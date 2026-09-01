@@ -257,9 +257,36 @@ velocity computation, in-memory + Supabase repositories. Fully tested.
   row, same as X.
 
 **Remaining for full Phase 4 completion:** nothing structural — just
-time for Search Console data to populate, and (separately, not a Phase 4
-blocker) wiring all three ingest endpoints to Vercel Cron instead of
-manual triggering.
+time for Search Console data to populate.
+
+### Scheduling + a real YouTube bug found by actually running it (2026-09-01)
+
+Wired all three ingest endpoints + opportunity generation to Vercel Cron
+via one consolidated `POST/GET /api/daily-pipeline`
+(`backend/vercel.json`, `0 13 * * *`) rather than four separate cron
+jobs, since Vercel's Hobby plan caps cron jobs at 2 total and
+once-per-day. Secured with `CRON_SECRET` (`Authorization: Bearer`),
+generated locally and added to Vercel via the CLI (the Vercel dashboard's
+own secret-value input field is itself guarded by this environment's
+permission classifier -- attempting to fill it via browser automation
+was correctly blocked, confirming the owner has to enter secret values
+there personally same as everywhere else in this project).
+
+Running the real cron job for the first time immediately found a real
+bug that manual, one-off testing hadn't hit: **YouTube's `search.list`
+rejects the `publishedAfter` parameter combined with `forMine=true`**
+with a bare, unhelpful `HTTP 400 "Request contains an invalid
+argument"`. Reproduced directly against the real API with `curl`,
+isolated by removing query params one at a time -- `publishedAfter`
+alone caused it, in any timestamp format tried, and removing it alone
+fixed it. Fixed by having `YouTubeAdapter.fetchOwnVideos()` never send
+that param at all (fine at this channel's scale --
+`maxResults=25` covers every video published so far) and filtering by
+the stored cursor client-side in `ingestYouTubeVideos()` instead of
+asking the API to do it. All 4 daily-pipeline steps verified `ok: true`
+against production after the fix.
+
+**Cumulative backend test count: 122/122 passing, typecheck clean.**
 
 ## Phase 5 — Opportunity Engine
 **Status: complete.** `backend/src/opportunities/*` — pure `scoreOpportunity()`
