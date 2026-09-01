@@ -10,6 +10,10 @@ export class InMemoryOpportunityRepository implements OpportunityRepository {
     return row;
   }
 
+  async listOpen(): Promise<Opportunity[]> {
+    return this.items.filter((o) => o.status === "open").sort((a, b) => b.score - a.score);
+  }
+
   _all(): Opportunity[] {
     return this.items;
   }

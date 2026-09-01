@@ -31,6 +31,7 @@ import com.fillbook.growthos.data.HomeSummary
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.healthColor
 import com.fillbook.growthos.ui.components.healthLabel
+import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
 
@@ -38,10 +39,15 @@ import com.fillbook.growthos.ui.theme.TextSecondary
 fun HomeScreen(repo: GrowthOsRepository) {
     var summary by remember { mutableStateOf<HomeSummary?>(null) }
     var health by remember { mutableStateOf<List<HealthItem>>(emptyList()) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        summary = repo.getHomeSummary()
-        health = repo.getHealth()
+        try {
+            summary = repo.getHomeSummary()
+            health = repo.getHealth()
+        } catch (e: Exception) {
+            errorMessage = "Couldn't reach Growth OS. Check your connection and try again."
+        }
     }
 
     LazyColumn(
@@ -60,6 +66,12 @@ fun HomeScreen(repo: GrowthOsRepository) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary,
                 )
+            }
+        }
+
+        errorMessage?.let { message ->
+            item {
+                Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger)
             }
         }
 

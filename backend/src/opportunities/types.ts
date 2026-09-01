@@ -34,4 +34,5 @@ export interface ScoringInput {
 
 export interface OpportunityRepository {
   insert(opportunity: Omit<Opportunity, "id" | "status">): Promise<Opportunity>;
+  listOpen(): Promise<Opportunity[]>;
 }

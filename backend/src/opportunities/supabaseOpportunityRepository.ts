@@ -1,6 +1,22 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Opportunity, OpportunityRepository } from "./types";
 
+function fromRow(data: Record<string, any>): Opportunity {
+  return {
+    id: data.id,
+    title: data.title,
+    score: Number(data.score),
+    urgency: data.urgency,
+    confidence: Number(data.confidence),
+    rationale: data.rationale,
+    recommendedChannels: data.recommended_channels,
+    recommendedCampaignType: data.recommended_campaign_type,
+    approvalClass: data.approval_class,
+    status: data.status,
+    signalIds: data.signal_ids,
+  };
+}
+
 export class SupabaseOpportunityRepository implements OpportunityRepository {
   constructor(private client: SupabaseClient) {}
 
@@ -21,18 +37,16 @@ export class SupabaseOpportunityRepository implements OpportunityRepository {
       .select()
       .single();
     if (error) throw new Error(`insert opportunity failed: ${error.message}`);
-    return {
-      id: data.id,
-      title: data.title,
-      score: Number(data.score),
-      urgency: data.urgency,
-      confidence: Number(data.confidence),
-      rationale: data.rationale,
-      recommendedChannels: data.recommended_channels,
-      recommendedCampaignType: data.recommended_campaign_type,
-      approvalClass: data.approval_class,
-      status: data.status,
-      signalIds: data.signal_ids,
-    };
+    return fromRow(data);
+  }
+
+  async listOpen(): Promise<Opportunity[]> {
+    const { data, error } = await this.client
+      .from("opportunities")
+      .select()
+      .eq("status", "open")
+      .order("score", { ascending: false });
+    if (error) throw new Error(`listOpen failed: ${error.message}`);
+    return (data ?? []).map(fromRow);
   }
 }

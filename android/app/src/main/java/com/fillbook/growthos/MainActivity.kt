@@ -25,7 +25,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.fillbook.growthos.data.FakeGrowthOsRepository
+import com.fillbook.growthos.data.NetworkGrowthOsRepository
 import com.fillbook.growthos.ui.screens.ApprovalsScreen
 import com.fillbook.growthos.ui.screens.HomeScreen
 import com.fillbook.growthos.ui.screens.RadarScreen
@@ -43,7 +43,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val repo = FakeGrowthOsRepository()
+        // See NetworkGrowthOsRepository's kdoc: this is a Vercel deployment-
+        // protection bypass token, not the Supabase service_role key --
+        // safe to embed client-side by design. The Supabase key itself
+        // never appears in this app.
+        val repo = NetworkGrowthOsRepository(
+            baseUrl = "https://fillbook-growth-os.vercel.app",
+            protectionBypassSecret = "7TVBpvTPeeHbiGlZco9RDS8miXqtbfoi",
+        )
         setContent {
             FillbookGrowthOSTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {

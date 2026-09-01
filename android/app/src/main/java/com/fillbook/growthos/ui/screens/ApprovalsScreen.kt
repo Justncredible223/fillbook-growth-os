@@ -48,9 +48,14 @@ import com.fillbook.growthos.ui.theme.TextTertiary
 fun ApprovalsScreen(repo: GrowthOsRepository) {
     var assets by remember { mutableStateOf<List<ApprovalAsset>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        assets = repo.getApprovals()
+        try {
+            assets = repo.getApprovals()
+        } catch (e: Exception) {
+            errorMessage = "Couldn't load approvals. Check your connection and try again."
+        }
         loaded = true
     }
 
@@ -68,7 +73,16 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             )
         }
 
-        if (loaded && assets.isEmpty()) {
+        errorMessage?.let { message ->
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = com.fillbook.growthos.ui.theme.Danger,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+        }
+
+        if (loaded && errorMessage == null && assets.isEmpty()) {
             EmptyApprovals()
         } else {
             LazyColumn(

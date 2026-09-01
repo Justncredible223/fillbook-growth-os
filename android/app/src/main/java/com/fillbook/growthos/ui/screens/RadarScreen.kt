@@ -30,6 +30,7 @@ import com.fillbook.growthos.data.Opportunity
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.urgencyColor
 import com.fillbook.growthos.ui.theme.Accent
+import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
@@ -38,9 +39,14 @@ import com.fillbook.growthos.ui.theme.TextTertiary
 fun RadarScreen(repo: GrowthOsRepository) {
     var opportunities by remember { mutableStateOf<List<Opportunity>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        opportunities = repo.getOpportunities()
+        try {
+            opportunities = repo.getOpportunities()
+        } catch (e: Exception) {
+            errorMessage = "Couldn't load opportunities. Check your connection and try again."
+        }
         loaded = true
     }
 
@@ -58,7 +64,16 @@ fun RadarScreen(repo: GrowthOsRepository) {
             )
         }
 
-        if (loaded && opportunities.isEmpty()) {
+        errorMessage?.let { message ->
+            Text(
+                message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Danger,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+        }
+
+        if (loaded && errorMessage == null && opportunities.isEmpty()) {
             EmptyState()
         } else {
             LazyColumn(

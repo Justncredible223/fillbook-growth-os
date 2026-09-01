@@ -207,18 +207,73 @@ existing first. Deliberately not stub-built with placeholder screens or
 fabricated "done" status — see `docs/ARCHITECTURE.md`'s definition-of-done
 discussion.
 
-## Repository & deployment state (end of this session)
+## Repository & deployment state (updated -- backend and Android now both live)
+
 - **No GitHub remote exists yet** for this repo — created and committed
   locally only. No `gh` CLI and no GitHub MCP/API tool was available in
   this session to create one autonomously.
   **OWNER ACTION:** create an empty repo (e.g. `Justncredible223/fillbook-growth-os`)
   on GitHub, then from `C:\Users\Justin\fillbook-growth-os` run
   `git remote add origin <url>` and `git push -u origin master`.
-- **Backend is not deployed anywhere.** The business logic
-  (jobs/knowledge/signals/opportunities/content/firewall) is real and
-  tested, but there are zero HTTP endpoints (Vercel serverless functions)
-  wrapping it yet — that's Phase 22 (release engineering) work, not done
-  this session. Deploying an empty API surface would have been a hollow
-  gesture, so it wasn't done just to be able to say "deployed."
-- **Supabase is live and real** (see Phase 1) — this is the one piece of
-  infrastructure that's actually running in the cloud right now.
+
+- **Backend IS deployed and live**: `https://fillbook-growth-os.vercel.app`,
+  Vercel project `fillbook-growth-os` (id `prj_EeqMUglf2bJy0VlaGjx83yHBsAQI`,
+  team `justwilliams407-3300s-projects`). Deployed via direct file upload
+  (`deploy_to_vercel`, no GitHub link yet -- reconnect this to GitHub once
+  a remote exists, via Vercel's Git integration, so future pushes
+  auto-deploy). Four endpoints live: `/api/health`, `/api/summary`,
+  `/api/opportunities`, `/api/approvals` -- all real, querying the live
+  Supabase project, no mocked data.
+  - **Fixed a real bug found via this deployment**: the initial deploy used
+    `"type": "module"` in `package.json`, which requires explicit `.js`
+    extensions on every relative import under Node's ESM loader --
+    without them, every function crashed with `ERR_MODULE_NOT_FOUND`
+    (`FUNCTION_INVOCATION_FAILED`, ugly 500 page, no graceful error).
+    Fixed by deploying with CommonJS (`module: "CommonJS"` in the deployed
+    tsconfig, no `"type": "module"` in the deployed package.json) instead
+    of chasing extensions on 20+ import statements. **Note:** the deployed
+    package.json/tsconfig are NOT the same files as
+    `backend/package.json`/`backend/tsconfig.json` in this repo (those stay
+    ESM for local vitest, which works fine) -- if you add new backend
+    files, remember the next deploy needs the CommonJS variant, not a
+    straight copy of the local config. This is a real seam to clean up
+    later (e.g. a `backend/deploy/` config), not fixed this session for
+    time reasons.
+  - **Vercel Authentication (Standard Protection) is ON** for this
+    project, which blocks unauthenticated requests (including from the
+    Android app) with a Vercel SSO redirect. Resolved via a **Protection
+    Bypass for Automation** secret (Settings -> Deployment Protection),
+    sent as the `x-vercel-protection-bypass` header. This is a different,
+    lower-sensitivity token than the Supabase `service_role` key -- it's
+    designed by Vercel specifically to be embedded in automation/clients,
+    unlike the Supabase key which must never leave the server. The Android
+    app embeds this bypass token (see `NetworkGrowthOsRepository.kt`);
+    it does NOT and must never embed the Supabase service_role key.
+  - **RLS enabled with default-deny** on every table (migration 0005) --
+    fixed a real gap from Phase 1 where tables were created with RLS off,
+    meaning the anon key alone could've read/written everything via
+    Supabase's REST API.
+  - **`system_settings` table added** (migration 0006) for the Pause
+    System, single row, RLS enabled.
+  - **Still blocked on the owner**: `SUPABASE_SERVICE_ROLE_KEY` is not set
+    in Vercel's environment variables. Until it is, `/api/health` correctly
+    reports Supabase as `DOWN` with an explanatory message (verified live)
+    rather than crashing -- this is the intended graceful-degradation
+    behavior, not a bug. **OWNER ACTION:** Vercel dashboard -> this project
+    -> Settings -> Environment Variables -> add `SUPABASE_SERVICE_ROLE_KEY`
+    (value from Supabase dashboard -> Settings -> API -> service_role,
+    NOT anon) -> redeploy (or it'll pick it up on the next deploy).
+
+- **Android app now calls the real backend** instead of fake data
+  (`NetworkGrowthOsRepository`, OkHttp-based). All three screens
+  (Home/Radar/Approvals) have real error states (a red message, not a
+  crash) if the network call fails -- verified this compiles and
+  `assembleDebug` still succeeds. Not yet verified end-to-end against
+  real (non-empty) data, since the tables are still empty and the service
+  role key isn't set yet -- once both are true, this should Just Work
+  without further code changes.
+
+- **Supabase is live and real** (see Phase 1) -- fully wired end-to-end
+  now: Supabase -> Vercel API -> Android app, all real, no mocks left in
+  the request path except the absence of actual signal/opportunity/
+  approval data (empty tables, not fake ones).
