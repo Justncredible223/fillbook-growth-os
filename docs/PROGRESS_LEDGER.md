@@ -340,6 +340,61 @@ loads asynchronously and can look permanently blank; read
 
 **Cumulative test status after Phase 6: 108/108 passing, typecheck clean.**
 
+**Campaign pipeline wired end-to-end (2026-09-01, after Phase 14):** until
+now, `CampaignFactory`, `ContentQualityGate`, and the nine review agents
+all worked but nothing actually chained them together starting from a
+real `Opportunity` row -- there was no drafting step and no orchestration.
+Added:
+- `backend/src/content/contentWriter.ts` — `draftContent()`, the one new
+  LLM call that writes a single platform-native post grounded in a
+  `verifiedKnowledgeSummary` blob and instructed never to invent Fillbook
+  facts beyond it. Uses the same `LlmClient.callTool()` tool-forcing
+  pattern as the review agents.
+- `backend/src/content/campaignPipeline.ts` — `runCampaignPipeline()`:
+  Opportunity -> draft -> `CampaignFactory.submitDraft` (mechanical gate)
+  -> if passed, `runAndRecordDeepReview` (all 9 agents) -> if passed,
+  `markReadyForOwner`. Persists a `campaigns`/`campaign_assets`/
+  `content_versions` row at every stage reached, even on failure, so a
+  rejected draft is still visible in the audit trail. Never calls
+  `handOffToOwner` -- furthest reachable stage is `ready_for_owner`, same
+  guarantee as every other CampaignFactory path.
+- `backend/src/content/supabaseCampaignRepository.ts` — the
+  `CampaignRepository` implementation the pipeline writes through.
+- `backend/api/run-campaign.ts` — `POST /api/run-campaign`, optional
+  `{opportunityId}` body (defaults to the highest-scored open
+  opportunity). Marks the opportunity `actioned` only if the pipeline
+  actually reached `ready_for_owner` -- a rejected draft leaves the
+  opportunity `open` so it can be retried. Costs real LLM tokens (1 draft
+  call + up to 9 review calls), so POST-only by design.
+- 3 new tests (`campaignPipeline.test.ts`): reaches `ready_for_owner` on
+  a clean pass; stops at the mechanical gate and never calls the (costly)
+  deep-review agents at all; passes the mechanical gate but stays at
+  `final_draft` when one review agent fails.
+
+**Real gap found while verifying this against production, not yet
+fixed:** the `opportunities` table in the live database was empty --
+`OpportunityEngine.createFromEvidence()` has existed since Phase 5 but
+**nothing has ever called it against real ingested signals**. The Signal
+Graph adapters (Phase 4) write real rows to `signals`, but there is no
+job/endpoint that clusters them and turns them into scored `Opportunity`
+rows the way Phase 5's own scoring function expects. To verify
+`/api/run-campaign` end-to-end against production without that piece
+existing yet, one opportunity was inserted manually (not fabricated --
+built from a real X mention in the `signals` table, a trader replying to
+`@FillbookHQ` about revenge trading breaching funded accounts, with its
+score actually computed by calling the real `scoreOpportunity()`
+function rather than invented) and clearly identifiable as a manual test
+row, not something the system found on its own.
+**OWNER ACTION / next real gap:** build the missing piece that turns
+Signal Graph rows into real `OpportunityEngine.createFromEvidence()`
+calls -- likely a periodic job over recent `signals`, grouped by
+similarity/topic, since `x_mention` and `youtube_video` signals currently
+have `topic = null` (only `search_console_query` populates it), so
+naive topic-grouping won't work for those two sources without a change
+there too.
+
+**Cumulative test status: 117/117 passing, typecheck clean.**
+
 ## Phase 7 — Android Mission Control
 **Status: all 11 screens built, real verified build, full emulator visual
 QA done (see "Phase 7 continuation" below).** `android/` — Kotlin +
