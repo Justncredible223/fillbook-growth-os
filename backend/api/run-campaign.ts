@@ -74,6 +74,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (result.finalStage === "ready_for_owner") {
       await client.from("opportunities").update({ status: "actioned", updated_at: new Date().toISOString() }).eq("id", opportunity.id);
+      await client.from("campaigns").update({ status: "approved", updated_at: new Date().toISOString() }).eq("id", result.campaignId);
     }
 
     res.status(200).json({ result });
