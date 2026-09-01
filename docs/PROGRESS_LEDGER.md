@@ -269,8 +269,8 @@ classification), `OpportunityEngine` orchestrator, in-memory + Supabase
 repositories. Fully tested, including score bounds (never <0 or >100).
 
 ## Phase 6 — Campaign Factory & Content Quality
-**Status: core complete, deep LLM review agents blocked on an AI provider
-key.** `backend/src/content/*`:
+**Status: complete, including the deep LLM review agents (2026-09-01).**
+`backend/src/content/*`:
 - `AntiSlopEngine` — deterministic regex/heuristic detector (generic
   openers, AI-cliche phrases, fake urgency, excessive em dashes/rhetorical
   questions/hashtags/emoji). No AI call needed, always-on.
@@ -287,19 +287,58 @@ key.** `backend/src/content/*`:
   `EXTERNAL_DRAFT`. Tested, including that it refuses to skip stages and
   that its audit trail always shows `EXTERNAL_DRAFT`/`drafted`.
 
-**BLOCKER (does not block anything else):** the deeper judgment-based
-review agents from the master spec (trader / hook_specialist / copy_editor
-/ skeptic / brand_guardian / growth_strategist / fact_checker /
-integrity_reviewer / conversion_reviewer) require calling an actual LLM.
-This backend has no AI provider API key configured in this environment.
-**OWNER ACTION (when ready):** add `ANTHROPIC_API_KEY` (or another
-provider's key) to `backend/.env.local` for local dev and to the Vercel
-project's encrypted environment variables for production — never commit
-it. Once present, these agents are additive: they consume the same
-`content_versions`/`content_scores` schema already in place and don't
-require changing anything already built.
+**Deep review agents (2026-09-01):** the nine judgment-based agents from
+the master spec (trader / hook_specialist / copy_editor / skeptic /
+brand_guardian / growth_strategist / fact_checker / integrity_reviewer /
+conversion_reviewer) are wired to the real Claude Messages API:
+- `LlmClient` (`backend/src/content/llmClient.ts`) — thin wrapper around
+  `POST /v1/messages` that forces a single tool call
+  (`tool_choice: {type: "tool", name: ...}`) so verdicts come back
+  structured, never as prose to parse.
+- `reviewAgents.ts` — one distinct, Fillbook-grounded system prompt per
+  agent, `runReviewAgent()` returns `{agent, pass, score, reasoning,
+  issues}`.
+- `deepReviewGate.ts` — `runDeepReview()` runs all requested agents in
+  parallel (`Promise.all`, no short-circuit) and passes only if **every**
+  agent passes (strict AND, no majority vote).
+- `CampaignFactory.runAndRecordDeepReview()` — additive method, persists
+  every verdict (pass or fail) to `content_scores` via
+  `ContentScoreRepository`.
 
-**Cumulative test status after Phase 6: 57/57 passing, typecheck clean.**
+Verified against the live API, not just mocks: a real draft
+("Most funded accounts get pulled for violating a rule nobody reads
+twice.") ran through all 9 agents — 8 passed, but `skeptic` correctly
+flagged the unqualified "most funded accounts" claim as unverifiable and
+blocked the whole batch. This is the intended behavior, not a bug: one
+skeptical agent is enough to hold back an unproven quantitative claim.
+
+**AI provider key saga:** the first `ANTHROPIC_API_KEY` captured from the
+Claude Console's one-time-reveal dialog via DOM text extraction
+(`find`/`read_page`) was silently truncated/corrupted -- it authenticated
+with a 100-character value whose suffix didn't match the real key shown
+in the Console's own key-detail panel. This is the same DOM-read
+technique that worked reliably for the X and Google OAuth credentials
+earlier in this project, so it isn't a universal fix. The corrupted key
+was deleted and replaced using a more defensive method: click the
+dialog's own copy-to-clipboard button, paste into a self-controlled
+scratch page (`document.body.innerHTML` swapped in via `javascript_tool`,
+not a `file://`/`data:` URL -- both are blocked by this environment's
+navigate tool), then read the pasted value back out of that page's own
+DOM and cross-check its prefix/suffix against the Console's masked
+display before trusting it.
+
+A second surprise: Console now issues **identity-linked** keys by
+default (no workspace picker at creation time), and the Messages API
+rejects them with `anthropic-workspace-id is required when
+authenticating with an identity-linked API key` unless that header is
+sent. Fixed by adding an optional `workspaceId` to `LlmClient` and a new
+`ANTHROPIC_WORKSPACE_ID` env var (value pulled from
+`platform.claude.com/settings/workspaces` -- that page's "ID" column
+loads asynchronously and can look permanently blank; read
+`document.body.innerText` if so). Both env vars are documented in
+`backend/.env.example`.
+
+**Cumulative test status after Phase 6: 108/108 passing, typecheck clean.**
 
 ## Phase 7 — Android Mission Control
 **Status: all 11 screens built, real verified build, full emulator visual

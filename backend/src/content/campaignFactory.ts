@@ -1,5 +1,9 @@
 import { authorizeAndAudit, type AuditSink } from "../firewall/externalWriteFirewall.js";
 import { ContentQualityGate } from "./contentQualityGate.js";
+import type { LlmClient } from "./llmClient.js";
+import { runDeepReview, ALL_REVIEW_AGENTS, type DeepReviewResult } from "./deepReviewGate.js";
+import type { ReviewAgentName, ReviewContext } from "./reviewAgents.js";
+import type { ContentScoreRepository } from "./contentScoreRepository.js";
 
 export type AssetStage =
   | "idea"
@@ -89,6 +93,29 @@ export class CampaignFactory {
       );
     }
     return "ready_for_owner";
+  }
+
+  /**
+   * Additive: runs the nine LLM deep-review agents (Phase 6, requires
+   * ANTHROPIC_API_KEY) and persists every verdict to content_scores,
+   * regardless of pass/fail -- the audit trail matters as much as the
+   * gate. Does not change submitDraft's mechanical-only behavior; a
+   * caller with no AI provider key configured never has to touch this
+   * method at all.
+   */
+  async runAndRecordDeepReview(
+    client: LlmClient,
+    scoreRepo: ContentScoreRepository,
+    contentVersionId: string,
+    candidateText: string,
+    context: ReviewContext,
+    agents: ReviewAgentName[] = ALL_REVIEW_AGENTS,
+  ): Promise<DeepReviewResult> {
+    const result = await runDeepReview(client, agents, candidateText, context);
+    for (const verdict of result.verdicts) {
+      await scoreRepo.save(contentVersionId, verdict);
+    }
+    return result;
   }
 
   /**

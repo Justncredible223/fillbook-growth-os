@@ -4,6 +4,8 @@ import { ContentQualityGate } from "../src/content/contentQualityGate";
 import { BrandConstitution } from "../src/knowledge/brandConstitution";
 import { InMemoryBrandConstitutionRepository } from "../src/knowledge/inMemoryRepositories";
 import type { BrandRule } from "../src/knowledge/types";
+import { LlmClient } from "../src/content/llmClient";
+import { InMemoryContentScoreRepository } from "../src/content/contentScoreRepository";
 
 const rules: BrandRule[] = [
   {
@@ -68,5 +70,47 @@ describe("CampaignFactory", () => {
     // handOffToOwner's signature has no actionClass parameter at all —
     // there is nothing to pass to make it publish instead of draft.
     expect(factory.handOffToOwner.length).toBe(3); // (currentStage, platform, assetId)
+  });
+
+  it("runAndRecordDeepReview persists every verdict regardless of pass/fail", async () => {
+    const { factory } = buildFactory();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [{ type: "tool_use", name: "submit_verdict", input: { pass: true, score: 1, reasoning: "solid hook", issues: [] } }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [
+            { type: "tool_use", name: "submit_verdict", input: { pass: false, score: 0.1, reasoning: "wrong tick math", issues: ["fix contract size"] } },
+          ],
+        }),
+      });
+    const client = new LlmClient("test-key", fetchMock);
+    const scoreRepo = new InMemoryContentScoreRepository();
+    const context = { platform: "X", brandRulesSummary: "", verifiedKnowledgeSummary: "" };
+
+    const result = await factory.runAndRecordDeepReview(
+      client,
+      scoreRepo,
+      "content-version-1",
+      "some draft text",
+      context,
+      ["hook_specialist", "trader"],
+    );
+
+    expect(result.passed).toBe(false);
+    expect(scoreRepo.saved).toHaveLength(2);
+    expect(scoreRepo.saved[0]).toEqual({
+      contentVersionId: "content-version-1",
+      verdict: { agent: "hook_specialist", pass: true, score: 1, reasoning: "solid hook", issues: [] },
+    });
+    expect(scoreRepo.saved[1]!.verdict.pass).toBe(false);
   });
 });
