@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { errorMessage } from "../src/lib/errorMessage";
 import { getServiceClient } from "../src/lib/supabaseClient";
 
 /**
@@ -44,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     health.push({
       label: "Supabase",
       status: "DOWN",
-      detail: err instanceof Error ? err.message : String(err),
+      detail: errorMessage(err),
     });
   }
 
