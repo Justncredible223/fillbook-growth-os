@@ -55,3 +55,25 @@ data class Creator(
     val rejectionReason: String?,
     val lastInteractionAt: String?,
 )
+
+data class CampaignAsset(
+    val id: String,
+    val platform: String,
+    val assetType: String,
+    /** Raw stage string from the server -- not every one of the 17 possible
+     * CampaignFactory stages has a matching AssetStage case, and this
+     * screen shows every campaign regardless of stage, so it's kept as
+     * text rather than forced into an enum that would misrepresent
+     * unmapped stages. */
+    val stage: String,
+    val latestBody: String?,
+    val reviewPassCount: Int,
+    val reviewFailCount: Int,
+)
+
+data class Campaign(
+    val id: String,
+    val thesis: String,
+    val status: String,
+    val assets: List<CampaignAsset>,
+)

@@ -115,6 +115,28 @@ class NetworkGrowthOsRepository(
             )
         }
     }
+
+    override suspend fun getCampaigns(): List<Campaign> {
+        val json = get("/api/campaigns")
+        return json.getJSONArray("campaigns").map { item ->
+            Campaign(
+                id = item.getString("id"),
+                thesis = item.getString("thesis"),
+                status = item.getString("status"),
+                assets = item.getJSONArray("assets").map { asset ->
+                    CampaignAsset(
+                        id = asset.getString("id"),
+                        platform = asset.getString("platform"),
+                        assetType = asset.getString("assetType"),
+                        stage = asset.getString("stage"),
+                        latestBody = asset.optStringOrNull("latestBody"),
+                        reviewPassCount = asset.getInt("reviewPassCount"),
+                        reviewFailCount = asset.getInt("reviewFailCount"),
+                    )
+                },
+            )
+        }
+    }
 }
 
 class NetworkException(message: String) : Exception(message)

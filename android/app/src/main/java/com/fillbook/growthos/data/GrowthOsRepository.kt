@@ -13,6 +13,7 @@ interface GrowthOsRepository {
     suspend fun getOpportunities(): List<Opportunity>
     suspend fun getApprovals(): List<ApprovalAsset>
     suspend fun getCreators(): List<Creator>
+    suspend fun getCampaigns(): List<Campaign>
 }
 
 /**
@@ -66,6 +67,25 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             notes = "Trading-journal/risk-management educator.",
             rejectionReason = null,
             lastInteractionAt = "2026-08-31T12:00:00Z",
+        ),
+    )
+
+    override suspend fun getCampaigns() = listOf(
+        Campaign(
+            id = "campaign-fake-1",
+            thesis = "A trader publicly told @FillbookHQ that revenge trading is what's breaching their funded accounts",
+            status = "actioned",
+            assets = listOf(
+                CampaignAsset(
+                    id = "asset-fake-1",
+                    platform = "x",
+                    assetType = "post",
+                    stage = "ready_for_owner",
+                    latestBody = "Revenge trading doesn't show up as \"revenge\" in your P&L -- it shows up as funded-account breach. One trade to fix the last one, every time, until you're done. Track the pattern or keep resetting.",
+                    reviewPassCount = 9,
+                    reviewFailCount = 0,
+                ),
+            ),
         ),
     )
 }
