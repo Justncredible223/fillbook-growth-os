@@ -27,6 +27,8 @@ data class ApprovalAsset(
     val isAutoDraft: Boolean,
     val costUsd: Double?,
     val generatedAt: String?,
+    val reviewPassCount: Int,
+    val reviewFailCount: Int,
 )
 
 data class HealthItem(

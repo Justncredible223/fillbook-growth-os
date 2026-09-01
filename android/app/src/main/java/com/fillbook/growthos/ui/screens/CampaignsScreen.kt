@@ -12,7 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,19 +22,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.Campaign
 import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
-import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
@@ -60,16 +60,15 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
         )
 
         errorMessage?.let { message ->
-            Text(
-                message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Danger,
-                modifier = Modifier.padding(horizontal = 20.dp),
-            )
+            Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.padding(horizontal = 20.dp))
         }
 
         if (loaded && errorMessage == null && campaigns.isEmpty()) {
-            EmptyState()
+            PolishedEmptyState(
+                icon = Icons.Filled.Campaign,
+                headline = "No campaigns run yet",
+                subtitle = "Once an opportunity runs through the pipeline, it shows up here -- pass or fail.",
+            )
         } else {
             LazyColumn(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
@@ -81,38 +80,19 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
     }
 }
 
-@Composable
-private fun EmptyState() {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            "No campaigns run yet.",
-            style = MaterialTheme.typography.titleMedium,
-            color = TextSecondary,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Once an opportunity runs through the pipeline (POST /api/run-campaign), it shows up here.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextTertiary,
-        )
-    }
+private fun campaignStatusColor(status: String) = when (status) {
+    "approved" -> Accent
+    "in_review" -> Warning
+    "retired" -> Danger
+    else -> TextTertiary
 }
 
 @Composable
 private fun CampaignCard(campaign: Campaign) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Surface)
-            .padding(16.dp),
-    ) {
+    GrowthCard {
         Text(campaign.thesis, style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(4.dp))
-        Pill(campaign.status, if (campaign.status == "actioned") Accent else TextSecondary)
+        Pill(campaign.status.replace("_", " "), campaignStatusColor(campaign.status))
         Spacer(Modifier.height(12.dp))
         campaign.assets.forEach { asset -> AssetRow(asset) }
     }
@@ -126,14 +106,14 @@ private fun AssetRow(asset: CampaignAsset) {
             Pill(stageLabel(asset.stage), stageColor(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {
                 Pill(
-                    "${asset.reviewPassCount}/${asset.reviewPassCount + asset.reviewFailCount} agents passed",
+                    "${asset.reviewPassCount}/${asset.reviewPassCount + asset.reviewFailCount} agents",
                     if (asset.reviewFailCount == 0) Accent else Warning,
                 )
             }
         }
         asset.latestBody?.let { body ->
             Spacer(Modifier.height(6.dp))
-            Text(body, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            Text(body, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 3)
         }
     }
 }

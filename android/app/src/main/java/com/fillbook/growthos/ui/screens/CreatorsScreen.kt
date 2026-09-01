@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,17 +25,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.Creator
 import com.fillbook.growthos.data.CreatorCategory
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.ui.components.ExpandableText
+import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.PolishedEmptyState
+import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.platformDisplayName
-import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
-import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
@@ -69,7 +72,11 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
         }
 
         if (loaded && errorMessage == null && creators.isEmpty()) {
-            EmptyState()
+            PolishedEmptyState(
+                icon = Icons.Filled.Groups,
+                headline = "No creators tracked yet",
+                subtitle = "Vetted, interacted, and rejected creators will show up here.",
+            )
         } else {
             val tierB = creators.filter { it.category == CreatorCategory.TIER_B }
                 .sortedByDescending { it.readinessScore ?: -1 }
@@ -109,52 +116,26 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun EmptyState() {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            "No creators tracked yet.",
-            style = MaterialTheme.typography.titleMedium,
-            color = TextSecondary,
-        )
-    }
-}
-
-@Composable
 private fun CreatorCard(creator: Creator) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Surface)
-            .padding(16.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top,
-        ) {
-            Text(
-                creator.displayName?.let { "${creator.handle} -- $it" } ?: creator.handle,
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f).padding(end = 8.dp),
-            )
+    GrowthCard {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             creator.readinessScore?.let { score ->
-                Text(
-                    "$score/10",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Accent,
-                )
+                ScoreBadge(score = score * 10, label = "$score/10")
+                Spacer(Modifier.width(12.dp))
             }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Pill(platformDisplayName(creator.platform), TextSecondary)
-            creator.followerCount?.let { count -> Pill(formatFollowers(count), TextSecondary) }
-            if (creator.category == CreatorCategory.REJECTED) {
-                Pill("rejected", Danger)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    creator.displayName?.let { "${creator.handle} -- $it" } ?: creator.handle,
+                    style = MaterialTheme.typography.titleLarge,
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Pill(platformDisplayName(creator.platform), TextSecondary)
+                    creator.followerCount?.let { count -> Pill(formatFollowers(count), TextSecondary) }
+                    if (creator.category == CreatorCategory.REJECTED) {
+                        Pill("rejected", Danger)
+                    }
+                }
             }
         }
         creator.creatorProductMoment?.let { moment ->
@@ -163,7 +144,7 @@ private fun CreatorCard(creator: Creator) {
         }
         creator.notes?.let { notes ->
             Spacer(Modifier.height(8.dp))
-            Text(notes, style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+            ExpandableText(notes, style = MaterialTheme.typography.bodySmall, color = TextTertiary, collapsedMaxLines = 2)
         }
         creator.rejectionReason?.let { reason ->
             Spacer(Modifier.height(8.dp))

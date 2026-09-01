@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -29,30 +31,38 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.ApprovalAsset
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.ui.components.ExpandableText
+import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.PolishedEmptyState
+import com.fillbook.growthos.ui.components.ScoreBadge
+import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.StatusTone
 import com.fillbook.growthos.ui.components.platformDisplayName
+import com.fillbook.growthos.ui.components.statusToneColor
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
-import com.fillbook.growthos.ui.theme.Surface
+import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
-import com.fillbook.growthos.ui.theme.TextTertiary
-import com.fillbook.growthos.ui.theme.Warning
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 
 /**
- * This screen must never contain a button labeled "Publish", "Post",
- * "Send", or similar — every action here either stays internal (Approve,
- * Reject) or opens the destination platform's own composer for the owner
- * to finish and press post themselves (see
- * docs/EXTERNAL_WRITE_FIREWALL.md). Approve/Reject only change what this
- * app displays (campaigns.status server-side, via POST /api/approvals) —
- * neither one ever contacts X, YouTube, or any other external platform.
+ * A decision screen, not a report: the review score is the first thing
+ * you see on every card, the two decisions (approve/reject) sit at the
+ * bottom where a thumb already is, and everything else (auto-draft
+ * badge, cost, timestamp) is secondary metadata below the content. This
+ * screen must never contain a button labeled "Publish", "Post", "Send",
+ * or similar -- every action either stays internal (Approve, Reject) or
+ * opens the destination platform's own composer for the owner to finish
+ * and press post themselves (see docs/EXTERNAL_WRITE_FIREWALL.md).
+ * Approve/Reject only change what this app displays (campaigns.status
+ * server-side) -- neither one ever contacts X, YouTube, or any other
+ * external platform.
  */
 @Composable
 fun ApprovalsScreen(repo: GrowthOsRepository) {
@@ -100,31 +110,19 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text("Approvals", style = MaterialTheme.typography.headlineLarge)
-            Text(
-                "You always press publish — this app only ever hands off a draft.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
-            )
-        }
+    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        ScreenHeader("Approvals", "You always press publish — this app only ever hands off a draft.")
 
         (errorMessage ?: actionError)?.let { message ->
-            Text(
-                message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Danger,
-                modifier = Modifier.padding(horizontal = 20.dp),
-            )
+            Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.padding(horizontal = 20.dp))
         }
 
         if (loaded && errorMessage == null && assets.isEmpty()) {
-            EmptyApprovals()
+            PolishedEmptyState(
+                icon = Icons.Filled.CheckCircle,
+                headline = "Nothing waiting on you",
+                subtitle = "Drafts land here once the Campaign Factory finishes AI review.",
+            )
         } else {
             LazyColumn(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
@@ -144,66 +142,38 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
 }
 
 @Composable
-private fun EmptyApprovals() {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            "Nothing waiting on you right now.",
-            style = MaterialTheme.typography.titleMedium,
-            color = TextSecondary,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Drafts land here once the Campaign Factory finishes review.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextTertiary,
-        )
-    }
-}
-
-@Composable
 private fun ApprovalCard(
     asset: ApprovalAsset,
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onOpenInPlatform: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Surface)
-            .padding(16.dp),
-    ) {
-        Text(asset.campaignTitle, style = MaterialTheme.typography.titleLarge)
-        Text(
-            "${platformDisplayName(asset.platform)} · ${asset.assetType}",
-            style = MaterialTheme.typography.labelLarge,
-            color = TextSecondary,
-        )
-        if (asset.isAutoDraft) {
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Pill("AUTO-DRAFT", Warning)
-                asset.costUsd?.let { cost -> Pill("$%.4f".format(cost), TextTertiary) }
+    GrowthCard {
+        Row(verticalAlignment = Alignment.Top) {
+            val total = asset.reviewPassCount + asset.reviewFailCount
+            if (total > 0) {
+                ScoreBadge(score = (asset.reviewPassCount * 100) / total)
+                Spacer(Modifier.width(12.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(asset.campaignTitle, style = MaterialTheme.typography.titleLarge, maxLines = 2)
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Pill(platformDisplayName(asset.platform), TextSecondary)
+                    if (total > 0) Pill("${asset.reviewPassCount}/$total agents", TextSecondary)
+                    if (asset.isAutoDraft) Pill("AUTO-DRAFT", statusToneColor(StatusTone.NEW))
+                }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Text(asset.previewText, style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(12.dp))
+        ExpandableText(asset.previewText, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 4)
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = onApprove, colors = ButtonDefaults.buttonColors(containerColor = Accent)) {
-                Text("Approve internally")
+            Button(onClick = onOpenInPlatform, colors = ButtonDefaults.buttonColors(containerColor = Accent), modifier = Modifier.weight(1f)) {
+                Text("Open in ${platformDisplayName(asset.platform)}")
             }
-            OutlinedButton(onClick = onReject) {
-                Text("Reject")
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onOpenInPlatform) {
-            Text("Open in ${platformDisplayName(asset.platform)}")
+            OutlinedButton(onClick = onApprove) { Text("Approve") }
+            OutlinedButton(onClick = onReject) { Text("Reject") }
         }
     }
 }

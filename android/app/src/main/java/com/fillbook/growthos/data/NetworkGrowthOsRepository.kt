@@ -133,6 +133,8 @@ class NetworkGrowthOsRepository(
                 isAutoDraft = item.getBoolean("isAutoDraft"),
                 costUsd = if (item.isNull("costUsd")) null else item.getDouble("costUsd"),
                 generatedAt = item.optStringOrNull("generatedAt"),
+                reviewPassCount = item.optInt("reviewPassCount", 0),
+                reviewFailCount = item.optInt("reviewFailCount", 0),
             )
         }
     }

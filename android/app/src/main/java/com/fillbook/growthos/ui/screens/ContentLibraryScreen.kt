@@ -12,7 +12,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,17 +22,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.ui.components.ExpandableText
+import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
-import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
@@ -70,7 +71,11 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
         }
 
         if (loaded && errorMessage == null && assetsByPlatform.isEmpty()) {
-            EmptyLibraryState()
+            PolishedEmptyState(
+                icon = Icons.Filled.VideoLibrary,
+                headline = "No drafts produced yet",
+                subtitle = "Once an opportunity runs through the pipeline, drafts show up here.",
+            )
         } else {
             LazyColumn(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
@@ -91,33 +96,20 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun EmptyLibraryState() {
-    Column(modifier = Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("No drafts produced yet.", style = MaterialTheme.typography.titleMedium, color = TextSecondary)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Once an opportunity runs through the pipeline (POST /api/run-campaign), drafts show up here.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextTertiary,
-        )
-    }
-}
-
-@Composable
 private fun LibraryCard(asset: CampaignAsset) {
-    Column(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Surface).padding(16.dp)) {
+    GrowthCard {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Pill(asset.assetType, TextSecondary)
             Pill(asset.stage.replace("_", " "), stageColor(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {
                 Pill(
-                    "${asset.reviewPassCount}/${asset.reviewPassCount + asset.reviewFailCount} agents passed",
+                    "${asset.reviewPassCount}/${asset.reviewPassCount + asset.reviewFailCount} agents",
                     if (asset.reviewFailCount == 0) Accent else Warning,
                 )
             }
         }
         Spacer(Modifier.height(10.dp))
-        Text(asset.latestBody ?: "", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+        ExpandableText(asset.latestBody ?: "", style = MaterialTheme.typography.bodyMedium, color = TextSecondary, collapsedMaxLines = 3)
     }
 }
 

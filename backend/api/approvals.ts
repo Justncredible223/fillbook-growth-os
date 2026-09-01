@@ -84,13 +84,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       awaitingDecision.map(async (asset: any) => {
         const { data: latestVersion } = await client
           .from("content_versions")
-          .select("body")
+          .select("id, body")
           .eq("campaign_asset_id", asset.id)
           .order("version", { ascending: false })
           .limit(1)
           .maybeSingle();
 
         const autoDraft = autoDraftByCampaignId.get(asset.campaign_id);
+
+        let reviewPassCount = 0;
+        let reviewFailCount = 0;
+        if (latestVersion) {
+          const { data: scores } = await client
+            .from("content_scores")
+            .select("verdict")
+            .eq("content_version_id", latestVersion.id);
+          for (const row of (scores ?? []) as Array<{ verdict: string }>) {
+            if (row.verdict === "pass") reviewPassCount++;
+            else reviewFailCount++;
+          }
+        }
 
         return {
           id: asset.id,
@@ -102,6 +115,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           isAutoDraft: Boolean(autoDraft),
           costUsd: autoDraft ? Number(autoDraft.cost_usd ?? 0) : null,
           generatedAt: autoDraft ? autoDraft.created_at : null,
+          reviewPassCount,
+          reviewFailCount,
         };
       }),
     );
