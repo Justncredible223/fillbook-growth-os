@@ -14,6 +14,7 @@ function fromRow(data: Record<string, any>): Opportunity {
     approvalClass: data.approval_class,
     status: data.status,
     signalIds: data.signal_ids,
+    createdAt: new Date(data.created_at),
   };
 }
 

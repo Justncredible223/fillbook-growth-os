@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.fillbook.growthos.data.AutoDraftStatus
 import com.fillbook.growthos.data.CostSummary
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.HealthItem
@@ -39,6 +40,7 @@ import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
+import com.fillbook.growthos.ui.theme.Warning
 
 /**
  * Reuses the same real /api/health data Home shows a summary of, at full
@@ -51,12 +53,14 @@ import com.fillbook.growthos.ui.theme.TextTertiary
 fun SystemScreen(repo: GrowthOsRepository) {
     var health by remember { mutableStateOf<List<HealthItem>>(emptyList()) }
     var costSummary by remember { mutableStateOf<CostSummary?>(null) }
+    var autoDraft by remember { mutableStateOf<AutoDraftStatus?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         try {
             health = repo.getHealth()
             costSummary = repo.getCostSummary()
+            autoDraft = repo.getHomeSummary().analytics.autoDraft
         } catch (e: Exception) {
             errorMessage = "Couldn't reach Growth OS. Check your connection and try again."
         }
@@ -83,6 +87,7 @@ fun SystemScreen(repo: GrowthOsRepository) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { PauseSystemRow() }
+            autoDraft?.let { status -> item { AutoDraftRow(status) } }
             costSummary?.let { summary -> item { CostSummaryRow(summary) } }
             item {
                 Text(
@@ -116,6 +121,38 @@ private fun PauseSystemRow() {
             )
         }
         Switch(checked = false, onCheckedChange = null, enabled = false, colors = SwitchDefaults.colors())
+    }
+}
+
+@Composable
+private fun AutoDraftRow(status: AutoDraftStatus) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Surface)
+            .padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Text("Auto-Draft", style = MaterialTheme.typography.titleMedium)
+            Pill("max 1/day", TextTertiary)
+        }
+        Spacer(Modifier.height(6.dp))
+        val lastRunText = when (status.lastRunStatus) {
+            "drafted" -> "Last run (${status.lastRunDate}): drafted a real post for review"
+            "skipped" -> "Last run (${status.lastRunDate}): skipped -- ${status.lastRunSkipReason}"
+            "failed" -> "Last run (${status.lastRunDate}): failed"
+            else -> "Hasn't run yet"
+        }
+        Text(lastRunText, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Pill("backlog ${status.backlogCount}/${status.backlogCap}", if (status.backlogCount >= status.backlogCap) Warning else TextTertiary)
+            Pill(
+                "month spend $%.4f / $%.2f".format(status.monthSpendUsd, status.monthBudgetUsd),
+                if (status.monthSpendUsd >= status.monthBudgetUsd) Warning else TextTertiary,
+            )
+        }
     }
 }
 

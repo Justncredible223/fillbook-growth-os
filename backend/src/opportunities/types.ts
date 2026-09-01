@@ -14,6 +14,7 @@ export interface Opportunity {
   approvalClass: ApprovalClass;
   status: OpportunityStatus;
   signalIds: string[];
+  createdAt: Date;
 }
 
 /** Inputs the scorer needs about a candidate opportunity's evidence. */
@@ -33,6 +34,6 @@ export interface ScoringInput {
 }
 
 export interface OpportunityRepository {
-  insert(opportunity: Omit<Opportunity, "id" | "status">): Promise<Opportunity>;
+  insert(opportunity: Omit<Opportunity, "id" | "status" | "createdAt">): Promise<Opportunity>;
   listOpen(): Promise<Opportunity[]>;
 }

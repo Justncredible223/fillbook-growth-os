@@ -58,6 +58,17 @@ class NetworkGrowthOsRepository(
                 opportunitiesByStatus = analytics.getJSONObject("opportunitiesByStatus").toIntMap(),
                 campaignAssetsByStage = analytics.getJSONObject("campaignAssetsByStage").toIntMap(),
                 totalCostUsd = analytics.getDouble("totalCostUsd"),
+                autoDraft = analytics.getJSONObject("autoDraft").let { ad ->
+                    AutoDraftStatus(
+                        lastRunDate = ad.optStringOrNull("lastRunDate"),
+                        lastRunStatus = ad.optStringOrNull("lastRunStatus"),
+                        lastRunSkipReason = ad.optStringOrNull("lastRunSkipReason"),
+                        backlogCount = ad.getInt("backlogCount"),
+                        backlogCap = ad.getInt("backlogCap"),
+                        monthSpendUsd = ad.getDouble("monthSpendUsd"),
+                        monthBudgetUsd = ad.getDouble("monthBudgetUsd"),
+                    )
+                },
             ),
         )
     }
@@ -100,6 +111,9 @@ class NetworkGrowthOsRepository(
                 previewText = item.getString("previewText"),
                 stage = runCatching { AssetStage.valueOf(item.getString("stage")) }
                     .getOrDefault(AssetStage.READY_FOR_OWNER),
+                isAutoDraft = item.getBoolean("isAutoDraft"),
+                costUsd = if (item.isNull("costUsd")) null else item.getDouble("costUsd"),
+                generatedAt = item.optStringOrNull("generatedAt"),
             )
         }
     }

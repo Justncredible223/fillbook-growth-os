@@ -2,25 +2,18 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { SupabaseOpportunityRepository } from "../src/opportunities/supabaseOpportunityRepository.js";
-import { BrandConstitution } from "../src/knowledge/brandConstitution.js";
-import { SupabaseBrandConstitutionRepository } from "../src/knowledge/supabaseRepositories.js";
-import { ContentQualityGate } from "../src/content/contentQualityGate.js";
-import { CampaignFactory } from "../src/content/campaignFactory.js";
-import { SupabaseContentScoreRepository } from "../src/content/contentScoreRepository.js";
-import { SupabaseCampaignRepository } from "../src/content/supabaseCampaignRepository.js";
-import { createLlmClient } from "../src/content/llmClient.js";
-import { runCampaignPipeline } from "../src/content/campaignPipeline.js";
-import { recordCostEvent } from "../src/cost/costTracking.js";
+import { runCampaignForOpportunity, buildSupabaseRunCampaignDeps } from "../src/content/runCampaignForOpportunity.js";
 
 /**
- * Runs one opportunity through the full Opportunity -> draft -> mechanical
- * gate -> nine-agent deep review -> ready_for_owner pipeline. Ties
- * together every piece built separately in Phases 5 and 6 into one real,
- * end-to-end run. Never publishes anything -- the furthest an asset can
- * reach here is 'ready_for_owner', same EXTERNAL_DRAFT-only guarantee as
- * the rest of CampaignFactory. Costs real LLM tokens (one drafting call
- * plus up to nine review calls), so POST-only, not something a GET/poll
- * should ever trigger.
+ * Manual trigger: runs one opportunity through the full Opportunity ->
+ * draft -> mechanical gate -> nine-agent deep review -> ready_for_owner
+ * pipeline. Never publishes anything -- the furthest an asset can reach
+ * here is 'ready_for_owner'. Costs real LLM tokens (one drafting call
+ * plus up to nine review calls), so POST-only. See
+ * src/content/runCampaignForOpportunity.ts for the shared, testable
+ * implementation also used by the scheduled auto-draft step
+ * (api/daily-pipeline.ts) -- this endpoint tags its cost events
+ * source: "manual" to distinguish itself from that automated path.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") {
@@ -43,44 +36,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const brandConstitution = new BrandConstitution(new SupabaseBrandConstitutionRepository(client));
-    const activeRules = await brandConstitution.getActiveRules();
-    const brandRulesSummary = activeRules.map((r) => `[${r.ruleType}] ${r.content}`).join("\n");
+    const { deps, usage } = await buildSupabaseRunCampaignDeps(client, () => opportunity.id, "manual");
+    const result = await runCampaignForOpportunity(deps, opportunity);
 
-    const { data: knowledgeRows } = await client
-      .from("knowledge_documents")
-      .select("title, content")
-      .eq("trust_level", "verified");
-    const verifiedKnowledgeSummary = (knowledgeRows ?? [])
-      .map((row: { title: string; content: string }) => `${row.title}: ${row.content}`)
-      .join("\n");
-
-    const { data: recentVersions } = await client
-      .from("content_versions")
-      .select("body")
-      .order("created_at", { ascending: false })
-      .limit(10);
-    const recentTextsForSameTopic = (recentVersions ?? []).map((row: { body: string }) => row.body);
-
-    const llmClient = createLlmClient(process.env, (usage) => {
-      void recordCostEvent(client, usage, { opportunityId: opportunity.id, endpoint: "run-campaign" });
-    });
-    const factory = new CampaignFactory(new ContentQualityGate(brandConstitution));
-    const scoreRepo = new SupabaseContentScoreRepository(client);
-    const campaignRepo = new SupabaseCampaignRepository(client);
-
-    const result = await runCampaignPipeline(llmClient, factory, scoreRepo, campaignRepo, opportunity, {
-      brandRulesSummary,
-      verifiedKnowledgeSummary,
-      recentTextsForSameTopic,
-    });
-
-    if (result.finalStage === "ready_for_owner") {
-      await client.from("opportunities").update({ status: "actioned", updated_at: new Date().toISOString() }).eq("id", opportunity.id);
-      await client.from("campaigns").update({ status: "approved", updated_at: new Date().toISOString() }).eq("id", result.campaignId);
-    }
-
-    res.status(200).json({ result });
+    res.status(200).json({ result, aiCalls: usage.aiCalls(), costUsd: usage.costUsd() });
   } catch (err) {
     res.status(500).json({ error: errorMessage(err) });
   }

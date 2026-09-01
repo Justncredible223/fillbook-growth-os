@@ -24,6 +24,9 @@ data class ApprovalAsset(
     val assetType: String,
     val previewText: String,
     val stage: AssetStage,
+    val isAutoDraft: Boolean,
+    val costUsd: Double?,
+    val generatedAt: String?,
 )
 
 data class HealthItem(
@@ -32,12 +35,23 @@ data class HealthItem(
     val detail: String,
 )
 
+data class AutoDraftStatus(
+    val lastRunDate: String?,
+    val lastRunStatus: String?,
+    val lastRunSkipReason: String?,
+    val backlogCount: Int,
+    val backlogCap: Int,
+    val monthSpendUsd: Double,
+    val monthBudgetUsd: Double,
+)
+
 data class AnalyticsBreakdown(
     val totalSignals: Int,
     val signalsBySource: Map<String, Int>,
     val opportunitiesByStatus: Map<String, Int>,
     val campaignAssetsByStage: Map<String, Int>,
     val totalCostUsd: Double,
+    val autoDraft: AutoDraftStatus,
 )
 
 data class HomeSummary(

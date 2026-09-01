@@ -30,10 +30,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.ApprovalAsset
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
+import com.fillbook.growthos.ui.theme.Warning
 
 /**
  * This screen must never contain a button labeled "Publish", "Post",
@@ -130,6 +132,13 @@ private fun ApprovalCard(asset: ApprovalAsset) {
             style = MaterialTheme.typography.labelLarge,
             color = TextSecondary,
         )
+        if (asset.isAutoDraft) {
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Pill("AUTO-DRAFT", Warning)
+                asset.costUsd?.let { cost -> Pill("$%.4f".format(cost), TextTertiary) }
+            }
+        }
         Spacer(Modifier.height(10.dp))
         Text(asset.previewText, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(14.dp))

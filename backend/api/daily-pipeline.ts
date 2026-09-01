@@ -11,6 +11,10 @@ import { ingestXMentions } from "../src/signals/adapters/xIngestion.js";
 import { ingestYouTubeVideos } from "../src/signals/adapters/youtubeIngestion.js";
 import { ingestSearchConsoleQueries } from "../src/signals/adapters/searchConsoleIngestion.js";
 import { runGenerateOpportunities } from "../src/opportunities/runGenerateOpportunities.js";
+import { SupabaseOpportunityRepository } from "../src/opportunities/supabaseOpportunityRepository.js";
+import { SupabaseAutoDraftRunRepository } from "../src/opportunities/autoDraftRunRepository.js";
+import { runAutoDraftStep } from "../src/opportunities/autoDraftStep.js";
+import { buildSupabaseRunCampaignDeps } from "../src/content/runCampaignForOpportunity.js";
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -106,6 +110,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await runStep("generate_opportunities", async () => {
       const result = await runGenerateOpportunities(client);
       return `${result.created} created, ${result.skipped} skipped`;
+    }),
+    await runStep("auto_draft", async () => {
+      const now = new Date();
+      const runDate = isoDate(now);
+      let currentOpportunityId = "unknown";
+
+      const { deps: runCampaignDeps, usage } = await buildSupabaseRunCampaignDeps(
+        client,
+        () => currentOpportunityId,
+        "auto-draft",
+      );
+
+      const result = await runAutoDraftStep(
+        {
+          runCampaignDeps,
+          usageLog: usage.usages,
+          opportunityRepo: new SupabaseOpportunityRepository(client),
+          runRepo: new SupabaseAutoDraftRunRepository(client),
+          countReadyForOwnerAssets: async () => {
+            const { count, error } = await client
+              .from("campaign_assets")
+              .select("id", { count: "exact", head: true })
+              .eq("stage", "ready_for_owner");
+            if (error) throw error;
+            return count ?? 0;
+          },
+          listOpportunityIdsWithCampaigns: async () => {
+            const { data, error } = await client.from("campaigns").select("opportunity_id");
+            if (error) throw error;
+            return new Set(((data ?? []) as Array<{ opportunity_id: string | null }>).map((r) => r.opportunity_id).filter((id): id is string => Boolean(id)));
+          },
+          onOpportunitySelected: (id) => {
+            currentOpportunityId = id;
+          },
+        },
+        runDate,
+        now,
+      );
+
+      if (result.status === "drafted") {
+        return `drafted (opportunity ${result.opportunityId}, ${result.aiCalls} AI calls, $${result.costUsd.toFixed(6)})`;
+      }
+      if (result.status === "skipped") {
+        return `skipped -- ${result.skipReason}`;
+      }
+      if (result.status === "already_ran") {
+        return "already ran today -- idempotent skip";
+      }
+      throw new Error(result.error ?? "auto-draft failed for an unknown reason");
     }),
   ];
 

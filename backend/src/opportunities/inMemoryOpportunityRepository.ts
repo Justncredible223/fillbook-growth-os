@@ -4,8 +4,8 @@ import type { Opportunity, OpportunityRepository } from "./types.js";
 export class InMemoryOpportunityRepository implements OpportunityRepository {
   private items: Opportunity[] = [];
 
-  async insert(opportunity: Omit<Opportunity, "id" | "status">): Promise<Opportunity> {
-    const row: Opportunity = { ...opportunity, id: randomUUID(), status: "open" };
+  async insert(opportunity: Omit<Opportunity, "id" | "status" | "createdAt">): Promise<Opportunity> {
+    const row: Opportunity = { ...opportunity, id: randomUUID(), status: "open", createdAt: new Date() };
     this.items.push(row);
     return row;
   }
