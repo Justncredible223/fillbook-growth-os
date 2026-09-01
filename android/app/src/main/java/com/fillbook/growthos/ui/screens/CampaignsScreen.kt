@@ -30,6 +30,7 @@ import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Surface
@@ -121,7 +122,7 @@ private fun CampaignCard(campaign: Campaign) {
 private fun AssetRow(asset: CampaignAsset) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Pill(asset.platform, TextSecondary)
+            Pill(platformDisplayName(asset.platform), TextSecondary)
             Pill(stageLabel(asset.stage), stageColor(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {
                 Pill(

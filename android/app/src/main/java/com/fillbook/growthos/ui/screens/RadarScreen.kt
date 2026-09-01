@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.Opportunity
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.urgencyColor
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
@@ -134,7 +135,7 @@ private fun OpportunityCard(opp: Opportunity) {
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Pill(opp.urgency.name.lowercase(), urgencyColor(opp.urgency))
-            opp.channels.forEach { channel -> Pill(channel, TextSecondary) }
+            opp.channels.forEach { channel -> Pill(platformDisplayName(channel), TextSecondary) }
         }
         Spacer(Modifier.height(10.dp))
         Text(opp.rationale, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)

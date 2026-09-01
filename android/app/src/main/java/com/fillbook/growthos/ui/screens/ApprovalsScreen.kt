@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.ApprovalAsset
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Surface
@@ -95,7 +96,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
         if (url != null) {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         } else {
-            actionError = "No composer wired up yet for ${asset.platform} -- copy the draft manually for now."
+            actionError = "No composer wired up yet for ${platformDisplayName(asset.platform)} -- copy the draft manually for now."
         }
     }
 
@@ -178,7 +179,7 @@ private fun ApprovalCard(
     ) {
         Text(asset.campaignTitle, style = MaterialTheme.typography.titleLarge)
         Text(
-            "${asset.platform} · ${asset.assetType}",
+            "${platformDisplayName(asset.platform)} · ${asset.assetType}",
             style = MaterialTheme.typography.labelLarge,
             color = TextSecondary,
         )
@@ -202,7 +203,7 @@ private fun ApprovalCard(
         }
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = onOpenInPlatform) {
-            Text("Open in ${asset.platform}")
+            Text("Open in ${platformDisplayName(asset.platform)}")
         }
     }
 }

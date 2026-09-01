@@ -40,6 +40,19 @@ fun Pill(text: String, color: Color, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * Platform values come from the backend lowercase (matches the DB
+ * check constraint: 'x', 'youtube', 'tiktok', 'blog', ...) -- fine for
+ * logic, but "Open in x" reads as a typo in UI text. This gives every
+ * screen the same real display name instead of each one guessing.
+ */
+fun platformDisplayName(platform: String): String = when (platform.lowercase()) {
+    "x" -> "X"
+    "youtube" -> "YouTube"
+    "tiktok" -> "TikTok"
+    else -> platform.replaceFirstChar { it.uppercase() }
+}
+
 fun urgencyColor(urgency: Urgency): Color = when (urgency) {
     Urgency.HIGH -> Danger
     Urgency.NORMAL -> Warning

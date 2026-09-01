@@ -30,6 +30,7 @@ import com.fillbook.growthos.data.CreatorCategory
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Surface
@@ -150,7 +151,7 @@ private fun CreatorCard(creator: Creator) {
         }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Pill(creator.platform, TextSecondary)
+            Pill(platformDisplayName(creator.platform), TextSecondary)
             creator.followerCount?.let { count -> Pill(formatFollowers(count), TextSecondary) }
             if (creator.category == CreatorCategory.REJECTED) {
                 Pill("rejected", Danger)
