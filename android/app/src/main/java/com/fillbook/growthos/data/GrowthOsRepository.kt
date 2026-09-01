@@ -14,6 +14,7 @@ interface GrowthOsRepository {
     suspend fun getApprovals(): List<ApprovalAsset>
     suspend fun getCreators(): List<Creator>
     suspend fun getCampaigns(): List<Campaign>
+    suspend fun getCostSummary(): CostSummary
 }
 
 /**
@@ -87,5 +88,11 @@ class FakeGrowthOsRepository : GrowthOsRepository {
                 ),
             ),
         ),
+    )
+
+    override suspend fun getCostSummary() = CostSummary(
+        totalCostUsd = 0.02,
+        last24hCostUsd = 0.02,
+        totalCalls = 20,
     )
 }

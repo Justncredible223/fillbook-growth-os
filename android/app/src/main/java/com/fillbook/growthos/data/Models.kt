@@ -77,3 +77,9 @@ data class Campaign(
     val status: String,
     val assets: List<CampaignAsset>,
 )
+
+data class CostSummary(
+    val totalCostUsd: Double,
+    val last24hCostUsd: Double,
+    val totalCalls: Int,
+)

@@ -137,6 +137,15 @@ class NetworkGrowthOsRepository(
             )
         }
     }
+
+    override suspend fun getCostSummary(): CostSummary {
+        val json = get("/api/cost-summary")
+        return CostSummary(
+            totalCostUsd = json.getDouble("totalCostUsd"),
+            last24hCostUsd = json.getDouble("last24hCostUsd"),
+            totalCalls = json.getInt("totalCalls"),
+        )
+    }
 }
 
 class NetworkException(message: String) : Exception(message)

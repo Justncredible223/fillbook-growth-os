@@ -27,12 +27,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.fillbook.growthos.data.CostSummary
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.HealthItem
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.healthColor
 import com.fillbook.growthos.ui.components.healthLabel
+import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
@@ -48,11 +50,13 @@ import com.fillbook.growthos.ui.theme.TextTertiary
 @Composable
 fun SystemScreen(repo: GrowthOsRepository) {
     var health by remember { mutableStateOf<List<HealthItem>>(emptyList()) }
+    var costSummary by remember { mutableStateOf<CostSummary?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         try {
             health = repo.getHealth()
+            costSummary = repo.getCostSummary()
         } catch (e: Exception) {
             errorMessage = "Couldn't reach Growth OS. Check your connection and try again."
         }
@@ -79,6 +83,7 @@ fun SystemScreen(repo: GrowthOsRepository) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item { PauseSystemRow() }
+            costSummary?.let { summary -> item { CostSummaryRow(summary) } }
             item {
                 Text(
                     "SUBSYSTEMS".uppercase(),
@@ -111,6 +116,34 @@ private fun PauseSystemRow() {
             )
         }
         Switch(checked = false, onCheckedChange = null, enabled = false, colors = SwitchDefaults.colors())
+    }
+}
+
+@Composable
+private fun CostSummaryRow(summary: CostSummary) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Surface)
+            .padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("LLM Spend", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "Real cost from ${summary.totalCalls} Claude API calls -- last 24h: $%.4f".format(summary.last24hCostUsd),
+                style = MaterialTheme.typography.bodyMedium,
+                color = TextSecondary,
+            )
+        }
+        Text(
+            "$%.4f".format(summary.totalCostUsd),
+            style = MaterialTheme.typography.titleLarge,
+            color = Accent,
+        )
     }
 }
 
