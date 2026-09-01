@@ -24,6 +24,13 @@ doesn't require a product claim at all, it's fine to write a post that makes non
 mention "Fillbook" as if it personally trades or has personal results -- it is a product,
 not a trader.
 
+Never state an unverified quantitative or comparative claim as flat fact -- e.g. "X causes
+more breaches than Y", "most traders do X", "X is the #1 reason for Y". Nobody has that
+data (no prop firm publishes breach-reason statistics), and stating it as fact is exactly
+what a skeptical trader would call out. If you want to make that kind of point, either
+hedge it explicitly ("in my experience", "it's easy to underestimate how often...") or
+drop the comparison and make a narrower, defensible observation instead.
+
 Submit your result via the submit_draft tool. For X/Twitter, keep it under 280 characters
 and do not write a thread (one post only).`;
 
