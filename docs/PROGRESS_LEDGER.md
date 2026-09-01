@@ -721,3 +721,41 @@ or just confirm it in chat and let it be done in-session.
   -> ready for the Android app to consume real data the moment there's
   real data to show (tables are empty, not broken -- Signal Graph
   ingestion adapters are the next real blocker on that, per Phase 4).
+
+## Phase 15 — Campaigns screen + Cost Intelligence (2026-09-01)
+
+- **`GET /api/campaigns`** + real Android Campaigns screen: every
+  campaign the pipeline has ever run, not just the `ready_for_owner`
+  subset `/api/approvals` shows — rejected drafts included, with real
+  per-asset review-agent pass/fail counts. Found and fixed a real bug in
+  the process: `campaigns.status` never got updated to `approved` (only
+  `campaign_assets.stage` and `opportunities.status` were) — every
+  campaign showed "draft" regardless of outcome until fixed.
+- **Cost Intelligence**: `cost_events` table (migration `0011`),
+  `LlmClient` now takes an optional `onUsage` callback firing with real
+  token counts straight from each Claude API response (not an estimate),
+  wired into `run-campaign.ts`. `GET /api/cost-summary` gives real
+  total/24h spend. Surfaced on the Android System screen. Verified live:
+  a real `/api/run-campaign` run recorded 10 real LLM calls (1 draft + 9
+  review agents), 18,468 input / 2,031 output tokens, $0.086 — the
+  system's actual first real cost number, not a guess. Deliberately built
+  *before* considering auto-scheduling `run-campaign` on a cron — nobody
+  should turn on unattended LLM spending without a real number to look at
+  first (see the note in `daily-pipeline.ts`).
+- **Real deploy-breaking bug found and fixed**: adding `campaigns.ts` and
+  `cost-summary.ts` pushed this project to 13 serverless functions —
+  Vercel's Hobby plan caps deployments at 12. Every deploy after that
+  point built successfully (`Build Completed`) but failed silently at
+  the "Deploying outputs..." step with no further log line, which is why
+  it wasn't obvious from the build log alone — had to notice
+  `vercel ls` showing `● Error` and correlate with the function count.
+  Fixed by consolidating `ingest-x-mentions.ts` / `ingest-youtube.ts` /
+  `ingest-search-console.ts` (three files) into one
+  `api/ingest.ts?source=x|youtube|search_console` — 11 functions now,
+  some headroom before the next feature needs this fixing again.
+- All of the above verified against production after the fix: `/api/health`,
+  `/api/cost-summary`, `/api/campaigns`, `/api/daily-pipeline`, and a
+  fresh `/api/run-campaign` call all confirmed working together for
+  real.
+
+**Cumulative backend test count: 126/126 passing, typecheck clean.**
