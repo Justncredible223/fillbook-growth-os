@@ -95,6 +95,26 @@ class NetworkGrowthOsRepository(
             )
         }
     }
+
+    override suspend fun getCreators(): List<Creator> {
+        val json = get("/api/creators")
+        return json.getJSONArray("creators").map { item ->
+            Creator(
+                id = item.getString("id"),
+                handle = item.getString("handle"),
+                displayName = item.optStringOrNull("displayName"),
+                platform = item.getString("platform"),
+                category = runCatching { CreatorCategory.valueOf(item.getString("category").uppercase()) }
+                    .getOrDefault(CreatorCategory.RESEARCH_NEXT),
+                readinessScore = if (item.isNull("readinessScore")) null else item.getInt("readinessScore"),
+                followerCount = if (item.isNull("followerCount")) null else item.getInt("followerCount"),
+                creatorProductMoment = item.optStringOrNull("creatorProductMoment"),
+                notes = item.optStringOrNull("notes"),
+                rejectionReason = item.optStringOrNull("rejectionReason"),
+                lastInteractionAt = item.optStringOrNull("lastInteractionAt"),
+            )
+        }
+    }
 }
 
 class NetworkException(message: String) : Exception(message)
@@ -105,3 +125,6 @@ private fun <T> JSONArray.map(transform: (JSONObject) -> T): List<T> =
 
 private fun JSONArray.mapStrings(): List<String> =
     (0 until length()).map { getString(it) }
+
+private fun JSONObject.optStringOrNull(key: String): String? =
+    if (isNull(key) || !has(key)) null else getString(key)

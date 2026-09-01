@@ -39,3 +39,19 @@ data class HomeSummary(
     val pendingReview: Int,
     val systemPaused: Boolean,
 )
+
+enum class CreatorCategory { TIER_B, RESEARCH_NEXT, REJECTED }
+
+data class Creator(
+    val id: String,
+    val handle: String,
+    val displayName: String?,
+    val platform: String,
+    val category: CreatorCategory,
+    val readinessScore: Int?,
+    val followerCount: Int?,
+    val creatorProductMoment: String?,
+    val notes: String?,
+    val rejectionReason: String?,
+    val lastInteractionAt: String?,
+)

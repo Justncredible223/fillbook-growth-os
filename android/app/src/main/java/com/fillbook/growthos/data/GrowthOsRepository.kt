@@ -12,6 +12,7 @@ interface GrowthOsRepository {
     suspend fun getHealth(): List<HealthItem>
     suspend fun getOpportunities(): List<Opportunity>
     suspend fun getApprovals(): List<ApprovalAsset>
+    suspend fun getCreators(): List<Creator>
 }
 
 /**
@@ -51,4 +52,20 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     )
 
     override suspend fun getApprovals() = emptyList<ApprovalAsset>()
+
+    override suspend fun getCreators() = listOf(
+        Creator(
+            id = "creator-fake-1",
+            handle = "@wannabechamp",
+            displayName = "Dan Cheung",
+            platform = "x",
+            category = CreatorCategory.TIER_B,
+            readinessScore = 2,
+            followerCount = 40100,
+            creatorProductMoment = "Journaling / journal-review discussions -- directly the product's core format.",
+            notes = "Trading-journal/risk-management educator.",
+            rejectionReason = null,
+            lastInteractionAt = "2026-08-31T12:00:00Z",
+        ),
+    )
 }

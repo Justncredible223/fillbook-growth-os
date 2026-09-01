@@ -440,19 +440,87 @@ bug found and fixed.**
   before — owner-held keystore); didn't re-verify the emulator finding
   against a physical device.
 
-## Phase 8+ (SEO/X/YouTube/TikTok/Video Factory/Attention Radar/Creator
-CRM/Research Lab/Attribution/Experiments/Growth Genome/Strategy
-Evolution/full Android polish/release engineering)
-**Not started.** Each external-platform phase (X=9, YouTube=11,
-TikTok=12, Search Console=8) shares the Phase 4 OAuth-app blocker: the
-owner must create the developer app/OAuth client before any adapter code
-can be exercised against the real API, even though the adapter code
-itself is a small addition once that exists. Video Factory (10) has no
-technical blocker but wasn't reached this session. Full Android polish
-(21) and release engineering (22) depend on Phase 7's remaining screens
-existing first. Deliberately not stub-built with placeholder screens or
-fabricated "done" status — see `docs/ARCHITECTURE.md`'s definition-of-done
-discussion.
+## Phase 8+ (SEO/X/YouTube/TikTok/Video Factory/Attention Radar/Research
+Lab/Attribution/Experiments/Growth Genome/Strategy Evolution/full Android
+polish/release engineering)
+**Not started** (Creator CRM pulled out and completed early — see Phase 14
+below, since it had no OAuth blocker and real seed data already existed).
+Each external-platform phase (X=9, YouTube=11, TikTok=12, Search
+Console=8) shares the Phase 4 OAuth-app blocker: the owner must create
+the developer app/OAuth client before any adapter code can be exercised
+against the real API, even though the adapter code itself is a small
+addition once that exists. Video Factory (10) has no technical blocker
+but wasn't reached this session. Full Android polish (21) and release
+engineering (22) depend on Phase 7's remaining screens existing first.
+Deliberately not stub-built with placeholder screens or fabricated "done"
+status — see `docs/ARCHITECTURE.md`'s definition-of-done discussion.
+
+## Phase 14 — Creator CRM
+**Status: complete (2026-09-01).** Pulled forward out of the "not
+started" Phase 8+ bucket because, unlike the platform-integration phases,
+it had no OAuth blocker and FillbookHQ already had a real, detailed
+manual creator-network practice
+(`fillbookhq/docs/social/CREATOR_NETWORK.md`) to import verbatim per
+`docs/SEED_DATA_SOURCES.md`'s own instruction, rather than build from
+nothing.
+
+- `backend/src/db/migrations/0009_creator_network.sql` — `creators`
+  (handle, platform, category `tier_b`/`research_next`/`rejected`,
+  `readiness_score` 0-10 nullable, follower_count, creator_product_moment,
+  notes, rejection_reason, last_interaction_at, source_doc) and
+  `creator_interactions` (creator_id, interaction_type, occurred_at,
+  summary, confirmed, source_doc). RLS enabled, same default-deny pattern
+  as every other table.
+- `0010_seed_creator_network.sql` — the real network imported verbatim:
+  7 Tier B, 11 Research Next, 10 Rejected (28 creators total, matches the
+  source doc's counts exactly), plus 6 confirmed interactions. Deliberately
+  did **not** insert @ItsJayCook's drafted-but-unconfirmed Aug 31 reply as
+  an interaction, matching the source doc's own distinction between
+  drafted and actually-posted.
+- `backend/src/creators/creatorNetwork.ts` — `CreatorNetwork
+  .advanceReadiness()` is the one code path allowed to change a creator's
+  score, and enforces the real practice's own rule ("never skip stages;
+  never advance without a logged, evidence-based interaction"): throws on
+  an unconfirmed interaction, throws on a rejected creator, throws on
+  skipping more than one step, throws at the ceiling (10). This lives in
+  application code, not a SQL CHECK, because it's a business rule about
+  *why* a score may change, not a shape constraint.
+  `InMemoryCreatorRepository`/`SupabaseCreatorRepository` implement the
+  same `CreatorRepository` interface, matching every other subsystem's
+  repository pattern.
+- `backend/api/creators.ts` — `GET /api/creators`, read-only, returns
+  every creator (no write path exists yet from the API — advancing
+  readiness is a backend-code operation for now, not exposed over HTTP,
+  since there's no case yet for triggering it from the Android app).
+- **Android**: `CreatorsScreen.kt` rewritten from `ComingSoonScreen` to a
+  real screen grouped by category (Tier B / Research Next / Rejected),
+  showing readiness score, platform, follower count, creator product
+  moment, notes, and rejection reason. `Creator` model added to
+  `Models.kt`, `getCreators()` added to `GrowthOsRepository` (both
+  `FakeGrowthOsRepository` and `NetworkGrowthOsRepository`
+  implementations). Builds clean (`assembleDebug`, JDK 21, zero warnings).
+- **Backend tests**: 6 new (`creatorNetwork.test.ts`) — advance-by-one,
+  refuse-unconfirmed, refuse-rejected, refuse-past-ceiling,
+  refuse-no-score, and category filtering. **Cumulative: 114/114 passing,
+  typecheck clean.**
+
+**Found and NOT fixed this pass (reported to the owner, not silently
+patched around):** while trying to visually verify this screen against
+the live emulator, discovered the **production backend is intermittently
+returning HTTP 404/500** instead of real data on several of the last
+several auto-deployed Vercel builds (bisected across the last ~3h of
+deployments — results were inconsistent by age, not a clean regression at
+one commit, e.g. a deployment older than this session's own pushes also
+404s while a newer one is healthy). One inspected deployment's build log
+showed `Build Completed in /vercel/output [316ms]` with `Skipping cache
+upload because no files were prepared` — consistent with a corrupted/stale
+Vercel build-cache restore rather than a real code regression. A manual
+`vercel --prod` redeploy from `backend/` would very likely fix it (this is
+the same fix that resolved deploy issues earlier in the project), but
+running it was blocked by the permission classifier as a
+production-affecting action requiring the owner's own confirmation.
+**OWNER ACTION:** run `vercel --prod` from `fillbook-growth-os/backend`,
+or just confirm it in chat and let it be done in-session.
 
 ## Repository & deployment state (updated -- backend and Android now both live)
 
