@@ -393,6 +393,22 @@ have `topic = null` (only `search_console_query` populates it), so
 naive topic-grouping won't work for those two sources without a change
 there too.
 
+**Full loop verified live against production (2026-09-01):** running
+`/api/run-campaign` against the manually-inserted opportunity above
+twice in a row both got correctly blocked by the deep-review agents for
+the same failure mode -- the drafter kept writing an unhedged comparative
+claim ("X breaches more accounts than Y") with zero data behind it,
+exactly the kind of thing `skeptic`/`trader`/`hook_specialist`/
+`copy_editor`/`growth_strategist` exist to catch. Fixed by adding an
+explicit instruction against unverified quantitative/comparative claims
+to `contentWriter.ts`'s system prompt. Third run reached
+`ready_for_owner`, all 9 agents passing, and the resulting draft is real
+and now genuinely visible in `GET /api/approvals` -- the same endpoint
+the Android Approvals screen already reads from. This is the first
+piece of real, AI-drafted, AI-reviewed content this system has ever
+produced end-to-end, grounded in a real trader's real reply to
+`@FillbookHQ`, not a fabricated example.
+
 **Cumulative test status: 117/117 passing, typecheck clean.**
 
 ## Phase 7 — Android Mission Control
