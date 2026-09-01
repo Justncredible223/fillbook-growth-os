@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { EnqueueInput, Job, JobQueueRepository, JobStatus } from "./types";
+import type { EnqueueInput, Job, JobQueueRepository, JobStatus } from "./types.js";
 
 interface JobRow {
   id: string;

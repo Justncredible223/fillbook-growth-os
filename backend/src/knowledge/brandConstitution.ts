@@ -1,4 +1,4 @@
-import type { BrandConstitutionRepository, BrandRule } from "./types";
+import type { BrandConstitutionRepository, BrandRule } from "./types.js";
 
 export interface VocabularyViolation {
   rule: BrandRule;

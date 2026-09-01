@@ -1,4 +1,4 @@
-import type { ScoringInput, Urgency } from "./types";
+import type { ScoringInput, Urgency } from "./types.js";
 
 export interface ScoreResult {
   score: number; // 0-100

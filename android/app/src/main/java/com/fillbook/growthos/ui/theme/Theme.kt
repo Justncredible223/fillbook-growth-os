@@ -1,6 +1,5 @@
 package com.fillbook.growthos.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -29,13 +28,17 @@ private val LightColors = lightColorScheme(
 )
 
 /**
- * Dark-first by design (this is an internal operator tool used mostly at
- * a desk/late at night reviewing drafts) — light theme exists but dark is
- * the primary, most-polished path.
+ * Dark-only for now. Screen components reference the dark palette's
+ * Surface/TextPrimary/etc. constants directly rather than
+ * MaterialTheme.colorScheme, so a light system theme previously rendered
+ * near-black cards on a white background with unreadable text -- a real
+ * bug caught during Phase 7 visual QA on an emulator. Forcing dark here
+ * until the components are made theme-aware is the honest fix: light mode
+ * was never actually finished, not a toggle worth exposing broken.
  */
 @Composable
 fun FillbookGrowthOSTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val colors = if (darkTheme) DarkColors else LightColors

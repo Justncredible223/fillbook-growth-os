@@ -1,4 +1,4 @@
-import type { EnqueueInput, Job, JobQueueRepository } from "./types";
+import type { EnqueueInput, Job, JobQueueRepository } from "./types.js";
 
 /** Test-only in-memory fake mirroring the Postgres functions' semantics. */
 export class InMemoryJobQueueRepository implements JobQueueRepository {

@@ -1,4 +1,4 @@
-import type { KnowledgeBrainRepository, KnowledgeDocument } from "./types";
+import type { KnowledgeBrainRepository, KnowledgeDocument } from "./types.js";
 
 /**
  * "Never let models invent Fillbook functionality. Every material product

@@ -96,21 +96,93 @@ topic (the anti-fabrication guarantee); `BrandConstitution` loads active
 versioned rules + mechanical vocabulary/claim backstop check.
 
 ## Phase 4 — Signal Graph
-**Status: core complete, real ingestion adapters blocked on OAuth apps
-only the owner can create.** `backend/src/signals/*` — ingest, dedup,
-72h topic clustering, 24h velocity computation, in-memory + Supabase
-repositories. Fully tested.
+**Status: core complete; X adapter now real and live (2026-09-01);
+Search Console/YouTube adapters still blocked on a Google Cloud OAuth
+app.** `backend/src/signals/*` — ingest, dedup, 72h topic clustering,
+24h velocity computation, in-memory + Supabase repositories. Fully
+tested.
 
-**BLOCKER (does not block anything else):** real signal sources (Search
-Console, YouTube Analytics, X mentions) each require an OAuth app the
-owner must personally create — this is account/developer-portal setup,
-not something achievable via API alone:
-- **Google Search Console + YouTube Analytics**: create a project in
-  Google Cloud Console, configure the OAuth consent screen, create OAuth
-  2.0 credentials, enable the Search Console API and YouTube Data API v3.
-- **X**: apply for a developer account at developer.x.com, create a
-  Project + App, generate API keys/tokens with the scopes needed for
-  reading mentions/analytics.
+### X adapter (done, 2026-09-01)
+
+- **X developer account created** — pay-per-use pricing (no free tier;
+  `$0.005`/read generally, but **Owned Reads** endpoints — including
+  `GET /2/users/{id}/mentions` for your own account — are `$0.001`/
+  resource). Owner deposited **$10** in credits.
+- **App `2094810164289273856FillbookHQ`** created with **Read**-only
+  permissions (no write scope exists anywhere on this app), type "Web
+  App, Automated App or Bot" (confidential client, matches the
+  server-side backend). Callback/Website URL point at the real Vercel
+  deployment.
+- **OAuth 2.0 user Access Token generated for @FillbookHQ**, scoped to
+  exactly `tweet.read`, `users.read`, `offline.access` — explicitly
+  unchecked `dm.read`/`dm.write` and every other scope the console
+  defaults to checked. The mentions endpoint requires this user-context
+  token (`OAuth2UserToken` per X's own API reference); the app-only
+  Bearer Token alone does not work for Owned Reads.
+- **New code**: `backend/src/signals/adapters/xAdapter.ts`
+  (`XSignalAdapter` — token refresh, `resolveOwnUserId()`,
+  `fetchOwnMentions()`, all read-only by construction),
+  `xTokenStore.ts` (`SupabaseXTokenStore` +
+  `BootstrappingXTokenStore`, which seeds `platform_oauth_credentials`
+  from `X_ACCESS_TOKEN`/`X_REFRESH_TOKEN` env vars on first run only —
+  after that, refreshed tokens persist in Supabase since a serverless
+  invocation can't write back to its own env vars),
+  `ingestionCursorStore.ts` + `xIngestion.ts` (`ingestXMentions()` —
+  tracks a `since_id` cursor per source so repeated runs don't
+  re-ingest the same mentions as duplicate signal rows; topic is left
+  `null`, since real topic classification needs the AI provider key,
+  Phase 6 blocker — not guessed at). New migrations: `0007` (
+  `platform_oauth_credentials`) and `0008` (`signal_ingestion_cursors`),
+  both applied to the live project. New endpoint:
+  `backend/api/ingest-x-mentions.ts` (POST-only — has real side effects:
+  spends X API credits and writes rows; manually triggerable, wiring to
+  Vercel Cron is a follow-up once run and verified at least once against
+  the real API).
+- **Real bug caught by tests**: initial implementation didn't thread a
+  testable clock through `fetchOwnMentions`/`resolveOwnUserId`, so the
+  token-expiry check silently used the real wall clock instead of an
+  injected `now` — fixed by adding `now` as an optional parameter
+  throughout, matching `SignalGraph.ingest()`'s existing convention.
+- **Credential-handling note for future sessions**: X's console dialogs
+  are one-time-reveal for secrets and occasionally mislabel the OAuth 2.0
+  Client Secret as "Client ID" in the "Did you save your...?" modal —
+  read the exact value via the browser's accessibility tree
+  (`read_page`/`find`), not a screenshot, to avoid OCR transcription
+  errors corrupting a secret silently.
+- **Cumulative backend test count: 81/81 passing, typecheck clean.**
+- **Deployed and verified live end-to-end, same session.** Deploying hit
+  the exact `ERR_MODULE_NOT_FOUND` bug documented earlier in this ledger
+  (Vercel's Node ESM loader requires explicit `.js` extensions on
+  relative imports) — this time fixed properly instead of re-reaching for
+  the CommonJS workaround: added `.js` extensions to every relative
+  import across `backend/src` and `backend/api` (41 import statements),
+  verified this doesn't break local `vitest`/`tsc` (TS's `Bundler`
+  resolution mode accepts extensioned imports to `.ts` files fine). One
+  config now works for both environments — the CommonJS/ESM split this
+  ledger flagged as tech debt no longer exists.
+  - `X_OAUTH_CLIENT_ID`/`X_OAUTH_CLIENT_SECRET`/`X_ACCESS_TOKEN`/
+    `X_REFRESH_TOKEN` added to Vercel's production env vars (owner did
+    this personally via `vercel env add` — secret values were never
+    piped through a shell command by Claude; a permission classifier
+    correctly blocked that when first attempted).
+  - `POST /api/ingest-x-mentions` called for real: **19 mentions
+    ingested** on the first call, confirmed via a direct `signals` table
+    count. A second call ingested **0** — confirms the `since_id` cursor
+    correctly prevents duplicate rows on repeated runs (manual or future
+    cron).
+  - `/api/health`'s `X` row now derives from a real query (does
+    `signal_ingestion_cursors` have an `x_mention` row?) rather than a
+    hardcoded string — shows `HEALTHY` with a real last-synced timestamp,
+    not just "credentials exist."
+- **Not done yet**: wiring this endpoint to Vercel Cron for automatic
+  periodic ingestion (currently manual-trigger only) — small follow-up,
+  no known blocker.
+
+**BLOCKER (does not block anything else): Search Console + YouTube
+Analytics** still need a Google Cloud OAuth app the owner must personally
+create — create a project in Google Cloud Console, configure the OAuth
+consent screen, create OAuth 2.0 credentials, enable the Search Console
+API and YouTube Data API v3.
 **WHAT'S READY:** `SignalGraph.ingest()` accepts any `source` string and
 works identically regardless of where evidence comes from — the moment
 credentials exist, an adapter that calls the real API and pipes results
@@ -157,8 +229,9 @@ require changing anything already built.
 **Cumulative test status after Phase 6: 57/57 passing, typecheck clean.**
 
 ## Phase 7 — Android Mission Control
-**Status: core complete (3 of 12 spec screens), real verified build, no
-visual/emulator QA.** `android/` — Kotlin + Jetpack Compose, native.
+**Status: all 11 screens built, real verified build, full emulator visual
+QA done (see "Phase 7 continuation" below).** `android/` — Kotlin +
+Jetpack Compose, native.
 Dark-first design system (custom color/type tokens, not a generic Material
 demo). Home, Radar, Approvals screens against a `GrowthOsRepository`
 interface; `FakeGrowthOsRepository` seeded with real FillbookHQ content
@@ -174,24 +247,86 @@ machine's default JDK 25, which Gradle 8.14.3 doesn't yet support — fixed
 via `JAVA_HOME` at build time, not a code change.
 
 **Not done, and NOT claimed as done:**
-- **No emulator/device visual QA.** No Android system image is installed
-  on this machine, and no `cmdline-tools`/`sdkmanager` binary exists to
-  fetch one from the command line — that requires either Android Studio's
-  own SDK Manager GUI or a multi-GB unattended download plus hardware
-  acceleration setup neither attempted nor verified safe to do headless.
-  **OWNER ACTION (only if you want on-device visual QA before I can do
-  it):** open Android Studio -> Tools -> SDK Manager -> SDK Tools -> check
-  "Android SDK Command-line Tools" -> Apply, OR just `adb install
-  android/app/build/outputs/apk/debug/app-debug.apk` to a physical device
-  with USB debugging on. Once either exists, I can drive it directly.
-- Only Home/Radar/Approvals exist; Campaigns/Analytics/Content
-  Library/Research/Creators/Strategy/System/Settings screens are not
-  built (right-sized sequencing, not an oversight — see
-  `docs/ARCHITECTURE.md`).
+- ~~No emulator/device visual QA~~ — **done, see "Phase 7 continuation"
+  below.**
+- ~~Only Home/Radar/Approvals exist~~ — **all 11 screens now built, see
+  "Phase 7 continuation" below.**
 - No release (signed) build, no AAB — only unsigned debug APK. Release
   signing requires a keystore, which per this build's own security
   posture should be generated and held by the owner, not autonomously
   created and stored in the repo.
+
+### Phase 7 continuation (2026-09-01, different machine: `justw`, not `Justin`)
+
+**Status: all 11 spec screens built, full emulator visual QA done, one real
+bug found and fixed.**
+
+- **Machine change noted:** this pass ran on a machine where the user
+  profile is `justw`, not `Justin` — no JDK, Android SDK, or Android
+  Studio existed here at all (not just missing the emulator system image,
+  the *entire* toolchain was absent). Installed via `winget`: Android
+  Studio (`Google.AndroidStudio`) and Amazon Corretto JDK 21
+  (`Amazon.Corretto.21.JDK`, at `C:\Program Files\Amazon
+  Corretto\jdk21.0.12_9`) — same JDK-21 requirement as before, Gradle
+  8.14.3 still doesn't support newer JDKs (Studio's bundled JBR is 25).
+  Downloaded the official `commandlinetools-win` zip directly (SHA-256
+  verified against Google's published hash) since winget has no
+  standalone command-line-tools package, extracted to
+  `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest`, then `sdkmanager`
+  installed platform-tools/build-tools 34/platform 34/emulator/a
+  `google_apis` x86_64 system image. Created AVD `growthos_test` via
+  `avdmanager` (a benign `devices.xml` stderr warning appeared but the AVD
+  was created successfully anyway).
+- **Built the remaining 8 screens**: Campaigns, Analytics, Content
+  Library, Research, Creators, Strategy, System, Settings (spec calls
+  them "9 remaining" counting from a 12-screen total; 3 existed +
+  8 new = 11 total — no 12th screen identified anywhere in the repo).
+  Backend only exposes 4 endpoints (`/health`, `/summary`,
+  `/opportunities`, `/approvals`), so per this project's own
+  anti-fabrication stance, the 6 screens with no backing endpoint
+  (Campaigns/Analytics/Content Library/Research/Creators/Strategy) show
+  an honest "Not wired to real data yet" state explaining specifically
+  what's blocking them (new shared `ComingSoonScreen`/`ScreenHeader` in
+  `ui/components/Common.kt`) instead of fabricated numbers or lorem
+  ipsum. **System** and **Settings** reuse the real `/api/health` data
+  (System shows it at full detail plus a visibly-disabled Pause System
+  toggle since `system_settings` has no endpoint yet; Settings surfaces
+  just the `NOT_CONNECTED` items as a real "Needs your action" list, plus
+  static app/backend/database info). Navigation switched from a 3-item
+  bottom bar to a `ModalNavigationDrawer` (11 destinations don't fit a
+  bottom bar) — `MainActivity.kt`.
+- **Real bug found via visual QA and fixed**: `FillbookGrowthOSTheme`
+  defaulted to `isSystemInDarkTheme()`, but every screen component
+  references the dark palette's `Surface`/`TextPrimary`/etc. constants
+  directly (`ui/theme/Color.kt`) rather than `MaterialTheme.colorScheme`.
+  On this emulator's light system theme, that rendered near-black cards
+  on a white background with barely-legible text — a real, screenshot-
+  confirmed defect, exactly what "nobody has looked at the rendered UI"
+  predicted might exist. Fixed by forcing `darkTheme = true`
+  unconditionally (`ui/theme/Theme.kt`) rather than fixing every
+  component to be theme-aware, since light mode was never actually
+  finished (`LightColors` doesn't even override `onSurface`/
+  `onBackground`) — exposing a broken toggle would be worse than not
+  having one. Proper light-theme support (colorScheme-driven components)
+  is a real future task if light mode is ever wanted, not done this pass.
+- **Full visual QA performed**: booted `growthos_test` headless
+  (`-no-window -no-audio -gpu swiftshader_indirect`), installed the real
+  debug APK, launched against the live production backend (not a mock),
+  and screenshotted all 11 screens via `adb exec-out screencap`. Verified:
+  drawer navigation/icons/selection state, Home's live stat cards and
+  System Health list, Radar/Approvals real empty states, all 6
+  ComingSoonScreen instances render their specific copy correctly with no
+  overflow/clipping, System's Pause toggle and health list, Settings'
+  dynamic owner-action list (5 items: Search Console/X/TikTok/YouTube/AI
+  provider, matching `getHealth()`'s real `NOT_CONNECTED` rows) and About
+  section. No other defects found. One caught-in-the-act false alarm:
+  a screenshot taken ~1s after navigating to Settings appeared to be
+  missing the owner-action section entirely — recapturing after the
+  network fetch actually completed showed it was correct; not a bug, just
+  a timing artifact of screenshotting before `LaunchedEffect` resolved.
+- **Not done this pass**: no release/signed build (same reasoning as
+  before — owner-held keystore); didn't re-verify the emulator finding
+  against a physical device.
 
 ## Phase 8+ (SEO/X/YouTube/TikTok/Video Factory/Attention Radar/Creator
 CRM/Research Lab/Attribution/Experiments/Growth Genome/Strategy

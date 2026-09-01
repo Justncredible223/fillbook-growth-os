@@ -1,6 +1,6 @@
-import { BrandConstitution, type VocabularyViolation } from "../knowledge/brandConstitution";
-import { checkAntiSlop, type SlopFinding } from "./antiSlopEngine";
-import { OriginalityEngine } from "./originalityEngine";
+import { BrandConstitution, type VocabularyViolation } from "../knowledge/brandConstitution.js";
+import { checkAntiSlop, type SlopFinding } from "./antiSlopEngine.js";
+import { OriginalityEngine } from "./originalityEngine.js";
 
 export interface QualityGateResult {
   passed: boolean;

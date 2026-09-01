@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Opportunity, OpportunityRepository } from "./types";
+import type { Opportunity, OpportunityRepository } from "./types.js";
 
 function fromRow(data: Record<string, any>): Opportunity {
   return {

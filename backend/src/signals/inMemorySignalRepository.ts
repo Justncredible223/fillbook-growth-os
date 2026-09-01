@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Signal, SignalRepository } from "./types";
+import type { Signal, SignalRepository } from "./types.js";
 
 export class InMemorySignalRepository implements SignalRepository {
   private signals: Signal[] = [];

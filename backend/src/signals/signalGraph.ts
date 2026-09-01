@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { IngestSignalInput, Signal, SignalRepository } from "./types";
+import type { IngestSignalInput, Signal, SignalRepository } from "./types.js";
 
 const CLUSTER_WINDOW_HOURS = 72;
 const VELOCITY_WINDOW_HOURS = 24;

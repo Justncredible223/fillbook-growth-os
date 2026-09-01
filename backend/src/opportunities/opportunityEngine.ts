@@ -1,5 +1,5 @@
-import { scoreOpportunity } from "./scoring";
-import type { ApprovalClass, Opportunity, OpportunityRepository, ScoringInput } from "./types";
+import { scoreOpportunity } from "./scoring.js";
+import type { ApprovalClass, Opportunity, OpportunityRepository, ScoringInput } from "./types.js";
 
 export class OpportunityEngine {
   constructor(private repo: OpportunityRepository) {}

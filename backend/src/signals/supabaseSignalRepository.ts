@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Signal, SignalRepository } from "./types";
+import type { Signal, SignalRepository } from "./types.js";
 
 interface SignalRow {
   id: string;

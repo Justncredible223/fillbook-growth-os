@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Opportunity, OpportunityRepository } from "./types";
+import type { Opportunity, OpportunityRepository } from "./types.js";
 
 export class InMemoryOpportunityRepository implements OpportunityRepository {
   private items: Opportunity[] = [];

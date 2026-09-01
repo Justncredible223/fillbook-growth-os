@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { errorMessage } from "../src/lib/errorMessage";
-import { getServiceClient } from "../src/lib/supabaseClient";
+import { errorMessage } from "../src/lib/errorMessage.js";
+import { getServiceClient } from "../src/lib/supabaseClient.js";
 
 /**
  * Integrations that genuinely require an owner-created OAuth app/developer
@@ -11,7 +11,6 @@ import { getServiceClient } from "../src/lib/supabaseClient";
  */
 const NOT_YET_CONNECTED = [
   { label: "Search Console", detail: "Needs a Google Cloud OAuth app (owner action)" },
-  { label: "X", detail: "Needs an X developer app (owner action)" },
   { label: "TikTok", detail: "Promote is account-blocked; organic staging only, not yet wired" },
   { label: "YouTube", detail: "Needs a Google Cloud OAuth app (owner action)" },
   { label: "AI provider", detail: "Needs an API key for deep content review (owner action)" },
@@ -51,6 +50,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   for (const item of NOT_YET_CONNECTED) {
     health.push({ label: item.label, status: "NOT_CONNECTED", detail: item.detail });
+  }
+
+  // A row in signal_ingestion_cursors for x_mention only ever gets written
+  // after a real, successful call to X's API (see xIngestion.ts) -- so its
+  // presence is real evidence the adapter works, not just that
+  // credentials exist.
+  try {
+    const client = getServiceClient();
+    const { data } = await client
+      .from("signal_ingestion_cursors")
+      .select("updated_at")
+      .eq("source", "x_mention")
+      .maybeSingle();
+    if (data) {
+      health.push({
+        label: "X",
+        status: "HEALTHY",
+        detail: `Verified live -- last synced ${(data as { updated_at: string }).updated_at}`,
+      });
+    } else {
+      health.push({
+        label: "X",
+        status: "DEGRADED",
+        detail: "Credentials wired, not yet verified against the real API",
+      });
+    }
+  } catch (err) {
+    health.push({ label: "X", status: "DEGRADED", detail: errorMessage(err) });
   }
 
   res.status(200).json({ health });

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { errorMessage } from "../src/lib/errorMessage";
-import { getServiceClient } from "../src/lib/supabaseClient";
+import { errorMessage } from "../src/lib/errorMessage.js";
+import { getServiceClient } from "../src/lib/supabaseClient.js";
 
 /**
  * Assembles ApprovalAsset-shaped rows (matching the Android app's data

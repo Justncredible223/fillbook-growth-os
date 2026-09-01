@@ -1,5 +1,5 @@
-import { decideRetry } from "./backoff";
-import type { EnqueueInput, Job, JobQueueRepository } from "./types";
+import { decideRetry } from "./backoff.js";
+import type { EnqueueInput, Job, JobQueueRepository } from "./types.js";
 
 export type JobHandler = (job: Job) => Promise<void>;
 

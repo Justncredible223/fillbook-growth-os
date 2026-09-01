@@ -1,5 +1,5 @@
-import { authorizeAndAudit, type AuditSink } from "../firewall/externalWriteFirewall";
-import { ContentQualityGate } from "./contentQualityGate";
+import { authorizeAndAudit, type AuditSink } from "../firewall/externalWriteFirewall.js";
+import { ContentQualityGate } from "./contentQualityGate.js";
 
 export type AssetStage =
   | "idea"
