@@ -132,11 +132,18 @@ export class SupabaseAutoDraftRunRepository implements AutoDraftRunRepository {
   }
 
   async getMonthSpendUsd(yearMonth: string): Promise<number> {
+    // run_date is a `date` column -- Postgres has no LIKE operator for
+    // it, so this must be a real range comparison, not string matching
+    // (reproduced live: "operator does not exist: date ~~ unknown").
+    const [year, month] = yearMonth.split("-").map(Number);
+    const monthStart = `${yearMonth}-01`;
+    const nextMonth = month === 12 ? `${year! + 1}-01-01` : `${yearMonth.slice(0, 5)}${String(month! + 1).padStart(2, "0")}-01`;
     const { data, error } = await this.client
       .from("auto_draft_runs")
       .select("cost_usd")
       .eq("status", "drafted")
-      .like("run_date", `${yearMonth}%`);
+      .gte("run_date", monthStart)
+      .lt("run_date", nextMonth);
     if (error) throw new Error(`getMonthSpendUsd failed: ${error.message}`);
     return ((data ?? []) as Array<{ cost_usd: number | null }>).reduce((sum, r) => sum + Number(r.cost_usd ?? 0), 0);
   }

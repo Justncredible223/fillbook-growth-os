@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { MONTHLY_AUTO_DRAFT_BUDGET_USD, BACKLOG_CAP } from "../src/opportunities/autoDraftEligibility.js";
+import { SupabaseAutoDraftRunRepository } from "../src/opportunities/autoDraftRunRepository.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "GET") {
@@ -15,7 +16,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     startOfToday.setUTCHours(0, 0, 0, 0);
     const yearMonth = new Date().toISOString().slice(0, 7);
 
-    const [signalsToday, openOpportunities, readyAssets, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftRuns] =
+    const autoDraftRunRepo = new SupabaseAutoDraftRunRepository(client);
+
+    const [signalsToday, openOpportunities, readyAssets, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftSpendUsd] =
       await Promise.all([
         client.from("signals").select("id", { count: "exact", head: true }).gte("observed_at", startOfToday.toISOString()),
         client.from("opportunities").select("id", { count: "exact", head: true }).eq("status", "open"),
@@ -25,8 +28,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         client.from("opportunities").select("status"),
         client.from("campaign_assets").select("stage"),
         client.from("cost_events").select("cost_usd"),
-        client.from("auto_draft_runs").select("run_date, status, skip_reason, cost_usd").order("run_date", { ascending: false }).limit(1).maybeSingle(),
-        client.from("auto_draft_runs").select("cost_usd, status").eq("status", "drafted").like("run_date", `${yearMonth}%`),
+        autoDraftRunRepo.getLastRun(),
+        autoDraftRunRepo.getMonthSpendUsd(yearMonth),
       ]);
 
     const countBy = (rows: Array<Record<string, string>> | null, key: string): Record<string, number> => {
@@ -38,10 +41,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return counts;
     };
     const totalCostUsd = (costRows.data ?? []).reduce((sum: number, r: { cost_usd: number }) => sum + Number(r.cost_usd), 0);
-    const monthAutoDraftSpendUsd = ((monthAutoDraftRuns.data ?? []) as Array<{ cost_usd: number | null }>).reduce(
-      (sum, r) => sum + Number(r.cost_usd ?? 0),
-      0,
-    );
 
     res.status(200).json({
       signalsAnalyzedToday: signalsToday.count ?? 0,
@@ -59,9 +58,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         campaignAssetsByStage: countBy(assetsByStage.data as Array<Record<string, string>>, "stage"),
         totalCostUsd: Number(totalCostUsd.toFixed(6)),
         autoDraft: {
-          lastRunDate: lastAutoDraftRun.data?.run_date ?? null,
-          lastRunStatus: lastAutoDraftRun.data?.status ?? null,
-          lastRunSkipReason: lastAutoDraftRun.data?.skip_reason ?? null,
+          lastRunDate: lastAutoDraftRun?.runDate ?? null,
+          lastRunStatus: lastAutoDraftRun?.status ?? null,
+          lastRunSkipReason: lastAutoDraftRun?.skipReason ?? null,
           backlogCount: readyAssets.count ?? 0,
           backlogCap: BACKLOG_CAP,
           monthSpendUsd: Number(monthAutoDraftSpendUsd.toFixed(6)),
