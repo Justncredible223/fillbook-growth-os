@@ -10,3 +10,4 @@ android/build/
 android/*/build/
 android/.idea/
 android/*/.cxx/
+.vercel
