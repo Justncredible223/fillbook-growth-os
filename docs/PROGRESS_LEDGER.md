@@ -157,10 +157,68 @@ require changing anything already built.
 **Cumulative test status after Phase 6: 57/57 passing, typecheck clean.**
 
 ## Phase 7 — Android Mission Control
-In progress — see below for current status once started this session.
+**Status: core complete (3 of 12 spec screens), real verified build, no
+visual/emulator QA.** `android/` — Kotlin + Jetpack Compose, native.
+Dark-first design system (custom color/type tokens, not a generic Material
+demo). Home, Radar, Approvals screens against a `GrowthOsRepository`
+interface; `FakeGrowthOsRepository` seeded with real FillbookHQ content
+(not lorem-ipsum placeholders) pending backend deployment. The Approvals
+screen has exactly two button labels anywhere on it — "Approve internally"
+and "Open in `<platform>`" — no publish/post/send action exists in this
+app's code at all.
 
-## Phases 8-25
-Not started. See `docs/ARCHITECTURE.md` for sequencing. Each of X (9),
-YouTube (11), and TikTok (12) integration phases share the same OAuth-app
-blocker pattern as Phase 4 above — documented per-phase as work reaches
-them, not duplicated here in advance.
+`./gradlew :app:assembleDebug` verified **BUILD SUCCESSFUL**, produces a
+real 16MB `app-debug.apk` at `android/app/build/outputs/apk/debug/`.
+Required using JDK 21 (`C:\Users\Justin\.jdks\jbr-21.0.11`) instead of the
+machine's default JDK 25, which Gradle 8.14.3 doesn't yet support — fixed
+via `JAVA_HOME` at build time, not a code change.
+
+**Not done, and NOT claimed as done:**
+- **No emulator/device visual QA.** No Android system image is installed
+  on this machine, and no `cmdline-tools`/`sdkmanager` binary exists to
+  fetch one from the command line — that requires either Android Studio's
+  own SDK Manager GUI or a multi-GB unattended download plus hardware
+  acceleration setup neither attempted nor verified safe to do headless.
+  **OWNER ACTION (only if you want on-device visual QA before I can do
+  it):** open Android Studio -> Tools -> SDK Manager -> SDK Tools -> check
+  "Android SDK Command-line Tools" -> Apply, OR just `adb install
+  android/app/build/outputs/apk/debug/app-debug.apk` to a physical device
+  with USB debugging on. Once either exists, I can drive it directly.
+- Only Home/Radar/Approvals exist; Campaigns/Analytics/Content
+  Library/Research/Creators/Strategy/System/Settings screens are not
+  built (right-sized sequencing, not an oversight — see
+  `docs/ARCHITECTURE.md`).
+- No release (signed) build, no AAB — only unsigned debug APK. Release
+  signing requires a keystore, which per this build's own security
+  posture should be generated and held by the owner, not autonomously
+  created and stored in the repo.
+
+## Phase 8+ (SEO/X/YouTube/TikTok/Video Factory/Attention Radar/Creator
+CRM/Research Lab/Attribution/Experiments/Growth Genome/Strategy
+Evolution/full Android polish/release engineering)
+**Not started.** Each external-platform phase (X=9, YouTube=11,
+TikTok=12, Search Console=8) shares the Phase 4 OAuth-app blocker: the
+owner must create the developer app/OAuth client before any adapter code
+can be exercised against the real API, even though the adapter code
+itself is a small addition once that exists. Video Factory (10) has no
+technical blocker but wasn't reached this session. Full Android polish
+(21) and release engineering (22) depend on Phase 7's remaining screens
+existing first. Deliberately not stub-built with placeholder screens or
+fabricated "done" status — see `docs/ARCHITECTURE.md`'s definition-of-done
+discussion.
+
+## Repository & deployment state (end of this session)
+- **No GitHub remote exists yet** for this repo — created and committed
+  locally only. No `gh` CLI and no GitHub MCP/API tool was available in
+  this session to create one autonomously.
+  **OWNER ACTION:** create an empty repo (e.g. `Justncredible223/fillbook-growth-os`)
+  on GitHub, then from `C:\Users\Justin\fillbook-growth-os` run
+  `git remote add origin <url>` and `git push -u origin master`.
+- **Backend is not deployed anywhere.** The business logic
+  (jobs/knowledge/signals/opportunities/content/firewall) is real and
+  tested, but there are zero HTTP endpoints (Vercel serverless functions)
+  wrapping it yet — that's Phase 22 (release engineering) work, not done
+  this session. Deploying an empty API surface would have been a hollow
+  gesture, so it wasn't done just to be able to say "deployed."
+- **Supabase is live and real** (see Phase 1) — this is the one piece of
+  infrastructure that's actually running in the cloud right now.
