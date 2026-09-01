@@ -80,8 +80,17 @@ export class YouTubeAdapter {
     return res.json();
   }
 
-  /** Videos uploaded to the authenticated user's own channel, newest first. */
-  async fetchOwnVideos(publishedAfter?: string, now: Date = new Date()): Promise<YouTubeVideo[]> {
+  /**
+   * Videos uploaded to the authenticated user's own channel, newest
+   * first. Deliberately never sends `publishedAfter` -- YouTube's
+   * search.list rejects that combined with `forMine=true` with a bare
+   * HTTP 400 "Request contains an invalid argument" (reproduced directly
+   * against the real API 2026-09-01; removing publishedAfter alone fixed
+   * it). Filtering by cursor is the caller's job now (see
+   * ingestYouTubeVideos) -- fine at this channel's current scale
+   * (maxResults=25 covers everything uploaded so far).
+   */
+  async fetchOwnVideos(now: Date = new Date()): Promise<YouTubeVideo[]> {
     const params = new URLSearchParams({
       part: "snippet",
       forMine: "true",
@@ -89,7 +98,6 @@ export class YouTubeAdapter {
       order: "date",
       maxResults: "25",
     });
-    if (publishedAfter) params.set("publishedAfter", publishedAfter);
 
     const json = (await this.authedGet(
       `https://www.googleapis.com/youtube/v3/search?${params.toString()}`,

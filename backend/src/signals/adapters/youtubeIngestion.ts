@@ -8,8 +8,10 @@ const CURSOR_SOURCE = "youtube_video";
 /**
  * Pulls newly published videos on the owner's own channel. Cursor tracks
  * the newest video's publishedAt timestamp (ISO string) so repeated runs
- * only fetch videos published after the last check -- same pattern as
- * ingestXMentions's since_id, adapted to YouTube's publishedAfter filter.
+ * only ingest videos published after the last check -- same pattern as
+ * ingestXMentions's since_id. Filtering happens here, client-side, rather
+ * than via YouTube's own publishedAfter param -- that param is broken
+ * when combined with forMine=true (see youtubeAdapter.ts).
  */
 export async function ingestYouTubeVideos(
   adapter: YouTubeAdapter,
@@ -17,8 +19,10 @@ export async function ingestYouTubeVideos(
   cursorStore: IngestionCursorStore,
   now: Date = new Date(),
 ): Promise<Signal[]> {
-  const publishedAfter = (await cursorStore.load(CURSOR_SOURCE)) ?? undefined;
-  const videos = await adapter.fetchOwnVideos(publishedAfter, now);
+  const cursor = await cursorStore.load(CURSOR_SOURCE);
+  const sinceDate = cursor ? new Date(cursor) : null;
+  const allVideos = await adapter.fetchOwnVideos(now);
+  const videos = sinceDate ? allVideos.filter((v) => v.publishedAt > sinceDate) : allVideos;
   const signals: Signal[] = [];
 
   for (const video of videos) {

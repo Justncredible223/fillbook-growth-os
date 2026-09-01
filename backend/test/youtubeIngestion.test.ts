@@ -6,12 +6,12 @@ import { InMemoryIngestionCursorStore } from "../src/signals/adapters/ingestionC
 import type { YouTubeVideo } from "../src/signals/adapters/youtubeAdapter";
 
 class FakeYouTubeAdapter {
-  public lastPublishedAfter: string | undefined;
+  public callCount = 0;
 
   constructor(private videos: YouTubeVideo[]) {}
 
-  async fetchOwnVideos(publishedAfter?: string): Promise<YouTubeVideo[]> {
-    this.lastPublishedAfter = publishedAfter;
+  async fetchOwnVideos(): Promise<YouTubeVideo[]> {
+    this.callCount++;
     return this.videos;
   }
 }
@@ -36,7 +36,7 @@ describe("ingestYouTubeVideos", () => {
     expect(signals[0]!.sourceReference).toBe("https://www.youtube.com/watch?v=abc123");
   });
 
-  it("passes the stored cursor as publishedAfter on the next call", async () => {
+  it("never passes publishedAfter to the adapter (fetches everything, filters client-side)", async () => {
     const repo = new InMemorySignalRepository();
     const graph = new SignalGraph(repo);
     const cursors = new InMemoryIngestionCursorStore();
@@ -45,7 +45,23 @@ describe("ingestYouTubeVideos", () => {
 
     await ingestYouTubeVideos(adapter as any, graph, cursors, now);
 
-    expect(adapter.lastPublishedAfter).toBe("2026-08-01T00:00:00.000Z");
+    expect(adapter.callCount).toBe(1);
+  });
+
+  it("filters out videos at or before the stored cursor", async () => {
+    const repo = new InMemorySignalRepository();
+    const graph = new SignalGraph(repo);
+    const cursors = new InMemoryIngestionCursorStore();
+    await cursors.save("youtube_video", "2026-08-25T00:00:00.000Z");
+    const adapter = new FakeYouTubeAdapter([
+      { videoId: "old", title: "already seen", publishedAt: new Date("2026-08-20T00:00:00Z") },
+      { videoId: "new", title: "genuinely new", publishedAt: new Date("2026-08-31T00:00:00Z") },
+    ]);
+
+    const signals = await ingestYouTubeVideos(adapter as any, graph, cursors, now);
+
+    expect(signals).toHaveLength(1);
+    expect((signals[0]!.evidence as { videoId: string }).videoId).toBe("new");
   });
 
   it("saves the newest video's publishedAt as the new cursor", async () => {

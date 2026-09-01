@@ -20,27 +20,19 @@ describe("YouTubeAdapter", () => {
     expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
   };
 
-  it("uses the stored access token and includes publishedAfter when a cursor is given", async () => {
+  it("uses the stored access token and never sends publishedAfter", async () => {
     const store = new InMemoryGoogleTokenStore(validState);
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ items: [] }));
     const adapter = new YouTubeAdapter("client-id", "client-secret", store, fetchMock);
 
-    await adapter.fetchOwnVideos("2026-08-01T00:00:00Z", now);
+    await adapter.fetchOwnVideos(now);
 
     const [url, options] = fetchMock.mock.calls[0]!;
     expect((options.headers as Record<string, string>).Authorization).toBe("Bearer valid-token");
-    expect(url).toContain("publishedAfter=2026-08-01");
     expect(url).toContain("forMine=true");
-  });
-
-  it("omits publishedAfter when no cursor is given", async () => {
-    const store = new InMemoryGoogleTokenStore(validState);
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ items: [] }));
-    const adapter = new YouTubeAdapter("client-id", "client-secret", store, fetchMock);
-
-    await adapter.fetchOwnVideos(undefined, now);
-
-    const [url] = fetchMock.mock.calls[0]!;
+    // publishedAfter is deliberately never sent -- YouTube's search.list
+    // rejects it combined with forMine=true (HTTP 400), reproduced
+    // directly against the real API. See youtubeAdapter.ts.
     expect(url).not.toContain("publishedAfter");
   });
 
@@ -56,7 +48,7 @@ describe("YouTubeAdapter", () => {
       .mockResolvedValueOnce(jsonResponse({ items: [] }));
     const adapter = new YouTubeAdapter("client-id", "client-secret", store, fetchMock);
 
-    await adapter.fetchOwnVideos(undefined, now);
+    await adapter.fetchOwnVideos(now);
 
     const saved = await store.load();
     expect(saved?.accessToken).toBe("new-token");
@@ -67,7 +59,7 @@ describe("YouTubeAdapter", () => {
     const store = new InMemoryGoogleTokenStore(null);
     const adapter = new YouTubeAdapter("client-id", "client-secret", store, vi.fn());
 
-    await expect(adapter.fetchOwnVideos(undefined, now)).rejects.toThrow(GoogleApiError);
+    await expect(adapter.fetchOwnVideos(now)).rejects.toThrow(GoogleApiError);
   });
 
   it("maps video fields correctly", async () => {
@@ -84,7 +76,7 @@ describe("YouTubeAdapter", () => {
     );
     const adapter = new YouTubeAdapter("client-id", "client-secret", store, fetchMock);
 
-    const videos = await adapter.fetchOwnVideos(undefined, now);
+    const videos = await adapter.fetchOwnVideos(now);
 
     expect(videos).toEqual([
       { videoId: "abc123", title: "Why 2 contracts is a bad rule", publishedAt: new Date("2026-08-31T10:00:00Z") },
