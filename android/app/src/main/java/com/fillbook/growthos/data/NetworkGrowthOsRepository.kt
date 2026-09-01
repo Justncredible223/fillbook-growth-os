@@ -45,12 +45,20 @@ class NetworkGrowthOsRepository(
 
     override suspend fun getHomeSummary(): HomeSummary {
         val json = get("/api/summary")
+        val analytics = json.getJSONObject("analytics")
         return HomeSummary(
             signalsAnalyzedToday = json.getInt("signalsAnalyzedToday"),
             opportunitiesFound = json.getInt("opportunitiesFound"),
             assetsReady = json.getInt("assetsReady"),
             pendingReview = json.getInt("pendingReview"),
             systemPaused = json.getBoolean("systemPaused"),
+            analytics = AnalyticsBreakdown(
+                totalSignals = analytics.getInt("totalSignals"),
+                signalsBySource = analytics.getJSONObject("signalsBySource").toIntMap(),
+                opportunitiesByStatus = analytics.getJSONObject("opportunitiesByStatus").toIntMap(),
+                campaignAssetsByStage = analytics.getJSONObject("campaignAssetsByStage").toIntMap(),
+                totalCostUsd = analytics.getDouble("totalCostUsd"),
+            ),
         )
     }
 
@@ -159,3 +167,6 @@ private fun JSONArray.mapStrings(): List<String> =
 
 private fun JSONObject.optStringOrNull(key: String): String? =
     if (isNull(key) || !has(key)) null else getString(key)
+
+private fun JSONObject.toIntMap(): Map<String, Int> =
+    keys().asSequence().associateWith { key -> getInt(key) }

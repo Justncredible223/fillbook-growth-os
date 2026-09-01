@@ -30,6 +30,13 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         assetsReady = 0,
         pendingReview = 0,
         systemPaused = false,
+        analytics = AnalyticsBreakdown(
+            totalSignals = 25,
+            signalsBySource = mapOf("x_mention" to 19, "youtube_video" to 6),
+            opportunitiesByStatus = mapOf("open" to 12, "actioned" to 1),
+            campaignAssetsByStage = mapOf("draft" to 1, "final_draft" to 1, "ready_for_owner" to 1),
+            totalCostUsd = 0.09,
+        ),
     )
 
     override suspend fun getHealth() = listOf(

@@ -168,7 +168,7 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository) {
                 composable(Destination.Radar.route) { RadarScreen(repo) }
                 composable(Destination.Approvals.route) { ApprovalsScreen(repo) }
                 composable(Destination.Campaigns.route) { CampaignsScreen(repo) }
-                composable(Destination.Analytics.route) { AnalyticsScreen() }
+                composable(Destination.Analytics.route) { AnalyticsScreen(repo) }
                 composable(Destination.ContentLibrary.route) { ContentLibraryScreen() }
                 composable(Destination.Research.route) { ResearchScreen() }
                 composable(Destination.Creators.route) { CreatorsScreen(repo) }

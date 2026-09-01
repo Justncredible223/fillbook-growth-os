@@ -32,12 +32,21 @@ data class HealthItem(
     val detail: String,
 )
 
+data class AnalyticsBreakdown(
+    val totalSignals: Int,
+    val signalsBySource: Map<String, Int>,
+    val opportunitiesByStatus: Map<String, Int>,
+    val campaignAssetsByStage: Map<String, Int>,
+    val totalCostUsd: Double,
+)
+
 data class HomeSummary(
     val signalsAnalyzedToday: Int,
     val opportunitiesFound: Int,
     val assetsReady: Int,
     val pendingReview: Int,
     val systemPaused: Boolean,
+    val analytics: AnalyticsBreakdown,
 )
 
 enum class CreatorCategory { TIER_B, RESEARCH_NEXT, REJECTED }
