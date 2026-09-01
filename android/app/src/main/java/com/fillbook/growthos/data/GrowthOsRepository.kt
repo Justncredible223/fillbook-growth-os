@@ -15,6 +15,12 @@ interface GrowthOsRepository {
     suspend fun getCreators(): List<Creator>
     suspend fun getCampaigns(): List<Campaign>
     suspend fun getCostSummary(): CostSummary
+    /**
+     * Records the human decision -- approve or reject -- for one
+     * campaign asset. Never publishes anything; only changes what this
+     * app displays. The owner still does the actual posting themselves.
+     */
+    suspend fun decideApproval(campaignAssetId: String, approve: Boolean)
 }
 
 /**
@@ -111,4 +117,8 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         last24hCostUsd = 0.02,
         totalCalls = 20,
     )
+
+    override suspend fun decideApproval(campaignAssetId: String, approve: Boolean) {
+        // No backend to call in fake mode -- no-op.
+    }
 }

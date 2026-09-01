@@ -2,8 +2,10 @@ package com.fillbook.growthos.data
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -40,6 +42,23 @@ class NetworkGrowthOsRepository(
                 throw NetworkException("GET $path failed: HTTP ${response.code} -- $body")
             }
             JSONObject(body)
+        }
+    }
+
+    private suspend fun post(path: String, jsonBody: JSONObject): JSONObject = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$baseUrl$path")
+            .header("x-vercel-protection-bypass", protectionBypassSecret)
+            .header("x-vercel-set-bypass-cookie", "true")
+            .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string() ?: "{}"
+            if (!response.isSuccessful) {
+                throw NetworkException("POST $path failed: HTTP ${response.code} -- $responseBody")
+            }
+            JSONObject(responseBody)
         }
     }
 
@@ -167,6 +186,13 @@ class NetworkGrowthOsRepository(
             last24hCostUsd = json.getDouble("last24hCostUsd"),
             totalCalls = json.getInt("totalCalls"),
         )
+    }
+
+    override suspend fun decideApproval(campaignAssetId: String, approve: Boolean) {
+        val body = JSONObject()
+            .put("campaignAssetId", campaignAssetId)
+            .put("action", if (approve) "approve" else "reject")
+        post("/api/approvals", body)
     }
 }
 
