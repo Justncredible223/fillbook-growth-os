@@ -277,3 +277,24 @@ discussion.
   now: Supabase -> Vercel API -> Android app, all real, no mocks left in
   the request path except the absence of actual signal/opportunity/
   approval data (empty tables, not fake ones).
+
+- **`SUPABASE_SERVICE_ROLE_KEY` is now set and verified working.** Getting
+  here took three attempts, each a real bug, each fixed:
+  1. First value was missing entirely (expected -- owner hadn't set it yet).
+  2. Second value had a stray newline in the middle
+     (`"sb_secret_YqeHP\nuEBZ7Ph..."`), breaking the HTTP header
+     entirely -- also the wrong key *type* (Supabase's new `sb_secret_...`
+     format from the default API Keys page, not the classic JWT
+     `service_role` key this code expects). Fixed by using Supabase's
+     "Legacy anon, service_role API keys" page instead and copying via the
+     copy-icon button rather than manual text selection.
+  3. Third attempt surfaced a real code bug once the key was finally being
+     read: `errorMessage()` fix above (see latest commit).
+  4. **Verified live and fully healthy** after redeploy:
+     `{"health":[{"label":"Supabase","status":"HEALTHY",...},{"label":"Job queue","status":"HEALTHY",...}, ...]}`.
+     `/api/opportunities` and `/api/summary` both confirmed returning real
+     (empty, not fake) data with no errors.
+  **The full chain is genuinely live end-to-end**: Supabase -> Vercel API
+  -> ready for the Android app to consume real data the moment there's
+  real data to show (tables are empty, not broken -- Signal Graph
+  ingestion adapters are the next real blocker on that, per Phase 4).
