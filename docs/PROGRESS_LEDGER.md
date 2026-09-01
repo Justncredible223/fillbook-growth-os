@@ -759,3 +759,34 @@ or just confirm it in chat and let it be done in-session.
   real.
 
 **Cumulative backend test count: 126/126 passing, typecheck clean.**
+
+### Android polish continued (2026-09-01, same day as Phase 15)
+
+Campaigns, Analytics, and Content Library screens converted from
+`ComingSoonScreen` to real data — 9 of 11 screens now show real data
+(Home, Radar, Approvals, Creators, System, Settings, Campaigns,
+Analytics, Content Library). Analytics and Content Library deliberately
+reuse existing endpoints (`/api/summary` extended, `/api/campaigns`
+reused) rather than adding new ones, since this project is now at 11 of
+Vercel Hobby's 12-function cap.
+
+**Remaining 2 screens (Research, Strategy) deliberately left as
+`ComingSoonScreen`** — these map to the not-started Research Lab and
+Strategy Evolution phases, which need real subsystems and real usage
+history behind them, not just a UI wired to existing tables. Building
+placeholder versions of those screens would be exactly the kind of
+fabrication this project has avoided everywhere else.
+
+**Genuinely blocked / needs real scoping, not more autonomous work
+right now:**
+- **TikTok integration** — needs the owner to create a TikTok developer
+  account/app first, same as X and Google earlier.
+- **Video Factory** — the existing manual pipeline (edge-tts + ffmpeg)
+  needs a real execution-environment decision (Vercel serverless has
+  tight size/timeout limits unsuited to video rendering) before writing
+  code, not something to guess at.
+- **Attribution, Experiments, Growth Genome, Strategy Evolution** — all
+  need real usage/outcome history this system doesn't have yet (it's
+  only been live for a few hours as of this writing). Building them now
+  would mean fabricating what they'd learn from.
+- **Release engineering** — needs the owner's signing keystore.
