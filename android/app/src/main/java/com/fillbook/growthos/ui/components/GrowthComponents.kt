@@ -5,9 +5,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -167,6 +169,32 @@ fun PolishedEmptyState(
 fun LoadingIndicator(modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(color = Accent)
+    }
+}
+
+/**
+ * One row of a real bar chart: label, count, and a bar whose width is
+ * proportional to `count / maxCount`. No trend/history is implied -- this
+ * is a snapshot of the same counts the old plain-text rows showed, just
+ * scannable at a glance instead of read number by number.
+ */
+@Composable
+fun BreakdownBar(label: String, count: Int, maxCount: Int, modifier: Modifier = Modifier) {
+    val fraction = if (maxCount <= 0) 0f else (count.toFloat() / maxCount.toFloat()).coerceIn(0f, 1f)
+    Column(modifier = modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            Text(count.toString(), style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+        }
+        Spacer(Modifier.height(4.dp))
+        Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(Border, RoundedCornerShape(999.dp))) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(fraction)
+                    .height(6.dp)
+                    .background(Accent, RoundedCornerShape(999.dp)),
+            )
+        }
     }
 }
 

@@ -36,6 +36,8 @@ import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.StatusChip
+import com.fillbook.growthos.ui.components.StatusTone
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextSecondary
@@ -136,7 +138,7 @@ private fun CreatorCard(creator: Creator) {
                     Pill(platformDisplayName(creator.platform), TextSecondary)
                     creator.followerCount?.let { count -> Pill(formatFollowers(count), TextSecondary) }
                     if (creator.category == CreatorCategory.REJECTED) {
-                        Pill("rejected", Danger)
+                        StatusChip("rejected", StatusTone.BLOCKED)
                     }
                 }
             }

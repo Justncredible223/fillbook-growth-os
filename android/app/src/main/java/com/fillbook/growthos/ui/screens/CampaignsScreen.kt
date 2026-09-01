@@ -32,11 +32,13 @@ import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.StatusChip
+import com.fillbook.growthos.ui.components.assetStageTone
+import com.fillbook.growthos.ui.components.campaignStatusTone
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextSecondary
-import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
 
 @Composable
@@ -83,19 +85,12 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
     }
 }
 
-private fun campaignStatusColor(status: String) = when (status) {
-    "approved" -> Accent
-    "in_review" -> Warning
-    "retired" -> Danger
-    else -> TextTertiary
-}
-
 @Composable
 private fun CampaignCard(campaign: Campaign) {
     GrowthCard {
         Text(campaign.thesis, style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(4.dp))
-        Pill(campaign.status.replace("_", " "), campaignStatusColor(campaign.status))
+        StatusChip(campaign.status.replace("_", " "), campaignStatusTone(campaign.status))
         Spacer(Modifier.height(12.dp))
         campaign.assets.forEach { asset -> AssetRow(asset) }
     }
@@ -106,7 +101,7 @@ private fun AssetRow(asset: CampaignAsset) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Pill(platformDisplayName(asset.platform), TextSecondary)
-            Pill(stageLabel(asset.stage), stageColor(asset.stage))
+            StatusChip(asset.stage.replace("_", " "), assetStageTone(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {
                 Pill(
                     "${asset.reviewPassCount}/${asset.reviewPassCount + asset.reviewFailCount} agents",
@@ -119,12 +114,4 @@ private fun AssetRow(asset: CampaignAsset) {
             Text(body, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 3)
         }
     }
-}
-
-private fun stageLabel(stage: String): String = stage.replace("_", " ")
-
-private fun stageColor(stage: String) = when (stage) {
-    "ready_for_owner", "handed_off" -> Accent
-    "final_draft" -> Warning
-    else -> TextTertiary
 }

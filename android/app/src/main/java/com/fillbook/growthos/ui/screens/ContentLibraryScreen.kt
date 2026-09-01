@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -32,8 +35,11 @@ import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.StatusChip
+import com.fillbook.growthos.ui.components.assetStageTone
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
+import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
@@ -47,22 +53,26 @@ import com.fillbook.growthos.ui.theme.Warning
  */
 @Composable
 fun ContentLibraryScreen(repo: GrowthOsRepository) {
-    var assetsByPlatform by remember { mutableStateOf<Map<String, List<CampaignAsset>>>(emptyMap()) }
+    var allAssets by remember { mutableStateOf<List<CampaignAsset>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var stageFilter by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
         try {
             val campaigns = repo.getCampaigns()
-            assetsByPlatform = campaigns
-                .flatMap { it.assets }
-                .filter { it.latestBody != null }
-                .groupBy { it.platform }
+            allAssets = campaigns.flatMap { it.assets }.filter { it.latestBody != null }
         } catch (e: Exception) {
             errorMessage = "Couldn't load the content library. Check your connection and try again."
         }
         loaded = true
     }
+
+    val stages = remember(allAssets) { allAssets.map { it.stage }.distinct().sorted() }
+    val filtered = remember(allAssets, stageFilter) {
+        stageFilter?.let { stage -> allAssets.filter { it.stage == stage } } ?: allAssets
+    }
+    val assetsByPlatform = remember(filtered) { filtered.groupBy { it.platform } }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScreenHeader("Content Library", "Every draft ever produced, with its real review-agent scores.")
@@ -73,13 +83,25 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
 
         if (!loaded) {
             LoadingIndicator()
-        } else if (errorMessage == null && assetsByPlatform.isEmpty()) {
+        } else if (errorMessage == null && allAssets.isEmpty()) {
             PolishedEmptyState(
                 icon = Icons.Filled.VideoLibrary,
                 headline = "No drafts produced yet",
                 subtitle = "Once an opportunity runs through the pipeline, drafts show up here.",
             )
         } else {
+            if (stages.size > 1) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    item { StageFilterChip("All", stageFilter == null) { stageFilter = null } }
+                    items(stages) { stage ->
+                        StageFilterChip(stage.replace("_", " "), stageFilter == stage) { stageFilter = stage }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
             LazyColumn(
                 contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -94,6 +116,21 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
 }
 
 @Composable
+private fun StageFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = Accent.copy(alpha = 0.2f),
+            selectedLabelColor = Accent,
+            containerColor = Surface,
+            labelColor = TextSecondary,
+        ),
+    )
+}
+
+@Composable
 private fun SectionLabel(text: String) {
     Text(text, style = MaterialTheme.typography.labelLarge, color = TextTertiary, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
 }
@@ -103,7 +140,7 @@ private fun LibraryCard(asset: CampaignAsset) {
     GrowthCard {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Pill(asset.assetType, TextSecondary)
-            Pill(asset.stage.replace("_", " "), stageColor(asset.stage))
+            StatusChip(asset.stage.replace("_", " "), assetStageTone(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {
                 Pill(
                     "${asset.reviewPassCount}/${asset.reviewPassCount + asset.reviewFailCount} agents",
@@ -114,10 +151,4 @@ private fun LibraryCard(asset: CampaignAsset) {
         Spacer(Modifier.height(10.dp))
         ExpandableText(asset.latestBody ?: "", style = MaterialTheme.typography.bodyMedium, color = TextSecondary, collapsedMaxLines = 3)
     }
-}
-
-private fun stageColor(stage: String) = when (stage) {
-    "ready_for_owner", "handed_off" -> Accent
-    "final_draft" -> Warning
-    else -> TextTertiary
 }

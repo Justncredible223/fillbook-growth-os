@@ -73,6 +73,27 @@ fun healthLabel(status: HealthStatus): String = when (status) {
     HealthStatus.NOT_CONNECTED -> "Not connected"
 }
 
+fun healthTone(status: HealthStatus): StatusTone = when (status) {
+    HealthStatus.HEALTHY -> StatusTone.HEALTHY
+    HealthStatus.DEGRADED -> StatusTone.WAITING
+    HealthStatus.DOWN -> StatusTone.BLOCKED
+    HealthStatus.NOT_CONNECTED -> StatusTone.NEUTRAL
+}
+
+/** Same real stage strings every screen already switches on, mapped to the shared status vocabulary. */
+fun assetStageTone(stage: String): StatusTone = when (stage) {
+    "ready_for_owner", "handed_off" -> StatusTone.READY
+    "final_draft" -> StatusTone.WAITING
+    else -> StatusTone.NEUTRAL
+}
+
+fun campaignStatusTone(status: String): StatusTone = when (status) {
+    "approved" -> StatusTone.READY
+    "in_review" -> StatusTone.WAITING
+    "retired" -> StatusTone.BLOCKED
+    else -> StatusTone.NEUTRAL
+}
+
 /** Shared title/subtitle header used at the top of every screen. */
 @Composable
 fun ScreenHeader(title: String, subtitle: String, modifier: Modifier = Modifier) {

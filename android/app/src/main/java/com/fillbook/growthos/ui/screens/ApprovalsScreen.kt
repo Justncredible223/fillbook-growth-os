@@ -21,7 +21,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -73,6 +76,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
     var actionError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     suspend fun refresh() {
         try {
@@ -92,6 +96,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                 repo.decideApproval(asset.id, approve)
                 actionError = null
                 refresh()
+                snackbarHostState.showSnackbar(if (approve) "Approved" else "Rejected")
             } catch (e: Exception) {
                 actionError = "Couldn't record that decision. Check your connection and try again."
             }
@@ -111,36 +116,39 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        ScreenHeader("Approvals", "You always press publish — this app only ever hands off a draft.")
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            ScreenHeader("Approvals", "You always press publish — this app only ever hands off a draft.")
 
-        (errorMessage ?: actionError)?.let { message ->
-            Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.padding(horizontal = 20.dp))
-        }
+            (errorMessage ?: actionError)?.let { message ->
+                Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.padding(horizontal = 20.dp))
+            }
 
-        if (!loaded) {
-            LoadingIndicator()
-        } else if (errorMessage == null && assets.isEmpty()) {
-            PolishedEmptyState(
-                icon = Icons.Filled.CheckCircle,
-                headline = "Nothing waiting on you",
-                subtitle = "Drafts land here once the Campaign Factory finishes AI review.",
-            )
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(assets, key = { it.id }) { asset ->
-                    ApprovalCard(
-                        asset = asset,
-                        onApprove = { decide(asset, approve = true) },
-                        onReject = { decide(asset, approve = false) },
-                        onOpenInPlatform = { openInPlatform(asset) },
-                    )
+            if (!loaded) {
+                LoadingIndicator()
+            } else if (errorMessage == null && assets.isEmpty()) {
+                PolishedEmptyState(
+                    icon = Icons.Filled.CheckCircle,
+                    headline = "Nothing waiting on you",
+                    subtitle = "Drafts land here once the Campaign Factory finishes AI review.",
+                )
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(assets, key = { it.id }) { asset ->
+                        ApprovalCard(
+                            asset = asset,
+                            onApprove = { decide(asset, approve = true) },
+                            onReject = { decide(asset, approve = false) },
+                            onOpenInPlatform = { openInPlatform(asset) },
+                        )
+                    }
                 }
             }
         }
+        SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 
