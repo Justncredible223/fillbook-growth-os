@@ -18,8 +18,31 @@ interface HealthItem {
  */
 const NOT_YET_CONNECTED = [
   { label: "TikTok", detail: "Promote is account-blocked; organic staging only, not yet wired" },
-  { label: "AI provider", detail: "Needs an API key for deep content review (owner action)" },
 ];
+
+/**
+ * No deployed endpoint calls the deep-review agents yet, so there's no
+ * content_scores evidence to check the way Search Console checks for a
+ * real signals row. A live API call on every health-check hit would cost
+ * real money per poll, so this checks env var presence only -- verified
+ * to actually work against the real API and real workspace once,
+ * out-of-band (see docs/PROGRESS_LEDGER.md Phase 6).
+ */
+function checkAiProvider(): HealthItem {
+  const hasKey = Boolean(process.env.ANTHROPIC_API_KEY);
+  const hasWorkspace = Boolean(process.env.ANTHROPIC_WORKSPACE_ID);
+  if (hasKey && hasWorkspace) {
+    return { label: "AI provider", status: "HEALTHY", detail: "ANTHROPIC_API_KEY + ANTHROPIC_WORKSPACE_ID configured" };
+  }
+  if (hasKey && !hasWorkspace) {
+    return {
+      label: "AI provider",
+      status: "DEGRADED",
+      detail: "ANTHROPIC_API_KEY set but ANTHROPIC_WORKSPACE_ID missing -- identity-linked keys need both",
+    };
+  }
+  return { label: "AI provider", status: "NOT_CONNECTED", detail: "Needs an API key for deep content review (owner action)" };
+}
 
 /**
  * A row for `cursorSource` in signal_ingestion_cursors only ever gets
@@ -105,6 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     health.push({ label: item.label, status: "NOT_CONNECTED", detail: item.detail });
   }
 
+  health.push(checkAiProvider());
   health.push(
     await checkCursorBackedIntegration(client, "X", "x_mention", "Credentials wired, not yet verified against the real API"),
   );
