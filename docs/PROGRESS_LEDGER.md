@@ -385,13 +385,23 @@ built from a real X mention in the `signals` table, a trader replying to
 score actually computed by calling the real `scoreOpportunity()`
 function rather than invented) and clearly identifiable as a manual test
 row, not something the system found on its own.
-**OWNER ACTION / next real gap:** build the missing piece that turns
-Signal Graph rows into real `OpportunityEngine.createFromEvidence()`
-calls -- likely a periodic job over recent `signals`, grouped by
-similarity/topic, since `x_mention` and `youtube_video` signals currently
-have `topic = null` (only `search_console_query` populates it), so
-naive topic-grouping won't work for those two sources without a change
-there too.
+**Gap closed same day:** `backend/src/opportunities/opportunityGenerator.ts`
++ `POST /api/generate-opportunities`. One opportunity per un-topic'd
+signal (`x_mention`, `youtube_video` -- each already a distinct event);
+one per topic cluster for `search_console_query` (repeat query
+observations are genuinely the same topic). Relevance inputs to
+`scoreOpportunity()` come from a documented keyword-heuristic MVP
+(`estimateRelevance()`) grounded in each signal's real text, not
+invented -- explicitly flagged as a stand-in for a real classifier later,
+same posture as `OriginalityEngine`'s Jaccard-similarity stand-in.
+Tracks already-covered signals via existing `opportunities.signal_ids`,
+so re-running is idempotent (no duplicate opportunities). Verified live:
+run against the real 25 ingested signals, correctly skipped the one
+already covered by the manual test opportunity above, and created 11 new
+real opportunities (5 X mentions, 6 YouTube videos) -- `GET
+/api/opportunities` (what the Android Radar screen reads) went from 0
+rows to 11 real ones in one call. 5 new tests
+(`opportunityGenerator.test.ts`).
 
 **Full loop verified live against production (2026-09-01):** running
 `/api/run-campaign` against the manually-inserted opportunity above
