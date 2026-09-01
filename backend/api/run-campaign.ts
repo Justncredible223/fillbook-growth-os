@@ -10,6 +10,7 @@ import { SupabaseContentScoreRepository } from "../src/content/contentScoreRepos
 import { SupabaseCampaignRepository } from "../src/content/supabaseCampaignRepository.js";
 import { createLlmClient } from "../src/content/llmClient.js";
 import { runCampaignPipeline } from "../src/content/campaignPipeline.js";
+import { recordCostEvent } from "../src/cost/costTracking.js";
 
 /**
  * Runs one opportunity through the full Opportunity -> draft -> mechanical
@@ -61,7 +62,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .limit(10);
     const recentTextsForSameTopic = (recentVersions ?? []).map((row: { body: string }) => row.body);
 
-    const llmClient = createLlmClient();
+    const llmClient = createLlmClient(process.env, (usage) => {
+      void recordCostEvent(client, usage, { opportunityId: opportunity.id, endpoint: "run-campaign" });
+    });
     const factory = new CampaignFactory(new ContentQualityGate(brandConstitution));
     const scoreRepo = new SupabaseContentScoreRepository(client);
     const campaignRepo = new SupabaseCampaignRepository(client);

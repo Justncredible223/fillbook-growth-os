@@ -48,4 +48,24 @@ describe("LlmClient", () => {
 
     await expect(client.callTool("sys", "user", "submit_verdict", {})).rejects.toThrow(LlmClientError);
   });
+
+  it("fires onUsage with real token counts from the response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        model: "claude-sonnet-4-5-20250929",
+        content: [{ type: "tool_use", name: "submit_verdict", input: { pass: true } }],
+        usage: { input_tokens: 42, output_tokens: 7 },
+      }),
+    );
+    const onUsage = vi.fn();
+    const client = new LlmClient("test-key", fetchMock, undefined, onUsage);
+
+    await client.callTool("sys", "user", "submit_verdict", {});
+
+    expect(onUsage).toHaveBeenCalledWith({
+      model: "claude-sonnet-4-5-20250929",
+      inputTokens: 42,
+      outputTokens: 7,
+    });
+  });
 });
