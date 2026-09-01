@@ -31,8 +31,8 @@ import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
-import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.StatusChip
@@ -82,7 +82,7 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
         }
 
         if (!loaded) {
-            LoadingIndicator()
+            SkeletonListLoading()
         } else if (errorMessage == null && allAssets.isEmpty()) {
             PolishedEmptyState(
                 icon = Icons.Filled.VideoLibrary,

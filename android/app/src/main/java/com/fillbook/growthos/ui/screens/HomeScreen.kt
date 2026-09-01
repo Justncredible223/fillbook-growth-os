@@ -37,6 +37,7 @@ import com.fillbook.growthos.data.HealthItem
 import com.fillbook.growthos.data.HomeSummary
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.MetricTile
+import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.healthColor
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
@@ -57,6 +58,7 @@ import com.fillbook.growthos.ui.theme.Warning
 fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
     var summary by remember { mutableStateOf<HomeSummary?>(null) }
     var health by remember { mutableStateOf<List<HealthItem>>(emptyList()) }
+    var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
@@ -66,6 +68,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
         } catch (e: Exception) {
             errorMessage = "Couldn't reach Growth OS. Check your connection and try again."
         }
+        loaded = true
     }
 
     LazyColumn(
@@ -83,6 +86,10 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
 
         errorMessage?.let { message ->
             item { Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger) }
+        }
+
+        if (!loaded) {
+            item { SkeletonListLoading(horizontalPadding = 0.dp) }
         }
 
         summary?.let { s ->

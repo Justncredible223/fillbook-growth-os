@@ -28,8 +28,8 @@ import com.fillbook.growthos.data.Campaign
 import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.GrowthCard
-import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.StatusChip
@@ -67,7 +67,7 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
         }
 
         if (!loaded) {
-            LoadingIndicator()
+            SkeletonListLoading()
         } else if (errorMessage == null && campaigns.isEmpty()) {
             PolishedEmptyState(
                 icon = Icons.Filled.Campaign,

@@ -29,8 +29,8 @@ import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.Opportunity
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
-import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
@@ -63,7 +63,7 @@ fun RadarScreen(repo: GrowthOsRepository) {
         }
 
         if (!loaded) {
-            LoadingIndicator()
+            SkeletonListLoading()
         } else if (errorMessage == null && opportunities.isEmpty()) {
             PolishedEmptyState(
                 icon = Icons.Filled.Radar,

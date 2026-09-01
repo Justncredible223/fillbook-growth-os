@@ -1,6 +1,11 @@
 package com.fillbook.growthos.ui.components
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -196,6 +201,54 @@ fun BreakdownBar(label: String, count: Int, maxCount: Int, modifier: Modifier = 
             )
         }
     }
+}
+
+/**
+ * Shimmering card-shaped placeholders for the load window on a list
+ * screen -- reads as "content is coming" instead of a generic spinner,
+ * and roughly previews the shape (title line + two body lines) of what's
+ * about to load in.
+ */
+@Composable
+fun SkeletonListLoading(modifier: Modifier = Modifier, count: Int = 3, horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp) {
+    val transition = rememberInfiniteTransition(label = "skeleton")
+    val alpha by transition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(animation = tween(700), repeatMode = RepeatMode.Reverse),
+        label = "skeletonAlpha",
+    )
+    Column(
+        modifier = modifier.fillMaxWidth().padding(horizontal = horizontalPadding, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        repeat(count) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Surface)
+                    .border(1.dp, Border, RoundedCornerShape(18.dp))
+                    .padding(16.dp),
+            ) {
+                SkeletonLine(fraction = 0.55f, alpha = alpha, height = 16.dp)
+                Spacer(Modifier.height(12.dp))
+                SkeletonLine(fraction = 1f, alpha = alpha, height = 12.dp)
+                Spacer(Modifier.height(6.dp))
+                SkeletonLine(fraction = 0.75f, alpha = alpha, height = 12.dp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkeletonLine(fraction: Float, alpha: Float, height: androidx.compose.ui.unit.Dp) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth(fraction)
+            .height(height)
+            .background(TextTertiary.copy(alpha = alpha), RoundedCornerShape(4.dp)),
+    )
 }
 
 /** Tap-to-expand text -- shows the important first lines, rest is one tap away. */
