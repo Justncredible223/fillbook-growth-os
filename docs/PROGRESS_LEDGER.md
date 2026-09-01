@@ -83,11 +83,84 @@ still wanted — not blocking, not pursued further since it doesn't affect
 Growth OS either way.
 
 ## Phase 2 — Job Infrastructure
-Not started. Depends on Phase 1 DB being live.
+**Status: complete.** `backend/src/jobs/*` — Postgres claim/complete/fail
+functions (migration 0003), pure backoff/dead-letter decision logic,
+JobQueue orchestrator, in-memory + Supabase repositories. Tests: 18/18
+(cumulative suite: see below).
 
 ## Phase 3 — Knowledge Brain & Brand Constitution
-Not started (seed content already synthesized in `docs/SEED_DATA_SOURCES.md`,
-ready to load once the DB exists).
+**Status: complete.** `backend/src/knowledge/*` — knowledge_documents
+seeded with real, cited FillbookHQ facts (migration 0004);
+`KnowledgeBrain.requireVerifiedKnowledge()` throws for any unverified
+topic (the anti-fabrication guarantee); `BrandConstitution` loads active
+versioned rules + mechanical vocabulary/claim backstop check.
 
-## Phases 4-25
-Not started. See `docs/ARCHITECTURE.md` for sequencing.
+## Phase 4 — Signal Graph
+**Status: core complete, real ingestion adapters blocked on OAuth apps
+only the owner can create.** `backend/src/signals/*` — ingest, dedup,
+72h topic clustering, 24h velocity computation, in-memory + Supabase
+repositories. Fully tested.
+
+**BLOCKER (does not block anything else):** real signal sources (Search
+Console, YouTube Analytics, X mentions) each require an OAuth app the
+owner must personally create — this is account/developer-portal setup,
+not something achievable via API alone:
+- **Google Search Console + YouTube Analytics**: create a project in
+  Google Cloud Console, configure the OAuth consent screen, create OAuth
+  2.0 credentials, enable the Search Console API and YouTube Data API v3.
+- **X**: apply for a developer account at developer.x.com, create a
+  Project + App, generate API keys/tokens with the scopes needed for
+  reading mentions/analytics.
+**WHAT'S READY:** `SignalGraph.ingest()` accepts any `source` string and
+works identically regardless of where evidence comes from — the moment
+credentials exist, an adapter that calls the real API and pipes results
+through `ingest()` is a small, self-contained addition, not a redesign.
+
+## Phase 5 — Opportunity Engine
+**Status: complete.** `backend/src/opportunities/*` — pure `scoreOpportunity()`
+scoring function (audience/Fillbook relevance, velocity, evidence
+confidence, topic-fatigue penalty, duplicate-coverage penalty, urgency
+classification), `OpportunityEngine` orchestrator, in-memory + Supabase
+repositories. Fully tested, including score bounds (never <0 or >100).
+
+## Phase 6 — Campaign Factory & Content Quality
+**Status: core complete, deep LLM review agents blocked on an AI provider
+key.** `backend/src/content/*`:
+- `AntiSlopEngine` — deterministic regex/heuristic detector (generic
+  openers, AI-cliche phrases, fake urgency, excessive em dashes/rhetorical
+  questions/hashtags/emoji). No AI call needed, always-on.
+- `OriginalityEngine` — Jaccard token-overlap similarity against recent
+  same-topic content. Lightweight stand-in for embedding-based semantic
+  similarity (upgrade path noted in the module's own docstring once an AI
+  provider key exists).
+- `ContentQualityGate` — combines brand-vocabulary, anti-slop, and
+  originality checks into one pass/fail gate.
+- `CampaignFactory` — stage machine (idea -> ... -> final_draft ->
+  ready_for_owner -> handed_off). `handOffToOwner()` is the **only** path
+  to `handed_off`, has no `actionClass` parameter a caller could use to
+  request EXTERNAL_WRITE, and always calls the firewall with
+  `EXTERNAL_DRAFT`. Tested, including that it refuses to skip stages and
+  that its audit trail always shows `EXTERNAL_DRAFT`/`drafted`.
+
+**BLOCKER (does not block anything else):** the deeper judgment-based
+review agents from the master spec (trader / hook_specialist / copy_editor
+/ skeptic / brand_guardian / growth_strategist / fact_checker /
+integrity_reviewer / conversion_reviewer) require calling an actual LLM.
+This backend has no AI provider API key configured in this environment.
+**OWNER ACTION (when ready):** add `ANTHROPIC_API_KEY` (or another
+provider's key) to `backend/.env.local` for local dev and to the Vercel
+project's encrypted environment variables for production — never commit
+it. Once present, these agents are additive: they consume the same
+`content_versions`/`content_scores` schema already in place and don't
+require changing anything already built.
+
+**Cumulative test status after Phase 6: 57/57 passing, typecheck clean.**
+
+## Phase 7 — Android Mission Control
+In progress — see below for current status once started this session.
+
+## Phases 8-25
+Not started. See `docs/ARCHITECTURE.md` for sequencing. Each of X (9),
+YouTube (11), and TikTok (12) integration phases share the same OAuth-app
+blocker pattern as Phase 4 above — documented per-phase as work reaches
+them, not duplicated here in advance.
