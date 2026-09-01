@@ -790,3 +790,46 @@ right now:**
   only been live for a few hours as of this writing). Building them now
   would mean fabricating what they'd learn from.
 - **Release engineering** — needs the owner's signing keystore.
+
+## Phase 16 — Safe daily auto-drafting + human approval actions (2026-09-01)
+
+Full spec-driven build (see chat transcript for the exact 18-section
+spec): bounded daily auto-draft cron (1/day max, score>=50 qualification,
+7-day staleness window, already-used exclusion, 3-draft backlog cap,
+$5/month hard budget ceiling, DB-unique-constraint idempotency on
+`auto_draft_runs.run_date`), all wired into the existing
+`/api/daily-pipeline` cron as a 5th step (no new serverless function --
+Hobby's cap was already tight). 26 new tests, 152/152 passing.
+
+Real audit findings fixed along the way (not hypothetical -- found by
+actually running the thing against production, per the spec's explicit
+requirement):
+- `campaigns.status` was being set to `'approved'` automatically when a
+  draft passed AI review -- conflating AI-review-passed with
+  human-approved. Fixed to `'in_review'`; `'approved'` is now set by
+  exactly one code path: `POST /api/approvals` (see below).
+- `/api/summary`'s `pendingReview` stat queried the `approvals` DB table,
+  which nothing in this codebase has ever written to -- it silently
+  returned 0 regardless of real pending drafts, since FillbookHQ's
+  earliest days. Fixed to count real `ready_for_owner` assets.
+- First live invocation of the new auto-draft step failed immediately:
+  `operator does not exist: date ~~ unknown` -- Postgres has no `LIKE`
+  for a `date` column. The idempotency/failure-handling worked exactly as
+  designed regardless (run marked `'failed'` with the real error, no
+  dangling draft). Fixed with a real date-range comparison; re-verified
+  clean end-to-end (real draft, 10 AI calls, $0.085566, correctly held at
+  `final_draft` by a legitimate `hook_specialist` rejection on 1 of 9
+  agents).
+
+Also wired the Approve/Reject buttons that had existed as inert UI stubs
+since Phase 7: `POST /api/approvals` (`{campaignAssetId, action}`) sets
+`campaigns.status` to `'approved'`/`'retired'`, folded into the existing
+GET endpoint rather than a new function. `GET /api/approvals` now filters
+to `status='in_review'` so a decided item actually leaves the queue.
+Android's "Open in X" button opens a real prefilled
+`twitter.com/intent/tweet` composer. Verified live: reset the one
+existing `ready_for_owner` campaign to `in_review`, confirmed it appeared
+in `GET /api/approvals`, called the real approve action, confirmed
+`campaigns.status` flipped to `'approved'` and the item left the queue.
+
+**Cumulative backend test count: 152/152 passing, typecheck clean.**
