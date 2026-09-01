@@ -5,6 +5,7 @@ import {
   ExternalWriteRejectedError,
   KNOWN_EXTERNAL_WRITE_ACTIONS,
   type ActionClass,
+  type FirewallAction,
 } from "../src/firewall/externalWriteFirewall";
 
 describe("ExternalWriteFirewall", () => {
@@ -87,13 +88,15 @@ describe("ExternalWriteFirewall", () => {
     // second parameter to pass an override through. This test documents
     // the invariant at the type level: calling with an extra property
     // does not change behavior.
-    const action = {
-      name: "x.post_tweet",
-      actionClass: "EXTERNAL_WRITE" as ActionClass,
-      context: {},
-      // @ts-expect-error -- no such field exists; if this ever compiles, the invariant broke.
-      forceAllow: true,
-    };
-    expect(() => authorize(action)).toThrow(ExternalWriteRejectedError);
+    function authorizeWithExtraField(): FirewallAction {
+      return authorize({
+        name: "x.post_tweet",
+        actionClass: "EXTERNAL_WRITE" as ActionClass,
+        context: {},
+        // @ts-expect-error -- no such field exists; if this ever compiles, the invariant broke.
+        forceAllow: true,
+      });
+    }
+    expect(() => authorizeWithExtraField()).toThrow(ExternalWriteRejectedError);
   });
 });
