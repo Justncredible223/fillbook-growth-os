@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -157,6 +159,14 @@ fun PolishedEmptyState(
             Spacer(Modifier.height(16.dp))
             OutlinedButton(onClick = onAction) { Text(actionLabel) }
         }
+    }
+}
+
+/** Centered spinner for the gap between "screen opened" and "data or error arrived" -- a blank screen reads as broken, this reads as working. */
+@Composable
+fun LoadingIndicator(modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(color = Accent)
     }
 }
 

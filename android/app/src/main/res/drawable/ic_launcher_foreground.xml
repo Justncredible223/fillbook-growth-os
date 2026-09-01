@@ -3,19 +3,15 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#39E29D"
-        android:pathData="M32,68 L32,80 L42,80 L42,68 Z" />
-    <path
-        android:fillColor="#39E29D"
-        android:pathData="M49,54 L49,80 L59,80 L59,54 Z" />
-    <path
-        android:fillColor="#39E29D"
-        android:pathData="M66,36 L66,80 L76,80 L76,36 Z" />
-    <path
-        android:fillColor="#7CF2C0"
-        android:pathData="M30,52 L54,28 L54,36 L38,52 Z" />
-    <path
-        android:fillColor="#7CF2C0"
-        android:pathData="M54,28 L72,28 L72,46 L64,38 L64,36 L56,36 Z" />
+    <!-- Ascending bars: the same "growth" language as fillbookhq.com's own
+         mark (rounded square, cyan, ascending bars) but in Growth OS's own
+         mint palette, so the two read as siblings, not a copy. -->
+    <path android:fillColor="#1F5C46" android:pathData="M27,64 L41,64 L41,82 L27,82 Z" />
+    <path android:fillColor="#39E29D" android:pathData="M47,50 L61,50 L61,82 L47,82 Z" />
+    <path android:fillColor="#39E29D" android:pathData="M67,36 L81,36 L81,82 L67,82 Z" />
+    <!-- A short upward trend line plus arrowhead above the bars: the one
+         clear Growth OS addition versus Fillbook's static chart, motion
+         rather than a snapshot. -->
+    <path android:fillColor="#7CF2C0" android:pathData="M29,54 L51,32 L45,26 L23,48 Z" />
+    <path android:fillColor="#7CF2C0" android:pathData="M56,21 L54,33 L44,23 Z" />
 </vector>

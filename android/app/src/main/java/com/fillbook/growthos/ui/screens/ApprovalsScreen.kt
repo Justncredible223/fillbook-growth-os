@@ -37,6 +37,7 @@ import com.fillbook.growthos.data.ApprovalAsset
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScoreBadge
@@ -117,7 +118,9 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.padding(horizontal = 20.dp))
         }
 
-        if (loaded && errorMessage == null && assets.isEmpty()) {
+        if (!loaded) {
+            LoadingIndicator()
+        } else if (errorMessage == null && assets.isEmpty()) {
             PolishedEmptyState(
                 icon = Icons.Filled.CheckCircle,
                 headline = "Nothing waiting on you",

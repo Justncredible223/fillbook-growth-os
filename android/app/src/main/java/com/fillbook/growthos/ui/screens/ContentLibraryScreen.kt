@@ -28,6 +28,7 @@ import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
@@ -70,7 +71,9 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
             Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.padding(horizontal = 20.dp))
         }
 
-        if (loaded && errorMessage == null && assetsByPlatform.isEmpty()) {
+        if (!loaded) {
+            LoadingIndicator()
+        } else if (errorMessage == null && assetsByPlatform.isEmpty()) {
             PolishedEmptyState(
                 icon = Icons.Filled.VideoLibrary,
                 headline = "No drafts produced yet",

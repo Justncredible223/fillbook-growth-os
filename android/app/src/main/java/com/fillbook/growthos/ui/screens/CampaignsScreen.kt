@@ -28,6 +28,7 @@ import com.fillbook.growthos.data.Campaign
 import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
@@ -63,7 +64,9 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
             Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.padding(horizontal = 20.dp))
         }
 
-        if (loaded && errorMessage == null && campaigns.isEmpty()) {
+        if (!loaded) {
+            LoadingIndicator()
+        } else if (errorMessage == null && campaigns.isEmpty()) {
             PolishedEmptyState(
                 icon = Icons.Filled.Campaign,
                 headline = "No campaigns run yet",

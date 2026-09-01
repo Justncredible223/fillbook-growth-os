@@ -31,6 +31,7 @@ import com.fillbook.growthos.data.CreatorCategory
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScoreBadge
@@ -71,7 +72,9 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
             )
         }
 
-        if (loaded && errorMessage == null && creators.isEmpty()) {
+        if (!loaded) {
+            LoadingIndicator()
+        } else if (errorMessage == null && creators.isEmpty()) {
             PolishedEmptyState(
                 icon = Icons.Filled.Groups,
                 headline = "No creators tracked yet",

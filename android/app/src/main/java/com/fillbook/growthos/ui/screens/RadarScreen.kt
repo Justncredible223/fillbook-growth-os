@@ -29,6 +29,7 @@ import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.Opportunity
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScoreBadge
@@ -61,7 +62,9 @@ fun RadarScreen(repo: GrowthOsRepository) {
             Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.padding(horizontal = 20.dp))
         }
 
-        if (loaded && errorMessage == null && opportunities.isEmpty()) {
+        if (!loaded) {
+            LoadingIndicator()
+        } else if (errorMessage == null && opportunities.isEmpty()) {
             PolishedEmptyState(
                 icon = Icons.Filled.Radar,
                 headline = "Nothing on Radar yet",
