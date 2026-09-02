@@ -1,5 +1,9 @@
 {
   "crons": [
     { "path": "/api/daily-pipeline", "schedule": "0 13 * * *" }
-  ]
+  ],
+  "functions": {
+    "api/run-campaign.ts": { "maxDuration": 60 },
+    "api/daily-pipeline.ts": { "maxDuration": 60 }
+  }
 }
