@@ -145,6 +145,27 @@ fun platformDisplayName(platform: String): String = when (platform.lowercase()) 
     else -> platform.replaceFirstChar { it.uppercase() }
 }
 
+/**
+ * Builds a real profile URL for the Creators screen's "Open profile"
+ * action -- there's no stored profile URL (creators only have a handle +
+ * platform), so this constructs one the same way a person would type it
+ * manually. Returns null rather than guessing when the platform isn't one
+ * of the three this app actually tracks creators on, or the handle has
+ * spaces/is otherwise not a real handle (e.g. a plain display name saved
+ * for a creator with category "other") -- a broken link is worse than no
+ * button at all.
+ */
+fun creatorProfileUrl(platform: String, handle: String): String? {
+    val cleanHandle = handle.removePrefix("@").trim()
+    if (cleanHandle.isEmpty() || cleanHandle.any { it.isWhitespace() }) return null
+    return when (platform.lowercase()) {
+        "x" -> "https://x.com/$cleanHandle"
+        "youtube" -> "https://youtube.com/@$cleanHandle"
+        "tiktok" -> "https://www.tiktok.com/@$cleanHandle"
+        else -> null
+    }
+}
+
 fun urgencyColor(urgency: Urgency): Color = when (urgency) {
     Urgency.HIGH -> Danger
     Urgency.NORMAL -> Warning
