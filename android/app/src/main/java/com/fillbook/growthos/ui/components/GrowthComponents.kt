@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -77,6 +78,100 @@ fun GrowthCard(
     Column(modifier = base.padding(16.dp), content = content)
 }
 
+/**
+ * The one "Level 1" surface in the app: the single most important thing
+ * on a screen (Home's next-best-action, a primary KPI). Everything else
+ * uses [GrowthCard] (Level 2) or [InsetRow]/[InsetSurface] (Level 3) --
+ * three consistent weights instead of every panel looking the same.
+ * A soft accent-tinted gradient + border does the "this one matters"
+ * signaling; deliberately subtle (low alpha) so it reads as premium, not
+ * a banner ad.
+ */
+@Composable
+fun HeroActionCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    actionLabel: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
+    val brush = androidx.compose.ui.graphics.Brush.linearGradient(
+        colors = listOf(Accent.copy(alpha = 0.14f), Surface),
+    )
+    var base: Modifier = modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(20.dp))
+        .background(brush)
+        .border(1.dp, Accent.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+    if (onClick != null) base = base.clickable(onClick = onClick)
+
+    Column(modifier = base.padding(18.dp)) {
+        Row(verticalAlignment = Alignment.Top) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(Accent.copy(alpha = 0.16f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleLarge, color = TextPrimary)
+                Spacer(Modifier.height(4.dp))
+                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(actionLabel, style = MaterialTheme.typography.labelLarge, color = Accent)
+            Spacer(Modifier.width(4.dp))
+            Text("→", style = MaterialTheme.typography.labelLarge, color = Accent)
+        }
+    }
+}
+
+/**
+ * "Level 3" surface -- quieter than [GrowthCard], for metadata/nested
+ * content inside a card (an activity row, a sub-item) rather than a
+ * page-level panel. Lower contrast than Surface, no border -- reads as
+ * inset rather than another card competing for attention.
+ */
+@Composable
+fun InsetRow(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(com.fillbook.growthos.ui.theme.SurfaceVariant)
+            .padding(12.dp),
+        content = content,
+    )
+}
+
+/**
+ * Icon-labeled quick-jump action -- replaces a text-only OutlinedButton
+ * so common destinations (Approvals, Radar, Analytics) are recognizable
+ * by shape/icon, not just a word, per the one-click-accessibility goal.
+ */
+@Composable
+fun QuickActionChip(icon: ImageVector, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(Surface)
+            .border(1.dp, Border, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.height(6.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = TextPrimary)
+    }
+}
+
 /** Enum-driven status coloring so every screen's chips mean the same thing. */
 enum class StatusTone { READY, ACTIVE, WAITING, BLOCKED, SKIPPED, FAILED, HEALTHY, NEW, NEUTRAL }
 
@@ -93,7 +188,24 @@ fun StatusChip(text: String, tone: StatusTone, modifier: Modifier = Modifier) {
     Pill(text.uppercase(), statusToneColor(tone), modifier)
 }
 
-/** Compact number+label tile for a top status row -- Home's "what happened" summary. */
+/** Small filled dot -- the "● Connected" operational-health visual language, paired with a StatusChip for the full label. */
+@Composable
+fun HealthDot(color: Color, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.size(8.dp).background(color, CircleShape))
+}
+
+/**
+ * Compact number+label tile for a top status row -- Home's "what
+ * happened" summary. `highlighted` swaps the icon into a color-tinted
+ * badge and picks up a matching border, for the one tile in a row that
+ * actually needs attention (e.g. a non-zero "waiting on you" count, or a
+ * budget at cap) -- without that, every tile in a 2x2 grid reads as
+ * equally important even when one clearly isn't. `highlightColor`
+ * defaults to the accent (a good thing needs attention -- e.g. drafts
+ * ready) but callers pass Warning/Danger when the attention-worthy thing
+ * is actually bad news, so the highlight color never contradicts what it
+ * highlights.
+ */
 @Composable
 fun MetricTile(
     label: String,
@@ -101,14 +213,26 @@ fun MetricTile(
     icon: ImageVector,
     modifier: Modifier = Modifier,
     valueColor: Color = TextPrimary,
+    highlighted: Boolean = false,
+    highlightColor: Color = Accent,
 ) {
+    val borderColor = if (highlighted) highlightColor.copy(alpha = 0.45f) else Border
     Column(
         modifier = modifier
             .background(Surface, RoundedCornerShape(16.dp))
-            .border(1.dp, Border, RoundedCornerShape(16.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(16.dp))
             .padding(14.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = TextTertiary, modifier = Modifier.height(16.dp))
+        if (highlighted) {
+            Box(
+                modifier = Modifier.size(28.dp).background(highlightColor.copy(alpha = 0.16f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(icon, contentDescription = null, tint = highlightColor, modifier = Modifier.size(15.dp))
+            }
+        } else {
+            Icon(icon, contentDescription = null, tint = TextTertiary, modifier = Modifier.height(16.dp))
+        }
         Spacer(Modifier.height(10.dp))
         Text(value, style = MaterialTheme.typography.headlineMedium, color = valueColor)
         Text(label, style = MaterialTheme.typography.labelMedium, color = TextSecondary)

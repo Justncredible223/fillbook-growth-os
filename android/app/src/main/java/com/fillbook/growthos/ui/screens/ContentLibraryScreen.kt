@@ -35,12 +35,16 @@ import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.StatusChip
 import com.fillbook.growthos.ui.components.assetStageTone
+import com.fillbook.growthos.ui.components.assetTypeDisplayName
+import com.fillbook.growthos.ui.components.assetTypeIcon
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Surface
@@ -126,7 +130,7 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     assetsByPlatform.entries.sortedByDescending { it.value.size }.forEach { (platform, assets) ->
-                        item { SectionLabel("${platform.uppercase()} (${assets.size})") }
+                        item { SectionHeader("${platform.uppercase()} (${assets.size})") }
                         items(assets) { asset -> LibraryCard(asset) }
                     }
                 }
@@ -151,15 +155,10 @@ private fun StageFilterChip(label: String, selected: Boolean, onClick: () -> Uni
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(text, style = MaterialTheme.typography.labelLarge, color = TextTertiary, modifier = Modifier.padding(top = 4.dp, bottom = 2.dp))
-}
-
-@Composable
 private fun LibraryCard(asset: CampaignAsset) {
     GrowthCard {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Pill(asset.assetType, TextSecondary)
+            IconPill(assetTypeDisplayName(asset.assetType), assetTypeIcon(asset.assetType), TextSecondary)
             StatusChip(asset.stage.replace("_", " "), assetStageTone(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {
                 Pill(

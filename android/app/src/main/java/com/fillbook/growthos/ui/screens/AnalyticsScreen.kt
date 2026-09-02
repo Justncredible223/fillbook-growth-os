@@ -113,6 +113,8 @@ fun AnalyticsScreen(repo: GrowthOsRepository) {
                                     Icons.Filled.Inbox,
                                     modifier = Modifier.weight(1f),
                                     valueColor = if (data.autoDraft.backlogCount >= data.autoDraft.backlogCap) Warning else MaterialTheme.colorScheme.onSurface,
+                                    highlighted = data.autoDraft.backlogCount >= data.autoDraft.backlogCap,
+                                    highlightColor = Warning,
                                 )
                                 MetricTile(
                                     "Month spend",
@@ -120,6 +122,8 @@ fun AnalyticsScreen(repo: GrowthOsRepository) {
                                     Icons.Filled.Payments,
                                     modifier = Modifier.weight(1f),
                                     valueColor = if (data.autoDraft.monthSpendUsd >= data.autoDraft.monthBudgetUsd) Warning else MaterialTheme.colorScheme.onSurface,
+                                    highlighted = data.autoDraft.monthSpendUsd >= data.autoDraft.monthBudgetUsd,
+                                    highlightColor = Warning,
                                 )
                             }
                         }

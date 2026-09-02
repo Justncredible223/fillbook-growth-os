@@ -1,16 +1,30 @@
 package com.fillbook.growthos.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Notes
+import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.SmartDisplay
+import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -19,10 +33,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.HealthStatus
 import com.fillbook.growthos.data.Urgency
 import com.fillbook.growthos.ui.theme.Accent
+import com.fillbook.growthos.ui.theme.Background
+import com.fillbook.growthos.ui.theme.Border
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
@@ -40,12 +57,51 @@ fun Pill(text: String, color: Color, modifier: Modifier = Modifier) {
     }
 }
 
+/** Same shape as [Pill], with a small leading icon -- platform/asset-type chips read faster with a glyph than text alone. */
+@Composable
+fun IconPill(text: String, icon: ImageVector, color: Color, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .background(color.copy(alpha = 0.16f), RoundedCornerShape(999.dp))
+            .padding(PaddingValues(horizontal = 10.dp, vertical = 4.dp)),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.height(12.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(text = text, style = MaterialTheme.typography.labelMedium, color = color)
+    }
+}
+
 /**
  * Platform values come from the backend lowercase (matches the DB
  * check constraint: 'x', 'youtube', 'tiktok', 'blog', ...) -- fine for
  * logic, but "Open in x" reads as a typo in UI text. This gives every
  * screen the same real display name instead of each one guessing.
+ *
+ * platformIcon's glyphs are generic Material stand-ins for real
+ * per-platform brand marks (no brand SVGs bundled in this app) -- close
+ * enough to be a scannable visual anchor next to the platform name, not
+ * meant as a logo.
  */
+fun platformIcon(platform: String): ImageVector = when (platform.lowercase()) {
+    "x" -> Icons.Filled.Tag
+    "youtube" -> Icons.Filled.SmartDisplay
+    "tiktok" -> Icons.Filled.MusicNote
+    "blog" -> Icons.Filled.Article
+    else -> Icons.Filled.Public
+}
+
+/** "video_script" -> "Video script", "post" -> "Post" -- same lowercase-DB-value pattern as platformDisplayName. */
+fun assetTypeDisplayName(assetType: String): String =
+    assetType.replace('_', ' ').replaceFirstChar { it.uppercase() }
+
+fun assetTypeIcon(assetType: String): ImageVector = when (assetType) {
+    "video_script" -> Icons.Filled.Movie
+    "thread" -> Icons.Filled.Forum
+    "article" -> Icons.Filled.Article
+    else -> Icons.Filled.Notes
+}
+
 fun platformDisplayName(platform: String): String = when (platform.lowercase()) {
     "x" -> "X"
     "youtube" -> "YouTube"
@@ -124,6 +180,26 @@ fun ScreenHeader(title: String, subtitle: String, modifier: Modifier = Modifier)
 }
 
 /**
+ * Uppercase group label ("QUICK ACTIONS", "RECENT ACTIVITY") used to break
+ * a screen into scannable sections instead of one undifferentiated column
+ * of cards. A short accent tick gives it a tiny bit more visual weight
+ * than plain caption text without turning it into another headline.
+ */
+@Composable
+fun SectionHeader(text: String, modifier: Modifier = Modifier) {
+    Row(modifier = modifier.padding(top = 4.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(12.dp)
+                .background(Accent, RoundedCornerShape(2.dp)),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+    }
+}
+
+/**
  * Honest placeholder for a screen whose backend endpoint/table doesn't
  * exist yet (see docs/PROGRESS_LEDGER.md). Explains what real data will
  * show up here and why it doesn't yet, instead of fabricating numbers or
@@ -146,21 +222,28 @@ fun ComingSoonScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Surface, RoundedCornerShape(16.dp))
-                    .padding(20.dp),
+                    .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(icon, contentDescription = null, tint = TextTertiary, modifier = Modifier.height(32.dp))
-                Spacer(Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier.size(56.dp).background(Background, CircleShape).border(1.dp, Border, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(icon, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(26.dp))
+                }
+                Spacer(Modifier.height(16.dp))
                 Text(
                     "Not wired to real data yet",
                     style = MaterialTheme.typography.titleMedium,
                     color = TextSecondary,
+                    textAlign = TextAlign.Center,
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
                     blockedOn,
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextTertiary,
+                    textAlign = TextAlign.Center,
                 )
             }
         }

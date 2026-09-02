@@ -978,3 +978,60 @@ temporary output deleted after visual inspection. 241/241 tests passing,
 typecheck clean.
 
 **Cumulative backend test count: 241/241 passing, typecheck clean.**
+
+## Phase 21 (partial) — Android UI/UX polish pass, evolved not replaced
+
+Audited the existing visual system (`ui/theme/{Color,Type}.kt`,
+`ui/components/{Common,GrowthComponents}.kt`) before touching anything --
+it already had a real dark mint-accent brand palette, a genuine
+typography scale, and reusable card/pill/skeleton components (not the
+flat, undifferentiated screens a from-scratch redesign would have
+assumed). Extended that system rather than replacing it: no new colors
+except a semantic `highlightColor` param (defaults to the existing
+accent), no new fonts.
+
+New shared components (`GrowthComponents.kt`/`Common.kt`): `HeroActionCard`
+(the one "Level 1" surface per screen -- accent-gradient background,
+circular icon badge, arrow affordance -- for the single most important
+thing, e.g. Home's next-best-action), `InsetRow` ("Level 3" -- quieter
+nested content inside a card, e.g. an activity row or a campaign's
+individual assets), `SectionHeader` (accent-tick uppercase group label,
+replacing five near-identical private `SectionLabel`/inline-`Text`
+copies scattered across screens), `QuickActionChip` and `IconPill`
+(icon+label instead of text-only), `HealthDot` (the "● Healthy" dot
+alongside System's existing StatusChip), and `platformIcon`/
+`assetTypeIcon`/`assetTypeDisplayName` (surfacing the `video_script` vs
+`post` distinction Phase 10 added, which no screen showed yet).
+
+Applied consistently across Home, Approvals, Radar, Analytics, Content
+Library, Creators, Campaigns, System, and Settings -- same components,
+each screen's actual data untouched. Settings' destructive Log Out
+button separated from its card and tinted danger-red rather than sitting
+identically styled next to informational rows. `MetricTile`'s new
+`highlighted` flag needed a real bug fix mid-pass: it defaulted to
+tinting the accent (green) regardless of what it was highlighting, which
+would have made a budget-at-cap warning glow green -- fixed with an
+explicit `highlightColor` param callers set to Warning for bad-news
+metrics.
+
+Verified on a real emulator (Android SDK's existing `Medium_Phone` AVD),
+not just compile success: built, installed, and screenshotted every
+listed screen end-to-end against live production data (real campaigns,
+creators, health rows) after every meaningful group of changes, per the
+phase's own "do full visual QA, not just compiles" requirement. No
+Android test suite exists in this repo to run (none existed before this
+pass either) -- compile success + live screenshots is the real
+verification available, not a gap introduced here.
+
+**Not done this pass** (see docs/PROGRESS_LEDGER.md's definition-of-done
+discipline -- not claimed complete): Research/Strategy remain
+`ComingSoonScreen` placeholders (only the shared component's empty-state
+visual improved, since there's no real data to redesign a screen around
+yet); no live `ApprovalCard` screenshot exists because the current
+dataset has zero pending drafts (0 "waiting on you") -- code compiles
+and matches the same component API verified live elsewhere (Radar/
+Library/Creators all use the same `ScoreBadge`/`IconPill` pattern), but
+wasn't itself visually exercised; tablet/ultrawide layouts not
+separately verified (this is a phone-only Compose app, not a responsive
+web app -- the original spec's ultrawide/1440p guidance was written for
+a web dashboard and doesn't have a phone-app equivalent to satisfy).

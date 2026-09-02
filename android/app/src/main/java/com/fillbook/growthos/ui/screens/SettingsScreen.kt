@@ -33,9 +33,11 @@ import com.fillbook.growthos.BuildConfig
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.HealthItem
 import com.fillbook.growthos.data.HealthStatus
+import androidx.compose.material3.ButtonDefaults
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.StatusChip
 import com.fillbook.growthos.ui.components.healthLabel
 import com.fillbook.growthos.ui.components.healthTone
@@ -101,24 +103,11 @@ fun SettingsScreen(repo: GrowthOsRepository, onLogout: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     if (needsOwnerAction.isNotEmpty()) {
-                        item {
-                            Text(
-                                "NEEDS YOUR ACTION".uppercase(),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = TextSecondary,
-                            )
-                        }
+                        item { SectionHeader("Needs your action") }
                         items(needsOwnerAction) { item -> OwnerActionCard(item) }
                     }
 
-                    item {
-                        Text(
-                            "ABOUT".uppercase(),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
+                    item { SectionHeader("About") }
                     item {
                         GrowthCard {
                             AboutRow("Version", "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})")
@@ -129,19 +118,14 @@ fun SettingsScreen(repo: GrowthOsRepository, onLogout: () -> Unit) {
                         }
                     }
 
+                    item { SectionHeader("Account") }
                     item {
-                        Text(
-                            "ACCOUNT".uppercase(),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
-                    item {
-                        GrowthCard {
-                            OutlinedButton(onClick = { showLogoutConfirm = true }, modifier = Modifier.fillMaxWidth()) {
-                                Text("Log out")
-                            }
+                        OutlinedButton(
+                            onClick = { showLogoutConfirm = true },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Log out")
                         }
                     }
                 }

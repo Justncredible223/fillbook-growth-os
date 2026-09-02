@@ -33,6 +33,7 @@ import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.Opportunity
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.PolishedEmptyState
@@ -40,6 +41,7 @@ import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SearchField
 import com.fillbook.growthos.ui.components.platformDisplayName
+import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.urgencyColor
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextPrimary
@@ -137,7 +139,7 @@ private fun OpportunityCard(opp: Opportunity) {
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Pill(opp.urgency.name.lowercase(), urgencyColor(opp.urgency))
-                    opp.channels.forEach { channel -> Pill(platformDisplayName(channel), TextSecondary) }
+                    opp.channels.forEach { channel -> IconPill(platformDisplayName(channel), platformIcon(channel), TextSecondary) }
                     source?.let { Pill(it.replace("_", " "), TextSecondary) }
                 }
             }

@@ -46,6 +46,7 @@ import com.fillbook.growthos.data.ApprovalAsset
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScoreBadge
@@ -53,7 +54,10 @@ import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SearchField
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.StatusTone
+import com.fillbook.growthos.ui.components.assetTypeDisplayName
+import com.fillbook.growthos.ui.components.assetTypeIcon
 import com.fillbook.growthos.ui.components.platformDisplayName
+import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.components.statusToneColor
 import com.fillbook.growthos.ui.theme.Accent
@@ -209,36 +213,46 @@ private fun ApprovalCard(
     onReject: () -> Unit,
     onCopyAndShare: () -> Unit,
 ) {
+    val total = asset.reviewPassCount + asset.reviewFailCount
     GrowthCard {
         Row(verticalAlignment = Alignment.Top) {
-            val total = asset.reviewPassCount + asset.reviewFailCount
             if (total > 0) {
                 ScoreBadge(score = (asset.reviewPassCount * 100) / total)
                 Spacer(Modifier.width(12.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(asset.campaignTitle, style = MaterialTheme.typography.titleLarge, maxLines = 2)
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Pill(platformDisplayName(asset.platform), TextSecondary)
-                    if (total > 0) Pill("${asset.reviewPassCount}/$total agents", TextSecondary)
+                    IconPill(platformDisplayName(asset.platform), platformIcon(asset.platform), TextSecondary)
+                    IconPill(assetTypeDisplayName(asset.assetType), assetTypeIcon(asset.assetType), TextSecondary)
                     if (asset.isAutoDraft) Pill("AUTO-DRAFT", statusToneColor(StatusTone.NEW))
                 }
             }
         }
         Spacer(Modifier.height(12.dp))
         ExpandableText(asset.previewText, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 4)
-        relativeTime(asset.generatedAt)?.let { time ->
-            Spacer(Modifier.height(6.dp))
-            Text(time, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            if (total > 0) {
+                Text("${asset.reviewPassCount}/$total review agents passed", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+            } else {
+                Spacer(Modifier.width(1.dp))
+            }
+            relativeTime(asset.generatedAt)?.let { time ->
+                Text(time, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+            }
         }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = onCopyAndShare, colors = ButtonDefaults.buttonColors(containerColor = Accent), modifier = Modifier.weight(1f)) {
-                Text("Copy & Share")
+            Button(onClick = onApprove, colors = ButtonDefaults.buttonColors(containerColor = Accent), modifier = Modifier.weight(1f)) {
+                Text("Approve")
             }
-            OutlinedButton(onClick = onApprove) { Text("Approve") }
-            OutlinedButton(onClick = onReject) { Text("Reject") }
+            OutlinedButton(
+                onClick = onReject,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger),
+            ) { Text("Reject") }
         }
+        Spacer(Modifier.height(6.dp))
+        TextButton(onClick = onCopyAndShare, modifier = Modifier.fillMaxWidth()) { Text("Copy & Share") }
     }
 }

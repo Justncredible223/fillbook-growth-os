@@ -32,6 +32,8 @@ import com.fillbook.growthos.data.Campaign
 import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.IconPill
+import com.fillbook.growthos.ui.components.InsetRow
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.PolishedEmptyState
@@ -41,6 +43,7 @@ import com.fillbook.growthos.ui.components.StatusChip
 import com.fillbook.growthos.ui.components.assetStageTone
 import com.fillbook.growthos.ui.components.campaignStatusTone
 import com.fillbook.growthos.ui.components.platformDisplayName
+import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
@@ -138,15 +141,17 @@ private fun CampaignCard(campaign: Campaign) {
             )
         }
         Spacer(Modifier.height(12.dp))
-        campaign.assets.forEach { asset -> AssetRow(asset) }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            campaign.assets.forEach { asset -> AssetRow(asset) }
+        }
     }
 }
 
 @Composable
 private fun AssetRow(asset: CampaignAsset) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+    InsetRow {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Pill(platformDisplayName(asset.platform), TextSecondary)
+            IconPill(platformDisplayName(asset.platform), platformIcon(asset.platform), TextSecondary)
             StatusChip(asset.stage.replace("_", " "), assetStageTone(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {
                 Pill(

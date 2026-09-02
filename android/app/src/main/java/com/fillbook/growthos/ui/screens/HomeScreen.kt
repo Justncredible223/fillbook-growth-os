@@ -20,9 +20,7 @@ import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,16 +31,18 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.HealthItem
 import com.fillbook.growthos.data.HomeSummary
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.HeroActionCard
+import com.fillbook.growthos.ui.components.InsetRow
 import com.fillbook.growthos.ui.components.MetricTile
+import com.fillbook.growthos.ui.components.QuickActionChip
+import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.SkeletonListLoading
-import com.fillbook.growthos.ui.components.healthColor
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextPrimary
@@ -119,7 +119,14 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                 item {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         MetricTile("Opportunities", s.opportunitiesFound.toString(), Icons.Filled.Search, Modifier.weight(1f))
-                        MetricTile("Waiting on you", s.pendingReview.toString(), Icons.Filled.CheckCircle, Modifier.weight(1f), valueColor = if (s.pendingReview > 0) Accent else TextPrimary)
+                        MetricTile(
+                            "Waiting on you",
+                            s.pendingReview.toString(),
+                            Icons.Filled.CheckCircle,
+                            Modifier.weight(1f),
+                            valueColor = if (s.pendingReview > 0) Accent else TextPrimary,
+                            highlighted = s.pendingReview > 0,
+                        )
                     }
                 }
                 item {
@@ -131,6 +138,8 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                             Icons.Filled.PauseCircle,
                             Modifier.weight(1f),
                             valueColor = if (issueCount == 0) Accent else Warning,
+                            highlighted = issueCount > 0,
+                            highlightColor = Warning,
                         )
                     }
                 }
@@ -138,17 +147,17 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                 item { NextBestActionCard(s, onNavigate) }
 
                 item {
-                    SectionLabel("Quick actions")
+                    SectionHeader("Quick actions")
                 }
                 item {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(onClick = { onNavigate("approvals") }, modifier = Modifier.weight(1f)) { Text("Approvals") }
-                        OutlinedButton(onClick = { onNavigate("radar") }, modifier = Modifier.weight(1f)) { Text("Radar") }
-                        OutlinedButton(onClick = { onNavigate("analytics") }, modifier = Modifier.weight(1f)) { Text("Analytics") }
+                        QuickActionChip(Icons.Filled.CheckCircle, "Approvals", { onNavigate("approvals") }, Modifier.weight(1f))
+                        QuickActionChip(Icons.Filled.Radar, "Radar", { onNavigate("radar") }, Modifier.weight(1f))
+                        QuickActionChip(Icons.Filled.Insights, "Analytics", { onNavigate("analytics") }, Modifier.weight(1f))
                     }
                 }
 
-                item { SectionLabel("Recent activity") }
+                item { SectionHeader("Recent activity") }
                 item { RecentActivity(s, health) }
             }
         }
@@ -181,19 +190,13 @@ private fun NextBestActionCard(summary: HomeSummary, onNavigate: (String) -> Uni
         )
     }
 
-    GrowthCard(onClick = { onNavigate(route) }) {
-        Row(verticalAlignment = Alignment.Top) {
-            Icon(icon, contentDescription = null, tint = Accent, modifier = Modifier.height(22.dp))
-            Spacer(Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.height(4.dp))
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-            }
-        }
-        Spacer(Modifier.height(12.dp))
-        Text(actionLabel, style = MaterialTheme.typography.labelLarge, color = Accent)
-    }
+    HeroActionCard(
+        icon = icon,
+        title = title,
+        subtitle = subtitle,
+        actionLabel = actionLabel,
+        onClick = { onNavigate(route) },
+    )
 }
 
 private data class NextAction(
@@ -209,45 +212,39 @@ private fun RecentActivity(summary: HomeSummary, health: List<HealthItem>) {
     val autoDraft = summary.analytics.autoDraft
     val syncedSources = health.filter { it.detail.contains("Verified live") }
 
-    GrowthCard {
-        var shown = 0
+    val rows = buildList {
         autoDraft.lastRunDate?.let { date ->
-            ActivityRow(
-                label = "Auto-draft ($date)",
-                detail = when (autoDraft.lastRunStatus) {
+            add(
+                "Auto-draft ($date)" to when (autoDraft.lastRunStatus) {
                     "drafted" -> "Produced a real draft"
                     "skipped" -> autoDraft.lastRunSkipReason ?: "Skipped"
                     "failed" -> "Failed -- see System"
                     else -> autoDraft.lastRunStatus ?: "Unknown"
                 },
             )
-            shown++
         }
         syncedSources.take(2).forEach { item ->
-            if (shown > 0) Spacer(Modifier.height(10.dp))
-            ActivityRow(label = item.label, detail = item.detail.substringAfter("last synced ").take(19))
-            shown++
+            add(item.label to item.detail.substringAfter("last synced ").take(19))
         }
-        if (shown == 0) {
+    }
+
+    GrowthCard {
+        if (rows.isEmpty()) {
             Text("No activity recorded yet.", style = MaterialTheme.typography.bodyMedium, color = TextTertiary)
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                rows.forEach { (label, detail) -> ActivityRow(label, detail) }
+            }
         }
     }
 }
 
 @Composable
 private fun ActivityRow(label: String, detail: String) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
-        Text(detail, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+    InsetRow {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(label, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+            Text(detail, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+        }
     }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text.uppercase(),
-        style = MaterialTheme.typography.labelMedium,
-        color = TextSecondary,
-        modifier = Modifier.padding(top = 4.dp),
-    )
 }

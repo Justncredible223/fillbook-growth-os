@@ -35,15 +35,18 @@ import com.fillbook.growthos.data.CreatorCategory
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SearchField
+import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.StatusChip
 import com.fillbook.growthos.ui.components.StatusTone
 import com.fillbook.growthos.ui.components.platformDisplayName
+import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextSecondary
@@ -129,15 +132,15 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         if (tierB.isNotEmpty()) {
-                            item { SectionLabel("Tier B -- active relationships (${tierB.size})") }
+                            item { SectionHeader("Tier B -- active relationships (${tierB.size})") }
                             items(tierB) { creator -> CreatorCard(creator) }
                         }
                         if (researchNext.isNotEmpty()) {
-                            item { SectionLabel("Research Next (${researchNext.size})") }
+                            item { SectionHeader("Research Next (${researchNext.size})") }
                             items(researchNext) { creator -> CreatorCard(creator) }
                         }
                         if (rejected.isNotEmpty()) {
-                            item { SectionLabel("Rejected (${rejected.size})") }
+                            item { SectionHeader("Rejected (${rejected.size})") }
                             items(rejected) { creator -> CreatorCard(creator) }
                         }
                     }
@@ -145,16 +148,6 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
             }
         }
     }
-}
-
-@Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = TextTertiary,
-        modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
-    )
 }
 
 @Composable
@@ -172,7 +165,7 @@ private fun CreatorCard(creator: Creator) {
                 )
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Pill(platformDisplayName(creator.platform), TextSecondary)
+                    IconPill(platformDisplayName(creator.platform), platformIcon(creator.platform), TextSecondary)
                     creator.followerCount?.let { count -> Pill(formatFollowers(count), TextSecondary) }
                     if (creator.category == CreatorCategory.REJECTED) {
                         StatusChip("rejected", StatusTone.BLOCKED)

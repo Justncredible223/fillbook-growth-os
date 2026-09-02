@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -40,11 +41,14 @@ import com.fillbook.growthos.data.CostSummary
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.HealthItem
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.HealthDot
 import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.MetricTile
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.StatusChip
+import com.fillbook.growthos.ui.components.healthColor
 import com.fillbook.growthos.ui.components.healthLabel
 import com.fillbook.growthos.ui.components.healthTone
 import com.fillbook.growthos.ui.theme.Danger
@@ -160,14 +164,7 @@ fun SystemScreen(repo: GrowthOsRepository) {
                         item { AutoDraftCard(status) }
                     }
                     item { PauseSystemCard(paused = systemPaused, onToggle = { showPauseConfirm = true }) }
-                    item {
-                        Text(
-                            "SUBSYSTEMS".uppercase(),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextSecondary,
-                            modifier = Modifier.padding(top = 4.dp),
-                        )
-                    }
+                    item { SectionHeader("Subsystems") }
                     items(health) { item -> SystemHealthCard(item) }
                 }
             }
@@ -242,10 +239,14 @@ private fun SystemHealthCard(item: HealthItem) {
             horizontalArrangement = Arrangement.SpaceBetween,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(item.label, style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(2.dp))
-                Text(item.detail, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.Top) {
+                HealthDot(healthColor(item.status), modifier = Modifier.padding(top = 6.dp))
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(item.label, style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(2.dp))
+                    Text(item.detail, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                }
             }
             StatusChip(healthLabel(item.status), healthTone(item.status))
         }
