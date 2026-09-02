@@ -67,22 +67,31 @@ export interface InboundSummary {
  * -- the one number specifically meant to make it hard to forget
  * something for days.
  *
- * `needsResponse` deliberately counts `review_needed` alongside
- * `needs_response`/`new` -- confirmed necessary by running this against
- * real production data: a backlog-recovery pass landed 19 real mentions
- * (including a genuine "I checked out your site and I think this is
- * exactly what I need!") as `review_needed`, and the dashboard's
- * attention count silently excluded every one of them on the first
- * version of this function. `review_needed` still renders as its own
- * distinct status in the queue itself (see inboundStatusLabel in the
- * Android app) -- only the aggregate "needs my attention" count treats
- * the two as equally attention-worthy, which they are.
+ * `needsResponse` counts every status that is NOT `responded`/`closed`/
+ * `follow_up` -- i.e. `new`, `needs_response`, `review_needed`, AND
+ * `draft_ready`. Both gaps below were found by running this against real
+ * production data, not by inspection:
+ *
+ * 1. `review_needed` was originally excluded -- a backlog-recovery pass
+ *    landed 19 real mentions (including a genuine "I checked out your
+ *    site and I think this is exactly what I need!") as `review_needed`,
+ *    and the dashboard's attention count silently excluded every one.
+ * 2. `draft_ready` was then also excluded -- generating a draft for one
+ *    of those 19 dropped the visible count from 19 to 18, even though a
+ *    draft sitting unsent is exactly the "drafted != responded" case
+ *    this whole feature exists to keep distinct. A draft is progress,
+ *    not resolution -- the owner still has to actually send it.
+ *
+ * Each status still renders as its own distinct label in the queue (see
+ * inboundStatusLabel in the Android app) -- only this aggregate "needs my
+ * attention" count treats all of them as equally unresolved, which they
+ * are: none of the four represent an owner action having been taken yet.
  */
-export async function summarizeInbound(client: SupabaseClient): Promise<InboundSummary> {
-  const repo = new SupabaseInboundRepository(client);
-  const active = await repo.listByStatus(ACTIVE_STATUSES);
-  const cutoff = Date.now() - OVERDUE_HOURS * 60 * 60 * 1000;
-  const isUnresolved = (status: string) => status === "needs_response" || status === "new" || status === "review_needed";
+/** Pure aggregation, deliberately separated from the Supabase fetch so it's directly unit-testable -- this exact function has already had two real bugs found only by running it against live data (see the doc comment above). */
+export function computeInboundSummary(active: InboundEngagement[], now: Date = new Date()): InboundSummary {
+  const cutoff = now.getTime() - OVERDUE_HOURS * 60 * 60 * 1000;
+  const isUnresolved = (status: string) =>
+    status === "needs_response" || status === "new" || status === "review_needed" || status === "draft_ready";
 
   return {
     needsResponse: active.filter((r) => isUnresolved(r.status)).length,
@@ -90,6 +99,12 @@ export async function summarizeInbound(client: SupabaseClient): Promise<InboundS
     repeatEngagers: active.filter((r) => r.isRepeatEngager).length,
     overdue: active.filter((r) => isUnresolved(r.status) && new Date(r.observedAt).getTime() < cutoff).length,
   };
+}
+
+export async function summarizeInbound(client: SupabaseClient): Promise<InboundSummary> {
+  const repo = new SupabaseInboundRepository(client);
+  const active = await repo.listByStatus(ACTIVE_STATUSES);
+  return computeInboundSummary(active);
 }
 
 async function loadGroundingContext(client: SupabaseClient): Promise<{ brandRulesSummary: string; verifiedKnowledgeSummary: string }> {
