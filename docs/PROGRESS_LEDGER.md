@@ -1101,4 +1101,17 @@ manual override between runs. Whether X's mentions endpoint itself misses
 any direct replies that don't technically trigger it wasn't independently
 re-verified against X's current API behavior this pass.
 
-**Cumulative backend test count: 273/273 passing, typecheck clean.**
+**Real-world verification found two more real bugs, live, immediately.**
+Ran `backlog-recover` against production: 19 real X mentions came back,
+including a genuine "I checked out your site and I think this is exactly
+what I need!" -- the dashboard's `needsResponse` count showed 0. Both
+`review_needed` and (once fixed) `draft_ready` had been silently excluded
+from the aggregate "needs my attention" count -- the exact silent-miss
+failure mode this whole phase exists to prevent, caught only because it
+was actually run against real data rather than trusted from code review.
+Fixed both, extracted the aggregation into a pure `computeInboundSummary`
+function so it's finally unit-tested directly (8 regression tests) instead
+of only catchable by live runs. Confirmed live post-fix: 19 need response,
+16 overdue, 4 repeat engagers -- all real.
+
+**Cumulative backend test count: 281/281 passing, typecheck clean.**
