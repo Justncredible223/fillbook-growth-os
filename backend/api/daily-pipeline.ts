@@ -6,10 +6,12 @@ import { SignalGraph } from "../src/signals/signalGraph.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
 import { createYouTubeAdapter } from "../src/signals/adapters/youtubeAdapter.js";
 import { createSearchConsoleAdapter } from "../src/signals/adapters/searchConsoleAdapter.js";
+import { createTikTokAdapter } from "../src/signals/adapters/tiktokAdapter.js";
 import { SupabaseIngestionCursorStore } from "../src/signals/adapters/ingestionCursorStore.js";
 import { ingestXMentions } from "../src/signals/adapters/xIngestion.js";
 import { ingestYouTubeVideos } from "../src/signals/adapters/youtubeIngestion.js";
 import { ingestSearchConsoleQueries } from "../src/signals/adapters/searchConsoleIngestion.js";
+import { ingestTikTokVideos } from "../src/signals/adapters/tiktokIngestion.js";
 import { runGenerateOpportunities } from "../src/opportunities/runGenerateOpportunities.js";
 import { SupabaseOpportunityRepository } from "../src/opportunities/supabaseOpportunityRepository.js";
 import { SupabaseAutoDraftRunRepository } from "../src/opportunities/autoDraftRunRepository.js";
@@ -36,8 +38,8 @@ async function runStep(step: string, fn: () => Promise<string>): Promise<StepRes
 
 /**
  * The single scheduled entry point for this project's whole ingestion ->
- * opportunity pipeline. Deliberately ONE endpoint doing four things
- * rather than four separate cron jobs, because Vercel's Hobby plan caps
+ * opportunity pipeline. Deliberately ONE endpoint doing several things
+ * rather than several separate cron jobs, because Vercel's Hobby plan caps
  * cron jobs at 2 total and once-per-day
  * (https://vercel.com/docs/cron-jobs/usage-and-pricing). Each step runs
  * independently and records its own ok/error -- one source failing (e.g.
@@ -105,6 +107,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         isoDate(endDate),
         now,
       );
+      return `${signals.length} ingested`;
+    }),
+    await runStep("tiktok", async () => {
+      const adapter = createTikTokAdapter(client);
+      const signals = await ingestTikTokVideos(adapter, signalGraph, cursorStore);
       return `${signals.length} ingested`;
     }),
     await runStep("generate_opportunities", async () => {

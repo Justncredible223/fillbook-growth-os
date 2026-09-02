@@ -11,17 +11,6 @@ interface HealthItem {
 }
 
 /**
- * Integrations that genuinely require an owner-created OAuth app/developer
- * account and are not yet connected -- see docs/PROGRESS_LEDGER.md Phase 4
- * and Phase 9/11/12. Hardcoded here (not queried from integration_health)
- * because there is nothing to poll yet; once each is wired up, its status
- * should come from a real integration_health row instead.
- */
-const NOT_YET_CONNECTED = [
-  { label: "TikTok", detail: "Promote is account-blocked; organic staging only, not yet wired" },
-];
-
-/**
  * No deployed endpoint calls the deep-review agents yet, so there's no
  * content_scores evidence to check the way Search Console checks for a
  * real signals row. A live API call on every health-check hit would cost
@@ -126,10 +115,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     health.push({ label: "Supabase", status: "DOWN", detail: errorMessage(err) });
   }
 
-  for (const item of NOT_YET_CONNECTED) {
-    health.push({ label: item.label, status: "NOT_CONNECTED", detail: item.detail });
-  }
-
   health.push(checkAiProvider());
   health.push(
     await checkCursorBackedIntegration(client, "X", "x_mention", "Credentials wired, not yet verified against the real API"),
@@ -141,6 +126,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       "YouTube",
       "youtube_video",
       "Credentials wired, not yet verified against the real API",
+    ),
+  );
+  // Promote (TikTok's paid-boost feature) is separately, permanently
+  // blocked at the account level for @fillbookhq -- "Prohibited Industry
+  // - Financial Opportunity", confirmed twice against real videos, see
+  // docs/CLAUDE_HANDOFF.md in the fillbookhq project. That's unrelated to
+  // and unaffected by this check: this only ever reads organic video
+  // stats (views/likes/comments/shares), never posts or promotes.
+  health.push(
+    await checkCursorBackedIntegration(
+      client,
+      "TikTok",
+      "tiktok_video",
+      "Credentials wired, not yet verified against the real API (Promote is separately account-blocked -- organic only)",
     ),
   );
 

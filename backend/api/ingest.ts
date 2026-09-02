@@ -6,10 +6,12 @@ import { SignalGraph } from "../src/signals/signalGraph.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
 import { createYouTubeAdapter } from "../src/signals/adapters/youtubeAdapter.js";
 import { createSearchConsoleAdapter } from "../src/signals/adapters/searchConsoleAdapter.js";
+import { createTikTokAdapter } from "../src/signals/adapters/tiktokAdapter.js";
 import { SupabaseIngestionCursorStore } from "../src/signals/adapters/ingestionCursorStore.js";
 import { ingestXMentions } from "../src/signals/adapters/xIngestion.js";
 import { ingestYouTubeVideos } from "../src/signals/adapters/youtubeIngestion.js";
 import { ingestSearchConsoleQueries } from "../src/signals/adapters/searchConsoleIngestion.js";
+import { ingestTikTokVideos } from "../src/signals/adapters/tiktokIngestion.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 
 function isoDate(d: Date): string {
@@ -18,11 +20,11 @@ function isoDate(d: Date): string {
 
 /**
  * Manual single-source ingestion trigger -- POST /api/ingest?source=x |
- * youtube | search_console. Consolidated from three separate endpoint
+ * youtube | search_console | tiktok. Consolidated from separate endpoint
  * files (ingest-x-mentions.ts, ingest-youtube.ts,
  * ingest-search-console.ts) into one, because Vercel's Hobby plan caps
  * serverless functions per deployment at 12 and this project hit it. The
- * scheduled daily job (api/daily-pipeline.ts) runs all three
+ * scheduled daily job (api/daily-pipeline.ts) runs all four
  * automatically; this endpoint stays for triggering just one source by
  * hand (debugging, or re-running after fixing an issue with one adapter
  * without waiting for the others).
@@ -35,8 +37,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const source = req.query.source;
-  if (source !== "x" && source !== "youtube" && source !== "search_console") {
-    res.status(400).json({ error: "Query param 'source' must be one of: x, youtube, search_console" });
+  if (source !== "x" && source !== "youtube" && source !== "search_console" && source !== "tiktok") {
+    res.status(400).json({ error: "Query param 'source' must be one of: x, youtube, search_console, tiktok" });
     return;
   }
 
@@ -61,16 +63,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    // source === "search_console"
-    const adapter = createSearchConsoleAdapter(client);
-    const siteUrl = await adapter.resolveSiteUrl();
-    const now = new Date();
-    const endDate = new Date(now);
-    endDate.setDate(endDate.getDate() - 3);
-    const startDate = new Date(endDate);
-    startDate.setDate(startDate.getDate() - 7);
-    const signals = await ingestSearchConsoleQueries(adapter, signalGraph, siteUrl, isoDate(startDate), isoDate(endDate), now);
-    res.status(200).json({ ingested: signals.length, siteUrl });
+    if (source === "search_console") {
+      const adapter = createSearchConsoleAdapter(client);
+      const siteUrl = await adapter.resolveSiteUrl();
+      const now = new Date();
+      const endDate = new Date(now);
+      endDate.setDate(endDate.getDate() - 3);
+      const startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - 7);
+      const signals = await ingestSearchConsoleQueries(adapter, signalGraph, siteUrl, isoDate(startDate), isoDate(endDate), now);
+      res.status(200).json({ ingested: signals.length, siteUrl });
+      return;
+    }
+
+    // source === "tiktok"
+    const adapter = createTikTokAdapter(client);
+    const cursorStore = new SupabaseIngestionCursorStore(client);
+    const signals = await ingestTikTokVideos(adapter, signalGraph, cursorStore);
+    res.status(200).json({ ingested: signals.length });
   } catch (err) {
     res.status(500).json({ error: errorMessage(err) });
   }

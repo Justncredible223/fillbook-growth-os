@@ -832,4 +832,45 @@ existing `ready_for_owner` campaign to `in_review`, confirmed it appeared
 in `GET /api/approvals`, called the real approve action, confirmed
 `campaigns.status` flipped to `'approved'` and the item left the queue.
 
-**Cumulative backend test count: 152/152 passing, typecheck clean.**
+## Phase 12 — TikTok Signal Graph adapter (code-complete, credentials pending)
+
+Wired the TikTok read-only adapter the same shape as X/YouTube:
+`tiktokTokenStore.ts` (persists the OAuth pair as `platform="tiktok"` in
+the existing `platform_oauth_credentials` table -- no migration needed,
+`platform` is a free-text primary key), `tiktokAdapter.ts`
+(`video.list`/`user.info.basic` scopes only, TikTok's real API shape --
+`create_time` returned as Unix seconds not ISO, refresh token rotates on
+every use unlike X/Google's), `tiktokIngestion.ts` (client-side cursor
+filtering on `createdAt`, same pattern as `youtubeIngestion.ts`). Wired
+into `POST /api/ingest?source=tiktok` and `/api/daily-pipeline`'s 6th
+step, both folded into existing functions (Hobby's serverless-function
+cap stays untouched). `health.ts`'s hardcoded `TikTok: NOT_CONNECTED`
+became a real `checkCursorBackedIntegration` call, same as X/YouTube --
+flips to `HEALTHY` automatically once `tiktok_video` signals actually
+land, no code change needed then.
+
+Structural point worth being explicit about: this only ever adds
+**read-only** organic video stats (views/likes/comments/shares) to the
+Signal Graph. `externalWriteFirewall.ts` already hardcoded
+`tiktok.publish_video`/`comment`/`like_video`/`follow_account` as
+permanently-rejected `EXTERNAL_WRITE` actions before this phase even
+started -- wiring this adapter doesn't add or need any write capability,
+and couldn't unlock one if it tried. Also unrelated to TikTok Promote
+(the platform's own paid-boost feature), which stays separately,
+permanently blocked at the account level for `@fillbookhq` per
+`docs/CLAUDE_HANDOFF.md` in the fillbookhq project -- that's a TikTok
+policy call on this account's content category, not something any code
+here can affect.
+
+**Genuinely blocked on the owner, same as X/YouTube/Search Console
+originally were:** needs a TikTok for Developers app (Login Kit) created
+for `@fillbookhq`, authorized for `user.info.basic` + `video.list` only,
+then `TIKTOK_CLIENT_KEY`/`TIKTOK_CLIENT_SECRET`/`TIKTOK_ACCESS_TOKEN`/
+`TIKTOK_REFRESH_TOKEN` set in Vercel (see `.env.example` for the exact
+steps). 17 new tests (`tiktokTokenStore`, `tiktokAdapter`,
+`tiktokIngestion`), 169/169 passing, typecheck clean. Not yet verified
+against the real API (can't be, until the app exists) -- same
+verify-once-credentials-exist caveat every other adapter had at this
+stage.
+
+**Cumulative backend test count: 169/169 passing, typecheck clean.**
