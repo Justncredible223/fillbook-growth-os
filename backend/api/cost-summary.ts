@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
+import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 
 /**
  * Real spend, not an estimate -- every row here comes from an actual
@@ -10,6 +11,7 @@ import { getServiceClient } from "../src/lib/supabaseClient.js";
  * spending without a real number to look at first.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!requireAppAuth(req, res)) return;
   if (req.method !== "GET") {
     res.status(405).json({ error: "Method not allowed" });
     return;

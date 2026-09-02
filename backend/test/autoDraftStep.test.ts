@@ -90,6 +90,7 @@ function buildStepDeps(fetchMock: ReturnType<typeof vi.fn>, opportunityRepo: InM
     runRepo: new InMemoryAutoDraftRunRepository(),
     countReadyForOwnerAssets: async () => 0,
     listOpportunityIdsWithCampaigns: async () => new Set(),
+    isPaused: async () => false,
     ...overrides,
   };
   return deps;
@@ -143,6 +144,21 @@ describe("runAutoDraftStep", () => {
     expect(first.status).toBe("drafted");
     expect(second.status).toBe("already_ran");
     expect((deps.runCampaignDeps.campaignRepo as InMemoryCampaignRepository).campaignCount).toBe(1);
+  });
+
+  it("system paused -> skip without claiming a run or touching the LLM", async () => {
+    const fetchMock = vi.fn();
+    const oppRepo = new InMemoryOpportunityRepository();
+    await seedOpportunity(oppRepo);
+    const runRepo = new InMemoryAutoDraftRunRepository();
+    const deps = buildStepDeps(fetchMock, oppRepo, { runRepo, isPaused: async () => true });
+
+    const result = await runAutoDraftStep(deps, "2026-09-08", now);
+
+    expect(result.status).toBe("skipped");
+    expect(result.skipReason).toBe("system_paused");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(await runRepo.getLastRun()).toBeNull();
   });
 
   it("backlog cap reached -> skip without touching opportunities or the LLM", async () => {

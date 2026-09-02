@@ -15,13 +15,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,27 +40,46 @@ import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.SearchField
 import com.fillbook.growthos.ui.components.StatusChip
 import com.fillbook.growthos.ui.components.StatusTone
 import com.fillbook.growthos.ui.components.platformDisplayName
+import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreatorsScreen(repo: GrowthOsRepository) {
     var creators by remember { mutableStateOf<List<Creator>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
+    suspend fun refresh() {
         try {
             creators = repo.getCreators()
+            errorMessage = null
         } catch (e: Exception) {
             errorMessage = "Couldn't load creators. Check your connection and try again."
         }
         loaded = true
+    }
+
+    LaunchedEffect(Unit) { refresh() }
+
+    val filteredCreators = remember(creators, query) {
+        if (query.isBlank()) creators
+        else creators.filter {
+            it.handle.contains(query, ignoreCase = true) ||
+                it.displayName?.contains(query, ignoreCase = true) == true ||
+                it.notes?.contains(query, ignoreCase = true) == true
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -66,12 +89,10 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
         )
 
         errorMessage?.let { message ->
-            Text(
-                message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Danger,
-                modifier = Modifier.padding(horizontal = 20.dp),
-            )
+            Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.weight(1f))
+                TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
+            }
         }
 
         if (!loaded) {
@@ -83,27 +104,43 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
                 subtitle = "Vetted, interacted, and rejected creators will show up here.",
             )
         } else {
-            val tierB = creators.filter { it.category == CreatorCategory.TIER_B }
-                .sortedByDescending { it.readinessScore ?: -1 }
-            val researchNext = creators.filter { it.category == CreatorCategory.RESEARCH_NEXT }
-                .sortedByDescending { it.readinessScore ?: -1 }
-            val rejected = creators.filter { it.category == CreatorCategory.REJECTED }
+            SearchField(query, { query = it }, "Search creators", modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
 
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+            val tierB = filteredCreators.filter { it.category == CreatorCategory.TIER_B }
+                .sortedByDescending { it.readinessScore ?: -1 }
+            val researchNext = filteredCreators.filter { it.category == CreatorCategory.RESEARCH_NEXT }
+                .sortedByDescending { it.readinessScore ?: -1 }
+            val rejected = filteredCreators.filter { it.category == CreatorCategory.REJECTED }
+
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                modifier = Modifier.fillMaxSize(),
             ) {
-                if (tierB.isNotEmpty()) {
-                    item { SectionLabel("Tier B -- active relationships (${tierB.size})") }
-                    items(tierB) { creator -> CreatorCard(creator) }
-                }
-                if (researchNext.isNotEmpty()) {
-                    item { SectionLabel("Research Next (${researchNext.size})") }
-                    items(researchNext) { creator -> CreatorCard(creator) }
-                }
-                if (rejected.isNotEmpty()) {
-                    item { SectionLabel("Rejected (${rejected.size})") }
-                    items(rejected) { creator -> CreatorCard(creator) }
+                if (filteredCreators.isEmpty()) {
+                    PolishedEmptyState(
+                        icon = Icons.Filled.Groups,
+                        headline = "No matches",
+                        subtitle = "No creators match \"$query\".",
+                    )
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        if (tierB.isNotEmpty()) {
+                            item { SectionLabel("Tier B -- active relationships (${tierB.size})") }
+                            items(tierB) { creator -> CreatorCard(creator) }
+                        }
+                        if (researchNext.isNotEmpty()) {
+                            item { SectionLabel("Research Next (${researchNext.size})") }
+                            items(researchNext) { creator -> CreatorCard(creator) }
+                        }
+                        if (rejected.isNotEmpty()) {
+                            item { SectionLabel("Rejected (${rejected.size})") }
+                            items(rejected) { creator -> CreatorCard(creator) }
+                        }
+                    }
                 }
             }
         }
@@ -140,6 +177,10 @@ private fun CreatorCard(creator: Creator) {
                     if (creator.category == CreatorCategory.REJECTED) {
                         StatusChip("rejected", StatusTone.BLOCKED)
                     }
+                }
+                relativeTime(creator.lastInteractionAt)?.let { time ->
+                    Spacer(Modifier.height(4.dp))
+                    Text("Last interaction: $time", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
                 }
             }
         }

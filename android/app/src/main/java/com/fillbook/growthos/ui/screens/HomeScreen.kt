@@ -19,15 +19,19 @@ import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,6 +49,7 @@ import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
+import kotlinx.coroutines.launch
 
 /**
  * Command center, not a text report: a top status row you can read in
@@ -54,81 +59,98 @@ import com.fillbook.growthos.ui.theme.Warning
  * app has always used) -- this screen changes how it's organized, not
  * what it claims.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
     var summary by remember { mutableStateOf<HomeSummary?>(null) }
     var health by remember { mutableStateOf<List<HealthItem>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
+    suspend fun refresh() {
         try {
             summary = repo.getHomeSummary()
             health = repo.getHealth()
+            errorMessage = null
         } catch (e: Exception) {
             errorMessage = "Couldn't reach Growth OS. Check your connection and try again."
         }
         loaded = true
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
+    LaunchedEffect(Unit) { refresh() }
+
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+        modifier = Modifier.fillMaxSize(),
     ) {
-        item {
-            Column {
-                Text("Fillbook Growth OS", style = MaterialTheme.typography.headlineLarge)
-                Spacer(Modifier.height(2.dp))
-                Text("Mission Control", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-            }
-        }
-
-        errorMessage?.let { message ->
-            item { Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger) }
-        }
-
-        if (!loaded) {
-            item { SkeletonListLoading(horizontalPadding = 0.dp) }
-        }
-
-        summary?.let { s ->
-            val issueCount = health.count { it.status.name == "DOWN" || it.status.name == "DEGRADED" }
-
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
             item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    MetricTile("Opportunities", s.opportunitiesFound.toString(), Icons.Filled.Search, Modifier.weight(1f))
-                    MetricTile("Waiting on you", s.pendingReview.toString(), Icons.Filled.CheckCircle, Modifier.weight(1f), valueColor = if (s.pendingReview > 0) Accent else TextPrimary)
-                }
-            }
-            item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    MetricTile("Today's spend", "$%.4f".format(s.analytics.totalCostUsd), Icons.Filled.Bolt, Modifier.weight(1f))
-                    MetricTile(
-                        "System health",
-                        if (issueCount == 0) "All clear" else "$issueCount issue${if (issueCount == 1) "" else "s"}",
-                        Icons.Filled.PauseCircle,
-                        Modifier.weight(1f),
-                        valueColor = if (issueCount == 0) Accent else Warning,
-                    )
+                Column {
+                    Text("Fillbook Growth OS", style = MaterialTheme.typography.headlineLarge)
+                    Spacer(Modifier.height(2.dp))
+                    Text("Mission Control", style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
                 }
             }
 
-            item { NextBestActionCard(s, onNavigate) }
-
-            item {
-                SectionLabel("Quick actions")
-            }
-            item {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedButton(onClick = { onNavigate("approvals") }, modifier = Modifier.weight(1f)) { Text("Approvals") }
-                    OutlinedButton(onClick = { onNavigate("radar") }, modifier = Modifier.weight(1f)) { Text("Radar") }
-                    OutlinedButton(onClick = { onNavigate("analytics") }, modifier = Modifier.weight(1f)) { Text("Analytics") }
+            errorMessage?.let { message ->
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
+                    }
                 }
             }
 
-            item { SectionLabel("Recent activity") }
-            item { RecentActivity(s, health) }
+            if (!loaded) {
+                item { SkeletonListLoading(horizontalPadding = 0.dp) }
+            }
+
+            summary?.let { s ->
+                val issueCount = health.count { it.status.name == "DOWN" || it.status.name == "DEGRADED" }
+
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MetricTile("Opportunities", s.opportunitiesFound.toString(), Icons.Filled.Search, Modifier.weight(1f))
+                        MetricTile("Waiting on you", s.pendingReview.toString(), Icons.Filled.CheckCircle, Modifier.weight(1f), valueColor = if (s.pendingReview > 0) Accent else TextPrimary)
+                    }
+                }
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        MetricTile("Today's spend", "$%.4f".format(s.analytics.totalCostUsd), Icons.Filled.Bolt, Modifier.weight(1f))
+                        MetricTile(
+                            "System health",
+                            if (issueCount == 0) "All clear" else "$issueCount issue${if (issueCount == 1) "" else "s"}",
+                            Icons.Filled.PauseCircle,
+                            Modifier.weight(1f),
+                            valueColor = if (issueCount == 0) Accent else Warning,
+                        )
+                    }
+                }
+
+                item { NextBestActionCard(s, onNavigate) }
+
+                item {
+                    SectionLabel("Quick actions")
+                }
+                item {
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedButton(onClick = { onNavigate("approvals") }, modifier = Modifier.weight(1f)) { Text("Approvals") }
+                        OutlinedButton(onClick = { onNavigate("radar") }, modifier = Modifier.weight(1f)) { Text("Radar") }
+                        OutlinedButton(onClick = { onNavigate("analytics") }, modifier = Modifier.weight(1f)) { Text("Analytics") }
+                    }
+                }
+
+                item { SectionLabel("Recent activity") }
+                item { RecentActivity(s, health) }
+            }
         }
     }
 }

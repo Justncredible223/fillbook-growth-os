@@ -141,6 +141,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (error) throw error;
             return new Set(((data ?? []) as Array<{ opportunity_id: string | null }>).map((r) => r.opportunity_id).filter((id): id is string => Boolean(id)));
           },
+          isPaused: async () => {
+            const { data } = await client.from("system_settings").select("paused").eq("id", true).single();
+            return data?.paused ?? false;
+          },
           onOpportunitySelected: (id) => {
             currentOpportunityId = id;
           },

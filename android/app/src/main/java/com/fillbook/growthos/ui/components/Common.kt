@@ -94,6 +94,25 @@ fun campaignStatusTone(status: String): StatusTone = when (status) {
     else -> StatusTone.NEUTRAL
 }
 
+/**
+ * "2h ago" instead of a raw ISO timestamp -- parses the subset of ISO
+ * 8601 this backend actually emits (java.time on the server, always
+ * UTC). Falls back to the raw string if parsing fails rather than
+ * crashing the row it's shown in over a formatting edge case.
+ */
+fun relativeTime(isoTimestamp: String?): String? {
+    if (isoTimestamp == null) return null
+    val instant = runCatching { java.time.Instant.parse(isoTimestamp) }.getOrNull() ?: return isoTimestamp
+    val seconds = java.time.Duration.between(instant, java.time.Instant.now()).seconds
+    return when {
+        seconds < 60 -> "just now"
+        seconds < 3600 -> "${seconds / 60}m ago"
+        seconds < 86400 -> "${seconds / 3600}h ago"
+        seconds < 604800 -> "${seconds / 86400}d ago"
+        else -> "${seconds / 604800}w ago"
+    }
+}
+
 /** Shared title/subtitle header used at the top of every screen. */
 @Composable
 fun ScreenHeader(title: String, subtitle: String, modifier: Modifier = Modifier) {

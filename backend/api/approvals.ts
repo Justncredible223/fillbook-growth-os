@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
+import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 
 /**
  * GET: assembles ApprovalAsset-shaped rows (matching the Android app's
@@ -22,11 +23,12 @@ import { getServiceClient } from "../src/lib/supabaseClient.js";
  * CampaignFactory (see docs/EXTERNAL_WRITE_FIREWALL.md).
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!requireAppAuth(req, res)) return;
   const client = getServiceClient();
 
   if (req.method === "POST") {
     try {
-      const body = req.body as { campaignAssetId?: string; action?: string } | undefined;
+      const body = req.body as { campaignAssetId?: string; action?: string; decidedBy?: string } | undefined;
       const campaignAssetId = body?.campaignAssetId;
       const action = body?.action;
       if (!campaignAssetId || (action !== "approve" && action !== "reject")) {
@@ -42,9 +44,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (assetError) throw assetError;
 
       const newStatus = action === "approve" ? "approved" : "retired";
+      const now = new Date().toISOString();
       const { error: updateError } = await client
         .from("campaigns")
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .update({
+          status: newStatus,
+          updated_at: now,
+          decided_by: body?.decidedBy?.trim() || null,
+          decided_at: now,
+        })
         .eq("id", asset.campaign_id);
       if (updateError) throw updateError;
 

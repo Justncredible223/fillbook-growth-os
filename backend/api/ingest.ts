@@ -10,6 +10,7 @@ import { SupabaseIngestionCursorStore } from "../src/signals/adapters/ingestionC
 import { ingestXMentions } from "../src/signals/adapters/xIngestion.js";
 import { ingestYouTubeVideos } from "../src/signals/adapters/youtubeIngestion.js";
 import { ingestSearchConsoleQueries } from "../src/signals/adapters/searchConsoleIngestion.js";
+import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -27,6 +28,7 @@ function isoDate(d: Date): string {
  * without waiting for the others).
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!requireAppAuth(req, res)) return;
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;

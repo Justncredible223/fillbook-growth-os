@@ -100,6 +100,8 @@ data class Campaign(
     val id: String,
     val thesis: String,
     val status: String,
+    val decidedBy: String?,
+    val decidedAt: String?,
     val assets: List<CampaignAsset>,
 )
 

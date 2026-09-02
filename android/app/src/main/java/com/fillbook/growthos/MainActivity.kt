@@ -52,13 +52,16 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.fillbook.growthos.data.CrashReporter
 import com.fillbook.growthos.data.NetworkGrowthOsRepository
+import com.fillbook.growthos.data.TokenStore
 import com.fillbook.growthos.ui.screens.AnalyticsScreen
 import com.fillbook.growthos.ui.screens.ApprovalsScreen
 import com.fillbook.growthos.ui.screens.CampaignsScreen
 import com.fillbook.growthos.ui.screens.ContentLibraryScreen
 import com.fillbook.growthos.ui.screens.CreatorsScreen
 import com.fillbook.growthos.ui.screens.HomeScreen
+import com.fillbook.growthos.ui.screens.LoginScreen
 import com.fillbook.growthos.ui.screens.RadarScreen
 import com.fillbook.growthos.ui.screens.ResearchScreen
 import com.fillbook.growthos.ui.screens.SettingsScreen
@@ -100,31 +103,67 @@ private val moreDestinations = listOf(
 
 private val allDestinations = primaryDestinations + moreDestinations
 
+private const val BASE_URL = "https://fillbook-growth-os.vercel.app"
+
+/**
+ * See NetworkGrowthOsRepository's kdoc: this is a Vercel deployment-
+ * protection bypass token, not the Supabase service_role key -- safe to
+ * embed client-side by design. It gets the app's requests PAST Vercel's
+ * deployment protection; it is not what authorizes them against this
+ * project's own data. That's TokenStore's job now (see LoginScreen).
+ */
+private const val PROTECTION_BYPASS_SECRET = "7TVBpvTPeeHbiGlZco9RDS8miXqtbfoi"
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        // See NetworkGrowthOsRepository's kdoc: this is a Vercel deployment-
-        // protection bypass token, not the Supabase service_role key --
-        // safe to embed client-side by design. The Supabase key itself
-        // never appears in this app.
-        val repo = NetworkGrowthOsRepository(
-            baseUrl = "https://fillbook-growth-os.vercel.app",
-            protectionBypassSecret = "7TVBpvTPeeHbiGlZco9RDS8miXqtbfoi",
-        )
+        val tokenStore = TokenStore(this)
+        CrashReporter.install(this, BASE_URL, PROTECTION_BYPASS_SECRET, tokenStore)
         setContent {
             FillbookGrowthOSTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    GrowthOsApp(repo)
+                    GrowthOsRoot(tokenStore)
                 }
             }
         }
     }
 }
 
+@Composable
+private fun GrowthOsRoot(tokenStore: TokenStore) {
+    var appToken by remember { mutableStateOf(tokenStore.getToken()) }
+    var displayName by remember { mutableStateOf(tokenStore.getDisplayName()) }
+
+    val token = appToken
+    if (token == null) {
+        LoginScreen(
+            baseUrl = BASE_URL,
+            protectionBypassSecret = PROTECTION_BYPASS_SECRET,
+            onLoginSuccess = { validatedToken, validatedName ->
+                tokenStore.saveToken(validatedToken)
+                tokenStore.saveDisplayName(validatedName)
+                appToken = validatedToken
+                displayName = validatedName
+            },
+        )
+    } else {
+        val repo = remember(token) {
+            NetworkGrowthOsRepository(BASE_URL, PROTECTION_BYPASS_SECRET, token, displayName ?: "")
+        }
+        GrowthOsApp(
+            repo = repo,
+            onLogout = {
+                tokenStore.clearToken()
+                appToken = null
+            },
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository) {
+private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, onLogout: () -> Unit) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
@@ -175,7 +214,7 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository) {
             composable(Destination.Creators.route) { CreatorsScreen(repo) }
             composable(Destination.Strategy.route) { StrategyScreen() }
             composable(Destination.System.route) { SystemScreen(repo) }
-            composable(Destination.Settings.route) { SettingsScreen(repo) }
+            composable(Destination.Settings.route) { SettingsScreen(repo, onLogout = onLogout) }
         }
     }
 

@@ -15,15 +15,19 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -43,6 +47,7 @@ import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
+import kotlinx.coroutines.launch
 
 /**
  * Every draft this system has produced, grouped by platform -- the same
@@ -51,22 +56,28 @@ import com.fillbook.growthos.ui.theme.Warning
  * endpoint: adding one would push this project over Vercel Hobby's
  * 12-serverless-function cap (see docs/PROGRESS_LEDGER.md Phase 15).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContentLibraryScreen(repo: GrowthOsRepository) {
     var allAssets by remember { mutableStateOf<List<CampaignAsset>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var stageFilter by remember { mutableStateOf<String?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
+    suspend fun refresh() {
         try {
             val campaigns = repo.getCampaigns()
             allAssets = campaigns.flatMap { it.assets }.filter { it.latestBody != null }
+            errorMessage = null
         } catch (e: Exception) {
             errorMessage = "Couldn't load the content library. Check your connection and try again."
         }
         loaded = true
     }
+
+    LaunchedEffect(Unit) { refresh() }
 
     val stages = remember(allAssets) { allAssets.map { it.stage }.distinct().sorted() }
     val filtered = remember(allAssets, stageFilter) {
@@ -78,7 +89,10 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
         ScreenHeader("Content Library", "Every draft ever produced, with its real review-agent scores.")
 
         errorMessage?.let { message ->
-            Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.padding(horizontal = 20.dp))
+            Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.weight(1f))
+                TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
+            }
         }
 
         if (!loaded) {
@@ -102,13 +116,19 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
                 }
                 Spacer(Modifier.height(8.dp))
             }
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                modifier = Modifier.fillMaxSize(),
             ) {
-                assetsByPlatform.entries.sortedByDescending { it.value.size }.forEach { (platform, assets) ->
-                    item { SectionLabel("${platform.uppercase()} (${assets.size})") }
-                    items(assets) { asset -> LibraryCard(asset) }
+                LazyColumn(
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    assetsByPlatform.entries.sortedByDescending { it.value.size }.forEach { (platform, assets) ->
+                        item { SectionLabel("${platform.uppercase()} (${assets.size})") }
+                        items(assets) { asset -> LibraryCard(asset) }
+                    }
                 }
             }
         }

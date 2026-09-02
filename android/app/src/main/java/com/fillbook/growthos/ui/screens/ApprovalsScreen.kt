@@ -1,9 +1,12 @@
 package com.fillbook.growthos.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,14 +20,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.foundation.layout.Box
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,19 +47,21 @@ import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.Pill
-import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.SearchField
+import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.StatusTone
 import com.fillbook.growthos.ui.components.platformDisplayName
+import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.components.statusToneColor
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
+import com.fillbook.growthos.ui.theme.TextTertiary
 import kotlinx.coroutines.launch
-import java.net.URLEncoder
 
 /**
  * A decision screen, not a report: the review score is the first thing
@@ -62,18 +70,22 @@ import java.net.URLEncoder
  * badge, cost, timestamp) is secondary metadata below the content. This
  * screen must never contain a button labeled "Publish", "Post", "Send",
  * or similar -- every action either stays internal (Approve, Reject) or
- * opens the destination platform's own composer for the owner to finish
- * and press post themselves (see docs/EXTERNAL_WRITE_FIREWALL.md).
+ * copies the draft and hands it to whatever app the owner picks to
+ * finish and press post themselves (see docs/EXTERNAL_WRITE_FIREWALL.md).
  * Approve/Reject only change what this app displays (campaigns.status
  * server-side) -- neither one ever contacts X, YouTube, or any other
  * external platform.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ApprovalsScreen(repo: GrowthOsRepository) {
     var assets by remember { mutableStateOf<List<ApprovalAsset>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
+    var pendingReject by remember { mutableStateOf<ApprovalAsset?>(null) }
+    var query by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -90,6 +102,11 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
 
     LaunchedEffect(Unit) { refresh() }
 
+    val filtered = remember(assets, query) {
+        if (query.isBlank()) assets
+        else assets.filter { it.campaignTitle.contains(query, ignoreCase = true) || it.previewText.contains(query, ignoreCase = true) }
+    }
+
     fun decide(asset: ApprovalAsset, approve: Boolean) {
         scope.launch {
             try {
@@ -103,17 +120,24 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
         }
     }
 
-    fun openInPlatform(asset: ApprovalAsset) {
-        val text = URLEncoder.encode(asset.previewText, "UTF-8")
-        val url = when (asset.platform.lowercase()) {
-            "x", "twitter" -> "https://twitter.com/intent/tweet?text=$text"
-            else -> null
+    /**
+     * Universal, platform-agnostic handoff: copies the draft to the
+     * clipboard and opens Android's own share sheet so the owner can pick
+     * literally any installed app -- X, YouTube Studio, TikTok, a blog
+     * CMS, or anything else -- instead of this app trying to maintain a
+     * pre-fill URL scheme per platform (which only ever worked for X).
+     * Paste is still the owner's action; nothing here ever posts on its
+     * own.
+     */
+    fun copyAndShare(asset: ApprovalAsset) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Draft", asset.previewText))
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, asset.previewText)
         }
-        if (url != null) {
-            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-        } else {
-            actionError = "No composer wired up yet for ${platformDisplayName(asset.platform)} -- copy the draft manually for now."
-        }
+        context.startActivity(Intent.createChooser(shareIntent, "Post to ${platformDisplayName(asset.platform)}"))
+        scope.launch { snackbarHostState.showSnackbar("Copied to clipboard") }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -121,7 +145,12 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             ScreenHeader("Approvals", "You always press publish — this app only ever hands off a draft.")
 
             (errorMessage ?: actionError)?.let { message ->
-                Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.padding(horizontal = 20.dp))
+                Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.weight(1f))
+                    if (errorMessage != null) {
+                        TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
+                    }
+                }
             }
 
             if (!loaded) {
@@ -133,22 +162,43 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                     subtitle = "Drafts land here once the Campaign Factory finishes AI review.",
                 )
             } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                SearchField(query, { query = it }, "Search drafts", modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                    modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(assets, key = { it.id }) { asset ->
-                        ApprovalCard(
-                            asset = asset,
-                            onApprove = { decide(asset, approve = true) },
-                            onReject = { decide(asset, approve = false) },
-                            onOpenInPlatform = { openInPlatform(asset) },
-                        )
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(filtered, key = { it.id }) { asset ->
+                            ApprovalCard(
+                                asset = asset,
+                                onApprove = { decide(asset, approve = true) },
+                                onReject = { pendingReject = asset },
+                                onCopyAndShare = { copyAndShare(asset) },
+                            )
+                        }
                     }
                 }
             }
         }
         SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+
+    pendingReject?.let { asset ->
+        AlertDialog(
+            onDismissRequest = { pendingReject = null },
+            title = { Text("Reject this draft?") },
+            text = { Text("\"${asset.campaignTitle}\" will be retired. This can't be undone from here.") },
+            confirmButton = {
+                TextButton(onClick = { decide(asset, approve = false); pendingReject = null }) { Text("Reject") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingReject = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 
@@ -157,7 +207,7 @@ private fun ApprovalCard(
     asset: ApprovalAsset,
     onApprove: () -> Unit,
     onReject: () -> Unit,
-    onOpenInPlatform: () -> Unit,
+    onCopyAndShare: () -> Unit,
 ) {
     GrowthCard {
         Row(verticalAlignment = Alignment.Top) {
@@ -178,10 +228,14 @@ private fun ApprovalCard(
         }
         Spacer(Modifier.height(12.dp))
         ExpandableText(asset.previewText, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 4)
+        relativeTime(asset.generatedAt)?.let { time ->
+            Spacer(Modifier.height(6.dp))
+            Text(time, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+        }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = onOpenInPlatform, colors = ButtonDefaults.buttonColors(containerColor = Accent), modifier = Modifier.weight(1f)) {
-                Text("Open in ${platformDisplayName(asset.platform)}")
+            Button(onClick = onCopyAndShare, colors = ButtonDefaults.buttonColors(containerColor = Accent), modifier = Modifier.weight(1f)) {
+                Text("Copy & Share")
             }
             OutlinedButton(onClick = onApprove) { Text("Approve") }
             OutlinedButton(onClick = onReject) { Text("Reject") }

@@ -3,6 +3,7 @@ import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { SupabaseOpportunityRepository } from "../src/opportunities/supabaseOpportunityRepository.js";
 import { runCampaignForOpportunity, buildSupabaseRunCampaignDeps } from "../src/content/runCampaignForOpportunity.js";
+import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 
 /**
  * Manual trigger: runs one opportunity through the full Opportunity ->
@@ -16,6 +17,7 @@ import { runCampaignForOpportunity, buildSupabaseRunCampaignDeps } from "../src/
  * source: "manual" to distinguish itself from that automated path.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!requireAppAuth(req, res)) return;
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
@@ -23,6 +25,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const client = getServiceClient();
+
+    const { data: settings } = await client.from("system_settings").select("paused").eq("id", true).single();
+    if (settings?.paused) {
+      res.status(409).json({ error: "System is paused -- unpause it in Settings before running a campaign manually." });
+      return;
+    }
+
     const opportunityId = (req.body as { opportunityId?: string } | undefined)?.opportunityId;
 
     const opportunityRepo = new SupabaseOpportunityRepository(client);

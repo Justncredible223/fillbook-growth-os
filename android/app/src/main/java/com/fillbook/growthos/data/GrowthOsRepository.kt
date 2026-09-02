@@ -21,6 +21,9 @@ interface GrowthOsRepository {
      * app displays. The owner still does the actual posting themselves.
      */
     suspend fun decideApproval(campaignAssetId: String, approve: Boolean)
+
+    /** Backs the Settings/System "Pause System" control -- actually stops auto-draft and manual campaign runs server-side, not just a display flag. */
+    suspend fun setPaused(paused: Boolean)
 }
 
 /**
@@ -98,6 +101,8 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             id = "campaign-fake-1",
             thesis = "A trader publicly told @FillbookHQ that revenge trading is what's breaching their funded accounts",
             status = "actioned",
+            decidedBy = null,
+            decidedAt = null,
             assets = listOf(
                 CampaignAsset(
                     id = "asset-fake-1",
@@ -119,6 +124,10 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     )
 
     override suspend fun decideApproval(campaignAssetId: String, approve: Boolean) {
+        // No backend to call in fake mode -- no-op.
+    }
+
+    override suspend fun setPaused(paused: Boolean) {
         // No backend to call in fake mode -- no-op.
     }
 }

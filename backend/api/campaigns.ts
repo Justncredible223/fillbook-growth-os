@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
+import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 
 /**
  * Read-only view of every campaign this system has actually run, for the
@@ -11,6 +12,7 @@ import { getServiceClient } from "../src/lib/supabaseClient.js";
  * trip" reasoning as /api/approvals, at this volume.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!requireAppAuth(req, res)) return;
   if (req.method !== "GET") {
     res.status(405).json({ error: "Method not allowed" });
     return;
@@ -20,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const client = getServiceClient();
     const { data: campaignRows, error: campaignsError } = await client
       .from("campaigns")
-      .select("id, thesis, status, created_at")
+      .select("id, thesis, status, created_at, decided_by, decided_at")
       .order("created_at", { ascending: false });
     if (campaignsError) throw campaignsError;
 
@@ -71,6 +73,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           id: campaign.id,
           thesis: campaign.thesis,
           status: campaign.status,
+          decidedBy: campaign.decided_by ?? null,
+          decidedAt: campaign.decided_at ?? null,
           assets,
         };
       }),

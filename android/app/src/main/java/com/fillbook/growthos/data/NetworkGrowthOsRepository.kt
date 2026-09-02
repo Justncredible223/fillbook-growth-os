@@ -21,10 +21,25 @@ import org.json.JSONObject
  * client-side by design -- see Vercel's own docs on this feature. It is a
  * different trust tier from the Supabase service_role key, which never
  * appears anywhere in this app.
+ *
+ * [appToken] is the second, separate credential that actually gates this
+ * project's own business data (see backend/src/lib/requireAppAuth.ts).
+ * Unlike the Vercel bypass secret above, this one is never baked into the
+ * source or the APK -- the user enters it once on LoginScreen and it's
+ * kept in EncryptedSharedPreferences via TokenStore. Every request here
+ * sends it as a standard Authorization: Bearer header; the backend
+ * rejects anything that doesn't match its own APP_API_TOKEN env var.
+ *
+ * [deciderName] is the display name entered alongside the access code --
+ * not a real account system, just enough to answer "who approved this"
+ * when two people share the same phone/token (see migration
+ * 0013_campaign_decision_audit.sql).
  */
 class NetworkGrowthOsRepository(
     private val baseUrl: String,
     private val protectionBypassSecret: String,
+    private val appToken: String,
+    private val deciderName: String = "",
 ) : GrowthOsRepository {
 
     private val client = OkHttpClient()
@@ -34,6 +49,7 @@ class NetworkGrowthOsRepository(
             .url("$baseUrl$path")
             .header("x-vercel-protection-bypass", protectionBypassSecret)
             .header("x-vercel-set-bypass-cookie", "true")
+            .header("Authorization", "Bearer $appToken")
             .build()
 
         client.newCall(request).execute().use { response ->
@@ -50,6 +66,7 @@ class NetworkGrowthOsRepository(
             .url("$baseUrl$path")
             .header("x-vercel-protection-bypass", protectionBypassSecret)
             .header("x-vercel-set-bypass-cookie", "true")
+            .header("Authorization", "Bearer $appToken")
             .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
@@ -166,6 +183,8 @@ class NetworkGrowthOsRepository(
                 id = item.getString("id"),
                 thesis = item.getString("thesis"),
                 status = item.getString("status"),
+                decidedBy = item.optStringOrNull("decidedBy"),
+                decidedAt = item.optStringOrNull("decidedAt"),
                 assets = item.getJSONArray("assets").map { asset ->
                     CampaignAsset(
                         id = asset.getString("id"),
@@ -194,7 +213,12 @@ class NetworkGrowthOsRepository(
         val body = JSONObject()
             .put("campaignAssetId", campaignAssetId)
             .put("action", if (approve) "approve" else "reject")
+            .put("decidedBy", deciderName)
         post("/api/approvals", body)
+    }
+
+    override suspend fun setPaused(paused: Boolean) {
+        post("/api/summary", JSONObject().put("paused", paused))
     }
 }
 

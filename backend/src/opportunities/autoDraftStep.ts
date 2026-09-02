@@ -28,6 +28,14 @@ export interface AutoDraftStepDeps {
   countReadyForOwnerAssets: () => Promise<number>;
   listOpportunityIdsWithCampaigns: () => Promise<Set<string>>;
   /**
+   * Backs the Settings/System screens' "Pause System" control (see
+   * migration 0006_system_settings.sql) -- checked before the run is
+   * even claimed, so flipping this off mid-day doesn't cost a real
+   * auto_draft_runs row and the step can still run later that same day
+   * once un-paused.
+   */
+  isPaused: () => Promise<boolean>;
+  /**
    * Called with the selected opportunity's id right before drafting
    * starts -- lets the production Supabase wiring tag cost events with
    * the real id even though it wasn't known when runCampaignDeps was
@@ -46,6 +54,10 @@ export interface AutoDraftStepDeps {
  * api/daily-pipeline.ts for the production Supabase wiring.
  */
 export async function runAutoDraftStep(deps: AutoDraftStepDeps, runDate: string, now: Date): Promise<AutoDraftStepResult> {
+  if (await deps.isPaused()) {
+    return { status: "skipped", skipReason: "system_paused", opportunitiesConsidered: 0, opportunitiesEligible: 0, aiCalls: 0, costUsd: 0 };
+  }
+
   const claimedId = await deps.runRepo.claimRun(runDate);
   if (claimedId === null) {
     return { status: "already_ran", opportunitiesConsidered: 0, opportunitiesEligible: 0, aiCalls: 0, costUsd: 0 };

@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
+import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 
 interface HealthItem {
   label: string;
@@ -97,6 +98,7 @@ async function checkSearchConsole(client: SupabaseClient): Promise<HealthItem> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!requireAppAuth(req, res)) return;
   if (req.method !== "GET") {
     res.status(405).json({ error: "Method not allowed" });
     return;

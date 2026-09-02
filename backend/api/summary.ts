@@ -3,8 +3,41 @@ import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { MONTHLY_AUTO_DRAFT_BUDGET_USD, BACKLOG_CAP } from "../src/opportunities/autoDraftEligibility.js";
 import { SupabaseAutoDraftRunRepository } from "../src/opportunities/autoDraftRunRepository.js";
+import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 
+/**
+ * POST here is the Pause System control (Settings/System screens):
+ * { paused: boolean }. Folded into this GET endpoint rather than a new
+ * file -- this project is already at Vercel Hobby's 12-serverless-
+ * function cap (see ingest.ts/daily-pipeline.ts), same reasoning as
+ * approvals.ts combining its own GET/POST. Actually enforced, not just
+ * a display value: see autoDraftStep.ts's isPaused dep and
+ * run-campaign.ts's own check -- both real money-spending paths stop
+ * when this is true.
+ */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!requireAppAuth(req, res)) return;
+
+  if (req.method === "POST") {
+    try {
+      const paused = (req.body as { paused?: boolean } | undefined)?.paused;
+      if (typeof paused !== "boolean") {
+        res.status(400).json({ error: "Body must be { paused: boolean }" });
+        return;
+      }
+      const client = getServiceClient();
+      const { error } = await client
+        .from("system_settings")
+        .update({ paused, updated_at: new Date().toISOString() })
+        .eq("id", true);
+      if (error) throw error;
+      res.status(200).json({ paused });
+    } catch (err) {
+      res.status(500).json({ error: errorMessage(err) });
+    }
+    return;
+  }
+
   if (req.method !== "GET") {
     res.status(405).json({ error: "Method not allowed" });
     return;
@@ -18,11 +51,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const autoDraftRunRepo = new SupabaseAutoDraftRunRepository(client);
 
-    const [signalsToday, openOpportunities, readyAssets, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftSpendUsd] =
+    const [signalsToday, openOpportunities, readyAssetsAwaitingDecision, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftSpendUsd] =
       await Promise.all([
         client.from("signals").select("id", { count: "exact", head: true }).gte("observed_at", startOfToday.toISOString()),
         client.from("opportunities").select("id", { count: "exact", head: true }).eq("status", "open"),
-        client.from("campaign_assets").select("id", { count: "exact", head: true }).eq("stage", "ready_for_owner"),
+        // Same filter as GET /api/approvals: ready_for_owner AND the
+        // campaign is still in_review. Counting ready_for_owner alone
+        // (the old behavior) overcounted -- an asset can sit at
+        // ready_for_owner after its campaign has already been approved
+        // or retired, which /api/approvals correctly excludes but this
+        // count previously didn't, so Home showed "N waiting on you"
+        // while Approvals showed fewer (or zero) real decisions pending.
+        client
+          .from("campaign_assets")
+          .select("id, campaigns!inner(status)", { count: "exact", head: true })
+          .eq("stage", "ready_for_owner")
+          .eq("campaigns.status", "in_review"),
         client.from("system_settings").select("paused").eq("id", true).single(),
         client.from("signals").select("source"),
         client.from("opportunities").select("status"),
@@ -45,11 +89,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(200).json({
       signalsAnalyzedToday: signalsToday.count ?? 0,
       opportunitiesFound: openOpportunities.count ?? 0,
-      assetsReady: readyAssets.count ?? 0,
-      // Real ready_for_owner count -- NOT the unused `approvals` table
-      // (nothing in this codebase ever inserts into it; querying it here
-      // always silently returned 0 regardless of real pending drafts).
-      pendingReview: readyAssets.count ?? 0,
+      assetsReady: readyAssetsAwaitingDecision.count ?? 0,
+      // Same real, in_review-filtered count GET /api/approvals returns --
+      // guarantees Home and Approvals always agree on "how many."
+      pendingReview: readyAssetsAwaitingDecision.count ?? 0,
       systemPaused: settings.data?.paused ?? false,
       analytics: {
         totalSignals: (signalsBySource.data ?? []).length,
@@ -61,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           lastRunDate: lastAutoDraftRun?.runDate ?? null,
           lastRunStatus: lastAutoDraftRun?.status ?? null,
           lastRunSkipReason: lastAutoDraftRun?.skipReason ?? null,
-          backlogCount: readyAssets.count ?? 0,
+          backlogCount: readyAssetsAwaitingDecision.count ?? 0,
           backlogCap: BACKLOG_CAP,
           monthSpendUsd: Number(monthAutoDraftSpendUsd.toFixed(6)),
           monthBudgetUsd: MONTHLY_AUTO_DRAFT_BUDGET_USD,
