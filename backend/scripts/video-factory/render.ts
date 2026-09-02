@@ -1,0 +1,86 @@
+import { basename, dirname } from "node:path";
+import type { ProcessRunner } from "./processRunner.js";
+import type { RenderPlan } from "./types.js";
+import { VideoFactoryError } from "./types.js";
+
+const WIDTH = 1080;
+const HEIGHT = 1920;
+const FRAME_RATE = 30;
+
+/**
+ * Builds the ffmpeg argv for the known-good composite strategy from
+ * ~/fillbookhq/docs/social/VIDEO_PRODUCTION_WORKFLOW.md, extended from a
+ * single flat background to N scene-colored segments concatenated
+ * end-to-end: one `color` lavfi source per scene, concatenated on the
+ * video track, then the `subtitles` filter burns in captions + scene
+ * labels on top of the composited result (NOT `drawtext`, which
+ * reproducibly segfaults on this ffmpeg 9.0.1 build -- see captions.ts).
+ * Audio is the real voiceover concatenated with a short silence pad so
+ * the closing caption has room to breathe, same as the known-good
+ * example. Pure function, no I/O -- render() below is the only thing
+ * that actually shells out, so this is fully unit-testable.
+ */
+export function buildFfmpegArgs(plan: RenderPlan): string[] {
+  if (plan.scenes.length === 0) throw new VideoFactoryError("Render plan has no scenes.");
+
+  const inputArgs: string[] = [];
+  for (const scene of plan.scenes) {
+    inputArgs.push(
+      "-f",
+      "lavfi",
+      "-i",
+      `color=c=${scene.backgroundColor}:s=${WIDTH}x${HEIGHT}:d=${scene.durationSeconds.toFixed(3)}:r=${FRAME_RATE}`,
+    );
+  }
+  const voiceoverInputIndex = plan.scenes.length;
+  const silenceInputIndex = voiceoverInputIndex + 1;
+  inputArgs.push("-i", basename(plan.voiceoverPath));
+  inputArgs.push("-f", "lavfi", "-i", `anullsrc=r=24000:cl=mono:d=${plan.silencePadSeconds.toFixed(3)}`);
+
+  const videoConcatInputs = plan.scenes.map((_, i) => `[${i}:v]`).join("");
+  const filterComplex = [
+    `${videoConcatInputs}concat=n=${plan.scenes.length}:v=1:a=0[bgraw]`,
+    `[bgraw]subtitles=${basename(plan.assPath)}[v]`,
+    `[${voiceoverInputIndex}:a][${silenceInputIndex}:a]concat=n=2:v=0:a=1[a]`,
+  ].join(";");
+
+  return [
+    "-y",
+    ...inputArgs,
+    "-filter_complex",
+    filterComplex,
+    "-map",
+    "[v]",
+    "-map",
+    "[a]",
+    "-c:v",
+    "libx264",
+    "-pix_fmt",
+    "yuv420p",
+    "-crf",
+    "18",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    "-shortest",
+    basename(plan.outputPath),
+  ];
+}
+
+/**
+ * Runs ffmpeg with cwd set to the render's output directory so the
+ * filter_complex string can reference voiceover.mp3/captions.ass/
+ * final.mp4 by plain basename -- sidesteps ffmpeg filter syntax's fragile
+ * escaping of Windows absolute paths (colons, backslashes) entirely,
+ * same fix the known-good pipeline used ("cd into the working folder
+ * first").
+ */
+export async function renderVideo(plan: RenderPlan, runner: ProcessRunner): Promise<void> {
+  const args = buildFfmpegArgs(plan);
+  const cwd = dirname(plan.outputPath);
+  const result = await runner.run("ffmpeg", args, { cwd });
+  if (result.exitCode !== 0) {
+    throw new VideoFactoryError(`ffmpeg render failed (exit ${result.exitCode}):\n${result.stderr || result.stdout}`);
+  }
+}

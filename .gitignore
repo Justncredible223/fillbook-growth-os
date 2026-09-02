@@ -11,3 +11,7 @@ android/*/build/
 android/.idea/
 android/*/.cxx/
 .vercel
+
+# Video Factory render output -- generated MP4s/voiceovers/captions, never
+# committed. See docs/VIDEO_FACTORY.md.
+output/

@@ -68,7 +68,7 @@ function videoScriptResponse() {
 class InMemoryCampaignRepository implements CampaignRepository {
   campaigns: Array<{ id: string; opportunityId: string; thesis: string }> = [];
   assets: Array<{ id: string; campaignId: string; platform: string; assetType: string; stage: AssetStage }> = [];
-  versions: Array<{ id: string; campaignAssetId: string; version: number; body: string }> = [];
+  versions: Array<{ id: string; campaignAssetId: string; version: number; body: string; metadata: Record<string, unknown> }> = [];
   private counter = 0;
 
   async createCampaign(opportunityId: string, thesis: string) {
@@ -81,9 +81,9 @@ class InMemoryCampaignRepository implements CampaignRepository {
     this.assets.push({ id, campaignId, platform, assetType, stage: "draft" });
     return id;
   }
-  async insertContentVersion(campaignAssetId: string, version: number, body: string) {
+  async insertContentVersion(campaignAssetId: string, version: number, body: string, metadata: Record<string, unknown> = {}) {
     const id = `version-${++this.counter}`;
-    this.versions.push({ id, campaignAssetId, version, body });
+    this.versions.push({ id, campaignAssetId, version, body, metadata });
     return id;
   }
   async updateAssetStage(campaignAssetId: string, stage: AssetStage) {
@@ -164,5 +164,10 @@ describe("runCampaignPipeline", () => {
     expect(result.draftText).toContain("SHOT LIST:");
     expect(campaignRepo.assets.find((a) => a.id === result.campaignAssetId)?.assetType).toBe("video_script");
     expect(result.finalStage).toBe("ready_for_owner");
+
+    const version = campaignRepo.versions.find((v) => v.campaignAssetId === result.campaignAssetId);
+    expect((version?.metadata.videoScript as { hook: string } | undefined)?.hook).toBe(
+      "Your funded account can get pulled even on a winning trade.",
+    );
   });
 });

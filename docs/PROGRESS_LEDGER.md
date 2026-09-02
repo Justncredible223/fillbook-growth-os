@@ -912,3 +912,69 @@ post, plus an `opportunityGenerator` case for the platform mapping),
 173/173 passing, typecheck clean.
 
 **Cumulative backend test count: 173/173 passing, typecheck clean.**
+
+## Phase 10 (continued) — Video Factory local render CLI
+
+Automated the mechanical half of "Video Factory: script generation ...
+render stays local/manual" -- the render step still runs on the owner's
+own machine (never Vercel), but no longer needs hand-run ffmpeg/edge-tts
+commands. `backend/scripts/video-factory/` (`npm run video:render --
+<draft-id>`, from `backend/`) fetches an approved `video_script` draft
+directly from Supabase, generates real narration via edge-tts, times
+captions off edge-tts's own real per-sentence `.srt` output (not a
+duration-based guess), composites deterministic branded scene
+backgrounds classified from the approved shot list, renders with the
+known-good ffmpeg settings preserved verbatim from
+`~/fillbookhq/docs/social/VIDEO_PRODUCTION_WORKFLOW.md` (`.ass` not
+`drawtext`/raw `.srt` -- both hit real bugs previously), and validates
+the output with `ffprobe` before calling it done.
+
+Extended `content_versions.metadata` (already existed, unused) to store
+the structured `VideoScript` JSON alongside the flattened text body --
+the CLI reads that directly rather than re-parsing
+`formatVideoScriptAsText`'s human-readable output, strictly more
+reliable. `SUPABASE_URL` exported from `backend/src/lib/supabaseClient.ts`
+so the CLI reuses it instead of duplicating the constant.
+
+**Approval gate, the one hard requirement:** `assertApproved` in
+`loadApprovedScript.ts` runs once, immediately after loading, before
+anything else -- checked via `campaigns.status === 'approved'` (the same
+status `POST /api/approvals`'s human approve action sets) for the
+Supabase path, or a required explicit `approvedAt` field for the offline
+`--input` JSON path. No flag, env var, or code path skips this in either
+mode.
+
+Two real bugs found and fixed via the smoke render's own frame-by-frame
+visual QA (not just "tests pass"):
+1. `classifyShot`'s metric-detection regex (`\b(\d|%)\b`) never actually
+   matched -- `\d`/`%` aren't word characters, so `\b` can't anchor
+   around them the way it does around letters. Multi-digit numbers and
+   percent signs silently fell through to "explanation." Fixed to test
+   `/\d|%/` directly.
+2. `labelForScene`'s hook/explanation branch was supposed to show no
+   on-screen label, but `tag ? tag : truncateForLabel(description)`
+   treated the empty-string "no label" sentinel as falsy and fell
+   through to displaying the raw internal shot-list direction text (e.g.
+   "Text card: the hook line") burned into the video -- confirmed
+   visually in the first smoke-render frame, not caught by any unit test
+   (all of which asserted behavior in isolation, not the real
+   integration). Fixed to return "" directly for those two kinds; a
+   regression test now asserts zero label cues are produced for
+   hook/explanation-only shot lists.
+
+`MAX_CHARS_PER_CAPTION` was also tuned from an untested guess (42) to a
+value sized against a real sentence length (70) after the first test run
+showed it splitting completely ordinary short sentences.
+
+68 new tests across 7 files under `backend/test/video-factory/`
+(production-package validation, the approval gate, SRT parsing/caption
+segmentation/ASS escaping, scene classification, ffmpeg argv generation,
+ffprobe validation logic, subprocess failure handling -- all with
+`ProcessRunner` mocked, no real ffmpeg/edge-tts invoked). Plus one real,
+non-mocked smoke render (`--input` mode, synthetic script) that actually
+invoked edge-tts + ffmpeg + ffprobe end-to-end and produced a real
+13.2s/1080x1920/h264+aac MP4 that passed every validation check --
+temporary output deleted after visual inspection. 241/241 tests passing,
+typecheck clean.
+
+**Cumulative backend test count: 241/241 passing, typecheck clean.**

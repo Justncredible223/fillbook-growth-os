@@ -25,10 +25,15 @@ export class SupabaseCampaignRepository implements CampaignRepository {
     return data.id as string;
   }
 
-  async insertContentVersion(campaignAssetId: string, version: number, body: string): Promise<string> {
+  async insertContentVersion(
+    campaignAssetId: string,
+    version: number,
+    body: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<string> {
     const { data, error } = await this.client
       .from("content_versions")
-      .insert({ campaign_asset_id: campaignAssetId, version, body, created_by: "system" })
+      .insert({ campaign_asset_id: campaignAssetId, version, body, metadata: metadata ?? {}, created_by: "system" })
       .select("id")
       .single();
     if (error) throw new Error(`insertContentVersion failed: ${error.message}`);

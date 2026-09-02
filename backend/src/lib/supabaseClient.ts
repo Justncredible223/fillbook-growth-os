@@ -2,7 +2,10 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // Not a secret -- Supabase project URLs are meant to be public (protection
 // comes from RLS + the service_role key below, never from hiding the URL).
-const SUPABASE_URL = "https://aijnibayogdygtykidta.supabase.co";
+// Exported so local tooling outside the Vercel deployment (e.g. the video
+// factory CLI in scripts/video-factory/) can build its own client against
+// the same project without duplicating this constant.
+export const SUPABASE_URL = "https://aijnibayogdygtykidta.supabase.co";
 
 let cachedClient: SupabaseClient | null = null;
 

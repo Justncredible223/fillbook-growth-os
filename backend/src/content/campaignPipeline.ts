@@ -3,7 +3,7 @@ import { CampaignFactory, type AssetStage } from "./campaignFactory.js";
 import type { ContentScoreRepository } from "./contentScoreRepository.js";
 import type { DeepReviewResult } from "./deepReviewGate.js";
 import { draftContent } from "./contentWriter.js";
-import { draftVideoScript, formatVideoScriptAsText } from "./videoScriptWriter.js";
+import { draftVideoScript, formatVideoScriptAsText, type VideoScript } from "./videoScriptWriter.js";
 
 /**
  * Platforms whose native format is short-form video, not a text post --
@@ -23,7 +23,14 @@ export interface PipelineOpportunity {
 export interface CampaignRepository {
   createCampaign(opportunityId: string, thesis: string): Promise<string>;
   createCampaignAsset(campaignId: string, platform: string, assetType: string): Promise<string>;
-  insertContentVersion(campaignAssetId: string, version: number, body: string): Promise<string>;
+  /**
+   * metadata is optional and additive -- text posts never set it. Video
+   * assets store the structured VideoScript here (not just re-parsed from
+   * `body`) so downstream consumers -- the video-factory CLI in
+   * particular -- get reliable structured fields instead of re-parsing
+   * formatVideoScriptAsText's human-readable text block.
+   */
+  insertContentVersion(campaignAssetId: string, version: number, body: string, metadata?: Record<string, unknown>): Promise<string>;
   updateAssetStage(campaignAssetId: string, stage: AssetStage): Promise<void>;
 }
 
@@ -63,15 +70,23 @@ export async function runCampaignPipeline(
 ): Promise<PipelineResult> {
   const platform = opportunity.recommendedChannels[0] ?? "x";
   const isVideo = VIDEO_PLATFORMS.has(platform);
-  const draftText = isVideo
-    ? formatVideoScriptAsText(
-        await draftVideoScript(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary),
-      )
-    : await draftContent(llmClient, platform, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
+  let draftText: string;
+  let videoScript: VideoScript | null = null;
+  if (isVideo) {
+    videoScript = await draftVideoScript(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
+    draftText = formatVideoScriptAsText(videoScript);
+  } else {
+    draftText = await draftContent(llmClient, platform, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
+  }
 
   const campaignId = await campaignRepo.createCampaign(opportunity.id, opportunity.title);
   const campaignAssetId = await campaignRepo.createCampaignAsset(campaignId, platform, isVideo ? "video_script" : "post");
-  const contentVersionId = await campaignRepo.insertContentVersion(campaignAssetId, 1, draftText);
+  const contentVersionId = await campaignRepo.insertContentVersion(
+    campaignAssetId,
+    1,
+    draftText,
+    videoScript ? { videoScript } : undefined,
+  );
 
   const mechanical = await factory.submitDraft("draft", draftText, context.recentTextsForSameTopic);
   await campaignRepo.updateAssetStage(campaignAssetId, mechanical.newStage);

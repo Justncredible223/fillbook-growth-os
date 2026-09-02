@@ -6,7 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "video:render": "tsx scripts/video-factory/index.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0"
@@ -15,6 +16,7 @@
     "typescript": "^5.6.0",
     "vitest": "^2.1.0",
     "@types/node": "^22.0.0",
-    "@vercel/node": "^3.2.24"
+    "@vercel/node": "^3.2.24",
+    "tsx": "^4.19.0"
   }
 }
