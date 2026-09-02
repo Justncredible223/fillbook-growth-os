@@ -1,5 +1,9 @@
 package com.fillbook.growthos.ui.components
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.MusicNote
@@ -27,12 +32,14 @@ import androidx.compose.material.icons.filled.SmartDisplay
 import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.HealthStatus
@@ -46,6 +53,34 @@ import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
+
+/**
+ * One clipboard write, reused everywhere a drafted or curated piece of
+ * text needs to leave this app -- Inbound replies, campaign/content
+ * drafts. Nothing here ever posts anything itself; this only gets text
+ * onto the clipboard so the owner can paste it into the reply box or
+ * composer they already have open.
+ */
+fun copyToClipboard(context: Context, label: String, text: String) {
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    clipboard.setPrimaryClip(ClipData.newPlainText(label, text))
+    // Android 13+ shows its own "Copied" system toast for clipboard writes;
+    // older versions don't, so this is the only feedback the owner gets there.
+    if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.TIRAMISU) {
+        Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+    }
+}
+
+/** Small, consistent copy affordance for any card showing drafted/curated text. */
+@Composable
+fun CopyButton(text: String, label: String = "Draft", modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    OutlinedButton(onClick = { copyToClipboard(context, label, text) }, modifier = modifier) {
+        Icon(Icons.Filled.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text("Copy")
+    }
+}
 
 @Composable
 fun Pill(text: String, color: Color, modifier: Modifier = Modifier) {

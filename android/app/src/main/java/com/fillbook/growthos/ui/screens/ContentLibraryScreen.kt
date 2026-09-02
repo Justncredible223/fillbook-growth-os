@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.ui.components.CopyButton
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
@@ -169,5 +170,9 @@ private fun LibraryCard(asset: CampaignAsset) {
         }
         Spacer(Modifier.height(10.dp))
         ExpandableText(asset.latestBody ?: "", style = MaterialTheme.typography.bodyMedium, color = TextSecondary, collapsedMaxLines = 3)
+        asset.latestBody?.let { body ->
+            Spacer(Modifier.height(10.dp))
+            CopyButton(text = body, label = "${asset.platform} ${assetTypeDisplayName(asset.assetType)}")
+        }
     }
 }

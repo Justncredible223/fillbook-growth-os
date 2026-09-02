@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Forum
@@ -21,6 +22,8 @@ import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.InboundEngagement
 import com.fillbook.growthos.data.InboundSummary
+import com.fillbook.growthos.ui.components.CopyButton
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
@@ -60,6 +64,7 @@ import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
+import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
@@ -85,6 +90,11 @@ fun InboundScreen(repo: GrowthOsRepository) {
     var refreshing by remember { mutableStateOf(false) }
     var recovering by remember { mutableStateOf(false) }
     var busyId by remember { mutableStateOf<String?>(null) }
+    // Without this, a "Follow up" tap has no way back -- the item just sits
+    // wherever it landed in the date-sorted list, potentially many screens
+    // down once a handful of newer items arrive. Defaults to null (all
+    // active statuses), same as the pre-filter behavior.
+    var statusFilter by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -171,6 +181,22 @@ fun InboundScreen(repo: GrowthOsRepository) {
                     subtitle = "New replies, mentions, and follow-ups from @FillbookHQ's audience show up here.",
                 )
             } else {
+                val availableStatuses = remember(items) { items.map { it.status }.distinct() }
+                if (availableStatuses.size > 1) {
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 20.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        item { InboundFilterChip("All", statusFilter == null) { statusFilter = null } }
+                        items(availableStatuses) { status ->
+                            InboundFilterChip(inboundStatusLabel(status), statusFilter == status) { statusFilter = status }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+                val filteredItems = remember(items, statusFilter) {
+                    statusFilter?.let { s -> items.filter { it.status == s } } ?: items
+                }
                 PullToRefreshBox(
                     isRefreshing = refreshing,
                     onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
@@ -180,7 +206,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        items(items, key = { it.id }) { item ->
+                        items(filteredItems, key = { it.id }) { item ->
                             InboundCard(
                                 item = item,
                                 busy = busyId == item.id,
@@ -245,6 +271,8 @@ private fun InboundCard(
                 Spacer(Modifier.height(2.dp))
                 Text(draft, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
             }
+            Spacer(Modifier.height(8.dp))
+            CopyButton(text = draft, label = "Reply to @${item.authorHandle ?: "unknown"}", modifier = Modifier.fillMaxWidth())
         }
 
         Spacer(Modifier.height(6.dp))
@@ -291,4 +319,19 @@ private fun IconButtonSmall(onClick: () -> Unit, icon: androidx.compose.ui.graph
     OutlinedButton(onClick = onClick, contentPadding = PaddingValues(12.dp)) {
         Icon(icon, contentDescription = contentDescription, modifier = Modifier.height(18.dp))
     }
+}
+
+@Composable
+private fun InboundFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = Accent.copy(alpha = 0.2f),
+            selectedLabelColor = Accent,
+            containerColor = Surface,
+            labelColor = TextSecondary,
+        ),
+    )
 }

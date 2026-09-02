@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.Campaign
 import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.ui.components.CopyButton
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.InsetRow
@@ -163,6 +164,8 @@ private fun AssetRow(asset: CampaignAsset) {
         asset.latestBody?.let { body ->
             Spacer(Modifier.height(6.dp))
             Text(body, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 3)
+            Spacer(Modifier.height(8.dp))
+            CopyButton(text = body, label = "${asset.platform} ${asset.assetType}")
         }
     }
 }
