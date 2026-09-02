@@ -16,9 +16,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -36,8 +33,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.Opportunity
+import com.fillbook.growthos.ui.components.GhostButton
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
+import com.fillbook.growthos.ui.components.InsetRow
+import com.fillbook.growthos.ui.components.PrimaryButton
 import com.fillbook.growthos.ui.components.assetStageDisplayName
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.SkeletonListLoading
@@ -108,10 +108,14 @@ fun RadarScreen(repo: GrowthOsRepository) {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        ScreenHeader("Radar", "Opportunities found from real signals — nothing here publishes itself.")
+        ScreenHeader(
+            "Radar",
+            "Opportunities found from real signals — nothing here publishes itself.",
+            kicker = if (loaded && opportunities.isNotEmpty()) "${opportunities.size} open signal${if (opportunities.size == 1) "" else "s"}" else null,
+        )
 
         (errorMessage ?: runResultMessage)?.let { message ->
-            Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     message,
                     style = MaterialTheme.typography.bodyMedium,
@@ -198,78 +202,76 @@ private fun splitTitle(title: String): Pair<String, String?> {
  * Leads with a human read ("why it surfaced"), not the raw scorer debug
  * text (see [explainOpportunity]) -- the score number and its inputs are
  * unchanged, only what's shown by default changes. Raw reason segments
- * stay one tap away under "View score breakdown" for anyone who wants
- * them. [topRanked] gives the single highest-scored visible card a
- * stronger CTA; every other card gets a compact, low-height action so a
- * long Radar list doesn't turn into a stack of equally-loud green
- * buttons.
+ * stay one tap away under "View score breakdown," framed as an analysis
+ * disclosure (a bordered inset block, small monospace-adjacent bullet
+ * lines) rather than looking like leaked debug output.
+ *
+ * The left signal-rail (a thin colored bar, via GrowthCard's accentBar)
+ * is Radar's own identity mark -- the score band's color runs the full
+ * height of the card, so priority reads at a glance scrolling past, not
+ * just from the badge. [topRanked] additionally gets a filled primary CTA
+ * and a brighter card border; every other card gets a quiet text-only
+ * action so a long list doesn't turn into a stack of equally-loud buttons.
  */
 @Composable
 private fun OpportunityCard(opp: Opportunity, running: Boolean, topRanked: Boolean, onRun: () -> Unit) {
     val (headline, source) = splitTitle(opp.title)
     val band = scoreBand(opp.score.toInt())
+    val bandColor = scoreBandColor(band)
     val explanation = explainOpportunity(opp.rationale)
     var showBreakdown by remember(opp.id) { mutableStateOf(false) }
 
-    GrowthCard {
+    GrowthCard(accentBar = bandColor) {
         Row(verticalAlignment = Alignment.Top) {
             ScoreBadge(score = opp.score.toInt())
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Pill(band.label.uppercase(), scoreBandColor(band))
+                    Pill(band.label.uppercase(), bandColor)
                     if (topRanked) Pill("TOP PICK", Accent)
                 }
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(headline, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     opp.channels.forEach { channel -> IconPill(platformDisplayName(channel), platformIcon(channel), TextSecondary) }
                     source?.let { Pill(signalSourceDisplayName(it), TextSecondary) }
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Text("Why it surfaced", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
-        Spacer(Modifier.height(2.dp))
-        Text(explanation.summary, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+        Spacer(Modifier.height(12.dp))
+        InsetRow {
+            Text("WHY IT SURFACED", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+            Spacer(Modifier.height(4.dp))
+            Text(explanation.summary, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
 
-        if (explanation.breakdown.isNotEmpty()) {
-            TextButton(onClick = { showBreakdown = !showBreakdown }, contentPadding = PaddingValues(0.dp)) {
-                Text(if (showBreakdown) "Hide score breakdown" else "View score breakdown", style = MaterialTheme.typography.labelMedium, color = Accent)
-            }
-            if (showBreakdown) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    explanation.breakdown.forEach { line ->
-                        Text("· $line", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+            if (explanation.breakdown.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = { showBreakdown = !showBreakdown }, contentPadding = PaddingValues(0.dp)) {
+                    Text(if (showBreakdown) "Hide score breakdown" else "View score breakdown", style = MaterialTheme.typography.labelMedium, color = Accent)
+                }
+                if (showBreakdown) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(com.fillbook.growthos.ui.theme.Background, androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                            .padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        explanation.breakdown.forEach { line ->
+                            Text(line, style = MaterialTheme.typography.bodySmall.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace), color = TextTertiary)
+                        }
                     }
                 }
-                Spacer(Modifier.height(4.dp))
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
             if (topRanked) {
-                Button(
-                    onClick = onRun,
-                    enabled = !running,
-                    colors = ButtonDefaults.buttonColors(containerColor = Accent),
-                ) {
-                    if (running) {
-                        CircularProgressIndicator(modifier = Modifier.height(16.dp), color = MaterialTheme.colorScheme.onPrimary)
-                    } else {
-                        Text("Build campaign")
-                    }
-                }
+                PrimaryButton(text = "Build campaign", onClick = onRun, enabled = !running, busy = running)
             } else {
-                TextButton(onClick = onRun, enabled = !running) {
-                    if (running) {
-                        CircularProgressIndicator(modifier = Modifier.height(16.dp), color = Accent)
-                    } else {
-                        Text("Build campaign →", color = Accent)
-                    }
-                }
+                GhostButton(text = "Build campaign →", onClick = onRun, enabled = !running)
             }
         }
     }

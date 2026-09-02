@@ -20,7 +20,6 @@ import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -47,6 +46,7 @@ import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SearchField
+import com.fillbook.growthos.ui.components.SecondaryButton
 import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.StatusChip
 import com.fillbook.growthos.ui.components.StatusTone
@@ -55,7 +55,9 @@ import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.components.relationshipStageLabel
+import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
+import com.fillbook.growthos.ui.theme.Success
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
@@ -96,6 +98,7 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
         ScreenHeader(
             "Creators",
             "Relationship stage for every creator Fillbook has vetted, interacted with, or rejected.",
+            kicker = if (loaded && creators.isNotEmpty()) "${creators.size} tracked" else null,
         )
 
         errorMessage?.let { message ->
@@ -159,7 +162,12 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
 
 @Composable
 private fun CreatorCard(creator: Creator) {
-    GrowthCard {
+    val accentBar = when (creator.category) {
+        CreatorCategory.TIER_B -> Success
+        CreatorCategory.RESEARCH_NEXT -> Accent
+        CreatorCategory.REJECTED -> Danger
+    }
+    GrowthCard(accentBar = accentBar) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             creator.readinessScore?.let { score ->
                 ScoreBadge(score = score * 10, label = "$score/10")
@@ -203,14 +211,11 @@ private fun CreatorCard(creator: Creator) {
         creatorProfileUrl(creator.platform, creator.handle)?.let { url ->
             val context = LocalContext.current
             Spacer(Modifier.height(12.dp))
-            OutlinedButton(
+            SecondaryButton(
+                text = "Open profile",
                 onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) },
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.height(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Open profile")
-            }
+            )
         }
     }
 }

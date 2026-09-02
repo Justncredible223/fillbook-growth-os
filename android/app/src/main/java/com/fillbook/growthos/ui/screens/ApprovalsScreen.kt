@@ -21,11 +21,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -45,13 +42,17 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.ApprovalAsset
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.ExpandableText
+import com.fillbook.growthos.ui.components.GhostButton
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
+import com.fillbook.growthos.ui.components.InsetRow
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
+import com.fillbook.growthos.ui.components.PrimaryButton
 import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SearchField
+import com.fillbook.growthos.ui.components.SecondaryButton
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.StatusTone
 import com.fillbook.growthos.ui.components.assetTypeDisplayName
@@ -64,6 +65,8 @@ import com.fillbook.growthos.ui.components.statusToneColor
 import com.fillbook.growthos.ui.theme.Warning
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
+import com.fillbook.growthos.ui.theme.KpiNumberStyleSmall
+import com.fillbook.growthos.ui.theme.Success
 import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
@@ -148,7 +151,11 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-            ScreenHeader("Approvals", "You always press publish — this app only ever hands off a draft.")
+            ScreenHeader(
+                "Approvals",
+                "You always press publish — this app only ever hands off a draft.",
+                kicker = if (loaded && assets.isNotEmpty()) "${assets.size} waiting on you" else null,
+            )
 
             (errorMessage ?: actionError)?.let { message ->
                 Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -216,10 +223,11 @@ private fun ApprovalCard(
     onCopyAndShare: () -> Unit,
 ) {
     val total = asset.reviewPassCount + asset.reviewFailCount
-    GrowthCard {
+    val flagged = asset.reviewFailCount > 0
+    GrowthCard(accentBar = if (total > 0) (if (flagged) Warning else Success) else null) {
         Row(verticalAlignment = Alignment.Top) {
             if (total > 0) {
-                ScoreBadge(score = (asset.reviewPassCount * 100) / total)
+                ScoreBadge(score = (asset.reviewPassCount * 100) / total, colorOverride = if (flagged) Warning else null)
                 Spacer(Modifier.width(12.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
@@ -234,9 +242,10 @@ private fun ApprovalCard(
         }
         Spacer(Modifier.height(12.dp))
         ExpandableText(asset.previewText, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 4)
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Spacer(Modifier.height(10.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             if (total > 0) {
-                Text(reviewSummaryLabel(asset.reviewPassCount, total), style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                Text(reviewSummaryLabel(asset.reviewPassCount, total), style = MaterialTheme.typography.labelMedium, color = if (flagged) Warning else TextTertiary)
             } else {
                 Spacer(Modifier.width(1.dp))
             }
@@ -244,25 +253,22 @@ private fun ApprovalCard(
                 Text(time, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
             }
         }
-        if (asset.reviewFailCount > 0) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "Flagged by review -- read it closely before you send it.",
-                style = MaterialTheme.typography.labelMedium,
-                color = Warning,
-            )
+        if (flagged) {
+            Spacer(Modifier.height(8.dp))
+            InsetRow {
+                Text(
+                    "Flagged by review — read it closely before you send it.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Warning,
+                )
+            }
         }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Button(onClick = onApprove, colors = ButtonDefaults.buttonColors(containerColor = Accent), modifier = Modifier.weight(1f)) {
-                Text("Approve")
-            }
-            OutlinedButton(
-                onClick = onReject,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger),
-            ) { Text("Reject") }
+            PrimaryButton(text = "Approve", onClick = onApprove, modifier = Modifier.weight(1f))
+            SecondaryButton(text = "Reject", onClick = onReject, contentColor = Danger)
         }
-        Spacer(Modifier.height(6.dp))
-        TextButton(onClick = onCopyAndShare, modifier = Modifier.fillMaxWidth()) { Text("Copy & Share") }
+        Spacer(Modifier.height(2.dp))
+        GhostButton(text = "Copy & Share", onClick = onCopyAndShare, modifier = Modifier.fillMaxWidth())
     }
 }

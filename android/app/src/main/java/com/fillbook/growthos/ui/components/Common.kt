@@ -49,6 +49,7 @@ import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Background
 import com.fillbook.growthos.ui.theme.Border
 import com.fillbook.growthos.ui.theme.Danger
+import com.fillbook.growthos.ui.theme.Success
 import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
@@ -210,7 +211,7 @@ fun inboundStatusLabel(status: String): String = when (status) {
 }
 
 fun healthColor(status: HealthStatus): Color = when (status) {
-    HealthStatus.HEALTHY -> Accent
+    HealthStatus.HEALTHY -> Success
     HealthStatus.DEGRADED -> Warning
     HealthStatus.DOWN -> Danger
     HealthStatus.NOT_CONNECTED -> TextTertiary
@@ -263,12 +264,23 @@ fun relativeTime(isoTimestamp: String?): String? {
     }
 }
 
-/** Shared title/subtitle header used at the top of every screen. */
+/**
+ * Shared masthead used at the top of every screen. An optional [kicker]
+ * (small uppercase cyan eyebrow above the title) gives a screen a sense of
+ * place within the product -- e.g. Radar's kicker can name the signal
+ * count -- without needing a second headline. Deliberately no bottom
+ * divider/rule: the section-header accent ticks below already provide
+ * enough wayfinding without adding another line across every screen.
+ */
 @Composable
-fun ScreenHeader(title: String, subtitle: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.padding(20.dp)) {
-        Text(title, style = MaterialTheme.typography.headlineLarge)
-        Spacer(Modifier.height(2.dp))
+fun ScreenHeader(title: String, subtitle: String, modifier: Modifier = Modifier, kicker: String? = null) {
+    Column(modifier = modifier.padding(horizontal = 20.dp, vertical = 22.dp)) {
+        if (kicker != null) {
+            Text(kicker.uppercase(), style = com.fillbook.growthos.ui.theme.OverlineStyle, color = com.fillbook.growthos.ui.theme.Accent)
+            Spacer(Modifier.height(6.dp))
+        }
+        Text(title, style = com.fillbook.growthos.ui.theme.AppTypography.displayLarge, color = com.fillbook.growthos.ui.theme.TextPrimary)
+        Spacer(Modifier.height(4.dp))
         Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
     }
 }
@@ -325,15 +337,16 @@ fun ComingSoonScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Surface, RoundedCornerShape(16.dp))
-                    .padding(24.dp),
+                    .background(Surface, RoundedCornerShape(24.dp))
+                    .border(1.dp, Border, RoundedCornerShape(24.dp))
+                    .padding(28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
-                    modifier = Modifier.size(56.dp).background(Background, CircleShape).border(1.dp, Border, CircleShape),
+                    modifier = Modifier.size(60.dp).background(Background, CircleShape).border(1.dp, Border, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(icon, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(26.dp))
+                    Icon(icon, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(28.dp))
                 }
                 Spacer(Modifier.height(16.dp))
                 Text(

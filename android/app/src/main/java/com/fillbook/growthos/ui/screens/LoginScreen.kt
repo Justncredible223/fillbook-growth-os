@@ -9,10 +9,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -30,8 +29,11 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.NetworkException
 import com.fillbook.growthos.data.NetworkGrowthOsRepository
 import java.io.IOException
+import com.fillbook.growthos.ui.components.PrimaryButton
+import com.fillbook.growthos.ui.theme.AppTypography
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
+import com.fillbook.growthos.ui.theme.OverlineStyle
 import com.fillbook.growthos.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
@@ -104,12 +106,14 @@ fun LoginScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
         Column(modifier = Modifier.fillMaxWidth().padding(32.dp)) {
-            Text("Fillbook Growth OS", style = MaterialTheme.typography.headlineLarge)
+            Text("OPERATOR CONSOLE", style = OverlineStyle, color = Accent)
+            Spacer(Modifier.height(6.dp))
+            Text("Fillbook Growth OS", style = AppTypography.displayLarge)
             Text(
                 "Enter your access code and name to continue.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
-                modifier = Modifier.padding(top = 4.dp, bottom = 24.dp),
+                modifier = Modifier.padding(top = 6.dp, bottom = 24.dp),
             )
             OutlinedTextField(
                 value = token,
@@ -117,6 +121,7 @@ fun LoginScreen(
                 label = { Text("Access code") },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
+                shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, cursorColor = Accent),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -127,6 +132,7 @@ fun LoginScreen(
                 label = { Text("Your name") },
                 singleLine = true,
                 isError = error != null,
+                shape = RoundedCornerShape(14.dp),
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, cursorColor = Accent),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -158,17 +164,13 @@ fun LoginScreen(
                 )
             }
             Spacer(Modifier.height(20.dp))
-            Button(
+            PrimaryButton(
+                text = "Continue",
                 onClick = ::attemptLogin,
                 enabled = !loading,
+                busy = loading,
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (loading) {
-                    CircularProgressIndicator(modifier = Modifier.height(18.dp), color = MaterialTheme.colorScheme.onPrimary)
-                } else {
-                    Text("Continue")
-                }
-            }
+            )
         }
     }
 }

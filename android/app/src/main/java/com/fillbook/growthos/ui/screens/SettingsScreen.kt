@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,15 +32,16 @@ import com.fillbook.growthos.BuildConfig
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.HealthItem
 import com.fillbook.growthos.data.HealthStatus
-import androidx.compose.material3.ButtonDefaults
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.SecondaryButton
+import com.fillbook.growthos.ui.components.QuietStatusLabel
 import com.fillbook.growthos.ui.components.SectionHeader
-import com.fillbook.growthos.ui.components.StatusChip
 import com.fillbook.growthos.ui.components.healthLabel
 import com.fillbook.growthos.ui.components.healthTone
 import com.fillbook.growthos.ui.theme.Danger
+import com.fillbook.growthos.ui.theme.Warning
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 import kotlinx.coroutines.launch
@@ -81,7 +81,11 @@ fun SettingsScreen(repo: GrowthOsRepository, onLogout: () -> Unit) {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        ScreenHeader("Settings", "Owner actions and app info.")
+        ScreenHeader(
+            "Settings",
+            "Owner actions and app info.",
+            kicker = needsOwnerAction.takeIf { it.isNotEmpty() }?.let { "${it.size} need${if (it.size == 1) "s" else ""} your action" },
+        )
 
         errorMessage?.let { message ->
             Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -122,13 +126,12 @@ fun SettingsScreen(repo: GrowthOsRepository, onLogout: () -> Unit) {
 
                     item { SectionHeader("Account") }
                     item {
-                        OutlinedButton(
+                        SecondaryButton(
+                            text = "Log out",
                             onClick = { showLogoutConfirm = true },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Danger),
+                            contentColor = Danger,
                             modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Log out")
-                        }
+                        )
                     }
                 }
             }
@@ -152,7 +155,7 @@ fun SettingsScreen(repo: GrowthOsRepository, onLogout: () -> Unit) {
 
 @Composable
 private fun OwnerActionCard(item: HealthItem) {
-    GrowthCard {
+    GrowthCard(accentBar = Warning) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -163,7 +166,7 @@ private fun OwnerActionCard(item: HealthItem) {
                 Spacer(Modifier.height(2.dp))
                 Text(item.detail, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
             }
-            StatusChip(healthLabel(item.status), healthTone(item.status))
+            QuietStatusLabel(healthLabel(item.status), healthTone(item.status))
         }
     }
 }

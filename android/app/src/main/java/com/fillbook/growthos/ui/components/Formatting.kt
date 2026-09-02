@@ -1,8 +1,7 @@
 package com.fillbook.growthos.ui.components
 
 import androidx.compose.ui.graphics.Color
-import com.fillbook.growthos.ui.theme.Accent
-import com.fillbook.growthos.ui.theme.AccentLight
+import com.fillbook.growthos.ui.theme.Success
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
 
@@ -36,9 +35,12 @@ fun scoreBand(score: Int): ScoreBand = when {
     else -> ScoreBand.LOW_PRIORITY
 }
 
+// Score bands are an outcome ("how good is this"), not an action -- Success
+// green for the high bands, matching the same semantic ScoreBadge/Radar use
+// elsewhere, not the brand-cyan Accent color reserved for interactive UI.
 fun scoreBandColor(band: ScoreBand): Color = when (band) {
-    ScoreBand.EXCEPTIONAL -> AccentLight
-    ScoreBand.STRONG -> Accent
+    ScoreBand.EXCEPTIONAL -> Success
+    ScoreBand.STRONG -> Success
     ScoreBand.WORTH_REVIEWING -> Warning
     ScoreBand.LOW_PRIORITY -> TextTertiary
 }

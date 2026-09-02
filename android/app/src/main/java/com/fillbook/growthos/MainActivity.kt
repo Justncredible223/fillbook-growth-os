@@ -5,18 +5,28 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Groups
@@ -28,13 +38,10 @@ import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,6 +51,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -71,11 +79,15 @@ import com.fillbook.growthos.ui.screens.ResearchScreen
 import com.fillbook.growthos.ui.screens.SettingsScreen
 import com.fillbook.growthos.ui.screens.StrategyScreen
 import com.fillbook.growthos.ui.screens.SystemScreen
+import com.fillbook.growthos.ui.theme.Accent
+import com.fillbook.growthos.ui.theme.Background
 import com.fillbook.growthos.ui.theme.Border
 import com.fillbook.growthos.ui.theme.FillbookGrowthOSTheme
-import com.fillbook.growthos.ui.theme.Surface
+import com.fillbook.growthos.ui.theme.Surface as SurfaceColor
+import com.fillbook.growthos.ui.theme.SurfaceElevated
 import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
+import com.fillbook.growthos.ui.theme.TextTertiary
 
 private sealed class Destination(val route: String, val label: String, val icon: ImageVector) {
     data object Home : Destination("home", "Home", Icons.Filled.Home)
@@ -206,24 +218,14 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, onL
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                primaryDestinations.forEach { destination ->
-                    val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = { navigate(destination.route) },
-                        icon = { Icon(destination.icon, contentDescription = destination.label) },
-                        label = { Text(destination.label) },
-                    )
-                }
-                val onMoreScreen = moreDestinations.any { d -> currentDestination?.hierarchy?.any { it.route == d.route } == true }
-                NavigationBarItem(
-                    selected = onMoreScreen,
-                    onClick = { showMore = true },
-                    icon = { Icon(Icons.Filled.MoreHoriz, contentDescription = "More") },
-                    label = { Text("More") },
-                )
-            }
+            val onMoreScreen = moreDestinations.any { d -> currentDestination?.hierarchy?.any { it.route == d.route } == true }
+            GrowthBottomNav(
+                items = primaryDestinations,
+                currentDestination = currentDestination,
+                onMoreScreen = onMoreScreen,
+                onSelect = ::navigate,
+                onMore = { showMore = true },
+            )
         },
     ) { innerPadding ->
         NavHost(
@@ -248,42 +250,119 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, onL
 
     if (showMore) {
         val sheetState = rememberModalBottomSheetState()
-        ModalBottomSheet(onDismissRequest = { showMore = false }, sheetState = sheetState) {
-            Text(
-                "More",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        ModalBottomSheet(
+            onDismissRequest = { showMore = false },
+            sheetState = sheetState,
+            containerColor = SurfaceColor,
+        ) {
+            MoreSheetContent(
+                currentDestination = currentDestination,
+                onSelect = { route -> showMore = false; navigate(route) },
             )
-            HorizontalDivider(color = Border)
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier.padding(12.dp),
-            ) {
-                items(moreDestinations) { destination ->
-                    MoreGridItem(destination.label, destination.icon) {
-                        showMore = false
-                        navigate(destination.route)
-                    }
-                }
+        }
+    }
+}
+
+/**
+ * A custom bottom nav rather than stock Material NavigationBar -- the
+ * selected item gets a soft cyan pill behind its icon instead of the
+ * default ripple-circle indicator, and the bar itself sits on an
+ * elevated surface with a top hairline rather than Material's default
+ * tonal surface, so it reads as this product's own chrome rather than a
+ * generic Android nav bar.
+ */
+@Composable
+private fun GrowthBottomNav(
+    items: List<Destination>,
+    currentDestination: androidx.navigation.NavDestination?,
+    onMoreScreen: Boolean,
+    onSelect: (String) -> Unit,
+    onMore: () -> Unit,
+) {
+    Column {
+        Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(Border))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(SurfaceElevated)
+                .windowInsetsPadding(WindowInsets.navigationBars)
+                .padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+        ) {
+            items.forEach { destination ->
+                val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
+                NavItem(destination.icon, destination.label, selected) { onSelect(destination.route) }
+            }
+            NavItem(Icons.Filled.MoreHoriz, "More", onMoreScreen, onMore)
+        }
+    }
+}
+
+@Composable
+private fun NavItem(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+    val color = if (selected) Accent else TextTertiary
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 4.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (selected) Accent.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
+                .padding(horizontal = 18.dp, vertical = 6.dp),
+        ) {
+            Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.height(3.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = color)
+    }
+}
+
+/**
+ * Editorial list rather than an icon grid -- a row per destination (icon
+ * in a soft circle, label, chevron) reads as a real menu, not a launcher
+ * page. Kept as one flat list in the same order the product already
+ * settled on (workflow screens first, System/Settings, Research/Strategy
+ * last as the not-yet-built modules) rather than inventing new groupings.
+ */
+@Composable
+private fun MoreSheetContent(currentDestination: androidx.navigation.NavDestination?, onSelect: (String) -> Unit) {
+    Column(modifier = Modifier.padding(bottom = 12.dp)) {
+        Text(
+            "More",
+            style = MaterialTheme.typography.headlineMedium,
+            color = TextPrimary,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+        )
+        LazyColumn {
+            items(moreDestinations) { destination ->
+                val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
+                MoreRow(destination.label, destination.icon, selected) { onSelect(destination.route) }
             }
         }
     }
 }
 
 @Composable
-private fun MoreGridItem(label: String, icon: ImageVector, onClick: () -> Unit) {
-    Column(
+private fun MoreRow(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
+    Row(
         modifier = Modifier
-            .padding(6.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Surface)
             .clickable(onClick = onClick)
-            .padding(vertical = 18.dp, horizontal = 8.dp),
-        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = TextPrimary)
-        androidx.compose.foundation.layout.Spacer(Modifier.height(8.dp))
-        Text(label, style = MaterialTheme.typography.labelMedium, color = TextSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(CircleShape)
+                .background(if (selected) Accent.copy(alpha = 0.16f) else Background),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = if (selected) Accent else TextSecondary, modifier = Modifier.size(19.dp))
+        }
+        Spacer(Modifier.width(14.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge, color = TextPrimary, modifier = Modifier.weight(1f))
+        Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(18.dp))
     }
 }

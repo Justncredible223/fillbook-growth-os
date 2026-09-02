@@ -38,6 +38,8 @@ import com.fillbook.growthos.ui.components.InsetRow
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.PolishedEmptyState
+import com.fillbook.growthos.ui.components.statusToneColor
+import com.fillbook.growthos.ui.components.QuietStatusLabel
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SearchField
 import com.fillbook.growthos.ui.components.StatusChip
@@ -49,8 +51,8 @@ import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.components.reviewSummaryLabel
-import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
+import com.fillbook.growthos.ui.theme.Success
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
@@ -86,6 +88,7 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
         ScreenHeader(
             "Campaigns",
             "Every campaign this system has actually run, stage by stage -- rejected drafts included.",
+            kicker = if (loaded && campaigns.isNotEmpty()) "${campaigns.size} campaign${if (campaigns.size == 1) "" else "s"}" else null,
         )
 
         errorMessage?.let { message ->
@@ -131,7 +134,7 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
 
 @Composable
 private fun CampaignCard(campaign: Campaign) {
-    GrowthCard {
+    GrowthCard(accentBar = statusToneColor(campaignStatusTone(campaign.status))) {
         Text(campaign.thesis, style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(4.dp))
         StatusChip(campaignStatusDisplayName(campaign.status), campaignStatusTone(campaign.status))
@@ -174,7 +177,7 @@ private fun CampaignStageTrail(campaign: Campaign) {
             Text(
                 label,
                 style = MaterialTheme.typography.labelMedium,
-                color = if (reached) Accent else TextTertiary,
+                color = if (reached) Success else TextTertiary,
             )
             if (index != steps.lastIndex) {
                 Text("→", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
@@ -195,11 +198,11 @@ private fun AssetRow(asset: CampaignAsset) {
     InsetRow {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconPill(platformDisplayName(asset.platform), platformIcon(asset.platform), TextSecondary)
-            StatusChip(assetStageDisplayName(asset.stage), assetStageTone(asset.stage))
+            QuietStatusLabel(assetStageDisplayName(asset.stage), assetStageTone(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {
                 Pill(
                     reviewSummaryLabel(asset.reviewPassCount, asset.reviewPassCount + asset.reviewFailCount),
-                    if (asset.reviewFailCount == 0) Accent else Warning,
+                    if (asset.reviewFailCount == 0) Success else Warning,
                 )
             }
         }

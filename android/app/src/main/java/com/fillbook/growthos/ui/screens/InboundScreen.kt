@@ -19,8 +19,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -52,7 +50,9 @@ import com.fillbook.growthos.ui.components.InsetRow
 import com.fillbook.growthos.ui.components.MetricTile
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
+import com.fillbook.growthos.ui.components.PrimaryButton
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.SecondaryButton
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.StatusChip
 import com.fillbook.growthos.ui.components.inboundPriorityColor
@@ -68,6 +68,7 @@ import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
+import com.fillbook.growthos.ui.theme.Warning
 import kotlinx.coroutines.launch
 
 /**
@@ -126,7 +127,11 @@ fun InboundScreen(repo: GrowthOsRepository) {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        ScreenHeader("Inbound", "People who engaged with @FillbookHQ -- nothing here ever sends itself.")
+        ScreenHeader(
+            "Inbound",
+            "People who engaged with @FillbookHQ -- nothing here ever sends itself.",
+            kicker = summary?.takeIf { it.needsResponse > 0 }?.let { "${it.needsResponse} need${if (it.needsResponse == 1) "s" else ""} a response" },
+        )
 
         (errorMessage ?: actionError)?.let { message ->
             Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -145,7 +150,15 @@ fun InboundScreen(repo: GrowthOsRepository) {
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    MetricTile("Need response", s.needsResponse.toString(), Icons.Filled.Forum, Modifier.weight(1f), highlighted = s.needsResponse > 0)
+                    MetricTile(
+                        "Need response",
+                        s.needsResponse.toString(),
+                        Icons.Filled.Forum,
+                        Modifier.weight(1f),
+                        valueColor = if (s.needsResponse > 0) Warning else TextPrimary,
+                        highlighted = s.needsResponse > 0,
+                        highlightColor = Warning,
+                    )
                     MetricTile(
                         "Overdue",
                         s.overdue.toString(),
@@ -238,7 +251,7 @@ private fun InboundCard(
     onClose: () -> Unit,
     onOpen: () -> Unit,
 ) {
-    GrowthCard {
+    GrowthCard(accentBar = inboundPriorityColor(item.priority)) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("@${item.authorHandle ?: "unknown"}", style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -286,13 +299,9 @@ private fun InboundCard(
         if (isActive) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 if (item.draftResponse == null) {
-                    Button(onClick = onDraft, enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Accent), modifier = Modifier.weight(1f)) {
-                        Text(if (busy) "..." else "Draft response")
-                    }
+                    PrimaryButton(text = "Draft response", onClick = onDraft, enabled = !busy, busy = busy, modifier = Modifier.weight(1f))
                 } else {
-                    Button(onClick = onMarkResponded, enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = Accent), modifier = Modifier.weight(1f)) {
-                        Text(if (busy) "..." else "Mark responded")
-                    }
+                    PrimaryButton(text = "Mark responded", onClick = onMarkResponded, enabled = !busy, busy = busy, modifier = Modifier.weight(1f))
                 }
                 if (item.sourceReference != null) {
                     IconButtonSmall(onClick = onOpen, icon = Icons.Filled.OpenInNew, contentDescription = "Open on ${platformDisplayName(item.platform)}")
@@ -305,11 +314,7 @@ private fun InboundCard(
                 TextButton(onClick = onClose, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Close") }
             }
         } else if (item.sourceReference != null) {
-            OutlinedButton(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.height(16.dp))
-                Spacer(Modifier.width(6.dp))
-                Text("Open on ${platformDisplayName(item.platform)}")
-            }
+            SecondaryButton(text = "Open on ${platformDisplayName(item.platform)}", onClick = onOpen, modifier = Modifier.fillMaxWidth())
         }
     }
 }

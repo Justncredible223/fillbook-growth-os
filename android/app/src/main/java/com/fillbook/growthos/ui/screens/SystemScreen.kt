@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -45,14 +46,16 @@ import com.fillbook.growthos.ui.components.HealthDot
 import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.MetricTile
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.QuietStatusLabel
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SectionHeader
-import com.fillbook.growthos.ui.components.StatusChip
 import com.fillbook.growthos.ui.components.autoDraftSkipReasonLabel
 import com.fillbook.growthos.ui.components.healthColor
 import com.fillbook.growthos.ui.components.healthLabel
 import com.fillbook.growthos.ui.components.healthTone
 import com.fillbook.growthos.ui.theme.Danger
+import com.fillbook.growthos.ui.theme.Success
+import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
@@ -113,7 +116,7 @@ fun SystemScreen(repo: GrowthOsRepository) {
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        ScreenHeader("System", "Live diagnostics for every subsystem and integration.")
+        ScreenHeader("System", "Live diagnostics for every subsystem and integration.", kicker = "Diagnostics")
 
         (errorMessage ?: actionError)?.let { message ->
             Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -136,6 +139,7 @@ fun SystemScreen(repo: GrowthOsRepository) {
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    item { OverallHealthCard(health) }
                     costSummary?.let { summary ->
                         item {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -253,6 +257,32 @@ private fun DiagnosticRow(label: String, value: String) {
     }
 }
 
+/**
+ * The one prominent, unmissable status on this screen -- everything below
+ * (subsystem rows, diagnostics) is real but deliberately secondary to
+ * this single answer. Green/calm when everything's healthy; the accent
+ * bar and headline both shift to amber/red the moment anything isn't.
+ */
+@Composable
+private fun OverallHealthCard(health: List<HealthItem>) {
+    val down = health.count { it.status.name == "DOWN" }
+    val degraded = health.count { it.status.name == "DEGRADED" }
+    val (color, headline, detail) = when {
+        down > 0 -> Triple(Danger, "System degraded", "$down subsystem${if (down == 1) "" else "s"} down -- see below.")
+        degraded > 0 -> Triple(Warning, "Needs attention", "$degraded subsystem${if (degraded == 1) "" else "s"} degraded -- see below.")
+        else -> Triple(Success, "All systems operational", "Every connected subsystem is healthy.")
+    }
+    GrowthCard(accentBar = color) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            HealthDot(color, modifier = Modifier.size(10.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(headline, style = MaterialTheme.typography.titleLarge, color = TextPrimary)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(detail, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+    }
+}
+
 @Composable
 private fun SystemHealthCard(item: HealthItem) {
     GrowthCard {
@@ -270,7 +300,7 @@ private fun SystemHealthCard(item: HealthItem) {
                     Text(item.detail, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
                 }
             }
-            StatusChip(healthLabel(item.status), healthTone(item.status))
+            QuietStatusLabel(healthLabel(item.status), healthTone(item.status))
         }
     }
 }

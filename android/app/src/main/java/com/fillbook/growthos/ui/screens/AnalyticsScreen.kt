@@ -34,6 +34,7 @@ import com.fillbook.growthos.data.AnalyticsBreakdown
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.ui.components.BreakdownBar
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.InsetRow
 import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.MetricTile
 import com.fillbook.growthos.ui.components.ScreenHeader
@@ -80,6 +81,7 @@ fun AnalyticsScreen(repo: GrowthOsRepository) {
         ScreenHeader(
             "Analytics",
             "Real counts from the Signal Graph, Opportunity Engine, and Campaign Factory.",
+            kicker = "Internal system metrics",
         )
 
         errorMessage?.let { message ->
@@ -135,13 +137,18 @@ fun AnalyticsScreen(repo: GrowthOsRepository) {
                     item { BreakdownChart("Opportunities by status", data.opportunitiesByStatus, ::opportunityStatusDisplayName) }
                     item { BreakdownChart("Campaign assets by stage", data.campaignAssetsByStage, ::assetStageDisplayName) }
                     item {
-                        Text(
-                            "Attribution / conversion analytics: blocked on FillbookHQ's own UTM tracking " +
-                                "(currently broken/unconfirmed for TikTok/X traffic) -- not shown here until that's fixed.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = TextTertiary,
-                            modifier = Modifier.padding(top = 8.dp, bottom = 20.dp),
-                        )
+                        Column(modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)) {
+                            InsetRow {
+                                Text("NOT SHOWN YET", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    "Attribution / conversion analytics is blocked on FillbookHQ's own UTM tracking " +
+                                        "(currently broken/unconfirmed for TikTok/X traffic).",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextTertiary,
+                                )
+                            }
+                        }
                     }
                 }
                 }

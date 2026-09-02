@@ -41,8 +41,8 @@ import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.QuietStatusLabel
 import com.fillbook.growthos.ui.components.SectionHeader
-import com.fillbook.growthos.ui.components.StatusChip
 import com.fillbook.growthos.ui.components.assetStageDisplayName
 import com.fillbook.growthos.ui.components.assetStageTone
 import com.fillbook.growthos.ui.components.assetTypeDisplayName
@@ -50,6 +50,7 @@ import com.fillbook.growthos.ui.components.assetTypeIcon
 import com.fillbook.growthos.ui.components.reviewSummaryLabel
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
+import com.fillbook.growthos.ui.theme.Success
 import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
@@ -93,7 +94,11 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
     val assetsByPlatform = remember(filtered) { filtered.groupBy { it.platform } }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        ScreenHeader("Content Library", "Every draft the system has produced -- browse, copy, and reuse.")
+        ScreenHeader(
+            "Content Library",
+            "Every draft the system has produced -- browse, copy, and reuse.",
+            kicker = if (loaded && allAssets.isNotEmpty()) "${allAssets.size} draft${if (allAssets.size == 1) "" else "s"}" else null,
+        )
 
         errorMessage?.let { message ->
             Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -162,11 +167,11 @@ private fun LibraryCard(asset: CampaignAsset) {
     GrowthCard {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconPill(assetTypeDisplayName(asset.assetType), assetTypeIcon(asset.assetType), TextSecondary)
-            StatusChip(assetStageDisplayName(asset.stage), assetStageTone(asset.stage))
+            QuietStatusLabel(assetStageDisplayName(asset.stage), assetStageTone(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {
                 Pill(
                     reviewSummaryLabel(asset.reviewPassCount, asset.reviewPassCount + asset.reviewFailCount),
-                    if (asset.reviewFailCount == 0) Accent else Warning,
+                    if (asset.reviewFailCount == 0) Success else Warning,
                 )
             }
         }
