@@ -55,7 +55,7 @@ class NetworkGrowthOsRepository(
         client.newCall(request).execute().use { response ->
             val body = response.body?.string() ?: "{}"
             if (!response.isSuccessful) {
-                throw NetworkException("GET $path failed: HTTP ${response.code} -- $body")
+                throw NetworkException("GET $path failed: HTTP ${response.code} -- $body", response.code)
             }
             JSONObject(body)
         }
@@ -73,7 +73,7 @@ class NetworkGrowthOsRepository(
         client.newCall(request).execute().use { response ->
             val responseBody = response.body?.string() ?: "{}"
             if (!response.isSuccessful) {
-                throw NetworkException("POST $path failed: HTTP ${response.code} -- $responseBody")
+                throw NetworkException("POST $path failed: HTTP ${response.code} -- $responseBody", response.code)
             }
             JSONObject(responseBody)
         }
@@ -280,7 +280,8 @@ class NetworkGrowthOsRepository(
     }
 }
 
-class NetworkException(message: String) : Exception(message)
+/** [httpCode] lets callers (LoginScreen especially) tell "wrong access code" (401) apart from an unrelated server/network failure -- both used to surface as the same generic message. */
+class NetworkException(message: String, val httpCode: Int? = null) : Exception(message)
 
 /** Small helpers since org.json's JSONArray predates Kotlin collections. */
 private fun <T> JSONArray.map(transform: (JSONObject) -> T): List<T> =

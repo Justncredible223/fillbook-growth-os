@@ -24,7 +24,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.fillbook.growthos.data.NetworkException
 import com.fillbook.growthos.data.NetworkGrowthOsRepository
+import java.io.IOException
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextSecondary
@@ -69,8 +71,18 @@ fun LoginScreen(
             try {
                 NetworkGrowthOsRepository(baseUrl, protectionBypassSecret, candidateToken).getHealth()
                 onLoginSuccess(candidateToken, candidateName)
-            } catch (e: Exception) {
-                error = "That access code didn't work. Check it and try again."
+            } catch (e: NetworkException) {
+                // A wrong/missing token is the only case that's actually about the
+                // access code (see backend/src/lib/requireAppAuth.ts) -- any other
+                // HTTP status is a real server-side problem this message used to
+                // misreport as "your code is wrong," sending people to re-type a
+                // code that was never the issue.
+                error = when (e.httpCode) {
+                    401 -> "That access code didn't work. Check it and try again."
+                    else -> "The server rejected the request (HTTP ${e.httpCode ?: "?"}). This may not be your access code -- check System status or try again shortly."
+                }
+            } catch (e: IOException) {
+                error = "Couldn't reach Growth OS. Check your connection and try again."
             } finally {
                 loading = false
             }
