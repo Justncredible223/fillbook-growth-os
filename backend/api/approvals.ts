@@ -2,6 +2,88 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
+import {
+  InboundActionError,
+  closeInbound,
+  draftResponseForInbound,
+  listInbound,
+  markFollowUp,
+  markResponded,
+  runBacklogRecovery,
+  summarizeInbound,
+} from "../src/inbound/inboundHandlers.js";
+
+/**
+ * `?resource=inbound` handles the Inbound Engagement Queue -- a
+ * completely different concept (replying to a specific person on X, not
+ * approving a drafted post) folded into this file only because Vercel's
+ * Hobby plan caps serverless functions at 12 and this project is already
+ * at the cap (same reasoning as api/ingest.ts's multi-source
+ * consolidation). See docs/INBOUND_ENGAGEMENT.md.
+ */
+async function handleInbound(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const client = getServiceClient();
+
+  if (req.method === "GET") {
+    try {
+      if (req.query.summary === "1") {
+        res.status(200).json(await summarizeInbound(client));
+        return;
+      }
+      const includeResolved = req.query.includeResolved === "1";
+      res.status(200).json({ items: await listInbound(client, includeResolved) });
+    } catch (err) {
+      res.status(500).json({ error: errorMessage(err) });
+    }
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const body = req.body as { action?: string; id?: string; note?: string } | undefined;
+    const action = body?.action;
+
+    if (action === "backlog-recover") {
+      res.status(200).json(await runBacklogRecovery(client));
+      return;
+    }
+
+    if (!body?.id) {
+      res.status(400).json({ error: "Body must include { id: string }" });
+      return;
+    }
+
+    switch (action) {
+      case "draft":
+        res.status(200).json(await draftResponseForInbound(client, body.id));
+        return;
+      case "mark-responded":
+        await markResponded(client, body.id, body.note);
+        res.status(200).json({ id: body.id, status: "responded" });
+        return;
+      case "follow-up":
+        await markFollowUp(client, body.id);
+        res.status(200).json({ id: body.id, status: "follow_up" });
+        return;
+      case "close":
+        await closeInbound(client, body.id);
+        res.status(200).json({ id: body.id, status: "closed" });
+        return;
+      default:
+        res.status(400).json({ error: "action must be one of: draft, mark-responded, follow-up, close, backlog-recover" });
+    }
+  } catch (err) {
+    if (err instanceof InboundActionError) {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
 
 /**
  * GET: assembles ApprovalAsset-shaped rows (matching the Android app's
@@ -24,6 +106,10 @@ import { requireAppAuth } from "../src/lib/requireAppAuth.js";
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res)) return;
+  if (req.query.resource === "inbound") {
+    await handleInbound(req, res);
+    return;
+  }
   const client = getServiceClient();
 
   if (req.method === "POST") {

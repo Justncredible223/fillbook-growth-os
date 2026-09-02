@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Dns
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Insights
@@ -61,6 +62,7 @@ import com.fillbook.growthos.ui.screens.CampaignsScreen
 import com.fillbook.growthos.ui.screens.ContentLibraryScreen
 import com.fillbook.growthos.ui.screens.CreatorsScreen
 import com.fillbook.growthos.ui.screens.HomeScreen
+import com.fillbook.growthos.ui.screens.InboundScreen
 import com.fillbook.growthos.ui.screens.LoginScreen
 import com.fillbook.growthos.ui.screens.RadarScreen
 import com.fillbook.growthos.ui.screens.ResearchScreen
@@ -77,6 +79,7 @@ private sealed class Destination(val route: String, val label: String, val icon:
     data object Home : Destination("home", "Home", Icons.Filled.Home)
     data object Radar : Destination("radar", "Radar", Icons.Filled.Radar)
     data object Approvals : Destination("approvals", "Approvals", Icons.Filled.CheckCircle)
+    data object Inbound : Destination("inbound", "Inbound", Icons.Filled.Forum)
     data object Campaigns : Destination("campaigns", "Campaigns", Icons.Filled.Campaign)
     data object Analytics : Destination("analytics", "Analytics", Icons.Filled.Insights)
     data object ContentLibrary : Destination("content_library", "Content Library", Icons.Filled.VideoLibrary)
@@ -92,6 +95,7 @@ private val primaryDestinations = listOf(Destination.Home, Destination.Radar, De
 
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
+    Destination.Inbound,
     Destination.Campaigns,
     Destination.ContentLibrary,
     Destination.Creators,
@@ -207,6 +211,7 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, onL
             composable(Destination.Home.route) { HomeScreen(repo, onNavigate = ::navigate) }
             composable(Destination.Radar.route) { RadarScreen(repo) }
             composable(Destination.Approvals.route) { ApprovalsScreen(repo) }
+            composable(Destination.Inbound.route) { InboundScreen(repo) }
             composable(Destination.Campaigns.route) { CampaignsScreen(repo) }
             composable(Destination.Analytics.route) { AnalyticsScreen(repo) }
             composable(Destination.ContentLibrary.route) { ContentLibraryScreen(repo) }

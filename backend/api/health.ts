@@ -86,6 +86,39 @@ async function checkSearchConsole(client: SupabaseClient): Promise<HealthItem> {
   }
 }
 
+/**
+ * Reads `integration_health` (previously a dead table -- see
+ * docs/PROGRESS_LEDGER.md's inbound-engagement audit) for the inbound
+ * sync's real attempt/success/error state. This is deliberately not the
+ * same check as X's `checkCursorBackedIntegration` above: a cursor
+ * existing only proves ingestion worked ONCE, ever -- it can't tell a
+ * caller "the last three attempts failed silently," which is exactly the
+ * gap that lets a broken sync present as a merely-empty (not visibly
+ * broken) inbound queue.
+ */
+async function checkInboundSync(client: SupabaseClient): Promise<HealthItem> {
+  try {
+    const { data } = await client
+      .from("integration_health")
+      .select("last_attempted_at, last_success_at, last_error")
+      .eq("platform", "x_inbound")
+      .maybeSingle();
+    if (!data) {
+      return { label: "Inbound Engagement", status: "NOT_CONNECTED", detail: "Never synced yet -- runs daily via /api/daily-pipeline" };
+    }
+    const row = data as { last_attempted_at: string | null; last_success_at: string | null; last_error: string | null };
+    if (row.last_error) {
+      return { label: "Inbound Engagement", status: "DOWN", detail: `Last attempt failed (${row.last_attempted_at}): ${row.last_error}` };
+    }
+    if (!row.last_success_at) {
+      return { label: "Inbound Engagement", status: "DEGRADED", detail: `Attempted at ${row.last_attempted_at}, no confirmed success yet` };
+    }
+    return { label: "Inbound Engagement", status: "HEALTHY", detail: `Verified live -- last synced ${row.last_success_at}` };
+  } catch (err) {
+    return { label: "Inbound Engagement", status: "DOWN", detail: errorMessage(err) };
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res)) return;
   if (req.method !== "GET") {
@@ -142,6 +175,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       "Credentials wired, not yet verified against the real API (Promote is separately account-blocked -- organic only)",
     ),
   );
+
+  health.push(await checkInboundSync(client));
 
   res.status(200).json({ health });
 }

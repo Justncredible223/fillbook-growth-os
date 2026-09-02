@@ -24,6 +24,19 @@ interface GrowthOsRepository {
 
     /** Backs the Settings/System "Pause System" control -- actually stops auto-draft and manual campaign runs server-side, not just a display flag. */
     suspend fun setPaused(paused: Boolean)
+
+    /** The active Inbound Engagement Queue -- everything not yet resolved (new/needs_response/draft_ready/follow_up/review_needed). */
+    suspend fun getInboundQueue(): List<InboundEngagement>
+    /** Command Center counts: needs response / follow-ups / repeat engagers / overdue. */
+    suspend fun getInboundSummary(): InboundSummary
+    /** Generates a reply draft via the LLM and moves the item to draft_ready -- never sends anything. */
+    suspend fun draftInboundResponse(id: String): InboundEngagement
+    /** The ONLY action that sets status=responded -- an explicit confirmation the owner actually replied on the platform themselves. */
+    suspend fun markInboundResponded(id: String, note: String? = null)
+    suspend fun markInboundFollowUp(id: String)
+    suspend fun closeInbound(id: String)
+    /** Ignores the ingestion cursor and re-checks the recent window -- the "we found unanswered replies" recovery pass. */
+    suspend fun runInboundBacklogRecovery()
 }
 
 /**
@@ -128,6 +141,74 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     }
 
     override suspend fun setPaused(paused: Boolean) {
+        // No backend to call in fake mode -- no-op.
+    }
+
+    private val inboundItems = mutableListOf(
+        InboundEngagement(
+            id = "inbound-fake-1",
+            platform = "x",
+            authorHandle = "someTrader",
+            body = "how do you handle trailing drawdown resets on a funded account?",
+            inResponseToText = "Revenge trading doesn't show up as \"revenge\" in your P&L...",
+            priority = InboundPriority.P1_DIRECT_REPLY,
+            status = "needs_response",
+            draftResponse = null,
+            respondedAt = null,
+            isRepeatEngager = false,
+            creatorHandle = null,
+            observedAt = "2026-09-01T18:00:00Z",
+            sourceReference = "https://x.com/i/web/status/1",
+        ),
+        InboundEngagement(
+            id = "inbound-fake-2",
+            platform = "x",
+            authorHandle = "wannabechamp",
+            body = "following up -- did you ever add the journal-review export I asked about?",
+            inResponseToText = null,
+            priority = InboundPriority.P2_RELATIONSHIP,
+            status = "needs_response",
+            draftResponse = null,
+            respondedAt = null,
+            isRepeatEngager = true,
+            creatorHandle = "wannabechamp",
+            observedAt = "2026-08-30T09:00:00Z",
+            sourceReference = "https://x.com/i/web/status/2",
+        ),
+    )
+
+    override suspend fun getInboundQueue() = inboundItems.filter { it.status != "closed" && it.status != "responded" }
+
+    override suspend fun getInboundSummary() = InboundSummary(
+        needsResponse = inboundItems.count { it.status == "needs_response" },
+        followUp = inboundItems.count { it.status == "follow_up" },
+        repeatEngagers = inboundItems.count { it.isRepeatEngager && it.status != "closed" && it.status != "responded" },
+        overdue = 0,
+    )
+
+    override suspend fun draftInboundResponse(id: String): InboundEngagement {
+        val index = inboundItems.indexOfFirst { it.id == id }
+        val updated = inboundItems[index].copy(status = "draft_ready", draftResponse = "Trailing drawdown typically resets at end-of-day on most prop firms -- worth double-checking your specific firm's rule since a few use a static floor instead.")
+        inboundItems[index] = updated
+        return updated
+    }
+
+    override suspend fun markInboundResponded(id: String, note: String?) {
+        val index = inboundItems.indexOfFirst { it.id == id }
+        inboundItems[index] = inboundItems[index].copy(status = "responded", respondedAt = "2026-09-01T19:00:00Z")
+    }
+
+    override suspend fun markInboundFollowUp(id: String) {
+        val index = inboundItems.indexOfFirst { it.id == id }
+        inboundItems[index] = inboundItems[index].copy(status = "follow_up")
+    }
+
+    override suspend fun closeInbound(id: String) {
+        val index = inboundItems.indexOfFirst { it.id == id }
+        inboundItems[index] = inboundItems[index].copy(status = "closed")
+    }
+
+    override suspend fun runInboundBacklogRecovery() {
         // No backend to call in fake mode -- no-op.
     }
 }

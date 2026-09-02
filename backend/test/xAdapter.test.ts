@@ -114,9 +114,13 @@ describe("XSignalAdapter", () => {
             author_id: "42",
             created_at: "2026-09-01T10:00:00Z",
             public_metrics: { like_count: 3 },
+            conversation_id: "conv-1",
+            in_reply_to_user_id: "999",
+            referenced_tweets: [{ type: "replied_to", id: "parent-1" }],
           },
           { id: "2", text: "no extra fields" },
         ],
+        includes: { users: [{ id: "42", username: "someTrader" }] },
       }),
     );
     const adapter = new XSignalAdapter("client-id", "client-secret", store, fetchMock);
@@ -128,11 +132,45 @@ describe("XSignalAdapter", () => {
         id: "1",
         text: "hello @FillbookHQ",
         authorId: "42",
+        authorHandle: "someTrader",
         createdAt: new Date("2026-09-01T10:00:00Z"),
         publicMetrics: { like_count: 3 },
+        inReplyToUserId: "999",
+        conversationId: "conv-1",
+        referencedTweets: [{ type: "replied_to", id: "parent-1" }],
       },
-      { id: "2", text: "no extra fields", authorId: null, createdAt: null, publicMetrics: null },
+      {
+        id: "2",
+        text: "no extra fields",
+        authorId: null,
+        authorHandle: null,
+        createdAt: null,
+        publicMetrics: null,
+        inReplyToUserId: null,
+        conversationId: null,
+        referencedTweets: [],
+      },
     ]);
+  });
+
+  it("requests the fields needed for reply-threading and real handles (not just text)", async () => {
+    const store = new InMemoryXTokenStore({
+      accessToken: "valid-token",
+      refreshToken: "refresh-token",
+      expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+    });
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [] }));
+    const adapter = new XSignalAdapter("client-id", "client-secret", store, fetchMock);
+
+    await adapter.fetchOwnMentions("123", undefined, now);
+
+    const [url] = fetchMock.mock.calls[0]!;
+    const requested = new URL(url as string);
+    expect(requested.searchParams.get("tweet.fields")).toContain("conversation_id");
+    expect(requested.searchParams.get("tweet.fields")).toContain("in_reply_to_user_id");
+    expect(requested.searchParams.get("tweet.fields")).toContain("referenced_tweets");
+    expect(requested.searchParams.get("expansions")).toBe("author_id");
+    expect(requested.searchParams.get("user.fields")).toBe("username");
   });
 
   it("resolves the own user id from /users/me", async () => {

@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.HealthStatus
+import com.fillbook.growthos.data.InboundPriority
 import com.fillbook.growthos.data.Urgency
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Background
@@ -113,6 +114,43 @@ fun urgencyColor(urgency: Urgency): Color = when (urgency) {
     Urgency.HIGH -> Danger
     Urgency.NORMAL -> Warning
     Urgency.LOW -> TextTertiary
+}
+
+/** Same visual language as urgencyColor -- P1 is the most urgent, matching Urgency.HIGH's red. */
+fun inboundPriorityColor(priority: InboundPriority): Color = when (priority) {
+    InboundPriority.P1_DIRECT_REPLY -> Danger
+    InboundPriority.P2_RELATIONSHIP -> Warning
+    InboundPriority.P3_COMMENT -> com.fillbook.growthos.ui.theme.Info
+    InboundPriority.P4_MENTION -> TextSecondary
+    InboundPriority.LOW_VALUE -> TextTertiary
+}
+
+fun inboundPriorityLabel(priority: InboundPriority): String = when (priority) {
+    InboundPriority.P1_DIRECT_REPLY -> "Direct reply"
+    InboundPriority.P2_RELATIONSHIP -> "Relationship"
+    InboundPriority.P3_COMMENT -> "Worth a reply"
+    InboundPriority.P4_MENTION -> "Mention"
+    InboundPriority.LOW_VALUE -> "Low value"
+}
+
+fun inboundStatusTone(status: String): StatusTone = when (status) {
+    "responded" -> StatusTone.READY
+    "draft_ready" -> StatusTone.NEW
+    "needs_response", "new" -> StatusTone.WAITING
+    "follow_up" -> StatusTone.ACTIVE
+    "review_needed" -> StatusTone.WAITING
+    "closed" -> StatusTone.SKIPPED
+    else -> StatusTone.NEUTRAL
+}
+
+fun inboundStatusLabel(status: String): String = when (status) {
+    "needs_response" -> "Needs response"
+    "draft_ready" -> "Draft ready"
+    "follow_up" -> "Follow up"
+    "review_needed" -> "Review needed"
+    "responded" -> "Responded"
+    "closed" -> "Closed"
+    else -> status.replace('_', ' ').replaceFirstChar { it.uppercase() }
 }
 
 fun healthColor(status: HealthStatus): Color = when (status) {

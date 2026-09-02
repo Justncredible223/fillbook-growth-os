@@ -12,6 +12,10 @@ import { ingestXMentions } from "../src/signals/adapters/xIngestion.js";
 import { ingestYouTubeVideos } from "../src/signals/adapters/youtubeIngestion.js";
 import { ingestSearchConsoleQueries } from "../src/signals/adapters/searchConsoleIngestion.js";
 import { ingestTikTokVideos } from "../src/signals/adapters/tiktokIngestion.js";
+import { ingestInboundMentions } from "../src/inbound/inboundIngestion.js";
+import { SupabaseInboundRepository } from "../src/inbound/supabaseInboundRepository.js";
+import { findCreatorIdByHandle } from "../src/creators/supabaseCreatorRepository.js";
+import { recordSyncAttempt, recordSyncSuccess, recordSyncFailure } from "../src/lib/integrationHealth.js";
 import { runGenerateOpportunities } from "../src/opportunities/runGenerateOpportunities.js";
 import { SupabaseOpportunityRepository } from "../src/opportunities/supabaseOpportunityRepository.js";
 import { SupabaseAutoDraftRunRepository } from "../src/opportunities/autoDraftRunRepository.js";
@@ -85,6 +89,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const userId = await adapter.resolveOwnUserId();
       const signals = await ingestXMentions(adapter, signalGraph, cursorStore, userId);
       return `${signals.length} ingested`;
+    }),
+    await runStep("inbound_engagement", async () => {
+      await recordSyncAttempt(client, "x_inbound");
+      try {
+        const adapter = createXSignalAdapter(client);
+        const userId = await adapter.resolveOwnUserId();
+        const repo = new SupabaseInboundRepository(client);
+        const result = await ingestInboundMentions(
+          { adapter, repo, findCreatorIdByHandle: (handle) => findCreatorIdByHandle(client, handle) },
+          cursorStore,
+          userId,
+        );
+        await recordSyncSuccess(client, "x_inbound", `${result.inserted} new, ${result.skippedExisting} already tracked`);
+        return `${result.inserted} new inbound (${result.fetched} fetched, ${result.skippedExisting} already tracked)`;
+      } catch (err) {
+        await recordSyncFailure(client, "x_inbound", errorMessage(err));
+        throw err;
+      }
     }),
     await runStep("youtube", async () => {
       const adapter = createYouTubeAdapter(client);

@@ -110,3 +110,29 @@ data class CostSummary(
     val last24hCostUsd: Double,
     val totalCalls: Int,
 )
+
+enum class InboundPriority { P1_DIRECT_REPLY, P2_RELATIONSHIP, P3_COMMENT, P4_MENTION, LOW_VALUE }
+
+/** Raw status string kept as-is (not every server value maps to something the UI treats specially) rather than an enum that could silently drop an unrecognized future status. */
+data class InboundEngagement(
+    val id: String,
+    val platform: String,
+    val authorHandle: String?,
+    val body: String,
+    val inResponseToText: String?,
+    val priority: InboundPriority,
+    val status: String,
+    val draftResponse: String?,
+    val respondedAt: String?,
+    val isRepeatEngager: Boolean,
+    val creatorHandle: String?,
+    val observedAt: String,
+    val sourceReference: String?,
+)
+
+data class InboundSummary(
+    val needsResponse: Int,
+    val followUp: Int,
+    val repeatEngagers: Int,
+    val overdue: Int,
+)

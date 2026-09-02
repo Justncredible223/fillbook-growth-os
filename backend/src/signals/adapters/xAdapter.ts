@@ -6,12 +6,28 @@ const TOKEN_ENDPOINT = "https://api.x.com/2/oauth2/token";
 const API_BASE = "https://api.x.com/2";
 const REFRESH_SAFETY_MARGIN_MS = 60_000;
 
+export type ReferencedTweetType = "replied_to" | "quoted" | "retweeted";
+
 export interface XMention {
   id: string;
   text: string;
   authorId: string | null;
+  authorHandle: string | null;
   createdAt: Date | null;
   publicMetrics: Record<string, number> | null;
+  /**
+   * The user id this tweet is a reply TO, if it's a reply -- X's own field
+   * for this, not derived. When it equals @FillbookHQ's own user id, this
+   * is a direct reply to something we posted (as opposed to a standalone
+   * mention). Previously not requested at all -- the adapter threw this
+   * away before it ever reached ingestion, making "is this a reply to us"
+   * undeterminable no matter what downstream code did with it.
+   */
+  inReplyToUserId: string | null;
+  /** Groups every tweet in one reply chain -- lets ingestion detect "this is a second message in a conversation we already have a row for." */
+  conversationId: string | null;
+  /** "replied_to" | "quoted" | "retweeted" pairs, so a quote-post can be told apart from a plain reply. */
+  referencedTweets: Array<{ type: ReferencedTweetType; id: string }>;
 }
 
 export class XApiError extends Error {}
@@ -100,11 +116,19 @@ export class XSignalAdapter {
     return json.data.id;
   }
 
-  /** Owned Reads pricing ($0.001/resource) since {id} is the authenticated user. */
+  /**
+   * Owned Reads pricing ($0.001/resource) since {id} is the authenticated
+   * user. Requests conversation_id/referenced_tweets/in_reply_to_user_id
+   * (previously omitted entirely -- see the class doc comment) plus a
+   * user expansion so a mention arrives with a real @handle instead of
+   * only a numeric author id nothing downstream could act on.
+   */
   async fetchOwnMentions(userId: string, sinceId?: string, now: Date = new Date()): Promise<XMention[]> {
     const params: Record<string, string> = {
       max_results: "50",
-      "tweet.fields": "created_at,public_metrics,author_id",
+      "tweet.fields": "created_at,public_metrics,author_id,conversation_id,referenced_tweets,in_reply_to_user_id",
+      expansions: "author_id",
+      "user.fields": "username",
     };
     if (sinceId) params.since_id = sinceId;
 
@@ -115,15 +139,29 @@ export class XSignalAdapter {
         author_id?: string;
         created_at?: string;
         public_metrics?: Record<string, number>;
+        conversation_id?: string;
+        in_reply_to_user_id?: string;
+        referenced_tweets?: Array<{ type: string; id: string }>;
       }>;
+      includes?: { users?: Array<{ id: string; username: string }> };
     };
+
+    const handleByAuthorId = new Map((json.includes?.users ?? []).map((u) => [u.id, u.username]));
 
     return (json.data ?? []).map((post) => ({
       id: post.id,
       text: post.text,
       authorId: post.author_id ?? null,
+      authorHandle: post.author_id ? (handleByAuthorId.get(post.author_id) ?? null) : null,
       createdAt: post.created_at ? new Date(post.created_at) : null,
       publicMetrics: post.public_metrics ?? null,
+      inReplyToUserId: post.in_reply_to_user_id ?? null,
+      conversationId: post.conversation_id ?? null,
+      referencedTweets: (post.referenced_tweets ?? [])
+        .filter((r): r is { type: ReferencedTweetType; id: string } =>
+          r.type === "replied_to" || r.type === "quoted" || r.type === "retweeted",
+        )
+        .map((r) => ({ type: r.type, id: r.id })),
     }));
   }
 }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Radar
@@ -36,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.HealthItem
 import com.fillbook.growthos.data.HomeSummary
+import com.fillbook.growthos.data.InboundSummary
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.HeroActionCard
 import com.fillbook.growthos.ui.components.InsetRow
@@ -64,6 +66,7 @@ import kotlinx.coroutines.launch
 fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
     var summary by remember { mutableStateOf<HomeSummary?>(null) }
     var health by remember { mutableStateOf<List<HealthItem>>(emptyList()) }
+    var inbound by remember { mutableStateOf<InboundSummary?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
@@ -73,6 +76,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
         try {
             summary = repo.getHomeSummary()
             health = repo.getHealth()
+            inbound = repo.getInboundSummary()
             errorMessage = null
         } catch (e: Exception) {
             errorMessage = "Couldn't reach Growth OS. Check your connection and try again."
@@ -144,16 +148,23 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                     }
                 }
 
-                item { NextBestActionCard(s, onNavigate) }
+                item { NextBestActionCard(s, inbound, onNavigate) }
+
+                inbound?.let { i ->
+                    if (i.needsResponse > 0 || i.followUp > 0 || i.repeatEngagers > 0) {
+                        item { SectionHeader("Inbound") }
+                        item { InboundSummaryCard(i, onNavigate) }
+                    }
+                }
 
                 item {
                     SectionHeader("Quick actions")
                 }
                 item {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        QuickActionChip(Icons.Filled.Forum, "Inbound", { onNavigate("inbound") }, Modifier.weight(1f))
                         QuickActionChip(Icons.Filled.CheckCircle, "Approvals", { onNavigate("approvals") }, Modifier.weight(1f))
                         QuickActionChip(Icons.Filled.Radar, "Radar", { onNavigate("radar") }, Modifier.weight(1f))
-                        QuickActionChip(Icons.Filled.Insights, "Analytics", { onNavigate("analytics") }, Modifier.weight(1f))
                     }
                 }
 
@@ -164,9 +175,22 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
     }
 }
 
+/**
+ * Priority order matches the explicit model: unresolved inbound engagement
+ * outranks drafts waiting for review, which outrank fresh outbound
+ * discovery -- a stranger's cold-discovery topic idea should never bury a
+ * real person waiting on a reply.
+ */
 @Composable
-private fun NextBestActionCard(summary: HomeSummary, onNavigate: (String) -> Unit) {
+private fun NextBestActionCard(summary: HomeSummary, inbound: InboundSummary?, onNavigate: (String) -> Unit) {
     val (title, subtitle, actionLabel, route, icon) = when {
+        inbound != null && inbound.needsResponse > 0 -> NextAction(
+            "${inbound.needsResponse} inbound repl${if (inbound.needsResponse == 1) "y" else "ies"} need${if (inbound.needsResponse == 1) "s" else ""} a response",
+            if (inbound.overdue > 0) "${inbound.overdue} of these have been waiting over 48 hours." else "Real people who engaged with @FillbookHQ, waiting to hear back.",
+            "Open Inbound",
+            "inbound",
+            Icons.Filled.Forum,
+        )
         summary.pendingReview > 0 -> NextAction(
             "${summary.pendingReview} draft${if (summary.pendingReview == 1) "" else "s"} ready to review",
             "AI-reviewed and waiting on your decision -- approve, reject, or open in-platform.",
@@ -197,6 +221,27 @@ private fun NextBestActionCard(summary: HomeSummary, onNavigate: (String) -> Uni
         actionLabel = actionLabel,
         onClick = { onNavigate(route) },
     )
+}
+
+/** The exact scannable counts the spec asks for: "3 need response / 1 follow-up / 1 repeat engager / 0 overdue," one tap into the full queue. */
+@Composable
+private fun InboundSummaryCard(inbound: InboundSummary, onNavigate: (String) -> Unit) {
+    GrowthCard(onClick = { onNavigate("inbound") }) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            InboundStat(inbound.needsResponse, "need response")
+            InboundStat(inbound.followUp, "follow-ups")
+            InboundStat(inbound.repeatEngagers, "repeat engager")
+            InboundStat(inbound.overdue, "overdue", emphasize = inbound.overdue > 0)
+        }
+    }
+}
+
+@Composable
+private fun InboundStat(count: Int, label: String, emphasize: Boolean = false) {
+    Column {
+        Text(count.toString(), style = MaterialTheme.typography.headlineMedium, color = if (emphasize) Danger else TextPrimary)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+    }
 }
 
 private data class NextAction(

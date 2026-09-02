@@ -220,6 +220,64 @@ class NetworkGrowthOsRepository(
     override suspend fun setPaused(paused: Boolean) {
         post("/api/summary", JSONObject().put("paused", paused))
     }
+
+    private fun JSONObject.toInboundEngagement() = InboundEngagement(
+        id = getString("id"),
+        platform = getString("platform"),
+        authorHandle = optStringOrNull("authorHandle"),
+        body = getString("body"),
+        inResponseToText = optStringOrNull("inResponseToText"),
+        priority = runCatching { InboundPriority.valueOf(getString("priority").uppercase()) }
+            .getOrDefault(InboundPriority.P4_MENTION),
+        status = getString("status"),
+        draftResponse = optStringOrNull("draftResponse"),
+        respondedAt = optStringOrNull("respondedAt"),
+        isRepeatEngager = getBoolean("isRepeatEngager"),
+        creatorHandle = optStringOrNull("creatorHandle"),
+        observedAt = getString("observedAt"),
+        sourceReference = optStringOrNull("sourceReference"),
+    )
+
+    // Folded into /api/approvals (?resource=inbound) rather than a new endpoint --
+    // Vercel Hobby's 12-serverless-function cap is already fully used (see api/ingest.ts
+    // for the same reasoning applied to signal sources).
+    override suspend fun getInboundQueue(): List<InboundEngagement> {
+        val json = get("/api/approvals?resource=inbound")
+        return json.getJSONArray("items").map { it.toInboundEngagement() }
+    }
+
+    override suspend fun getInboundSummary(): InboundSummary {
+        val json = get("/api/approvals?resource=inbound&summary=1")
+        return InboundSummary(
+            needsResponse = json.getInt("needsResponse"),
+            followUp = json.getInt("followUp"),
+            repeatEngagers = json.getInt("repeatEngagers"),
+            overdue = json.getInt("overdue"),
+        )
+    }
+
+    override suspend fun draftInboundResponse(id: String): InboundEngagement {
+        val json = post("/api/approvals?resource=inbound", JSONObject().put("action", "draft").put("id", id))
+        return json.toInboundEngagement()
+    }
+
+    override suspend fun markInboundResponded(id: String, note: String?) {
+        val body = JSONObject().put("action", "mark-responded").put("id", id)
+        if (note != null) body.put("note", note)
+        post("/api/approvals?resource=inbound", body)
+    }
+
+    override suspend fun markInboundFollowUp(id: String) {
+        post("/api/approvals?resource=inbound", JSONObject().put("action", "follow-up").put("id", id))
+    }
+
+    override suspend fun closeInbound(id: String) {
+        post("/api/approvals?resource=inbound", JSONObject().put("action", "close").put("id", id))
+    }
+
+    override suspend fun runInboundBacklogRecovery() {
+        post("/api/approvals?resource=inbound", JSONObject().put("action", "backlog-recover"))
+    }
 }
 
 class NetworkException(message: String) : Exception(message)

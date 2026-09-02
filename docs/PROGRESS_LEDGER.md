@@ -1035,3 +1035,70 @@ wasn't itself visually exercised; tablet/ultrawide layouts not
 separately verified (this is a phone-only Compose app, not a responsive
 web app -- the original spec's ultrawide/1440p guidance was written for
 a web dashboard and doesn't have a phone-app equivalent to satisfy).
+
+## Phase 22 — Inbound Engagement Queue
+
+Full-repo audit (see chat transcript) confirmed a real, concrete gap: X
+mentions of `@FillbookHQ` were ingested as generic Opportunity Engine
+signals, scored identically to a YouTube video idea, with zero code path
+anywhere recording whether a specific person's reply had been answered.
+`xAdapter.ts`'s `fetchOwnMentions` didn't even request the fields needed
+to tell a direct reply from a fresh mention (`conversation_id`,
+`in_reply_to_user_id`, `referenced_tweets`) or a real @handle (only a bare
+numeric `author_id`) -- confirmed by reading the actual request params,
+not inferred. `creator_interactions`/`creators.last_interaction_at` turned
+out to be entirely manual: `CreatorNetwork.advanceReadiness` has zero
+callers outside unit tests.
+
+Built `backend/src/inbound/` (`inboundClassifier.ts` -- deterministic,
+no LLM call; `inboundIngestion.ts`; `inboundResponseWriter.ts`;
+Supabase + in-memory repositories; `inboundHandlers.ts`) and migration
+`0014_inbound_engagement.sql` (`inbound_engagements` table, applied live
+via Supabase MCP). Folded the API into `api/approvals.ts` behind
+`?resource=inbound` -- Vercel Hobby's 12-function cap was already fully
+used, same reasoning as `api/ingest.ts`'s existing multi-source
+consolidation. Put `integration_health` (present since migration 0001,
+confirmed dead -- never read or written by any code) to its first real
+use, tracking attempt-vs-success-vs-error for the inbound sync
+specifically, surfaced in `GET /api/health`.
+
+Real design decisions worth being explicit about: `draft_ready` and
+`responded` are structurally distinct statuses -- the only code path that
+ever sets `responded` is an explicit human "mark responded" action, never
+inferred from a draft existing, because X's API can't reliably confirm a
+reply was sent without a write-adjacent capability this app deliberately
+lacks. A reply into an already-`responded` conversation creates its own
+new row rather than mutating history. Backlog-recovered items land as
+`review_needed` (not assumed answered or unanswered), while forward-sync
+items go straight to `needs_response` (no ambiguity -- it's the first
+time the system has ever seen them). `low_value` items (emoji-only, blank,
+single hype words) still get a real row, auto-`closed` -- visible and
+auditable, never silently dropped.
+
+Android: new `InboundScreen.kt`, reachable from Home's Command Center in
+one tap (a dedicated summary card + the existing next-best-action hero
+card now checks unresolved inbound *before* drafts-to-review or fresh
+Radar opportunities, matching the explicit priority model). `GrowthCard`/
+`IconPill`/`InsetRow`/`SectionHeader` reused throughout -- no new design
+system components needed for this phase.
+
+31 new tests across 4 files (classifier, ingestion -- dedup, follow-up
+reopening, repeat-engager detection, backlog vs. forward status, cursor
+isolation from `xIngestion.ts`'s own cursor -- repository, response
+writer), 273/273 passing, typecheck clean. Verified live: pushed and
+confirmed the deployed `/api/approvals?resource=inbound` endpoint
+responds correctly against the real database (see chat transcript for
+the exact request/response); Android screens screenshotted against the
+live emulator and real production data both before and after this
+change.
+
+**Genuinely blocked / left for later:** `in_response_to_text` isn't
+populated (would need a second API call per mention to fetch the parent
+tweet's text -- not worth the added Owned Reads cost/complexity at
+current volume). Sync stays once-daily (Vercel Hobby cron's real ceiling,
+not a choice) -- "Check for missed replies" in the Inbound screen is the
+manual override between runs. Whether X's mentions endpoint itself misses
+any direct replies that don't technically trigger it wasn't independently
+re-verified against X's current API behavior this pass.
+
+**Cumulative backend test count: 273/273 passing, typecheck clean.**

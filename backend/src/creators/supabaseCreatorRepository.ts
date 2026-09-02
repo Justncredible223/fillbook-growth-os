@@ -84,3 +84,15 @@ export class SupabaseCreatorRepository implements CreatorRepository {
     return interactionFromRow(data);
   }
 }
+
+/**
+ * Standalone (not a CreatorRepository method) since it's only needed by
+ * inbound ingestion to link a mention's author to an existing tracked
+ * creator -- case-insensitive because handles arrive from two different
+ * sources (X's API, manual creator entries) with no guaranteed casing.
+ */
+export async function findCreatorIdByHandle(client: SupabaseClient, handle: string): Promise<string | null> {
+  const { data, error } = await client.from("creators").select("id").ilike("handle", handle).maybeSingle();
+  if (error) throw new Error(`findCreatorIdByHandle failed: ${error.message}`);
+  return (data?.id as string | undefined) ?? null;
+}

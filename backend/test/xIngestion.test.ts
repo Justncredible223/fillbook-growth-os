@@ -16,6 +16,19 @@ class FakeXAdapter {
   }
 }
 
+function mention(overrides: Partial<XMention> & Pick<XMention, "id" | "text">): XMention {
+  return {
+    authorId: null,
+    authorHandle: null,
+    createdAt: null,
+    publicMetrics: null,
+    inReplyToUserId: null,
+    conversationId: null,
+    referencedTweets: [],
+    ...overrides,
+  };
+}
+
 describe("ingestXMentions", () => {
   const now = new Date("2026-09-01T12:00:00Z");
 
@@ -24,13 +37,13 @@ describe("ingestXMentions", () => {
     const graph = new SignalGraph(repo);
     const cursors = new InMemoryIngestionCursorStore();
     const adapter = new FakeXAdapter([
-      {
+      mention({
         id: "1",
         text: "@FillbookHQ this journal is great",
         authorId: "42",
         createdAt: new Date("2026-09-01T09:00:00Z"),
         publicMetrics: { like_count: 5 },
-      },
+      }),
     ]);
 
     const signals = await ingestXMentions(adapter as any, graph, cursors, "own-user-id", now);
@@ -49,7 +62,7 @@ describe("ingestXMentions", () => {
     const graph = new SignalGraph(repo);
     const cursors = new InMemoryIngestionCursorStore();
     const adapter = new FakeXAdapter([
-      { id: "2", text: "no timestamp", authorId: null, createdAt: null, publicMetrics: null },
+      mention({ id: "2", text: "no timestamp" }),
     ]);
 
     const signals = await ingestXMentions(adapter as any, graph, cursors, "own-user-id", now);
@@ -85,8 +98,8 @@ describe("ingestXMentions", () => {
     const graph = new SignalGraph(repo);
     const cursors = new InMemoryIngestionCursorStore();
     const adapter = new FakeXAdapter([
-      { id: "300", text: "newest", authorId: null, createdAt: null, publicMetrics: null },
-      { id: "200", text: "older", authorId: null, createdAt: null, publicMetrics: null },
+      mention({ id: "300", text: "newest" }),
+      mention({ id: "200", text: "older" }),
     ]);
 
     await ingestXMentions(adapter as any, graph, cursors, "own-user-id", now);
