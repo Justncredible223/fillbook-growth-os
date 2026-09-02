@@ -37,6 +37,9 @@ import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.MetricTile
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.assetStageDisplayName
+import com.fillbook.growthos.ui.components.opportunityStatusDisplayName
+import com.fillbook.growthos.ui.components.signalSourceDisplayName
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
@@ -128,9 +131,9 @@ fun AnalyticsScreen(repo: GrowthOsRepository) {
                             }
                         }
                     }
-                    item { BreakdownChart("Signals by source", data.signalsBySource) }
-                    item { BreakdownChart("Opportunities by status", data.opportunitiesByStatus) }
-                    item { BreakdownChart("Campaign assets by stage", data.campaignAssetsByStage) }
+                    item { BreakdownChart("Signals by source", data.signalsBySource, ::signalSourceDisplayName) }
+                    item { BreakdownChart("Opportunities by status", data.opportunitiesByStatus, ::opportunityStatusDisplayName) }
+                    item { BreakdownChart("Campaign assets by stage", data.campaignAssetsByStage, ::assetStageDisplayName) }
                     item {
                         Text(
                             "Attribution / conversion analytics: blocked on FillbookHQ's own UTM tracking " +
@@ -148,7 +151,7 @@ fun AnalyticsScreen(repo: GrowthOsRepository) {
 }
 
 @Composable
-private fun BreakdownChart(label: String, counts: Map<String, Int>) {
+private fun BreakdownChart(label: String, counts: Map<String, Int>, displayName: (String) -> String) {
     GrowthCard {
         Text(label, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(6.dp))
@@ -157,7 +160,7 @@ private fun BreakdownChart(label: String, counts: Map<String, Int>) {
         } else {
             val sorted = counts.entries.sortedByDescending { it.value }
             val max = sorted.first().value
-            sorted.forEach { (key, count) -> BreakdownBar(key.replace("_", " "), count, max) }
+            sorted.forEach { (key, count) -> BreakdownBar(displayName(key), count, max) }
         }
     }
 }

@@ -54,6 +54,7 @@ import com.fillbook.growthos.ui.components.creatorProfileUrl
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
+import com.fillbook.growthos.ui.components.relationshipStageLabel
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
@@ -135,7 +136,7 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
                 } else {
                     LazyColumn(
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         if (tierB.isNotEmpty()) {
                             item { SectionHeader("Tier B -- active relationships (${tierB.size})") }
@@ -169,6 +170,10 @@ private fun CreatorCard(creator: Creator) {
                     creator.displayName?.let { "${creator.handle} -- $it" } ?: creator.handle,
                     style = MaterialTheme.typography.titleLarge,
                 )
+                if (creator.category != CreatorCategory.REJECTED) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(relationshipStageLabel(creator.readinessScore), style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                }
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     IconPill(platformDisplayName(creator.platform), platformIcon(creator.platform), TextSecondary)

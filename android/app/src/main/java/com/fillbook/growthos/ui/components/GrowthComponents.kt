@@ -75,7 +75,11 @@ fun GrowthCard(
         .background(Surface)
         .border(1.dp, Border, RoundedCornerShape(18.dp))
     if (onClick != null) base = base.clickable(onClick = onClick)
-    Column(modifier = base.padding(16.dp), content = content)
+    // 14dp, not 16dp -- a measured density pass (Radar/Campaigns/Content
+    // Library/Creators ran noticeably taller than they needed to) without
+    // going cramped; touch targets are the buttons/rows inside the card,
+    // not this outer padding, so this doesn't affect tap accessibility.
+    Column(modifier = base.padding(14.dp), content = content)
 }
 
 /**
