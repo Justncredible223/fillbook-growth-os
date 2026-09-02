@@ -1,8 +1,47 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+/**
+ * Release signing: the keystore and its passwords are owner-controlled and
+ * NEVER live in this repo. Two ways to supply them, checked in this order:
+ *
+ * 1. `android/keystore.properties` (gitignored, see .gitignore) -- a local
+ *    file with `storeFile`/`storePassword`/`keyAlias`/`keyPassword` keys.
+ *    Simplest for a developer machine building releases by hand.
+ * 2. Environment variables `GROWTH_OS_KEYSTORE_PATH` /
+ *    `GROWTH_OS_KEYSTORE_PASSWORD` / `GROWTH_OS_KEY_ALIAS` /
+ *    `GROWTH_OS_KEY_PASSWORD` -- for CI or any environment where dropping a
+ *    properties file isn't convenient.
+ *
+ * If neither source provides all four values, the `release` signingConfig
+ * below is left incomplete on purpose. That is NOT a silent no-op: AGP's own
+ * `validateSigningRelease` task refuses to assemble/bundle a release build
+ * with an incomplete signing config and fails with a clear error naming the
+ * missing field -- there is deliberately no fallback that would let an
+ * unsigned or debug-signed APK pass as "release" output. `assembleDebug` is
+ * completely unaffected either way; the debug build type keeps using AGP's
+ * own auto-managed debug keystore, which never touches any of this.
+ */
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        FileInputStream(keystorePropertiesFile).use { load(it) }
+    }
+}
+
+fun signingValue(propertyKey: String, envVarName: String): String? =
+    keystoreProperties.getProperty(propertyKey) ?: System.getenv(envVarName)
+
+val releaseStoreFilePath = signingValue("storeFile", "GROWTH_OS_KEYSTORE_PATH")
+val releaseStorePassword = signingValue("storePassword", "GROWTH_OS_KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "GROWTH_OS_KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "GROWTH_OS_KEY_PASSWORD")
 
 android {
     namespace = "com.fillbook.growthos"
@@ -12,14 +51,27 @@ android {
         applicationId = "com.fillbook.growthos"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.2.1"
+    }
+
+    signingConfigs {
+        create("release") {
+            // Deliberately assigned even when values are null/missing --
+            // see the kdoc above for why an incomplete config here is the
+            // point, not a bug.
+            releaseStoreFilePath?.let { storeFile = file(it) }
+            releaseStorePassword?.let { storePassword = it }
+            releaseKeyAlias?.let { keyAlias = it }
+            releaseKeyPassword?.let { keyPassword = it }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

@@ -12,6 +12,12 @@ android/.idea/
 android/*/.cxx/
 .vercel
 
+# Release signing -- the keystore and its passwords are owner-controlled and
+# must never be committed. See docs/ANDROID_RELEASE_SIGNING.md.
+android/keystore.properties
+*.jks
+*.keystore
+
 # Video Factory render output -- generated MP4s/voiceovers/captions, never
 # committed. See docs/VIDEO_FACTORY.md.
 output/
