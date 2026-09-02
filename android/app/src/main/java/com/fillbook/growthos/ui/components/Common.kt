@@ -297,7 +297,11 @@ fun SectionHeader(text: String, modifier: Modifier = Modifier) {
  * Honest placeholder for a screen whose backend endpoint/table doesn't
  * exist yet (see docs/PROGRESS_LEDGER.md). Explains what real data will
  * show up here and why it doesn't yet, instead of fabricating numbers or
- * lorem-ipsum content.
+ * lorem-ipsum content. [statusLabel] is deliberately not fixed to one
+ * wording -- an internal/dev build can say exactly what's missing
+ * ("Not wired to real data yet"), while the normal operator-facing build
+ * says something calmer ("Coming later") without exposing schema/table
+ * names or implementation status.
  */
 @Composable
 fun ComingSoonScreen(
@@ -306,11 +310,17 @@ fun ComingSoonScreen(
     icon: ImageVector,
     blockedOn: String,
     modifier: Modifier = Modifier,
+    statusLabel: String = "Not wired to real data yet",
 ) {
     Column(modifier = modifier.fillMaxSize()) {
         ScreenHeader(title, subtitle)
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        // weight(1f) + Center: on a Coming-later screen there's nothing else on the
+        // page, so anchoring the one card to the top leaves the rest of the phone
+        // screen as dead black space below it -- centering it in the remaining
+        // height reads as an intentional single-message screen instead.
+        Box(
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp),
+            contentAlignment = Alignment.Center,
         ) {
             Column(
                 modifier = Modifier
@@ -327,7 +337,7 @@ fun ComingSoonScreen(
                 }
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "Not wired to real data yet",
+                    statusLabel,
                     style = MaterialTheme.typography.titleMedium,
                     color = TextSecondary,
                     textAlign = TextAlign.Center,

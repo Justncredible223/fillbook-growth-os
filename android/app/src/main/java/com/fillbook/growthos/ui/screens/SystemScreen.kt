@@ -48,6 +48,7 @@ import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.StatusChip
+import com.fillbook.growthos.ui.components.autoDraftSkipReasonLabel
 import com.fillbook.growthos.ui.components.healthColor
 import com.fillbook.growthos.ui.components.healthLabel
 import com.fillbook.growthos.ui.components.healthTone
@@ -59,10 +60,11 @@ import kotlinx.coroutines.launch
 
 /**
  * Reuses the same real /api/health data Home shows a summary of, at full
- * detail, plus the Pause System control. The pause toggle is disabled --
- * system_settings exists in the schema (migration 0006) but no
- * /api/system-settings endpoint exists yet to read or flip it, so this
- * stays visibly inert rather than pretending to work.
+ * detail, plus the Pause System control (POST /api/summary {paused},
+ * NetworkGrowthOsRepository.setPaused -- genuinely wired, not a display-
+ * only toggle). The technical/infrastructure detail an operator doesn't
+ * need on the normal Settings screen (backend host, database project)
+ * lives here instead, under Diagnostics.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -166,6 +168,14 @@ fun SystemScreen(repo: GrowthOsRepository) {
                     item { PauseSystemCard(paused = systemPaused, onToggle = { showPauseConfirm = true }) }
                     item { SectionHeader("Subsystems") }
                     items(health) { item -> SystemHealthCard(item) }
+                    item { SectionHeader("Diagnostics") }
+                    item {
+                        GrowthCard {
+                            DiagnosticRow("Backend", "fillbook-growth-os.vercel.app")
+                            Spacer(Modifier.height(10.dp))
+                            DiagnosticRow("Database", "Supabase, fillbook-growth-os project")
+                        }
+                    }
                 }
             }
         }
@@ -223,11 +233,23 @@ private fun AutoDraftCard(status: AutoDraftStatus) {
         Spacer(Modifier.height(6.dp))
         val lastRunText = when (status.lastRunStatus) {
             "drafted" -> "Last run (${status.lastRunDate}): drafted a real post for review"
-            "skipped" -> "Last run (${status.lastRunDate}): skipped -- ${status.lastRunSkipReason}"
+            "skipped" -> "Last run (${status.lastRunDate}): ${autoDraftSkipReasonLabel(status.lastRunSkipReason)}"
             "failed" -> "Last run (${status.lastRunDate}): failed"
             else -> "Hasn't run yet"
         }
         Text(lastRunText, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+    }
+}
+
+@Composable
+private fun DiagnosticRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, style = MaterialTheme.typography.titleMedium)
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = TextTertiary)
     }
 }
 

@@ -9,13 +9,12 @@ import com.fillbook.growthos.ui.components.ComingSoonScreen
 @Composable
 fun ResearchScreen(modifier: Modifier = Modifier) {
     ComingSoonScreen(
-        title = "Research",
+        title = "Research Lab",
         subtitle = "Deep-dive investigations behind bigger content bets.",
         icon = Icons.Filled.Science,
-        blockedOn = "The Research Lab phase hasn't started — research_projects " +
-            "and research_results don't exist in the schema yet (see " +
-            "docs/PROGRESS_LEDGER.md, Phase 8+). Not blocked on anything " +
-            "external, just not reached yet.",
+        blockedOn = "Deep investigations that turn recurring market signals " +
+            "into evidence-backed content opportunities.",
+        statusLabel = "Coming later",
         modifier = modifier,
     )
 }

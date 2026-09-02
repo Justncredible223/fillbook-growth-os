@@ -41,14 +41,18 @@ import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SearchField
 import com.fillbook.growthos.ui.components.StatusChip
+import com.fillbook.growthos.ui.components.assetStageDisplayName
 import com.fillbook.growthos.ui.components.assetStageTone
+import com.fillbook.growthos.ui.components.campaignStatusDisplayName
 import com.fillbook.growthos.ui.components.campaignStatusTone
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
+import com.fillbook.growthos.ui.components.reviewSummaryLabel
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextSecondary
+import com.fillbook.growthos.ui.theme.TextTertiary
 import com.fillbook.growthos.ui.theme.Warning
 import kotlinx.coroutines.launch
 
@@ -115,7 +119,7 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
                 } else {
                     LazyColumn(
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         items(filtered) { campaign -> CampaignCard(campaign) }
                     }
@@ -130,7 +134,9 @@ private fun CampaignCard(campaign: Campaign) {
     GrowthCard {
         Text(campaign.thesis, style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(4.dp))
-        StatusChip(campaign.status.replace("_", " "), campaignStatusTone(campaign.status))
+        StatusChip(campaignStatusDisplayName(campaign.status), campaignStatusTone(campaign.status))
+        Spacer(Modifier.height(8.dp))
+        CampaignStageTrail(campaign)
         campaign.decidedBy?.takeIf { it.isNotBlank() }?.let { decider ->
             Spacer(Modifier.height(6.dp))
             val verb = if (campaign.status == "approved") "Approved" else "Rejected"
@@ -148,22 +154,58 @@ private fun CampaignCard(campaign: Campaign) {
     }
 }
 
+/**
+ * Campaigns communicates PROCESS, not just current state -- a compact
+ * 4-step trail (Discovered -> Drafted -> Reviewed -> Ready) derived from
+ * this campaign's real assets, so the card reads as "how far did this
+ * get" rather than a single status word. A campaign always started at
+ * Discovered (it exists because a real Opportunity was actioned); the
+ * furthest real asset stage among its assets decides how far the trail
+ * fills in. Purely a display grouping over the existing stage strings --
+ * no stage is invented or reordered.
+ */
+@Composable
+private fun CampaignStageTrail(campaign: Campaign) {
+    val furthest = campaign.assets.maxOfOrNull { stageRank(it.stage) } ?: 0
+    val steps = listOf("Discovered", "Drafted", "Reviewed", "Ready")
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        steps.forEachIndexed { index, label ->
+            val reached = index <= furthest
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (reached) Accent else TextTertiary,
+            )
+            if (index != steps.lastIndex) {
+                Text("→", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+            }
+        }
+    }
+}
+
+private fun stageRank(stage: String): Int = when (stage) {
+    "draft" -> 1
+    "final_draft" -> 2
+    "ready_for_owner", "handed_off" -> 3
+    else -> 0
+}
+
 @Composable
 private fun AssetRow(asset: CampaignAsset) {
     InsetRow {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconPill(platformDisplayName(asset.platform), platformIcon(asset.platform), TextSecondary)
-            StatusChip(asset.stage.replace("_", " "), assetStageTone(asset.stage))
+            StatusChip(assetStageDisplayName(asset.stage), assetStageTone(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {
                 Pill(
-                    "${asset.reviewPassCount}/${asset.reviewPassCount + asset.reviewFailCount} agents",
+                    reviewSummaryLabel(asset.reviewPassCount, asset.reviewPassCount + asset.reviewFailCount),
                     if (asset.reviewFailCount == 0) Accent else Warning,
                 )
             }
         }
         asset.latestBody?.let { body ->
             Spacer(Modifier.height(6.dp))
-            Text(body, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 3)
+            Text(body, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             Spacer(Modifier.height(8.dp))
             CopyButton(text = body, label = "${asset.platform} ${asset.assetType}")
         }

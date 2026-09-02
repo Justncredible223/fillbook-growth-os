@@ -45,6 +45,7 @@ import com.fillbook.growthos.ui.components.MetricTile
 import com.fillbook.growthos.ui.components.QuickActionChip
 import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.SkeletonListLoading
+import com.fillbook.growthos.ui.components.autoDraftSkipReasonLabel
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextPrimary
@@ -79,6 +80,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
             inbound = repo.getInboundSummary()
             errorMessage = null
         } catch (e: Exception) {
+            android.util.Log.e("GrowthOsDiag", "refresh() failed", e)
             errorMessage = "Couldn't reach Growth OS. Check your connection and try again."
         }
         loaded = true
@@ -146,6 +148,10 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                             highlightColor = Warning,
                         )
                     }
+                }
+
+                if (issueCount > 0) {
+                    item { SystemIssuesCard(health, issueCount, onNavigate) }
                 }
 
                 item { NextBestActionCard(s, inbound, onNavigate) }
@@ -223,6 +229,42 @@ private fun NextBestActionCard(summary: HomeSummary, inbound: InboundSummary?, o
     )
 }
 
+/**
+ * Makes the "N issues" metric tile actionable instead of a dead end --
+ * summarizes the real DOWN/DEGRADED subsystems (same /api/health data the
+ * tile above already fetched) so the operator sees what's actually wrong
+ * without leaving Home, then one tap into System for the full diagnostic
+ * list. Never rendered when healthy (issueCount == 0) -- a restrained
+ * healthy state has nothing to show here.
+ */
+@Composable
+private fun SystemIssuesCard(health: List<com.fillbook.growthos.data.HealthItem>, issueCount: Int, onNavigate: (String) -> Unit) {
+    val issues = health.filter { it.status.name == "DOWN" || it.status.name == "DEGRADED" }
+    GrowthCard(onClick = { onNavigate("system") }) {
+        Text(
+            "$issueCount system issue${if (issueCount == 1) "" else "s"}",
+            style = MaterialTheme.typography.titleMedium,
+            color = Warning,
+        )
+        Spacer(Modifier.height(8.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            issues.take(2).forEach { item ->
+                Text(
+                    "${item.label} ${if (item.status.name == "DOWN") "is down" else "needs attention"}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Text("View diagnostics", style = MaterialTheme.typography.labelLarge, color = Accent)
+            Spacer(Modifier.width(4.dp))
+            Text("→", style = MaterialTheme.typography.labelLarge, color = Accent)
+        }
+    }
+}
+
 /** The exact scannable counts the spec asks for: "3 need response / 1 follow-up / 1 repeat engager / 0 overdue," one tap into the full queue. */
 @Composable
 private fun InboundSummaryCard(inbound: InboundSummary, onNavigate: (String) -> Unit) {
@@ -262,7 +304,7 @@ private fun RecentActivity(summary: HomeSummary, health: List<HealthItem>) {
             add(
                 "Auto-draft ($date)" to when (autoDraft.lastRunStatus) {
                     "drafted" -> "Produced a real draft"
-                    "skipped" -> autoDraft.lastRunSkipReason ?: "Skipped"
+                    "skipped" -> autoDraftSkipReasonLabel(autoDraft.lastRunSkipReason)
                     "failed" -> "Failed -- see System"
                     else -> autoDraft.lastRunStatus ?: "Unknown"
                 },

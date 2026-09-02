@@ -241,7 +241,7 @@ private fun InboundCard(
     GrowthCard {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("@${item.authorHandle ?: "unknown"}", style = MaterialTheme.typography.titleLarge, maxLines = 1)
+                Text("@${item.authorHandle ?: "unknown"}", style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     IconPill(platformDisplayName(item.platform), platformIcon(item.platform), TextSecondary)
@@ -260,7 +260,7 @@ private fun InboundCard(
             InsetRow {
                 Text("Replying to:", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
                 Spacer(Modifier.height(2.dp))
-                Text(context, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 2)
+                Text(context, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
             }
         }
 
@@ -295,7 +295,7 @@ private fun InboundCard(
                     }
                 }
                 if (item.sourceReference != null) {
-                    IconButtonSmall(onClick = onOpen, icon = Icons.Filled.OpenInNew, contentDescription = "Open on X")
+                    IconButtonSmall(onClick = onOpen, icon = Icons.Filled.OpenInNew, contentDescription = "Open on ${platformDisplayName(item.platform)}")
                 }
             }
             Spacer(Modifier.height(6.dp))
@@ -308,7 +308,7 @@ private fun InboundCard(
             OutlinedButton(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Filled.OpenInNew, contentDescription = null, modifier = Modifier.height(16.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Open on X")
+                Text("Open on ${platformDisplayName(item.platform)}")
             }
         }
     }

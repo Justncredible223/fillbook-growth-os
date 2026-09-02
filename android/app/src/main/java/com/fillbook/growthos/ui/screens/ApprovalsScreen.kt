@@ -59,7 +59,9 @@ import com.fillbook.growthos.ui.components.assetTypeIcon
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
+import com.fillbook.growthos.ui.components.reviewSummaryLabel
 import com.fillbook.growthos.ui.components.statusToneColor
+import com.fillbook.growthos.ui.theme.Warning
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextPrimary
@@ -221,7 +223,7 @@ private fun ApprovalCard(
                 Spacer(Modifier.width(12.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(asset.campaignTitle, style = MaterialTheme.typography.titleLarge, maxLines = 2)
+                Text(asset.campaignTitle, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     IconPill(platformDisplayName(asset.platform), platformIcon(asset.platform), TextSecondary)
@@ -234,13 +236,21 @@ private fun ApprovalCard(
         ExpandableText(asset.previewText, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 4)
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             if (total > 0) {
-                Text("${asset.reviewPassCount}/$total review agents passed", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                Text(reviewSummaryLabel(asset.reviewPassCount, total), style = MaterialTheme.typography.labelMedium, color = TextTertiary)
             } else {
                 Spacer(Modifier.width(1.dp))
             }
             relativeTime(asset.generatedAt)?.let { time ->
                 Text(time, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
             }
+        }
+        if (asset.reviewFailCount > 0) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Flagged by review -- read it closely before you send it.",
+                style = MaterialTheme.typography.labelMedium,
+                color = Warning,
+            )
         }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

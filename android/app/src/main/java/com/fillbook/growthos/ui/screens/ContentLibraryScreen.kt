@@ -43,9 +43,11 @@ import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.StatusChip
+import com.fillbook.growthos.ui.components.assetStageDisplayName
 import com.fillbook.growthos.ui.components.assetStageTone
 import com.fillbook.growthos.ui.components.assetTypeDisplayName
 import com.fillbook.growthos.ui.components.assetTypeIcon
+import com.fillbook.growthos.ui.components.reviewSummaryLabel
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Surface
@@ -91,7 +93,7 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
     val assetsByPlatform = remember(filtered) { filtered.groupBy { it.platform } }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        ScreenHeader("Content Library", "Every draft ever produced, with its real review-agent scores.")
+        ScreenHeader("Content Library", "Every draft the system has produced -- browse, copy, and reuse.")
 
         errorMessage?.let { message ->
             Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -116,7 +118,7 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
                 ) {
                     item { StageFilterChip("All", stageFilter == null) { stageFilter = null } }
                     items(stages) { stage ->
-                        StageFilterChip(stage.replace("_", " "), stageFilter == stage) { stageFilter = stage }
+                        StageFilterChip(assetStageDisplayName(stage), stageFilter == stage) { stageFilter = stage }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
@@ -128,10 +130,10 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
             ) {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     assetsByPlatform.entries.sortedByDescending { it.value.size }.forEach { (platform, assets) ->
-                        item { SectionHeader("${platform.uppercase()} (${assets.size})") }
+                        item { SectionHeader("${com.fillbook.growthos.ui.components.platformDisplayName(platform)} (${assets.size})") }
                         items(assets) { asset -> LibraryCard(asset) }
                     }
                 }
@@ -160,10 +162,10 @@ private fun LibraryCard(asset: CampaignAsset) {
     GrowthCard {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             IconPill(assetTypeDisplayName(asset.assetType), assetTypeIcon(asset.assetType), TextSecondary)
-            StatusChip(asset.stage.replace("_", " "), assetStageTone(asset.stage))
+            StatusChip(assetStageDisplayName(asset.stage), assetStageTone(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {
                 Pill(
-                    "${asset.reviewPassCount}/${asset.reviewPassCount + asset.reviewFailCount} agents",
+                    reviewSummaryLabel(asset.reviewPassCount, asset.reviewPassCount + asset.reviewFailCount),
                     if (asset.reviewFailCount == 0) Accent else Warning,
                 )
             }

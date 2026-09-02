@@ -112,9 +112,11 @@ fun SettingsScreen(repo: GrowthOsRepository, onLogout: () -> Unit) {
                         GrowthCard {
                             AboutRow("Version", "${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})")
                             Spacer(Modifier.height(10.dp))
-                            AboutRow("Backend", "fillbook-growth-os.vercel.app")
-                            Spacer(Modifier.height(10.dp))
-                            AboutRow("Database", "Supabase, fillbook-growth-os project")
+                            Text(
+                                "Backend and infrastructure details live in System.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = TextTertiary,
+                            )
                         }
                     }
 

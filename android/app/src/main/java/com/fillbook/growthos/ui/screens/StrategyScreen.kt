@@ -12,11 +12,9 @@ fun StrategyScreen(modifier: Modifier = Modifier) {
         title = "Strategy",
         subtitle = "How the Growth Genome has evolved its own playbook over time.",
         icon = Icons.Filled.Timeline,
-        blockedOn = "growth_genome and strategy_versions don't exist in the " +
-            "schema yet — Strategy Evolution is a later phase, not started " +
-            "(see docs/PROGRESS_LEDGER.md, Phase 8+). The Brand Constitution " +
-            "that already exists (Phase 3) is the static seed this will " +
-            "eventually learn from, not replace.",
+        blockedOn = "A living record of what's working, so the growth strategy " +
+            "keeps improving instead of repeating itself.",
+        statusLabel = "Coming later",
         modifier = modifier,
     )
 }
