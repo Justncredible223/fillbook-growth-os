@@ -177,10 +177,20 @@ export async function markFollowUp(client: SupabaseClient, id: string): Promise<
   await repo.updateStatus(id, "follow_up");
 }
 
-export async function closeInbound(client: SupabaseClient, id: string): Promise<void> {
+/**
+ * `note` is optional and reuses the same `responded_note` column
+ * `markResponded` writes to -- it's really "the human-readable reason for
+ * this disposition," not specifically "note about a response." Keeping it
+ * to one column instead of adding a second migration: a closed row's note
+ * ("stale: 9 days old, generic opinion" / "superseded by <id> in the same
+ * thread") means the same thing a responded row's note does -- context for
+ * why the terminal status was reached, so a backlog-recovery batch is
+ * still auditable after the fact instead of just disappearing.
+ */
+export async function closeInbound(client: SupabaseClient, id: string, note?: string): Promise<void> {
   const repo = new SupabaseInboundRepository(client);
   if (!(await repo.getById(id))) throw new InboundActionError(`No inbound_engagements row with id "${id}"`);
-  await repo.updateStatus(id, "closed");
+  await repo.updateStatus(id, "closed", note?.trim() ? { respondedNote: note.trim() } : undefined);
 }
 
 /**

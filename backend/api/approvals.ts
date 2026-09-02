@@ -70,7 +70,7 @@ async function handleInbound(req: VercelRequest, res: VercelResponse): Promise<v
         res.status(200).json({ id: body.id, status: "follow_up" });
         return;
       case "close":
-        await closeInbound(client, body.id);
+        await closeInbound(client, body.id, body.note);
         res.status(200).json({ id: body.id, status: "closed" });
         return;
       default:
