@@ -66,19 +66,29 @@ export interface InboundSummary {
  * items sitting longer than OVERDUE_HOURS with no draft and no response
  * -- the one number specifically meant to make it hard to forget
  * something for days.
+ *
+ * `needsResponse` deliberately counts `review_needed` alongside
+ * `needs_response`/`new` -- confirmed necessary by running this against
+ * real production data: a backlog-recovery pass landed 19 real mentions
+ * (including a genuine "I checked out your site and I think this is
+ * exactly what I need!") as `review_needed`, and the dashboard's
+ * attention count silently excluded every one of them on the first
+ * version of this function. `review_needed` still renders as its own
+ * distinct status in the queue itself (see inboundStatusLabel in the
+ * Android app) -- only the aggregate "needs my attention" count treats
+ * the two as equally attention-worthy, which they are.
  */
 export async function summarizeInbound(client: SupabaseClient): Promise<InboundSummary> {
   const repo = new SupabaseInboundRepository(client);
   const active = await repo.listByStatus(ACTIVE_STATUSES);
   const cutoff = Date.now() - OVERDUE_HOURS * 60 * 60 * 1000;
+  const isUnresolved = (status: string) => status === "needs_response" || status === "new" || status === "review_needed";
 
   return {
-    needsResponse: active.filter((r) => r.status === "needs_response" || r.status === "new").length,
+    needsResponse: active.filter((r) => isUnresolved(r.status)).length,
     followUp: active.filter((r) => r.status === "follow_up").length,
     repeatEngagers: active.filter((r) => r.isRepeatEngager).length,
-    overdue: active.filter(
-      (r) => (r.status === "needs_response" || r.status === "new") && new Date(r.observedAt).getTime() < cutoff,
-    ).length,
+    overdue: active.filter((r) => isUnresolved(r.status) && new Date(r.observedAt).getTime() < cutoff).length,
   };
 }
 
