@@ -44,7 +44,7 @@ export function estimateRelevance(text: string): RelevanceEstimate {
 function extractText(signal: Signal): string {
   const ev = signal.evidence as Record<string, unknown>;
   if (typeof ev.text === "string") return ev.text; // x_mention
-  if (typeof ev.title === "string") return ev.title; // youtube_video
+  if (typeof ev.title === "string") return ev.title; // youtube_video, tiktok_video
   if (typeof ev.query === "string") return ev.query; // search_console_query
   return signal.topic ?? "";
 }
@@ -52,6 +52,7 @@ function extractText(signal: Signal): string {
 function platformForSource(source: string): string {
   if (source === "x_mention") return "x";
   if (source === "youtube_video") return "youtube";
+  if (source === "tiktok_video") return "tiktok";
   if (source === "search_console_query") return "blog";
   return "x";
 }

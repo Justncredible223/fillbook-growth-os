@@ -874,3 +874,41 @@ verify-once-credentials-exist caveat every other adapter had at this
 stage.
 
 **Cumulative backend test count: 169/169 passing, typecheck clean.**
+
+## Phase 10 — Video Factory script generation (render stays local/manual)
+
+Split the phase into what Growth OS should own (the creative/grounding
+judgment call) versus what it structurally can't (rendering a video on
+Vercel serverless -- see the earlier "Genuinely blocked" note on tight
+size/timeout limits). `videoScriptWriter.ts` adds `draftVideoScript`
+(hook/script/shotList/caption/hashtags via one tool call, same
+invent-once-review-downstream shape as `contentWriter.draftContent`) and
+`formatVideoScriptAsText`, which flattens it into one text block so it
+flows through the *existing* mechanical gate + nine deep-review agents
+completely unmodified -- neither needed a single change, both already
+operated on a generic `candidateText` string.
+
+`campaignPipeline.ts` now branches on platform: opportunities recommending
+`tiktok` (`VIDEO_PLATFORMS`) get a real production package and a
+`video_script` asset type instead of a mis-fitting short text `post`.
+`opportunityGenerator.ts`'s `platformForSource` gained the `tiktok_video`
+-> `tiktok` mapping, so opportunities generated from Phase 12's new TikTok
+signals actually recommend the right platform end-to-end.
+
+Rendering (TTS + ffmpeg) deliberately stays exactly where it already was:
+a real, already-working, already-documented local pipeline at
+`~/fillbookhq/docs/social/VIDEO_PRODUCTION_WORKFLOW.md` (edge-tts for
+voiceover, hand-written `.ass` captions -- `drawtext` segfaults on this
+ffmpeg build, naive `subtitles=file.srt` clips text -- ffmpeg for the
+final composite). See `docs/VIDEO_FACTORY.md` for the full flow and why
+the split lands here rather than trying to automate the render step now.
+No code needed for this pass since the render pipeline isn't part of this
+codebase -- verified it exists and actually works by reading that doc,
+not assumed.
+
+4 new tests (`videoScriptWriter` x2, plus a `campaignPipeline` case
+proving a `tiktok` opportunity gets a real script/shot-list not a text
+post, plus an `opportunityGenerator` case for the platform mapping),
+173/173 passing, typecheck clean.
+
+**Cumulative backend test count: 173/173 passing, typecheck clean.**

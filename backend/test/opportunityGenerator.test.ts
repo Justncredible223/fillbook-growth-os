@@ -77,6 +77,19 @@ describe("generateOpportunitiesFromSignals", () => {
     expect(result.skipped).toBe(1);
   });
 
+  it("recommends the tiktok platform for tiktok_video signals", async () => {
+    const repo = new InMemoryOpportunityRepository();
+    const engine = new OpportunityEngine(repo);
+    const signals = [
+      makeSignal({ id: "s1", source: "tiktok_video", evidence: { title: "Why 2 contracts is a bad rule" } }),
+    ];
+
+    await generateOpportunitiesFromSignals(engine, signals, new Set());
+
+    const open = await repo.listOpen();
+    expect(open[0]!.recommendedChannels).toEqual(["tiktok"]);
+  });
+
   it("is idempotent -- re-running with the same already-covered set creates nothing new", async () => {
     const repo = new InMemoryOpportunityRepository();
     const engine = new OpportunityEngine(repo);

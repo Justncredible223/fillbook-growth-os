@@ -3,6 +3,15 @@ import { CampaignFactory, type AssetStage } from "./campaignFactory.js";
 import type { ContentScoreRepository } from "./contentScoreRepository.js";
 import type { DeepReviewResult } from "./deepReviewGate.js";
 import { draftContent } from "./contentWriter.js";
+import { draftVideoScript, formatVideoScriptAsText } from "./videoScriptWriter.js";
+
+/**
+ * Platforms whose native format is short-form video, not a text post --
+ * these get a real shootable production package (hook/script/shot
+ * list/caption/hashtags) from videoScriptWriter instead of a single
+ * platform-native post from contentWriter. See docs/VIDEO_FACTORY.md.
+ */
+const VIDEO_PLATFORMS = new Set(["tiktok"]);
 
 export interface PipelineOpportunity {
   id: string;
@@ -53,16 +62,15 @@ export async function runCampaignPipeline(
   context: PipelineContext,
 ): Promise<PipelineResult> {
   const platform = opportunity.recommendedChannels[0] ?? "x";
-  const draftText = await draftContent(
-    llmClient,
-    platform,
-    opportunity,
-    context.brandRulesSummary,
-    context.verifiedKnowledgeSummary,
-  );
+  const isVideo = VIDEO_PLATFORMS.has(platform);
+  const draftText = isVideo
+    ? formatVideoScriptAsText(
+        await draftVideoScript(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary),
+      )
+    : await draftContent(llmClient, platform, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
 
   const campaignId = await campaignRepo.createCampaign(opportunity.id, opportunity.title);
-  const campaignAssetId = await campaignRepo.createCampaignAsset(campaignId, platform, "post");
+  const campaignAssetId = await campaignRepo.createCampaignAsset(campaignId, platform, isVideo ? "video_script" : "post");
   const contentVersionId = await campaignRepo.insertContentVersion(campaignAssetId, 1, draftText);
 
   const mechanical = await factory.submitDraft("draft", draftText, context.recentTextsForSameTopic);

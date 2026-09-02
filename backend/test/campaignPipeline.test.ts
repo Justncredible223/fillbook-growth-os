@@ -47,6 +47,24 @@ function verdictResponse(pass: boolean, reasoning = "ok") {
   });
 }
 
+function videoScriptResponse() {
+  return jsonResponse({
+    content: [
+      {
+        type: "tool_use",
+        name: "submit_video_script",
+        input: {
+          hook: "Your funded account can get pulled even on a winning trade.",
+          script: "Your funded account can get pulled even on a winning trade. Here's why.",
+          shotList: ["Text card: the hook", "Fillbook UI: example drawdown chart (demo data)"],
+          caption: "Trailing drawdown explained.",
+          hashtags: ["futurestrading", "propfirm"],
+        },
+      },
+    ],
+  });
+}
+
 class InMemoryCampaignRepository implements CampaignRepository {
   campaigns: Array<{ id: string; opportunityId: string; thesis: string }> = [];
   assets: Array<{ id: string; campaignId: string; platform: string; assetType: string; stage: AssetStage }> = [];
@@ -130,5 +148,21 @@ describe("runCampaignPipeline", () => {
     expect(result.deepReview?.passed).toBe(false);
     expect(result.finalStage).toBe("final_draft");
     expect(campaignRepo.assets.find((a) => a.id === result.campaignAssetId)?.stage).toBe("final_draft");
+  });
+
+  it("drafts a real video script (not a text post) for a video platform like tiktok", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(videoScriptResponse()).mockResolvedValue(verdictResponse(true));
+    const client = new LlmClient("test-key", fetchMock);
+    const campaignRepo = new InMemoryCampaignRepository();
+    const scoreRepo = new InMemoryContentScoreRepository();
+    const videoOpportunity = { ...opportunity, recommendedChannels: ["tiktok"] };
+
+    const result = await runCampaignPipeline(client, buildFactory(), scoreRepo, campaignRepo, videoOpportunity, context);
+
+    expect(result.platform).toBe("tiktok");
+    expect(result.draftText).toContain("HOOK:");
+    expect(result.draftText).toContain("SHOT LIST:");
+    expect(campaignRepo.assets.find((a) => a.id === result.campaignAssetId)?.assetType).toBe("video_script");
+    expect(result.finalStage).toBe("ready_for_owner");
   });
 });
