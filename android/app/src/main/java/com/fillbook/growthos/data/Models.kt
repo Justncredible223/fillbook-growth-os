@@ -111,6 +111,18 @@ data class CostSummary(
     val totalCalls: Int,
 )
 
+/**
+ * Result of manually running one opportunity through POST /api/run-campaign.
+ * `finalStage` reaching "ready_for_owner" means it landed in Approvals;
+ * anything else means the mechanical gate or deep review blocked it --
+ * `blockReasons` is why, not a failure of the request itself.
+ */
+data class CampaignRunResult(
+    val finalStage: String,
+    val blockReasons: List<String>,
+    val costUsd: Double,
+)
+
 enum class InboundPriority { P1_DIRECT_REPLY, P2_RELATIONSHIP, P3_COMMENT, P4_MENTION, LOW_VALUE }
 
 /** Raw status string kept as-is (not every server value maps to something the UI treats specially) rather than an enum that could silently drop an unrecognized future status. */

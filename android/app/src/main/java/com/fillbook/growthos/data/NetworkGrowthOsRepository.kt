@@ -8,6 +8,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
 
 /**
  * Real backend client. Talks to the deployed Vercel API, which is the
@@ -42,7 +43,19 @@ class NetworkGrowthOsRepository(
     private val deciderName: String = "",
 ) : GrowthOsRepository {
 
-    private val client = OkHttpClient()
+    // Default OkHttp timeouts are 10s each way -- fine for every other
+    // endpoint here, but POST /api/run-campaign drafts content and then runs
+    // up to nine sequential LLM review-agent calls server-side, which
+    // routinely takes well past 10s. Verified live: a real run reached
+    // ready_for_owner in Supabase while the client had already timed out and
+    // shown "couldn't run that campaign" -- the campaign wasn't lost, but
+    // retrying on that false failure would have spent real LLM tokens
+    // drafting the same opportunity a second time.
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .build()
 
     private suspend fun get(path: String): JSONObject = withContext(Dispatchers.IO) {
         val request = Request.Builder()
@@ -134,6 +147,16 @@ class NetworkGrowthOsRepository(
                 channels = item.getJSONArray("recommendedChannels").mapStrings(),
             )
         }
+    }
+
+    override suspend fun runCampaignForOpportunity(opportunityId: String): CampaignRunResult {
+        val json = post("/api/run-campaign", JSONObject().put("opportunityId", opportunityId))
+        val result = json.getJSONObject("result")
+        return CampaignRunResult(
+            finalStage = result.getString("finalStage"),
+            blockReasons = result.optJSONArray("mechanicalBlockReasons")?.mapStrings() ?: emptyList(),
+            costUsd = json.getDouble("costUsd"),
+        )
     }
 
     override suspend fun getApprovals(): List<ApprovalAsset> {

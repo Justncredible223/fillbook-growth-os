@@ -11,6 +11,14 @@ interface GrowthOsRepository {
     suspend fun getHomeSummary(): HomeSummary
     suspend fun getHealth(): List<HealthItem>
     suspend fun getOpportunities(): List<Opportunity>
+    /**
+     * Manually runs one open opportunity through the same draft -> mechanical
+     * gate -> deep review pipeline the automated (max 1/day) auto-draft
+     * uses. Never publishes anything -- the furthest an asset can reach is
+     * ready_for_owner, i.e. it shows up in Approvals for a human decision.
+     * Costs real LLM tokens (one draft + up to nine review calls).
+     */
+    suspend fun runCampaignForOpportunity(opportunityId: String): CampaignRunResult
     suspend fun getApprovals(): List<ApprovalAsset>
     suspend fun getCreators(): List<Creator>
     suspend fun getCampaigns(): List<Campaign>
@@ -89,6 +97,12 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             rationale = "High audience relevance (prop-firm traders), strong Fillbook fit (drawdown tracking is a real feature), no recent coverage on this exact angle.",
             channels = listOf("X", "YouTube Shorts"),
         ),
+    )
+
+    override suspend fun runCampaignForOpportunity(opportunityId: String) = CampaignRunResult(
+        finalStage = "ready_for_owner",
+        blockReasons = emptyList(),
+        costUsd = 0.03,
     )
 
     override suspend fun getApprovals() = emptyList<ApprovalAsset>()

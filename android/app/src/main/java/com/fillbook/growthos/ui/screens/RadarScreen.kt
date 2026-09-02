@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -14,6 +15,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Radar
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -43,6 +48,7 @@ import com.fillbook.growthos.ui.components.SearchField
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.urgencyColor
+import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
@@ -56,6 +62,9 @@ fun RadarScreen(repo: GrowthOsRepository) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
+    var pendingRun by remember { mutableStateOf<Opportunity?>(null) }
+    var runningId by remember { mutableStateOf<String?>(null) }
+    var runResultMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -70,6 +79,25 @@ fun RadarScreen(repo: GrowthOsRepository) {
 
     LaunchedEffect(Unit) { refresh() }
 
+    fun runCampaign(opp: Opportunity) {
+        scope.launch {
+            runningId = opp.id
+            try {
+                val result = repo.runCampaignForOpportunity(opp.id)
+                runResultMessage = if (result.finalStage == "ready_for_owner") {
+                    "Sent to Approvals for your review."
+                } else {
+                    "Didn't clear review (${result.finalStage.replace('_', ' ')})" +
+                        if (result.blockReasons.isNotEmpty()) ": ${result.blockReasons.joinToString("; ")}" else "."
+                }
+                refresh()
+            } catch (e: Exception) {
+                runResultMessage = "Couldn't run that campaign. Check your connection and try again."
+            }
+            runningId = null
+        }
+    }
+
     val filtered = remember(opportunities, query) {
         if (query.isBlank()) opportunities
         else opportunities.filter { it.title.contains(query, ignoreCase = true) || it.rationale.contains(query, ignoreCase = true) }
@@ -78,10 +106,19 @@ fun RadarScreen(repo: GrowthOsRepository) {
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScreenHeader("Radar", "Opportunities found from real signals — nothing here publishes itself.")
 
-        errorMessage?.let { message ->
+        (errorMessage ?: runResultMessage)?.let { message ->
             Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.weight(1f))
-                TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
+                Text(
+                    message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (errorMessage != null) Danger else TextSecondary,
+                    modifier = Modifier.weight(1f),
+                )
+                if (errorMessage != null) {
+                    TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
+                } else {
+                    TextButton(onClick = { runResultMessage = null }) { Text("Dismiss") }
+                }
             }
         }
 
@@ -111,11 +148,36 @@ fun RadarScreen(repo: GrowthOsRepository) {
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        items(filtered) { opp -> OpportunityCard(opp) }
+                        items(filtered, key = { it.id }) { opp ->
+                            OpportunityCard(
+                                opp = opp,
+                                running = runningId == opp.id,
+                                onRun = { pendingRun = opp },
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    pendingRun?.let { opp ->
+        AlertDialog(
+            onDismissRequest = { pendingRun = null },
+            title = { Text("Run this campaign?") },
+            text = {
+                Text(
+                    "Drafts this opportunity and runs it through the full review pipeline. " +
+                        "Costs a small amount of real LLM spend. Nothing publishes -- at most it lands in Approvals for you to decide.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { runCampaign(opp); pendingRun = null }) { Text("Run") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRun = null }) { Text("Cancel") }
+            },
+        )
     }
 }
 
@@ -127,7 +189,7 @@ private fun splitTitle(title: String): Pair<String, String?> {
 }
 
 @Composable
-private fun OpportunityCard(opp: Opportunity) {
+private fun OpportunityCard(opp: Opportunity, running: Boolean, onRun: () -> Unit) {
     val (headline, source) = splitTitle(opp.title)
 
     GrowthCard {
@@ -146,5 +208,18 @@ private fun OpportunityCard(opp: Opportunity) {
         }
         Spacer(Modifier.height(10.dp))
         ExpandableText(opp.rationale, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, collapsedMaxLines = 2)
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = onRun,
+            enabled = !running,
+            colors = ButtonDefaults.buttonColors(containerColor = Accent),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (running) {
+                CircularProgressIndicator(modifier = Modifier.height(18.dp), color = MaterialTheme.colorScheme.onPrimary)
+            } else {
+                Text("Run campaign")
+            }
+        }
     }
 }
