@@ -10,6 +10,8 @@ android/build/
 android/*/build/
 android/.idea/
 android/*/.cxx/
+.idea/
+android/app/release/
 .vercel
 
 # Release signing -- the keystore and its passwords are owner-controlled and
