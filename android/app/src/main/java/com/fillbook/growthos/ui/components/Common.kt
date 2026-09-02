@@ -314,8 +314,13 @@ fun ComingSoonScreen(
 ) {
     Column(modifier = modifier.fillMaxSize()) {
         ScreenHeader(title, subtitle)
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        // weight(1f) + Center: on a Coming-later screen there's nothing else on the
+        // page, so anchoring the one card to the top leaves the rest of the phone
+        // screen as dead black space below it -- centering it in the remaining
+        // height reads as an intentional single-message screen instead.
+        Box(
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp),
+            contentAlignment = Alignment.Center,
         ) {
             Column(
                 modifier = Modifier

@@ -38,6 +38,7 @@ import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.Opportunity
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
+import com.fillbook.growthos.ui.components.assetStageDisplayName
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.PolishedEmptyState
@@ -49,6 +50,7 @@ import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.scoreBand
 import com.fillbook.growthos.ui.components.scoreBandColor
+import com.fillbook.growthos.ui.components.signalSourceDisplayName
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextPrimary
@@ -89,7 +91,7 @@ fun RadarScreen(repo: GrowthOsRepository) {
                 runResultMessage = if (result.finalStage == "ready_for_owner") {
                     "Sent to Approvals for your review."
                 } else {
-                    "Didn't clear review (${result.finalStage.replace('_', ' ')})" +
+                    "Didn't clear review (${assetStageDisplayName(result.finalStage)})" +
                         if (result.blockReasons.isNotEmpty()) ": ${result.blockReasons.joinToString("; ")}" else "."
                 }
                 refresh()
@@ -223,7 +225,7 @@ private fun OpportunityCard(opp: Opportunity, running: Boolean, topRanked: Boole
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     opp.channels.forEach { channel -> IconPill(platformDisplayName(channel), platformIcon(channel), TextSecondary) }
-                    source?.let { Pill(it.replace("_", " "), TextSecondary) }
+                    source?.let { Pill(signalSourceDisplayName(it), TextSecondary) }
                 }
             }
         }
