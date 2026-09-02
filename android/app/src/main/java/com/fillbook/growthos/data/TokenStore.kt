@@ -39,11 +39,26 @@ class TokenStore(context: Context) {
     }
 
     fun clearToken() {
-        prefs.edit().remove(KEY_TOKEN).remove(KEY_DISPLAY_NAME).apply()
+        prefs.edit().remove(KEY_TOKEN).remove(KEY_DISPLAY_NAME).remove(KEY_BIOMETRIC_LOCK).apply()
+    }
+
+    /**
+     * Whether reopening the app should require a Face/Fingerprint check
+     * before using the already-saved token. Defaults to true (once
+     * hardware supports it): the token was already going to stay signed
+     * in forever the moment it's saved, so the actual choice this
+     * controls is "gate that with a biometric check" vs "no gate at all" --
+     * not whether the session persists, which it always does.
+     */
+    fun isBiometricLockEnabled(): Boolean = prefs.getBoolean(KEY_BIOMETRIC_LOCK, true)
+
+    fun setBiometricLockEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_BIOMETRIC_LOCK, enabled).apply()
     }
 
     companion object {
         private const val KEY_TOKEN = "app_api_token"
         private const val KEY_DISPLAY_NAME = "display_name"
+        private const val KEY_BIOMETRIC_LOCK = "biometric_lock_enabled"
     }
 }

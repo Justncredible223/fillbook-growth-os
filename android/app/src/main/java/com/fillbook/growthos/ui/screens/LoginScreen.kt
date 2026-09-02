@@ -3,12 +3,15 @@ package com.fillbook.growthos.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -41,15 +44,25 @@ import kotlinx.coroutines.launch
  * field isn't a real account system, just enough identity to record who
  * approved/rejected a given draft when the app is shared (see migration
  * 0013_campaign_decision_audit.sql).
+ *
+ * The token itself is ALWAYS saved for good once accepted here (see
+ * TokenStore) -- that part was never the friction. What this screen's
+ * checkbox controls is only whether reopening the app later requires a
+ * Face/Fingerprint check first (see BiometricGateScreen) before that saved
+ * token gets used, versus no gate at all. Only shown when the device
+ * actually has usable biometric hardware -- offering a toggle for
+ * something that can't work is worse than not offering it.
  */
 @Composable
 fun LoginScreen(
     baseUrl: String,
     protectionBypassSecret: String,
-    onLoginSuccess: (token: String, displayName: String) -> Unit,
+    biometricAvailable: Boolean,
+    onLoginSuccess: (token: String, displayName: String, requireBiometric: Boolean) -> Unit,
 ) {
     var token by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
+    var requireBiometric by remember { mutableStateOf(true) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -70,7 +83,7 @@ fun LoginScreen(
         scope.launch {
             try {
                 NetworkGrowthOsRepository(baseUrl, protectionBypassSecret, candidateToken).getHealth()
-                onLoginSuccess(candidateToken, candidateName)
+                onLoginSuccess(candidateToken, candidateName, biometricAvailable && requireBiometric)
             } catch (e: NetworkException) {
                 // A wrong/missing token is the only case that's actually about the
                 // access code (see backend/src/lib/requireAppAuth.ts) -- any other
@@ -119,6 +132,30 @@ fun LoginScreen(
             )
             error?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = Danger, modifier = Modifier.padding(top = 8.dp))
+            }
+            if (biometricAvailable) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                ) {
+                    Checkbox(
+                        checked = requireBiometric,
+                        onCheckedChange = { requireBiometric = it },
+                        colors = CheckboxDefaults.colors(checkedColor = Accent),
+                    )
+                    Text(
+                        "Require Face/Fingerprint to reopen the app",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                    )
+                }
+                Text(
+                    if (requireBiometric) "You'll never need to retype this code -- just unlock with biometrics next time."
+                    else "Stay signed in with no prompt at all, even without biometrics.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextSecondary,
+                    modifier = Modifier.padding(top = 4.dp, start = 40.dp),
+                )
             }
             Spacer(Modifier.height(20.dp))
             Button(

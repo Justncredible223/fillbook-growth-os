@@ -1,7 +1,6 @@
 package com.fillbook.growthos
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
@@ -53,17 +52,20 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.fragment.app.FragmentActivity
 import com.fillbook.growthos.data.CrashReporter
 import com.fillbook.growthos.data.NetworkGrowthOsRepository
 import com.fillbook.growthos.data.TokenStore
 import com.fillbook.growthos.ui.screens.AnalyticsScreen
 import com.fillbook.growthos.ui.screens.ApprovalsScreen
+import com.fillbook.growthos.ui.screens.BiometricGateScreen
 import com.fillbook.growthos.ui.screens.CampaignsScreen
 import com.fillbook.growthos.ui.screens.ContentLibraryScreen
 import com.fillbook.growthos.ui.screens.CreatorsScreen
 import com.fillbook.growthos.ui.screens.HomeScreen
 import com.fillbook.growthos.ui.screens.InboundScreen
 import com.fillbook.growthos.ui.screens.LoginScreen
+import com.fillbook.growthos.ui.screens.canUseBiometrics
 import com.fillbook.growthos.ui.screens.RadarScreen
 import com.fillbook.growthos.ui.screens.ResearchScreen
 import com.fillbook.growthos.ui.screens.SettingsScreen
@@ -118,7 +120,7 @@ private const val BASE_URL = "https://fillbook-growth-os.vercel.app"
  */
 private const val PROTECTION_BYPASS_SECRET = "7TVBpvTPeeHbiGlZco9RDS8miXqtbfoi"
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -127,7 +129,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             FillbookGrowthOSTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    GrowthOsRoot(tokenStore)
+                    GrowthOsRoot(this, tokenStore)
                 }
             }
         }
@@ -135,20 +137,41 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun GrowthOsRoot(tokenStore: TokenStore) {
+private fun GrowthOsRoot(activity: FragmentActivity, tokenStore: TokenStore) {
     var appToken by remember { mutableStateOf(tokenStore.getToken()) }
     var displayName by remember { mutableStateOf(tokenStore.getDisplayName()) }
+    // Re-checked once per process, not per recomposition -- whether Face/
+    // Fingerprint is enrolled doesn't change mid-session, and re-querying
+    // BiometricManager on every recomposition would be wasted work.
+    val biometricAvailable = remember { canUseBiometrics(activity) }
+    // Starts locked whenever a saved token + the owner's own "require
+    // biometric" choice both say it should -- set true either by a fresh
+    // LoginScreen pass (typing the real code already proves identity) or
+    // by clearing the biometric prompt.
+    var unlocked by remember { mutableStateOf(!(tokenStore.getToken() != null && biometricAvailable && tokenStore.isBiometricLockEnabled())) }
 
     val token = appToken
     if (token == null) {
         LoginScreen(
             baseUrl = BASE_URL,
             protectionBypassSecret = PROTECTION_BYPASS_SECRET,
-            onLoginSuccess = { validatedToken, validatedName ->
+            biometricAvailable = biometricAvailable,
+            onLoginSuccess = { validatedToken, validatedName, requireBiometric ->
                 tokenStore.saveToken(validatedToken)
                 tokenStore.saveDisplayName(validatedName)
+                tokenStore.setBiometricLockEnabled(requireBiometric)
                 appToken = validatedToken
                 displayName = validatedName
+                unlocked = true
+            },
+        )
+    } else if (!unlocked) {
+        BiometricGateScreen(
+            activity = activity,
+            onUnlocked = { unlocked = true },
+            onUseCodeInstead = {
+                tokenStore.clearToken()
+                appToken = null
             },
         )
     } else {
