@@ -14,12 +14,25 @@ export const TOPICS_PER_SEARCH_RUN = 6;
 export const RESULTS_PER_QUERY = 15;
 
 /**
- * If this many unshown ('new'/'shown') candidates are already queued,
- * skip searching for more today -- surfacing "enough for 8-15 replies,"
- * per the actual operating goal, not maximum possible volume. Re-search
- * resumes once the owner works the queue down.
+ * If this many non-terminal candidates (new/shown/drafting/ready -- the
+ * same pool prospectingDailySelection.ts draws "today's set" from) are
+ * already queued, skip searching for more today. Derived from the actual
+ * daily target rather than picked blindly: DAILY_SET_MAX (15) * 2 = two
+ * full days' worth of max-quality inventory already sitting available.
+ * "Use existing quality inventory before spending to create more" --
+ * discovery resumes on its own once the owner works the backlog down
+ * below this.
  */
-export const QUEUE_FULL_THRESHOLD = 25;
+export const QUEUE_FULL_THRESHOLD = 30; // 2 * DAILY_SET_MAX (kept as a literal -- see prospectingDailySelection.ts for the source constant)
+
+/**
+ * A non-terminal candidate this old has almost certainly scrolled off
+ * relevance -- the conversation it belonged to has moved on. Matches
+ * opportunities/scoring.ts's own TOPIC_FATIGUE_WINDOW_DAYS (14) for
+ * consistency across the codebase's two "how long before this goes
+ * stale" judgment calls, rather than inventing an unrelated number.
+ */
+export const STALE_EXPIRY_DAYS = 14;
 
 /**
  * Conservative monthly ceiling, leaving real headroom under the $10
@@ -44,6 +57,12 @@ export function evaluateQueueCapacity(unshownCandidateCount: number): Eligibilit
     };
   }
   return { eligible: true };
+}
+
+/** Pure predicate -- true if a non-terminal candidate's discoveredAt is older than STALE_EXPIRY_DAYS. Used by the repository's expireStale() before each daily-set selection so a months-old unactioned post never resurfaces as if freshly found. */
+export function isStaleCandidate(discoveredAt: string, now: Date): boolean {
+  const ageMs = now.getTime() - new Date(discoveredAt).getTime();
+  return ageMs > STALE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
 }
 
 export function evaluateMonthlyBudget(monthSpendUsd: number): EligibilityCheckResult {

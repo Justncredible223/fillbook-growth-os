@@ -278,6 +278,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             authorVerified = false,
             postText = "does trailing drawdown lock in at end of day or is it live the whole session? every firm explains it differently and I'm losing my mind",
             postUrl = "https://x.com/i/web/status/501",
+            postCreatedAt = "2026-09-03T18:00:00Z",
             opportunityScore = 78.2,
             scoreBreakdown = mapOf(
                 "topicRelevance" to "\"Trailing drawdown\" (risk_management) -> +16",
@@ -302,6 +303,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             authorVerified = false,
             postText = "blew my third funded account this year on the same mistake. one bad trade after four good days, every single time",
             postUrl = "https://x.com/i/web/status/502",
+            postCreatedAt = "2026-09-03T19:30:00Z",
             opportunityScore = 71.5,
             scoreBreakdown = mapOf(
                 "topicRelevance" to "\"Blown account\" (risk_management) -> +16",

@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createLlmClient } from "../content/llmClient.js";
 import { recordCostEvent } from "../cost/costTracking.js";
 import { loadGroundingContext } from "../inbound/inboundHandlers.js";
+import { selectDailyWorkingSet } from "./prospectingDailySelection.js";
+import { STALE_EXPIRY_DAYS } from "./prospectingEligibility.js";
 import { draftProspectingReply } from "./prospectingReplyWriter.js";
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
@@ -18,15 +20,30 @@ export function toProspectingJson(candidate: ProspectingCandidate) {
   };
 }
 
-const QUEUE_STATUSES = ["new", "shown", "ready"] as const;
+const NON_TERMINAL_STATUSES = ["new", "shown", "drafting", "ready"] as const;
 
-/** Lists the active queue (highest score first) and marks any still-'new' rows 'shown' -- a candidate is only ever presented once as "new," never resurfaced as if freshly found. */
-export async function listProspectingQueue(client: SupabaseClient, limit = 50): Promise<ProspectingCandidate[]> {
+/**
+ * DISCOVER -> FILTER -> RANK already happened upstream (prospectingSearch.ts
+ * / prospectingScoring.ts). This is SELECT DAILY WORKING SET: expires
+ * anything that's sat unactioned past STALE_EXPIRY_DAYS, re-ranks the
+ * remaining non-terminal pool, and returns only today's capped, deduped
+ * working set (see prospectingDailySelection.ts) -- never the full
+ * accumulated backlog. Only rows actually selected today get marked
+ * 'shown'; everything else stays exactly as it was (a 'new' row not
+ * selected today is still 'new' tomorrow -- real backlog, not lost).
+ */
+export async function listProspectingQueue(client: SupabaseClient, now: Date = new Date()): Promise<ProspectingCandidate[]> {
   const repo = new SupabaseProspectingRepository(client);
-  const queue = await repo.listByStatus([...QUEUE_STATUSES], limit);
-  const newIds = queue.filter((c) => c.status === "new").map((c) => c.id);
+
+  const staleCutoff = new Date(now.getTime() - STALE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+  await repo.expireStale(staleCutoff);
+
+  const eligible = await repo.listByStatus([...NON_TERMINAL_STATUSES], 500);
+  const { selected } = selectDailyWorkingSet(eligible);
+
+  const newIds = selected.filter((c) => c.status === "new").map((c) => c.id);
   await repo.markShown(newIds);
-  return queue.map((c) => (newIds.includes(c.id) ? { ...c, status: "shown" as const } : c));
+  return selected.map((c) => (newIds.includes(c.id) ? { ...c, status: "shown" as const } : c));
 }
 
 export async function listProspectingHistory(client: SupabaseClient, limit = 100): Promise<ProspectingCandidate[]> {

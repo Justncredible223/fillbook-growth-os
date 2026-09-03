@@ -175,4 +175,15 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
     // same outreach a moment earlier -- not a real failure.
     if (error && error.code !== "23505") throw new Error(`recordOutreach insert failed: ${error.message}`);
   }
+
+  async expireStale(olderThan: Date): Promise<number> {
+    const { data, error } = await this.client
+      .from("prospecting_candidates")
+      .update({ status: "expired", updated_at: new Date().toISOString() })
+      .in("status", ["new", "shown", "drafting", "ready"])
+      .lt("discovered_at", olderThan.toISOString())
+      .select("id");
+    if (error) throw new Error(`expireStale failed: ${error.message}`);
+    return (data ?? []).length;
+  }
 }

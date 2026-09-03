@@ -50,6 +50,9 @@ class FakeProspectingRepo implements ProspectingRepository {
   async recordOutreach(_platform: string, authorExternalId: string) {
     this.outreach.add(authorExternalId);
   }
+  async expireStale() {
+    return 0;
+  }
 }
 
 function fakeSupabaseClient() {

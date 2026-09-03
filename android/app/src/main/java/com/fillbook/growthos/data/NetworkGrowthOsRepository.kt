@@ -334,6 +334,7 @@ class NetworkGrowthOsRepository(
         authorVerified = if (isNull("authorVerified")) null else getBoolean("authorVerified"),
         postText = getString("postText"),
         postUrl = getString("postUrl"),
+        postCreatedAt = optStringOrNull("postCreatedAt"),
         opportunityScore = getDouble("opportunityScore"),
         scoreBreakdown = optJSONObject("scoreBreakdown")?.toStringMap() ?: emptyMap(),
         creatorCandidate = optBoolean("creatorCandidate", false),

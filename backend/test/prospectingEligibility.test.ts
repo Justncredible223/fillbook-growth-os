@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   MONTHLY_PROSPECTING_BUDGET_USD,
   QUEUE_FULL_THRESHOLD,
+  STALE_EXPIRY_DAYS,
   evaluateMonthlyBudget,
   evaluateQueueCapacity,
+  isStaleCandidate,
   selectTopicsForRun,
 } from "../src/prospecting/prospectingEligibility";
 
@@ -28,6 +30,24 @@ describe("evaluateMonthlyBudget", () => {
     const result = evaluateMonthlyBudget(MONTHLY_PROSPECTING_BUDGET_USD);
     expect(result.eligible).toBe(false);
     expect(result.reason).toMatch(/monthly_budget_reached/);
+  });
+});
+
+describe("isStaleCandidate", () => {
+  const now = new Date("2026-09-15T00:00:00Z");
+
+  it("is not stale just under the window", () => {
+    const discoveredAt = new Date(now.getTime() - (STALE_EXPIRY_DAYS - 1) * 24 * 60 * 60 * 1000).toISOString();
+    expect(isStaleCandidate(discoveredAt, now)).toBe(false);
+  });
+
+  it("is stale just over the window", () => {
+    const discoveredAt = new Date(now.getTime() - (STALE_EXPIRY_DAYS + 1) * 24 * 60 * 60 * 1000).toISOString();
+    expect(isStaleCandidate(discoveredAt, now)).toBe(true);
+  });
+
+  it("a freshly discovered candidate is never stale", () => {
+    expect(isStaleCandidate(now.toISOString(), now)).toBe(false);
   });
 });
 

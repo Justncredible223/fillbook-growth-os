@@ -50,8 +50,10 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     return { skipped: true, skipReason: budgetCheck.reason, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, costUsd: 0 };
   }
 
-  const unshown = await deps.repo.listByStatus(["new", "shown"], QUEUE_FULL_THRESHOLD + 1);
-  const queueCheck = evaluateQueueCapacity(unshown.length);
+  // Same non-terminal pool prospectingDailySelection.ts draws "today's set"
+  // from -- QUEUE_FULL_THRESHOLD is derived from that pool's real target.
+  const backlog = await deps.repo.listByStatus(["new", "shown", "drafting", "ready"], QUEUE_FULL_THRESHOLD + 1);
+  const queueCheck = evaluateQueueCapacity(backlog.length);
   if (!queueCheck.eligible) {
     return { skipped: true, skipReason: queueCheck.reason, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, costUsd: 0 };
   }

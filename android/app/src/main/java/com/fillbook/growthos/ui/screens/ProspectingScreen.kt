@@ -50,6 +50,7 @@ import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.copyToClipboard
+import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Border
 import com.fillbook.growthos.ui.theme.Danger
@@ -247,6 +248,12 @@ private fun ProspectingCard(
                     Pill(candidate.discoveryLabel, TextSecondary)
                     candidate.authorFollowerCount?.let { count -> Pill(formatFollowerCount(count), TextTertiary) }
                     if (candidate.creatorCandidate) Pill("CREATOR CANDIDATE", Success)
+                }
+                candidate.postCreatedAt?.let { posted ->
+                    relativeTime(posted)?.let { time ->
+                        Spacer(Modifier.height(2.dp))
+                        Text(time, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                    }
                 }
             }
         }

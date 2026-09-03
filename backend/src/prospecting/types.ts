@@ -78,4 +78,6 @@ export interface ProspectingRepository {
   /** True if this author has already been replied to via Prospecting before -- feeds both scoring and the Inbound relationship bridge. */
   hasPriorOutreach(platform: string, authorExternalId: string): Promise<boolean>;
   recordOutreach(platform: string, authorExternalId: string, authorHandle: string | null): Promise<void>;
+  /** Marks non-terminal candidates older than the given cutoff as 'expired' -- run before each daily-set selection. Returns how many were expired. */
+  expireStale(olderThan: Date): Promise<number>;
 }
