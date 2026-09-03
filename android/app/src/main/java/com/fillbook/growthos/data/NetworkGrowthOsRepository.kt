@@ -323,6 +323,62 @@ class NetworkGrowthOsRepository(
     override suspend fun runInboundBacklogRecovery() {
         post("/api/approvals?resource=inbound", JSONObject().put("action", "backlog-recover"))
     }
+
+    private fun JSONObject.toProspectingCandidate() = ProspectingCandidate(
+        id = getString("id"),
+        discoveryQuery = getString("discoveryQuery"),
+        discoveryLabel = optStringOrNull("discoveryLabel") ?: getString("discoveryQuery"),
+        authorHandle = optStringOrNull("authorHandle"),
+        authorFollowerCount = if (isNull("authorFollowerCount")) null else getInt("authorFollowerCount"),
+        authorVerified = if (isNull("authorVerified")) null else getBoolean("authorVerified"),
+        postText = getString("postText"),
+        postUrl = getString("postUrl"),
+        opportunityScore = getDouble("opportunityScore"),
+        scoreBreakdown = optJSONObject("scoreBreakdown")?.toStringMap() ?: emptyMap(),
+        creatorCandidate = optBoolean("creatorCandidate", false),
+        status = getString("status"),
+        draftReply = optStringOrNull("draftReply"),
+        replyMentionsFillbook = if (isNull("replyMentionsFillbook")) null else getBoolean("replyMentionsFillbook"),
+        replyUsedLink = if (isNull("replyUsedLink")) null else getBoolean("replyUsedLink"),
+    )
+
+    // Folded into /api/approvals (?resource=prospecting) -- same 12-function-cap reasoning as inbound above.
+    override suspend fun getProspectingQueue(): List<ProspectingCandidate> {
+        val json = get("/api/approvals?resource=prospecting")
+        return json.getJSONArray("items").map { it.toProspectingCandidate() }
+    }
+
+    override suspend fun draftProspectingReply(id: String): ProspectingCandidate {
+        val json = post("/api/approvals?resource=prospecting", JSONObject().put("action", "draft").put("id", id))
+        return json.toProspectingCandidate()
+    }
+
+    override suspend fun openProspectingCandidate(id: String) {
+        post("/api/approvals?resource=prospecting", JSONObject().put("action", "open").put("id", id))
+    }
+
+    override suspend fun markProspectingReplied(id: String, finalReply: String?, mentionsFillbook: Boolean?, usedLink: Boolean?): ProspectingCandidate {
+        val body = JSONObject().put("action", "mark-replied").put("id", id)
+        if (finalReply != null) body.put("finalReply", finalReply)
+        if (mentionsFillbook != null) body.put("mentionsFillbook", mentionsFillbook)
+        if (usedLink != null) body.put("usedLink", usedLink)
+        val json = post("/api/approvals?resource=prospecting", body)
+        return json.toProspectingCandidate()
+    }
+
+    override suspend fun markProspectingSkipped(id: String, reason: String?) {
+        val body = JSONObject().put("action", "skip").put("id", id)
+        if (reason != null) body.put("reason", reason)
+        post("/api/approvals?resource=prospecting", body)
+    }
+
+    override suspend fun markProspectingNotRelevant(id: String) {
+        post("/api/approvals?resource=prospecting", JSONObject().put("action", "not-relevant").put("id", id))
+    }
+
+    override suspend fun markProspectingAlreadyHandled(id: String) {
+        post("/api/approvals?resource=prospecting", JSONObject().put("action", "already-handled").put("id", id))
+    }
 }
 
 /** [httpCode] lets callers (LoginScreen especially) tell "wrong access code" (401) apart from an unrelated server/network failure -- both used to surface as the same generic message. */
@@ -340,3 +396,6 @@ private fun JSONObject.optStringOrNull(key: String): String? =
 
 private fun JSONObject.toIntMap(): Map<String, Int> =
     keys().asSequence().associateWith { key -> getInt(key) }
+
+private fun JSONObject.toStringMap(): Map<String, String> =
+    keys().asSequence().associateWith { key -> getString(key) }

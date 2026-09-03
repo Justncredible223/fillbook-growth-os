@@ -1,0 +1,81 @@
+export type ProspectingStatus =
+  | "new"
+  | "shown"
+  | "drafting"
+  | "ready"
+  | "replied"
+  | "skipped"
+  | "not_relevant"
+  | "already_handled"
+  | "expired";
+
+export interface ProspectingCandidate {
+  id: string;
+  platform: string;
+  externalId: string;
+  discoveryQuery: string;
+  authorHandle: string | null;
+  authorExternalId: string | null;
+  authorName: string | null;
+  authorFollowerCount: number | null;
+  authorVerified: boolean | null;
+  postText: string;
+  postUrl: string;
+  postCreatedAt: string | null;
+  publicMetrics: Record<string, number>;
+  opportunityScore: number;
+  scoreBreakdown: Record<string, string>;
+  creatorCandidate: boolean;
+  status: ProspectingStatus;
+  shownAt: string | null;
+  openedAt: string | null;
+  draftReply: string | null;
+  finalReply: string | null;
+  replyMentionsFillbook: boolean | null;
+  replyUsedLink: boolean | null;
+  repliedAt: string | null;
+  skipReason: string | null;
+  discoveredAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NewProspectingCandidate {
+  platform: string;
+  externalId: string;
+  discoveryQuery: string;
+  authorHandle: string | null;
+  authorExternalId: string | null;
+  authorName: string | null;
+  authorFollowerCount: number | null;
+  authorVerified: boolean | null;
+  postText: string;
+  postUrl: string;
+  postCreatedAt: string | null;
+  publicMetrics: Record<string, number>;
+  opportunityScore: number;
+  scoreBreakdown: Record<string, string>;
+  creatorCandidate: boolean;
+  discoveredAt: string;
+}
+
+export interface ProspectingRepository {
+  /** Insert-if-new by (platform, externalId) -- the dedup key. Returns created=false if already known (no duplicate re-surfacing). */
+  upsertIfNew(candidate: NewProspectingCandidate): Promise<{ id: string; created: boolean }>;
+  listByStatus(statuses: ProspectingStatus[], limit?: number): Promise<ProspectingCandidate[]>;
+  getById(id: string): Promise<ProspectingCandidate | null>;
+  markShown(ids: string[]): Promise<void>;
+  updateStatus(
+    id: string,
+    status: ProspectingStatus,
+    fields?: Partial<
+      Pick<
+        ProspectingCandidate,
+        "openedAt" | "draftReply" | "finalReply" | "replyMentionsFillbook" | "replyUsedLink" | "repliedAt" | "skipReason"
+      >
+    >,
+  ): Promise<void>;
+  /** True if this author has already been replied to via Prospecting before -- feeds both scoring and the Inbound relationship bridge. */
+  hasPriorOutreach(platform: string, authorExternalId: string): Promise<boolean>;
+  recordOutreach(platform: string, authorExternalId: string, authorHandle: string | null): Promise<void>;
+}

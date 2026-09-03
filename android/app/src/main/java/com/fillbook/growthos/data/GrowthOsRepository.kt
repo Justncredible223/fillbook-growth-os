@@ -54,6 +54,18 @@ interface GrowthOsRepository {
     suspend fun closeInbound(id: String)
     /** Ignores the ingestion cursor and re-checks the recent window -- the "we found unanswered replies" recovery pass. */
     suspend fun runInboundBacklogRecovery()
+
+    /** The active Prospecting queue -- OTHER people's public X posts worth replying to, ranked highest score first. Marks any still-"new" rows "shown" server-side, so a refresh never presents the same candidate as freshly found twice. */
+    suspend fun getProspectingQueue(): List<ProspectingCandidate>
+    /** Generates a reply draft via the LLM for one candidate -- never persisted as sent, never posted. Costs one real LLM call. */
+    suspend fun draftProspectingReply(id: String): ProspectingCandidate
+    /** Records that the owner tapped "Open on X" for this candidate -- timestamp only, no status change. */
+    suspend fun openProspectingCandidate(id: String)
+    /** The ONLY action that sets status=replied -- an explicit confirmation the owner actually posted on X themselves. Also records outreach so Inbound recognizes this author if they reply back later. */
+    suspend fun markProspectingReplied(id: String, finalReply: String?, mentionsFillbook: Boolean?, usedLink: Boolean?): ProspectingCandidate
+    suspend fun markProspectingSkipped(id: String, reason: String?)
+    suspend fun markProspectingNotRelevant(id: String)
+    suspend fun markProspectingAlreadyHandled(id: String)
 }
 
 /**
@@ -253,5 +265,99 @@ class FakeGrowthOsRepository : GrowthOsRepository {
 
     override suspend fun runInboundBacklogRecovery() {
         // No backend to call in fake mode -- no-op.
+    }
+
+    private val prospectingItems = mutableListOf(
+        ProspectingCandidate(
+            id = "prospect-fake-1",
+            discoveryQuery = "trailing_drawdown",
+            discoveryLabel = "Trailing drawdown",
+            authorHandle = "futuresGrind",
+            authorFollowerCount = 3400,
+            authorVerified = false,
+            postText = "does trailing drawdown lock in at end of day or is it live the whole session? every firm explains it differently and I'm losing my mind",
+            postUrl = "https://x.com/i/web/status/501",
+            opportunityScore = 78.2,
+            scoreBreakdown = mapOf(
+                "topicRelevance" to "\"Trailing drawdown\" (risk_management) -> +16",
+                "activeDiscussion" to "3 replies, 0 quotes, 9 likes -> +9.8",
+                "authorReach" to "3400 followers -> +11.3 (capped at 15)",
+                "recency" to "posted 2.1h ago -> +14.3",
+                "valueOpportunity" to "asks a question, enough context -> +15",
+            ),
+            creatorCandidate = false,
+            status = "shown",
+            draftReply = null,
+            replyMentionsFillbook = null,
+            replyUsedLink = null,
+        ),
+        ProspectingCandidate(
+            id = "prospect-fake-2",
+            discoveryQuery = "blown_account",
+            discoveryLabel = "Blown account",
+            authorHandle = "smallAccountTrader",
+            authorFollowerCount = 620,
+            authorVerified = false,
+            postText = "blew my third funded account this year on the same mistake. one bad trade after four good days, every single time",
+            postUrl = "https://x.com/i/web/status/502",
+            opportunityScore = 71.5,
+            scoreBreakdown = mapOf(
+                "topicRelevance" to "\"Blown account\" (risk_management) -> +16",
+                "activeDiscussion" to "1 replies, 0 quotes, 22 likes -> +8.1",
+                "authorReach" to "620 followers -> +8.4 (capped at 15)",
+                "recency" to "posted 0.6h ago -> +14.8",
+                "valueOpportunity" to "no question, enough context -> +7",
+            ),
+            creatorCandidate = false,
+            status = "new",
+            draftReply = null,
+            replyMentionsFillbook = null,
+            replyUsedLink = null,
+        ),
+    )
+
+    override suspend fun getProspectingQueue(): List<ProspectingCandidate> {
+        for (i in prospectingItems.indices) {
+            if (prospectingItems[i].status == "new") prospectingItems[i] = prospectingItems[i].copy(status = "shown")
+        }
+        return prospectingItems.filter { it.status in setOf("new", "shown", "ready") }.sortedByDescending { it.opportunityScore }
+    }
+
+    override suspend fun draftProspectingReply(id: String): ProspectingCandidate {
+        val index = prospectingItems.indexOfFirst { it.id == id }
+        val updated = prospectingItems[index].copy(
+            status = "ready",
+            draftReply = "Most firms lock it in at the daily close, but a few (Apex included) still trail live intraday -- worth checking your specific firm's rulebook since this trips people up constantly.",
+            replyMentionsFillbook = false,
+            replyUsedLink = false,
+        )
+        prospectingItems[index] = updated
+        return updated
+    }
+
+    override suspend fun openProspectingCandidate(id: String) {
+        // No backend to call in fake mode -- no-op.
+    }
+
+    override suspend fun markProspectingReplied(id: String, finalReply: String?, mentionsFillbook: Boolean?, usedLink: Boolean?): ProspectingCandidate {
+        val index = prospectingItems.indexOfFirst { it.id == id }
+        val updated = prospectingItems[index].copy(status = "replied")
+        prospectingItems[index] = updated
+        return updated
+    }
+
+    override suspend fun markProspectingSkipped(id: String, reason: String?) {
+        val index = prospectingItems.indexOfFirst { it.id == id }
+        if (index >= 0) prospectingItems[index] = prospectingItems[index].copy(status = "skipped")
+    }
+
+    override suspend fun markProspectingNotRelevant(id: String) {
+        val index = prospectingItems.indexOfFirst { it.id == id }
+        if (index >= 0) prospectingItems[index] = prospectingItems[index].copy(status = "not_relevant")
+    }
+
+    override suspend fun markProspectingAlreadyHandled(id: String) {
+        val index = prospectingItems.indexOfFirst { it.id == id }
+        if (index >= 0) prospectingItems[index] = prospectingItems[index].copy(status = "already_handled")
     }
 }

@@ -141,6 +141,30 @@ describe("ingestInboundMentions", () => {
     expect(await cursors.load(INBOUND_CURSOR_SOURCE)).toBeNull();
   });
 
+  it("treats a prior Prospecting outreach as an existing relationship (p2), even with no prior inbound row or tracked creator", async () => {
+    const deps = {
+      adapter: new FakeAdapter([mention({ id: "1", text: "hey thanks for the reply the other day", authorId: "prospect-1", authorHandle: "randomTrader" })]) as any,
+      repo: new InMemoryInboundRepository(),
+      findCreatorIdByHandle: async () => null,
+      hasProspectingOutreach: async (authorExternalId: string) => authorExternalId === "prospect-1",
+    };
+    const cursors = new InMemoryIngestionCursorStore();
+
+    await ingestInboundMentions(deps, cursors, OUR_USER_ID, now);
+
+    const row = deps.repo.all()[0]!;
+    expect(row.priority).toBe("p2_relationship");
+  });
+
+  it("works unchanged when hasProspectingOutreach is omitted (pre-Prospecting callers)", async () => {
+    const deps = buildDeps([mention({ id: "1", text: "hi there", authorId: "someone-else" })]);
+    const cursors = new InMemoryIngestionCursorStore();
+
+    const result = await ingestInboundMentions(deps, cursors, OUR_USER_ID, now);
+
+    expect(result.inserted).toBe(1);
+  });
+
   it("a reply arriving in an existing conversation after we've responded still lands as its own new row needing a response", async () => {
     const repo = new InMemoryInboundRepository();
     const cursors = new InMemoryIngestionCursorStore();

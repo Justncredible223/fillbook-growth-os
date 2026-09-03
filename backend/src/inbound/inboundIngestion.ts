@@ -11,6 +11,15 @@ export interface IngestInboundDeps {
   repo: InboundRepository;
   /** Resolves a handle to a tracked creator's id, if any -- links relationship context without this module depending on the creators module's repository shape. */
   findCreatorIdByHandle: (handle: string) => Promise<string | null>;
+  /**
+   * True if we've already replied to this X user id via Prospecting
+   * (prospecting_outreach table) -- optional so existing callers/tests
+   * that predate Prospecting keep working unchanged. Closes the loop the
+   * Prospecting audit flagged: without this, someone we cold-replied to
+   * would show up here as a first-time stranger even though we already
+   * reached out.
+   */
+  hasProspectingOutreach?: (authorExternalId: string) => Promise<boolean>;
 }
 
 export interface IngestInboundResult {
@@ -73,7 +82,9 @@ async function buildRow(
 
   const priorCount = mention.authorId ? await deps.repo.countPriorFromAuthor("x", mention.authorId) : 0;
   const creatorId = mention.authorHandle ? await deps.findCreatorIdByHandle(mention.authorHandle) : null;
-  const hasExistingRelationship = priorCount > 0 || creatorId !== null;
+  const priorProspectingOutreach =
+    mention.authorId && deps.hasProspectingOutreach ? await deps.hasProspectingOutreach(mention.authorId) : false;
+  const hasExistingRelationship = priorCount > 0 || creatorId !== null || priorProspectingOutreach;
 
   const priority = classifyPriority({
     text: mention.text,

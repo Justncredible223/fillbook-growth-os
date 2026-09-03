@@ -21,6 +21,9 @@ import { SupabaseOpportunityRepository } from "../src/opportunities/supabaseOppo
 import { SupabaseAutoDraftRunRepository } from "../src/opportunities/autoDraftRunRepository.js";
 import { runAutoDraftStep } from "../src/opportunities/autoDraftStep.js";
 import { buildSupabaseRunCampaignDeps } from "../src/content/runCampaignForOpportunity.js";
+import { runProspectingSearch } from "../src/prospecting/prospectingSearch.js";
+import { SupabaseProspectingRepository } from "../src/prospecting/supabaseProspectingRepository.js";
+import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -96,8 +99,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const adapter = createXSignalAdapter(client);
         const userId = await adapter.resolveOwnUserId();
         const repo = new SupabaseInboundRepository(client);
+        const prospectingRepo = new SupabaseProspectingRepository(client);
         const result = await ingestInboundMentions(
-          { adapter, repo, findCreatorIdByHandle: (handle) => findCreatorIdByHandle(client, handle) },
+          {
+            adapter,
+            repo,
+            findCreatorIdByHandle: (handle) => findCreatorIdByHandle(client, handle),
+            hasProspectingOutreach: (authorExternalId) => prospectingRepo.hasPriorOutreach("x", authorExternalId),
+          },
           cursorStore,
           userId,
         );
@@ -135,6 +144,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const adapter = createTikTokAdapter(client);
       const signals = await ingestTikTokVideos(adapter, signalGraph, cursorStore);
       return `${signals.length} ingested`;
+    }),
+    await runStep("prospecting_search", async () => {
+      await recordSyncAttempt(client, "prospecting");
+      try {
+        const adapter = createXSignalAdapter(client);
+        const repo = new SupabaseProspectingRepository(client);
+        const result = await runProspectingSearch({
+          adapter,
+          repo,
+          client,
+          getMonthSpendUsd: () => getProspectingMonthSpendUsd(client),
+        });
+        if (result.skipped) {
+          // A deliberate skip (budget/queue-capacity gate) is not a
+          // failure -- still counts as a successful sync attempt so
+          // Health doesn't flag it as broken.
+          await recordSyncSuccess(client, "prospecting", `skipped -- ${result.skipReason}`);
+          return `skipped -- ${result.skipReason}`;
+        }
+        await recordSyncSuccess(client, "prospecting", `${result.newCandidates} new, ${result.postsRead} read`);
+        return `${result.newCandidates} new (${result.postsRead} read, ${result.excludedAsSpam} excluded as spam, $${result.costUsd.toFixed(4)}) across topics: ${result.topicsSearched.join(", ")}`;
+      } catch (err) {
+        await recordSyncFailure(client, "prospecting", errorMessage(err));
+        throw err;
+      }
     }),
     await runStep("generate_opportunities", async () => {
       const result = await runGenerateOpportunities(client);

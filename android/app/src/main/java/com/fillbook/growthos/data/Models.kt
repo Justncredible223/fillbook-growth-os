@@ -179,3 +179,30 @@ data class InboundSummary(
     val repeatEngagers: Int,
     val overdue: Int,
 )
+
+/**
+ * Someone else's public X post found by Prospecting -- NOT a person who
+ * mentioned/replied to @FillbookHQ (that's InboundEngagement). Raw status
+ * string kept as-is, same rationale as InboundEngagement.status: the
+ * server owns the state machine.
+ */
+data class ProspectingCandidate(
+    val id: String,
+    val discoveryQuery: String,
+    val discoveryLabel: String,
+    val authorHandle: String?,
+    val authorFollowerCount: Int?,
+    val authorVerified: Boolean?,
+    val postText: String,
+    val postUrl: String,
+    val opportunityScore: Double,
+    /** Human-readable reasons behind the score, keyed by factor name ("topicRelevance", "activeDiscussion", ...) -- never fabricated, comes straight from the server's own scoring breakdown. */
+    val scoreBreakdown: Map<String, String>,
+    /** Flagged only by a simple follower-count heuristic server-side -- never auto-added to Creators; a human still decides. */
+    val creatorCandidate: Boolean,
+    val status: String,
+    /** Only present once a draft has actually been generated -- never fabricated client-side. */
+    val draftReply: String?,
+    val replyMentionsFillbook: Boolean?,
+    val replyUsedLink: Boolean?,
+)

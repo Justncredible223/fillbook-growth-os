@@ -1,0 +1,178 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { NewProspectingCandidate, ProspectingCandidate, ProspectingRepository, ProspectingStatus } from "./types.js";
+
+function fromRow(data: Record<string, any>): ProspectingCandidate {
+  return {
+    id: data.id,
+    platform: data.platform,
+    externalId: data.external_id,
+    discoveryQuery: data.discovery_query,
+    authorHandle: data.author_handle,
+    authorExternalId: data.author_external_id,
+    authorName: data.author_name,
+    authorFollowerCount: data.author_follower_count,
+    authorVerified: data.author_verified,
+    postText: data.post_text,
+    postUrl: data.post_url,
+    postCreatedAt: data.post_created_at,
+    publicMetrics: data.public_metrics ?? {},
+    opportunityScore: Number(data.opportunity_score),
+    scoreBreakdown: data.score_breakdown ?? {},
+    creatorCandidate: data.creator_candidate,
+    status: data.status,
+    shownAt: data.shown_at,
+    openedAt: data.opened_at,
+    draftReply: data.draft_reply,
+    finalReply: data.final_reply,
+    replyMentionsFillbook: data.reply_mentions_fillbook,
+    replyUsedLink: data.reply_used_link,
+    repliedAt: data.replied_at,
+    skipReason: data.skip_reason,
+    discoveredAt: data.discovered_at,
+    createdAt: data.created_at,
+    updatedAt: data.updated_at,
+  };
+}
+
+export class SupabaseProspectingRepository implements ProspectingRepository {
+  constructor(private client: SupabaseClient) {}
+
+  async upsertIfNew(candidate: NewProspectingCandidate): Promise<{ id: string; created: boolean }> {
+    const { data: existing, error: selectError } = await this.client
+      .from("prospecting_candidates")
+      .select("id")
+      .eq("platform", candidate.platform)
+      .eq("external_id", candidate.externalId)
+      .maybeSingle();
+    if (selectError) throw new Error(`upsertIfNew select failed: ${selectError.message}`);
+    if (existing) return { id: existing.id as string, created: false };
+
+    const { data, error } = await this.client
+      .from("prospecting_candidates")
+      .insert({
+        platform: candidate.platform,
+        external_id: candidate.externalId,
+        discovery_query: candidate.discoveryQuery,
+        author_handle: candidate.authorHandle,
+        author_external_id: candidate.authorExternalId,
+        author_name: candidate.authorName,
+        author_follower_count: candidate.authorFollowerCount,
+        author_verified: candidate.authorVerified,
+        post_text: candidate.postText,
+        post_url: candidate.postUrl,
+        post_created_at: candidate.postCreatedAt,
+        public_metrics: candidate.publicMetrics,
+        opportunity_score: candidate.opportunityScore,
+        score_breakdown: candidate.scoreBreakdown,
+        creator_candidate: candidate.creatorCandidate,
+        discovered_at: candidate.discoveredAt,
+      })
+      .select("id")
+      .single();
+    if (error) {
+      if (error.code === "23505") {
+        const { data: raceRow, error: raceError } = await this.client
+          .from("prospecting_candidates")
+          .select("id")
+          .eq("platform", candidate.platform)
+          .eq("external_id", candidate.externalId)
+          .single();
+        if (raceError) throw new Error(`upsertIfNew race-recovery select failed: ${raceError.message}`);
+        return { id: raceRow.id as string, created: false };
+      }
+      throw new Error(`upsertIfNew insert failed: ${error.message}`);
+    }
+    return { id: data.id as string, created: true };
+  }
+
+  async listByStatus(statuses: ProspectingStatus[], limit = 50): Promise<ProspectingCandidate[]> {
+    const { data, error } = await this.client
+      .from("prospecting_candidates")
+      .select()
+      .in("status", statuses)
+      .order("opportunity_score", { ascending: false })
+      .limit(limit);
+    if (error) throw new Error(`listByStatus failed: ${error.message}`);
+    return (data ?? []).map(fromRow);
+  }
+
+  async getById(id: string): Promise<ProspectingCandidate | null> {
+    const { data, error } = await this.client.from("prospecting_candidates").select().eq("id", id).maybeSingle();
+    if (error) throw new Error(`getById failed: ${error.message}`);
+    return data ? fromRow(data) : null;
+  }
+
+  async markShown(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const { error } = await this.client
+      .from("prospecting_candidates")
+      .update({ status: "shown", shown_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .in("id", ids)
+      .eq("status", "new");
+    if (error) throw new Error(`markShown failed: ${error.message}`);
+  }
+
+  async updateStatus(
+    id: string,
+    status: ProspectingStatus,
+    fields?: Partial<
+      Pick<
+        ProspectingCandidate,
+        "openedAt" | "draftReply" | "finalReply" | "replyMentionsFillbook" | "replyUsedLink" | "repliedAt" | "skipReason"
+      >
+    >,
+  ): Promise<void> {
+    const update: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
+    if (fields?.openedAt !== undefined) update.opened_at = fields.openedAt;
+    if (fields?.draftReply !== undefined) update.draft_reply = fields.draftReply;
+    if (fields?.finalReply !== undefined) update.final_reply = fields.finalReply;
+    if (fields?.replyMentionsFillbook !== undefined) update.reply_mentions_fillbook = fields.replyMentionsFillbook;
+    if (fields?.replyUsedLink !== undefined) update.reply_used_link = fields.replyUsedLink;
+    if (fields?.repliedAt !== undefined) update.replied_at = fields.repliedAt;
+    if (fields?.skipReason !== undefined) update.skip_reason = fields.skipReason;
+    const { error } = await this.client.from("prospecting_candidates").update(update).eq("id", id);
+    if (error) throw new Error(`updateStatus failed: ${error.message}`);
+  }
+
+  async hasPriorOutreach(platform: string, authorExternalId: string): Promise<boolean> {
+    const { data, error } = await this.client
+      .from("prospecting_outreach")
+      .select("id")
+      .eq("platform", platform)
+      .eq("author_external_id", authorExternalId)
+      .maybeSingle();
+    if (error) throw new Error(`hasPriorOutreach failed: ${error.message}`);
+    return data !== null;
+  }
+
+  async recordOutreach(platform: string, authorExternalId: string, authorHandle: string | null): Promise<void> {
+    const { data: existing, error: selectError } = await this.client
+      .from("prospecting_outreach")
+      .select("id, reply_count")
+      .eq("platform", platform)
+      .eq("author_external_id", authorExternalId)
+      .maybeSingle();
+    if (selectError) throw new Error(`recordOutreach select failed: ${selectError.message}`);
+
+    const now = new Date().toISOString();
+    if (existing) {
+      const { error } = await this.client
+        .from("prospecting_outreach")
+        .update({ last_replied_at: now, reply_count: (existing.reply_count as number) + 1 })
+        .eq("id", existing.id);
+      if (error) throw new Error(`recordOutreach update failed: ${error.message}`);
+      return;
+    }
+    const { error } = await this.client.from("prospecting_outreach").insert({
+      platform,
+      author_external_id: authorExternalId,
+      author_handle: authorHandle,
+      first_replied_at: now,
+      last_replied_at: now,
+      reply_count: 1,
+    });
+    // A unique-constraint race here just means another request recorded the
+    // same outreach a moment earlier -- not a real failure.
+    if (error && error.code !== "23505") throw new Error(`recordOutreach insert failed: ${error.message}`);
+  }
+}

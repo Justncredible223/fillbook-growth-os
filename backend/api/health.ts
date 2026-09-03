@@ -119,6 +119,30 @@ async function checkInboundSync(client: SupabaseClient): Promise<HealthItem> {
   }
 }
 
+/** Same real attempt/success/error evidence as checkInboundSync above, keyed to Prospecting's own integration_health row -- a search failure (rate limit, expired token, etc.) must be visible here, not silently presented as "just an empty/thin queue today." */
+async function checkProspectingSync(client: SupabaseClient): Promise<HealthItem> {
+  try {
+    const { data } = await client
+      .from("integration_health")
+      .select("last_attempted_at, last_success_at, last_error")
+      .eq("platform", "prospecting")
+      .maybeSingle();
+    if (!data) {
+      return { label: "Prospecting", status: "NOT_CONNECTED", detail: "Never synced yet -- runs daily via /api/daily-pipeline" };
+    }
+    const row = data as { last_attempted_at: string | null; last_success_at: string | null; last_error: string | null };
+    if (row.last_error) {
+      return { label: "Prospecting", status: "DOWN", detail: `Last attempt failed (${row.last_attempted_at}): ${row.last_error}` };
+    }
+    if (!row.last_success_at) {
+      return { label: "Prospecting", status: "DEGRADED", detail: `Attempted at ${row.last_attempted_at}, no confirmed success yet` };
+    }
+    return { label: "Prospecting", status: "HEALTHY", detail: `Verified live -- last synced ${row.last_success_at}` };
+  } catch (err) {
+    return { label: "Prospecting", status: "DOWN", detail: errorMessage(err) };
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res)) return;
   if (req.method !== "GET") {
@@ -177,6 +201,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   );
 
   health.push(await checkInboundSync(client));
+  health.push(await checkProspectingSync(client));
 
   res.status(200).json({ health });
 }

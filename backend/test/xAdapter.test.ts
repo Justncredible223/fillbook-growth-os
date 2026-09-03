@@ -186,4 +186,88 @@ describe("XSignalAdapter", () => {
 
     expect(id).toBe("999");
   });
+
+  describe("searchRecentPosts", () => {
+    it("maps search results including author metrics, and excludes retweets/replies from the query", async () => {
+      const store = new InMemoryXTokenStore({
+        accessToken: "valid-token",
+        refreshToken: "refresh-token",
+        expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+      });
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse({
+          data: [
+            {
+              id: "1",
+              text: "how do prop firm consistency rules even work",
+              author_id: "42",
+              created_at: "2026-09-01T10:00:00Z",
+              public_metrics: { reply_count: 2, like_count: 5 },
+              lang: "en",
+            },
+          ],
+          includes: {
+            users: [{ id: "42", username: "someTrader", name: "Some Trader", verified: false, public_metrics: { followers_count: 1200 } }],
+          },
+        }),
+      );
+      const adapter = new XSignalAdapter("client-id", "client-secret", store, fetchMock);
+
+      const results = await adapter.searchRecentPosts('"prop firm"', 15, now);
+
+      expect(results).toEqual([
+        {
+          id: "1",
+          text: "how do prop firm consistency rules even work",
+          authorId: "42",
+          authorHandle: "someTrader",
+          authorName: "Some Trader",
+          authorFollowerCount: 1200,
+          authorVerified: false,
+          createdAt: new Date("2026-09-01T10:00:00Z"),
+          publicMetrics: { reply_count: 2, like_count: 5 },
+          lang: "en",
+        },
+      ]);
+
+      const [url] = fetchMock.mock.calls[0]!;
+      const requested = new URL(url as string);
+      expect(requested.pathname).toBe("/2/tweets/search/recent");
+      expect(requested.searchParams.get("query")).toBe('"prop firm" -is:retweet -is:reply lang:en');
+    });
+
+    it("clamps max_results into X's accepted 10-100 range", async () => {
+      const store = new InMemoryXTokenStore({
+        accessToken: "valid-token",
+        refreshToken: "refresh-token",
+        expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+      });
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [] }));
+      const adapter = new XSignalAdapter("client-id", "client-secret", store, fetchMock);
+
+      await adapter.searchRecentPosts("drawdown", 2, now);
+      let requested = new URL(fetchMock.mock.calls[0]![0] as string);
+      expect(requested.searchParams.get("max_results")).toBe("10");
+
+      await adapter.searchRecentPosts("drawdown", 500, now);
+      requested = new URL(fetchMock.mock.calls[1]![0] as string);
+      expect(requested.searchParams.get("max_results")).toBe("100");
+    });
+
+    it("does not fabricate author data when X returns no user expansion for a post", async () => {
+      const store = new InMemoryXTokenStore({
+        accessToken: "valid-token",
+        refreshToken: "refresh-token",
+        expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+      });
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [{ id: "1", text: "hi" }] }));
+      const adapter = new XSignalAdapter("client-id", "client-secret", store, fetchMock);
+
+      const results = await adapter.searchRecentPosts("drawdown", 15, now);
+
+      expect(results[0]!.authorHandle).toBeNull();
+      expect(results[0]!.authorFollowerCount).toBeNull();
+      expect(results[0]!.authorVerified).toBeNull();
+    });
+  });
 });

@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -83,6 +84,7 @@ import com.fillbook.growthos.ui.screens.HomeScreen
 import com.fillbook.growthos.ui.screens.InboundScreen
 import com.fillbook.growthos.ui.screens.LoginScreen
 import com.fillbook.growthos.ui.screens.canUseBiometrics
+import com.fillbook.growthos.ui.screens.ProspectingScreen
 import com.fillbook.growthos.ui.screens.RadarScreen
 import com.fillbook.growthos.ui.screens.ResearchScreen
 import com.fillbook.growthos.ui.screens.SettingsScreen
@@ -101,6 +103,7 @@ import com.fillbook.growthos.ui.theme.TextTertiary
 private sealed class Destination(val route: String, val label: String, val icon: ImageVector) {
     data object Home : Destination("home", "Home", Icons.Filled.Home)
     data object Radar : Destination("radar", "Radar", Icons.Filled.Radar)
+    data object Prospecting : Destination("prospecting", "Prospecting", Icons.Filled.TrendingUp)
     data object Approvals : Destination("approvals", "Approvals", Icons.Filled.CheckCircle)
     data object Inbound : Destination("inbound", "Inbound", Icons.Filled.Forum)
     data object Campaigns : Destination("campaigns", "Campaigns", Icons.Filled.Campaign)
@@ -113,12 +116,20 @@ private sealed class Destination(val route: String, val label: String, val icon:
     data object Settings : Destination("settings", "Settings", Icons.Filled.Settings)
 }
 
-/** The 4 screens worth a permanent thumb-reach slot -- everything else lives in More. */
-private val primaryDestinations = listOf(Destination.Home, Destination.Radar, Destination.Approvals, Destination.Analytics)
+/**
+ * The 4 screens worth a permanent thumb-reach slot -- everything else
+ * lives in More. Prospecting replaced Analytics here: for a new product
+ * with no inbound traffic yet, proactive daily outreach is the primary
+ * growth system, not a periodic check (see docs/PROSPECTING.md) --
+ * Analytics is still one tap away in More, just no longer competing for
+ * the habitual daily slot.
+ */
+private val primaryDestinations = listOf(Destination.Home, Destination.Radar, Destination.Prospecting, Destination.Approvals)
 
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
     Destination.Inbound,
+    Destination.Analytics,
     Destination.Campaigns,
     Destination.ContentLibrary,
     Destination.Creators,
@@ -244,6 +255,7 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, onL
         ) {
             composable(Destination.Home.route) { HomeScreen(repo, onNavigate = ::navigate) }
             composable(Destination.Radar.route) { RadarScreen(repo) }
+            composable(Destination.Prospecting.route) { ProspectingScreen(repo) }
             composable(Destination.Approvals.route) { ApprovalsScreen(repo) }
             composable(Destination.Inbound.route) { InboundScreen(repo) }
             composable(Destination.Campaigns.route) { CampaignsScreen(repo) }

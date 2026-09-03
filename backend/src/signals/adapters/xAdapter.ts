@@ -32,6 +32,21 @@ export interface XMention {
 
 export class XApiError extends Error {}
 
+/** One public post found by a recent-search query -- someone else's post, not @FillbookHQ's own. */
+export interface XSearchResult {
+  id: string;
+  text: string;
+  authorId: string | null;
+  authorHandle: string | null;
+  authorName: string | null;
+  authorFollowerCount: number | null;
+  authorVerified: boolean | null;
+  createdAt: Date | null;
+  publicMetrics: Record<string, number> | null;
+  /** True only when X's own possibly_sensitive/lang fields suggest a real, on-topic post -- never inferred beyond what the API states. */
+  lang: string | null;
+}
+
 /**
  * Talks to X's API for @FillbookHQ's own data only (Owned Reads pricing:
  * $0.001/resource for GET /2/users/{id}/mentions when {id} is the
@@ -39,6 +54,13 @@ export class XApiError extends Error {}
  * post, reply, or otherwise write to X. See docs/PROGRESS_LEDGER.md
  * Phase 4/9 and the OAuth 2.0 app's scopes (tweet.read, users.read only,
  * no tweet.write).
+ *
+ * searchRecentPosts() is the one exception to "own data only" -- it reads
+ * OTHER people's public posts (Prospecting feature, docs/PROSPECTING.md).
+ * It bills at the general $0.005/read rate, not the cheaper Owned Reads
+ * tier, since {query} isn't scoped to the authenticated user's own
+ * resource. Still strictly read-only: no method anywhere in this class
+ * issues a POST to /2/tweets.
  */
 export class XSignalAdapter {
   constructor(
@@ -163,6 +185,63 @@ export class XSignalAdapter {
         )
         .map((r) => ({ type: r.type, id: r.id })),
     }));
+  }
+
+  /**
+   * GET /2/tweets/search/recent -- public posts from the last 7 days
+   * matching {query}. Works with the same OAuth2UserToken (tweet.read
+   * scope) already granted for mentions; X's own docs confirm this
+   * endpoint accepts that scope (docs.x.com/x-api/posts/recent-search),
+   * so no new X app/OAuth setup is required. Excludes retweets/replies
+   * by construction (query gets " -is:retweet -is:reply" appended) so
+   * results are always original posts worth reading in isolation.
+   */
+  async searchRecentPosts(query: string, maxResults = 25, now: Date = new Date()): Promise<XSearchResult[]> {
+    const params: Record<string, string> = {
+      query: `${query} -is:retweet -is:reply lang:en`,
+      max_results: String(Math.min(Math.max(maxResults, 10), 100)),
+      "tweet.fields": "created_at,public_metrics,author_id,lang",
+      expansions: "author_id",
+      "user.fields": "username,name,public_metrics,verified",
+    };
+
+    const json = (await this.authedGet("/tweets/search/recent", params, now)) as {
+      data?: Array<{
+        id: string;
+        text: string;
+        author_id?: string;
+        created_at?: string;
+        public_metrics?: Record<string, number>;
+        lang?: string;
+      }>;
+      includes?: {
+        users?: Array<{
+          id: string;
+          username: string;
+          name?: string;
+          verified?: boolean;
+          public_metrics?: { followers_count?: number };
+        }>;
+      };
+    };
+
+    const userByAuthorId = new Map((json.includes?.users ?? []).map((u) => [u.id, u]));
+
+    return (json.data ?? []).map((post) => {
+      const author = post.author_id ? userByAuthorId.get(post.author_id) : undefined;
+      return {
+        id: post.id,
+        text: post.text,
+        authorId: post.author_id ?? null,
+        authorHandle: author?.username ?? null,
+        authorName: author?.name ?? null,
+        authorFollowerCount: author?.public_metrics?.followers_count ?? null,
+        authorVerified: author?.verified ?? null,
+        createdAt: post.created_at ? new Date(post.created_at) : null,
+        publicMetrics: post.public_metrics ?? null,
+        lang: post.lang ?? null,
+      };
+    });
   }
 }
 

@@ -17,6 +17,18 @@ import { CampaignFactory, type AssetStage } from "../src/content/campaignFactory
 import { ContentQualityGate } from "../src/content/contentQualityGate.js";
 import { BrandConstitution } from "../src/knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../src/knowledge/supabaseRepositories.js";
+import {
+  ProspectingActionError,
+  draftProspectingCandidateReply,
+  listProspectingHistory,
+  listProspectingQueue,
+  markProspectingAlreadyHandled,
+  markProspectingNotRelevant,
+  markProspectingOpened,
+  markProspectingReplied,
+  markProspectingSkipped,
+  toProspectingJson,
+} from "../src/prospecting/prospectingHandlers.js";
 
 /**
  * `?resource=inbound` handles the Inbound Engagement Queue -- a
@@ -91,6 +103,81 @@ async function handleInbound(req: VercelRequest, res: VercelResponse): Promise<v
 }
 
 /**
+ * `?resource=prospecting` handles the Prospecting queue -- proactive
+ * discovery of OTHER people's public X posts, distinct from both
+ * `inbound` (people who spoke TO us) and the default approvals resource
+ * (drafted campaign posts awaiting a stage decision). Folded in here for
+ * the same reason `inbound` is: Vercel Hobby's 12-function cap, already
+ * at capacity (confirmed via `ls backend/api/*.ts` before adding this).
+ * See docs/PROSPECTING.md.
+ */
+async function handleProspecting(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const client = getServiceClient();
+
+  if (req.method === "GET") {
+    try {
+      const items = req.query.history === "1" ? await listProspectingHistory(client) : await listProspectingQueue(client);
+      res.status(200).json({ items: items.map(toProspectingJson) });
+    } catch (err) {
+      res.status(500).json({ error: errorMessage(err) });
+    }
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const body = req.body as
+      | { action?: string; id?: string; finalReply?: string; mentionsFillbook?: boolean; usedLink?: boolean; reason?: string }
+      | undefined;
+    const action = body?.action;
+    const id = body?.id;
+    if (!id) {
+      res.status(400).json({ error: "Body must include { id: string }" });
+      return;
+    }
+
+    switch (action) {
+      case "draft":
+        res.status(200).json(toProspectingJson(await draftProspectingCandidateReply(client, id)));
+        return;
+      case "open":
+        await markProspectingOpened(client, id);
+        res.status(200).json({ id, opened: true });
+        return;
+      case "mark-replied": {
+        const updated = await markProspectingReplied(client, id, body?.finalReply, body?.mentionsFillbook, body?.usedLink);
+        res.status(200).json(toProspectingJson(updated));
+        return;
+      }
+      case "skip":
+        await markProspectingSkipped(client, id, body?.reason);
+        res.status(200).json({ id, status: "skipped" });
+        return;
+      case "not-relevant":
+        await markProspectingNotRelevant(client, id);
+        res.status(200).json({ id, status: "not_relevant" });
+        return;
+      case "already-handled":
+        await markProspectingAlreadyHandled(client, id);
+        res.status(200).json({ id, status: "already_handled" });
+        return;
+      default:
+        res.status(400).json({ error: "action must be one of: draft, open, mark-replied, skip, not-relevant, already-handled" });
+    }
+  } catch (err) {
+    if (err instanceof ProspectingActionError) {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+/**
  * Wires CampaignFactory.handOffToOwner() -- built, tested, and never
  * called from any route until now -- to a real action. EXTERNAL_DRAFT
  * only ("opened the platform's own composer / staged the file for the
@@ -143,6 +230,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res)) return;
   if (req.query.resource === "inbound") {
     await handleInbound(req, res);
+    return;
+  }
+  if (req.query.resource === "prospecting") {
+    await handleProspecting(req, res);
     return;
   }
   const client = getServiceClient();
