@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
@@ -12,6 +13,10 @@ import {
   runBacklogRecovery,
   summarizeInbound,
 } from "../src/inbound/inboundHandlers.js";
+import { CampaignFactory, type AssetStage } from "../src/content/campaignFactory.js";
+import { ContentQualityGate } from "../src/content/contentQualityGate.js";
+import { BrandConstitution } from "../src/knowledge/brandConstitution.js";
+import { SupabaseBrandConstitutionRepository } from "../src/knowledge/supabaseRepositories.js";
 
 /**
  * `?resource=inbound` handles the Inbound Engagement Queue -- a
@@ -86,6 +91,36 @@ async function handleInbound(req: VercelRequest, res: VercelResponse): Promise<v
 }
 
 /**
+ * Wires CampaignFactory.handOffToOwner() -- built, tested, and never
+ * called from any route until now -- to a real action. EXTERNAL_DRAFT
+ * only ("opened the platform's own composer / staged the file for the
+ * owner"); there is no code path here or in CampaignFactory that can
+ * reach EXTERNAL_WRITE. Requires the asset to actually be at
+ * 'ready_for_owner' (handOffToOwner throws otherwise) and persists the
+ * resulting 'handed_off' stage -- CampaignFactory itself does no I/O.
+ */
+async function handOffAsset(client: SupabaseClient, campaignAssetId: string): Promise<{ campaignAssetId: string; stage: string }> {
+  const { data: asset, error: assetError } = await client
+    .from("campaign_assets")
+    .select("stage, platform")
+    .eq("id", campaignAssetId)
+    .single();
+  if (assetError) throw assetError;
+
+  const brandConstitution = new BrandConstitution(new SupabaseBrandConstitutionRepository(client));
+  const factory = new CampaignFactory(new ContentQualityGate(brandConstitution));
+  const newStage = await factory.handOffToOwner(asset.stage as AssetStage, asset.platform as string, campaignAssetId);
+
+  const { error: updateError } = await client
+    .from("campaign_assets")
+    .update({ stage: newStage })
+    .eq("id", campaignAssetId);
+  if (updateError) throw updateError;
+
+  return { campaignAssetId, stage: newStage };
+}
+
+/**
  * GET: assembles ApprovalAsset-shaped rows (matching the Android app's
  * data model) from campaign_assets at 'ready_for_owner' whose campaign is
  * still 'in_review' -- i.e. AI-reviewed and genuinely still awaiting a
@@ -117,8 +152,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const body = req.body as { campaignAssetId?: string; action?: string; decidedBy?: string } | undefined;
       const campaignAssetId = body?.campaignAssetId;
       const action = body?.action;
+
+      if (action === "hand-off") {
+        if (!campaignAssetId) {
+          res.status(400).json({ error: "Body must include { campaignAssetId: string }" });
+          return;
+        }
+        const result = await handOffAsset(client, campaignAssetId);
+        res.status(200).json(result);
+        return;
+      }
+
       if (!campaignAssetId || (action !== "approve" && action !== "reject")) {
-        res.status(400).json({ error: "Body must be { campaignAssetId: string, action: 'approve' | 'reject' }" });
+        res.status(400).json({ error: "Body must be { campaignAssetId: string, action: 'approve' | 'reject' | 'hand-off' }" });
         return;
       }
 

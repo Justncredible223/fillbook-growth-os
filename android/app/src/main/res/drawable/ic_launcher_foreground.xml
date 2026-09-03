@@ -3,15 +3,22 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Ascending bars: the same "growth" language as fillbookhq.com's own
-         mark (rounded square, cyan, ascending bars) but in Growth OS's own
-         mint palette, so the two read as siblings, not a copy. -->
-    <path android:fillColor="#1F5C46" android:pathData="M27,64 L41,64 L41,82 L27,82 Z" />
-    <path android:fillColor="#39E29D" android:pathData="M47,50 L61,50 L61,82 L47,82 Z" />
-    <path android:fillColor="#39E29D" android:pathData="M67,36 L81,36 L81,82 L67,82 Z" />
-    <!-- A short upward trend line plus arrowhead above the bars: the one
-         clear Growth OS addition versus Fillbook's static chart, motion
-         rather than a snapshot. -->
-    <path android:fillColor="#7CF2C0" android:pathData="M29,54 L51,32 L45,26 L23,48 Z" />
-    <path android:fillColor="#7CF2C0" android:pathData="M56,21 L54,33 L44,23 Z" />
+    <!-- Growth OS's own mark, not Fillbook's: the ring gauge motif from
+         Radar's ScoreBadge (the app's real visual signature) in the
+         actual brand cyan, on the app's own dark background, a distinct
+         silhouette from Fillbook's flat cyan square with bars logo so the
+         two are never confused on a home screen, while still reading as
+         the same product family (same cyan, same growth progress idea). -->
+    <path
+        android:pathData="M54,26 A28,28 0 1,1 26,54"
+        android:strokeColor="#0891B2"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M54,26 A28,28 0 0,1 72,33"
+        android:strokeColor="#22B8DC"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
 </vector>

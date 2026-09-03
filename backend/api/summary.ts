@@ -51,7 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const autoDraftRunRepo = new SupabaseAutoDraftRunRepository(client);
 
-    const [signalsToday, openOpportunities, readyAssetsAwaitingDecision, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftSpendUsd] =
+    const [signalsToday, openOpportunities, readyAssetsAwaitingDecision, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftSpendUsd, xAssetsToday] =
       await Promise.all([
         client.from("signals").select("id", { count: "exact", head: true }).gte("observed_at", startOfToday.toISOString()),
         client.from("opportunities").select("id", { count: "exact", head: true }).eq("status", "open"),
@@ -74,6 +74,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         client.from("cost_events").select("cost_usd"),
         autoDraftRunRepo.getLastRun(),
         autoDraftRunRepo.getMonthSpendUsd(yearMonth),
+        // Today's X Post: real candidates only -- an X-platform asset
+        // actually created today, at a stage the owner can act on or has
+        // already acted on. Never assumes Auto-Draft targeted X; this is
+        // independent of which pipeline produced it.
+        client
+          .from("campaign_assets")
+          .select("id, stage, campaign_id, campaigns!inner(status)")
+          .eq("platform", "x")
+          .gte("created_at", startOfToday.toISOString())
+          .in("stage", ["ready_for_owner", "handed_off"])
+          .order("created_at", { ascending: false }),
       ]);
 
     const countBy = (rows: Array<Record<string, string>> | null, key: string): Record<string, number> => {
@@ -86,7 +97,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     const totalCostUsd = (costRows.data ?? []).reduce((sum: number, r: { cost_usd: number }) => sum + Number(r.cost_usd), 0);
 
+    // A handed-off asset (owner already opened X with it) outranks a
+    // still-pending ready one -- if both exist, the story is "already
+    // handled today," not "still waiting."
+    type XAssetRow = { id: string; stage: string; campaign_id: string; campaigns: { status: string } | { status: string }[] };
+    const xCandidates = (xAssetsToday.data ?? []) as XAssetRow[];
+    const statusOf = (row: XAssetRow): string | undefined =>
+      Array.isArray(row.campaigns) ? row.campaigns[0]?.status : row.campaigns?.status;
+    const handedOff = xCandidates.find((a) => a.stage === "handed_off");
+    const readyForOwner = xCandidates.find((a) => a.stage === "ready_for_owner" && statusOf(a) === "in_review");
+    const chosenXAsset = handedOff ?? readyForOwner ?? null;
+
+    let todayXPost: { state: "empty" | "ready" | "handed_off"; campaignAssetId?: string; previewText?: string } = { state: "empty" };
+    if (chosenXAsset?.stage === "handed_off") {
+      todayXPost = { state: "handed_off", campaignAssetId: chosenXAsset.id };
+    } else if (chosenXAsset) {
+      const { data: latestVersion } = await client
+        .from("content_versions")
+        .select("body")
+        .eq("campaign_asset_id", chosenXAsset.id)
+        .order("version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      todayXPost = { state: "ready", campaignAssetId: chosenXAsset.id, previewText: latestVersion?.body ?? "" };
+    }
+
     res.status(200).json({
+      todayXPost,
       signalsAnalyzedToday: signalsToday.count ?? 0,
       opportunitiesFound: openOpportunities.count ?? 0,
       assetsReady: readyAssetsAwaitingDecision.count ?? 0,

@@ -3,6 +3,7 @@ package com.fillbook.growthos.ui.screens
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -17,14 +18,14 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Forum
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
@@ -42,7 +43,6 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.InboundEngagement
 import com.fillbook.growthos.data.InboundSummary
-import com.fillbook.growthos.ui.components.CopyButton
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
@@ -55,6 +55,7 @@ import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SecondaryButton
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.StatusChip
+import com.fillbook.growthos.ui.components.copyToClipboard
 import com.fillbook.growthos.ui.components.inboundPriorityColor
 import com.fillbook.growthos.ui.components.inboundPriorityLabel
 import com.fillbook.growthos.ui.components.inboundStatusLabel
@@ -98,6 +99,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
     var statusFilter by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     suspend fun refresh() {
         try {
@@ -111,6 +113,26 @@ fun InboundScreen(repo: GrowthOsRepository) {
     }
 
     LaunchedEffect(Unit) { refresh() }
+
+    // One combined action instead of a separate Copy button and Open
+    // icon -- the owner still does the actual posting, this just removes
+    // a redundant tap. Never touches status: opening X must never imply
+    // a reply was sent, so "Mark responded" stays its own explicit action.
+    fun copyAndOpen(item: InboundEngagement) {
+        val draft = item.draftResponse
+        if (draft != null) copyToClipboard(context, "Reply to @${item.authorHandle ?: "unknown"}", draft)
+        val sourceReference = item.sourceReference
+        if (sourceReference != null) {
+            context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(sourceReference)))
+        }
+        val message = when {
+            draft != null && sourceReference != null -> "Copied — paste in X"
+            draft != null -> "Copied"
+            sourceReference != null -> "Opened in X"
+            else -> null
+        }
+        if (message != null) scope.launch { snackbarHostState.showSnackbar(message) }
+    }
 
     fun runAction(id: String, action: suspend () -> Unit) {
         scope.launch {
@@ -126,6 +148,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
         }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScreenHeader(
             "Inbound",
@@ -227,17 +250,15 @@ fun InboundScreen(repo: GrowthOsRepository) {
                                 onMarkResponded = { runAction(item.id) { repo.markInboundResponded(item.id) } },
                                 onFollowUp = { runAction(item.id) { repo.markInboundFollowUp(item.id) } },
                                 onClose = { runAction(item.id) { repo.closeInbound(item.id) } },
-                                onOpen = {
-                                    item.sourceReference?.let { url ->
-                                        context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
-                                    }
-                                },
+                                onCopyAndOpen = { copyAndOpen(item) },
                             )
                         }
                     }
                 }
             }
         }
+    }
+    SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 
@@ -249,7 +270,7 @@ private fun InboundCard(
     onMarkResponded: () -> Unit,
     onFollowUp: () -> Unit,
     onClose: () -> Unit,
-    onOpen: () -> Unit,
+    onCopyAndOpen: () -> Unit,
 ) {
     GrowthCard(accentBar = inboundPriorityColor(item.priority)) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -284,8 +305,6 @@ private fun InboundCard(
                 Spacer(Modifier.height(2.dp))
                 Text(draft, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
             }
-            Spacer(Modifier.height(8.dp))
-            CopyButton(text = draft, label = "Reply to @${item.authorHandle ?: "unknown"}", modifier = Modifier.fillMaxWidth())
         }
 
         Spacer(Modifier.height(6.dp))
@@ -297,15 +316,15 @@ private fun InboundCard(
 
         val isActive = item.status !in setOf("responded", "closed")
         if (isActive) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                if (item.draftResponse == null) {
-                    PrimaryButton(text = "Draft response", onClick = onDraft, enabled = !busy, busy = busy, modifier = Modifier.weight(1f))
-                } else {
-                    PrimaryButton(text = "Mark responded", onClick = onMarkResponded, enabled = !busy, busy = busy, modifier = Modifier.weight(1f))
-                }
-                if (item.sourceReference != null) {
-                    IconButtonSmall(onClick = onOpen, icon = Icons.Filled.OpenInNew, contentDescription = "Open on ${platformDisplayName(item.platform)}")
-                }
+            if (item.draftResponse == null) {
+                PrimaryButton(text = "Draft response", onClick = onDraft, enabled = !busy, busy = busy, modifier = Modifier.fillMaxWidth())
+            } else {
+                PrimaryButton(
+                    text = if (item.sourceReference != null) "Copy + Open X" else "Copy reply",
+                    onClick = onCopyAndOpen,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
@@ -314,17 +333,11 @@ private fun InboundCard(
                 TextButton(onClick = onClose, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Close") }
             }
         } else if (item.sourceReference != null) {
-            SecondaryButton(text = "Open on ${platformDisplayName(item.platform)}", onClick = onOpen, modifier = Modifier.fillMaxWidth())
+            SecondaryButton(text = "Open on ${platformDisplayName(item.platform)}", onClick = onCopyAndOpen, modifier = Modifier.fillMaxWidth())
         }
     }
 }
 
-@Composable
-private fun IconButtonSmall(onClick: () -> Unit, icon: androidx.compose.ui.graphics.vector.ImageVector, contentDescription: String) {
-    OutlinedButton(onClick = onClick, contentPadding = PaddingValues(12.dp)) {
-        Icon(icon, contentDescription = contentDescription, modifier = Modifier.height(18.dp))
-    }
-}
 
 @Composable
 private fun InboundFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {

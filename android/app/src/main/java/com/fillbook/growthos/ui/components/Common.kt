@@ -40,6 +40,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.HealthStatus
@@ -276,7 +279,17 @@ fun relativeTime(isoTimestamp: String?): String? {
 fun ScreenHeader(title: String, subtitle: String, modifier: Modifier = Modifier, kicker: String? = null) {
     Column(modifier = modifier.padding(horizontal = 20.dp, vertical = 22.dp)) {
         if (kicker != null) {
-            Text(kicker.uppercase(), style = com.fillbook.growthos.ui.theme.OverlineStyle, color = com.fillbook.growthos.ui.theme.Accent)
+            // A live region here (not the whole screen) means TalkBack
+            // announces "N items" once when loading finishes -- because
+            // the kicker only exists once there's a real count, this
+            // fires on that one meaningful transition, not on every
+            // recomposition, so it never turns into repeated noise.
+            Text(
+                kicker.uppercase(),
+                style = com.fillbook.growthos.ui.theme.OverlineStyle,
+                color = com.fillbook.growthos.ui.theme.Accent,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
             Spacer(Modifier.height(6.dp))
         }
         Text(title, style = com.fillbook.growthos.ui.theme.AppTypography.displayLarge, color = com.fillbook.growthos.ui.theme.TextPrimary)

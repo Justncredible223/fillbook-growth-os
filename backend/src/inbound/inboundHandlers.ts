@@ -107,7 +107,7 @@ export async function summarizeInbound(client: SupabaseClient): Promise<InboundS
   return computeInboundSummary(active);
 }
 
-async function loadGroundingContext(client: SupabaseClient): Promise<{ brandRulesSummary: string; verifiedKnowledgeSummary: string }> {
+export async function loadGroundingContext(client: SupabaseClient): Promise<{ brandRulesSummary: string; verifiedKnowledgeSummary: string }> {
   const brandConstitution = new BrandConstitution(new SupabaseBrandConstitutionRepository(client));
   const activeRules = await brandConstitution.getActiveRules();
   const brandRulesSummary = activeRules.map((r) => `[${r.ruleType}] ${r.content}`).join("\n");

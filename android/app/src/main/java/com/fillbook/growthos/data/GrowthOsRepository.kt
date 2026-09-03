@@ -19,6 +19,13 @@ interface GrowthOsRepository {
      * Costs real LLM tokens (one draft + up to nine review calls).
      */
     suspend fun runCampaignForOpportunity(opportunityId: String): CampaignRunResult
+    /**
+     * The lightweight path for a single-post engagement opportunity --
+     * one real LLM call, never the multi-agent campaign pipeline. Nothing
+     * is persisted server-side; the draft is only ever returned for the
+     * owner to review before they copy it themselves.
+     */
+    suspend fun draftOpportunityReply(opportunityId: String): String
     suspend fun getApprovals(): List<ApprovalAsset>
     suspend fun getCreators(): List<Creator>
     suspend fun getCampaigns(): List<Campaign>
@@ -29,6 +36,8 @@ interface GrowthOsRepository {
      * app displays. The owner still does the actual posting themselves.
      */
     suspend fun decideApproval(campaignAssetId: String, approve: Boolean)
+    /** Wires CampaignFactory.handOffToOwner() -- EXTERNAL_DRAFT only, "opened the composer," never a publish. */
+    suspend fun handOffAsset(campaignAssetId: String): HandOffResult
 
     /** Backs the Settings/System "Pause System" control -- actually stops auto-draft and manual campaign runs server-side, not just a display flag. */
     suspend fun setPaused(paused: Boolean)
@@ -76,6 +85,11 @@ class FakeGrowthOsRepository : GrowthOsRepository {
                 monthBudgetUsd = 5.0,
             ),
         ),
+        todayXPost = TodayXPost(
+            state = TodayXPostState.READY,
+            campaignAssetId = "asset-fake-1",
+            previewText = "Revenge trading doesn't show up as \"revenge\" in your P&L -- it shows up as funded-account breach.",
+        ),
     )
 
     override suspend fun getHealth() = listOf(
@@ -97,6 +111,15 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             rationale = "High audience relevance (prop-firm traders), strong Fillbook fit (drawdown tracking is a real feature), no recent coverage on this exact angle.",
             channels = listOf("X", "YouTube Shorts"),
         ),
+        Opportunity(
+            id = "opp-2",
+            title = "x_mention: how do you handle a trailing drawdown reset on a funded account?",
+            score = 62.0,
+            urgency = Urgency.NORMAL,
+            rationale = "A single real X mention worth a direct reply, not a full campaign.",
+            channels = listOf("X"),
+            sourceUrl = "https://x.com/i/web/status/999",
+        ),
     )
 
     override suspend fun runCampaignForOpportunity(opportunityId: String) = CampaignRunResult(
@@ -104,6 +127,9 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         blockReasons = emptyList(),
         costUsd = 0.03,
     )
+
+    override suspend fun draftOpportunityReply(opportunityId: String) =
+        "Depends on the firm -- most reset trailing drawdown at end of day, but a few use a static floor instead. Worth checking your specific rulebook."
 
     override suspend fun getApprovals() = emptyList<ApprovalAsset>()
 
@@ -157,6 +183,8 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     override suspend fun setPaused(paused: Boolean) {
         // No backend to call in fake mode -- no-op.
     }
+
+    override suspend fun handOffAsset(campaignAssetId: String) = HandOffResult(campaignAssetId, "handed_off")
 
     private val inboundItems = mutableListOf(
         InboundEngagement(

@@ -170,7 +170,7 @@ private fun CreatorCard(creator: Creator) {
     GrowthCard(accentBar = accentBar) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             creator.readinessScore?.let { score ->
-                ScoreBadge(score = score * 10, label = "$score/10")
+                ScoreBadge(score = score * 10, label = "$score/10", semanticLabel = "Creator readiness $score out of 10")
                 Spacer(Modifier.width(12.dp))
             }
             Column(modifier = Modifier.weight(1f)) {

@@ -27,6 +27,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.Campaign
 import com.fillbook.growthos.data.CampaignAsset
@@ -171,12 +174,18 @@ private fun CampaignCard(campaign: Campaign) {
 private fun CampaignStageTrail(campaign: Campaign) {
     val furthest = campaign.assets.maxOfOrNull { stageRank(it.stage) } ?: 0
     val steps = listOf("Discovered", "Drafted", "Reviewed", "Ready")
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.clearAndSetSemantics {
+            contentDescription = "Progress: ${steps[furthest.coerceIn(0, steps.lastIndex)]}"
+        },
+    ) {
         steps.forEachIndexed { index, label ->
             val reached = index <= furthest
             Text(
-                label,
+                if (reached) "✓ $label" else label,
                 style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (reached) FontWeight.Bold else FontWeight.Normal,
                 color = if (reached) Success else TextTertiary,
             )
             if (index != steps.lastIndex) {

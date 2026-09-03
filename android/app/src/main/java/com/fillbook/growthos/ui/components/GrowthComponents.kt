@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -51,6 +52,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
@@ -210,12 +218,19 @@ fun QuickActionChip(icon: ImageVector, label: String, onClick: () -> Unit, modif
  */
 enum class StatusTone { READY, ACTIVE, WAITING, BLOCKED, SKIPPED, FAILED, HEALTHY, NEW, NEUTRAL }
 
+/**
+ * SKIPPED/NEUTRAL use TextSecondary, not TextTertiary -- these are real
+ * status words ("Not connected", "Closed"), and TextTertiary's ~3.3:1
+ * contrast against Background fails WCAG AA for text at this size.
+ * TextTertiary itself is untouched for genuinely decorative metadata
+ * (timestamps, helper captions) elsewhere in the app.
+ */
 fun statusToneColor(tone: StatusTone): Color = when (tone) {
     StatusTone.READY, StatusTone.HEALTHY, StatusTone.ACTIVE -> Success
     StatusTone.NEW -> Accent
     StatusTone.WAITING -> Warning
     StatusTone.BLOCKED, StatusTone.FAILED -> Danger
-    StatusTone.SKIPPED, StatusTone.NEUTRAL -> TextTertiary
+    StatusTone.SKIPPED, StatusTone.NEUTRAL -> TextSecondary
 }
 
 /** The bold filled-pill treatment -- reserved for the few callouts that should shout (TOP PICK, AUTO-DRAFT, NEEDS RESPONSE). */
@@ -300,14 +315,23 @@ fun MetricTile(
  * band color, label="$readiness/10" for the correct text).
  */
 @Composable
-fun ScoreBadge(score: Int, modifier: Modifier = Modifier, label: String = score.toString(), colorOverride: Color? = null) {
+fun ScoreBadge(
+    score: Int,
+    modifier: Modifier = Modifier,
+    label: String = score.toString(),
+    colorOverride: Color? = null,
+    semanticLabel: String = "Score $label",
+) {
     val color = colorOverride ?: when {
         score >= 70 -> Success
         score >= 45 -> Warning
         else -> TextTertiary
     }
     val fraction = (score / 100f).coerceIn(0f, 1f)
-    Box(modifier = modifier.size(50.dp), contentAlignment = Alignment.Center) {
+    Box(
+        modifier = modifier.size(50.dp).clearAndSetSemantics { contentDescription = semanticLabel },
+        contentAlignment = Alignment.Center,
+    ) {
         Canvas(modifier = Modifier.size(50.dp)) {
             val stroke = 4.dp.toPx()
             drawArc(
@@ -341,7 +365,7 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
         enabled = enabled && !busy,
         colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Background, disabledContainerColor = Accent.copy(alpha = 0.4f)),
         shape = RoundedCornerShape(14.dp),
-        modifier = modifier,
+        modifier = modifier.heightIn(min = 48.dp),
     ) {
         if (busy) CircularProgressIndicator(modifier = Modifier.height(18.dp), color = Background, strokeWidth = 2.dp)
         else Text(text, style = MaterialTheme.typography.labelLarge)
@@ -357,14 +381,14 @@ fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modi
         colors = ButtonDefaults.outlinedButtonColors(contentColor = contentColor),
         border = androidx.compose.foundation.BorderStroke(1.dp, BorderStrong),
         shape = RoundedCornerShape(14.dp),
-        modifier = modifier,
+        modifier = modifier.heightIn(min = 48.dp),
     ) { Text(text, style = MaterialTheme.typography.labelLarge) }
 }
 
 /** Lowest-emphasis action -- plain text, for a card's tertiary/optional action (copy & share, dismiss). */
 @Composable
 fun GhostButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, color: Color = Accent, enabled: Boolean = true) {
-    TextButton(onClick = onClick, enabled = enabled, modifier = modifier) {
+    TextButton(onClick = onClick, enabled = enabled, modifier = modifier.heightIn(min = 48.dp)) {
         Text(text, style = MaterialTheme.typography.labelLarge, color = if (enabled) color else TextTertiary)
     }
 }
@@ -469,6 +493,27 @@ fun BreakdownBar(label: String, count: Int, maxCount: Int, modifier: Modifier = 
 private val SurfaceVariantColor get() = com.fillbook.growthos.ui.theme.SurfaceVariant
 
 /**
+ * Compose has no first-party "prefers reduced motion" signal the way
+ * some other platforms do -- this reads the same system setting Android's
+ * own Developer Options "Remove animations" toggle writes
+ * (Settings.Global.ANIMATOR_DURATION_SCALE = 0), which Compose's own
+ * animation APIs don't automatically respect on their own clock. Read
+ * once per composition, not observed live, since this setting doesn't
+ * change while the app is running.
+ */
+@Composable
+private fun rememberReducedMotionEnabled(): Boolean {
+    val context = LocalContext.current
+    return remember {
+        android.provider.Settings.Global.getFloat(
+            context.contentResolver,
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE,
+            1f,
+        ) == 0f
+    }
+}
+
+/**
  * Shimmering card-shaped placeholders for the load window on a list
  * screen -- reads as "content is coming" instead of a generic spinner,
  * and roughly previews the shape (title line + two body lines) of what's
@@ -476,13 +521,18 @@ private val SurfaceVariantColor get() = com.fillbook.growthos.ui.theme.SurfaceVa
  */
 @Composable
 fun SkeletonListLoading(modifier: Modifier = Modifier, count: Int = 3, horizontalPadding: androidx.compose.ui.unit.Dp = 20.dp) {
-    val transition = rememberInfiniteTransition(label = "skeleton")
-    val alpha by transition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 0.7f,
-        animationSpec = infiniteRepeatable(animation = tween(700), repeatMode = RepeatMode.Reverse),
-        label = "skeletonAlpha",
-    )
+    val alpha: Float = if (rememberReducedMotionEnabled()) {
+        0.5f
+    } else {
+        val transition = rememberInfiniteTransition(label = "skeleton")
+        val animatedAlpha by transition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 0.7f,
+            animationSpec = infiniteRepeatable(animation = tween(700), repeatMode = RepeatMode.Reverse),
+            label = "skeletonAlpha",
+        )
+        animatedAlpha
+    }
     Column(
         modifier = modifier.fillMaxWidth().padding(horizontal = horizontalPadding, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -532,6 +582,9 @@ fun ExpandableText(
         color = color,
         maxLines = if (expanded) Int.MAX_VALUE else collapsedMaxLines,
         overflow = TextOverflow.Ellipsis,
-        modifier = modifier.animateContentSize().clickable { expanded = !expanded },
+        modifier = modifier
+            .animateContentSize()
+            .clickable { expanded = !expanded }
+            .semantics { stateDescription = if (expanded) "Expanded" else "Collapsed" },
     )
 }

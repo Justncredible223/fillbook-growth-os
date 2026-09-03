@@ -11,7 +11,20 @@ data class Opportunity(
     val urgency: Urgency,
     val rationale: String,
     val channels: List<String>,
-)
+    /**
+     * Only present when this opportunity traces back to exactly one real
+     * X mention (see SupabaseOpportunityRepository.attachSourceUrls on
+     * the backend) -- its presence, not any title/label heuristic, is
+     * what marks this as an "engagement" opportunity (reply-worthy)
+     * rather than a "campaign/content" opportunity.
+     */
+    val sourceUrl: String? = null,
+) {
+    val isEngagementOpportunity: Boolean get() = sourceUrl != null
+}
+
+/** Result of handing a ready campaign asset off to the owner (opened the platform composer) -- never a publish confirmation. */
+data class HandOffResult(val campaignAssetId: String, val stage: String)
 
 enum class AssetStage {
     DRAFT, FINAL_DRAFT, READY_FOR_OWNER, HANDED_OFF
@@ -63,6 +76,22 @@ data class HomeSummary(
     val pendingReview: Int,
     val systemPaused: Boolean,
     val analytics: AnalyticsBreakdown,
+    val todayXPost: TodayXPost = TodayXPost(TodayXPostState.EMPTY, null, null),
+)
+
+enum class TodayXPostState { EMPTY, READY, HANDED_OFF }
+
+/**
+ * Never fabricated: EMPTY means no real X asset was created today, full
+ * stop -- Home must not invent a placeholder. READY/HANDED_OFF only ever
+ * reflect a genuine campaign_assets row (see api/summary.ts). HANDED_OFF
+ * means the owner already opened X with this draft -- never "published,"
+ * this app has no way to confirm an actual post happened.
+ */
+data class TodayXPost(
+    val state: TodayXPostState,
+    val campaignAssetId: String?,
+    val previewText: String?,
 )
 
 enum class CreatorCategory { TIER_B, RESEARCH_NEXT, REJECTED }

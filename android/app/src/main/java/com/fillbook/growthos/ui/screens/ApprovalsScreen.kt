@@ -227,11 +227,15 @@ private fun ApprovalCard(
     GrowthCard(accentBar = if (total > 0) (if (flagged) Warning else Success) else null) {
         Row(verticalAlignment = Alignment.Top) {
             if (total > 0) {
-                ScoreBadge(score = (asset.reviewPassCount * 100) / total, colorOverride = if (flagged) Warning else null)
+                ScoreBadge(
+                    score = (asset.reviewPassCount * 100) / total,
+                    colorOverride = if (flagged) Warning else null,
+                    semanticLabel = "Review score ${(asset.reviewPassCount * 100) / total}, ${if (flagged) "flagged" else "passed review"}",
+                )
                 Spacer(Modifier.width(12.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(asset.campaignTitle, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(asset.campaignTitle, style = MaterialTheme.typography.titleLarge, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     IconPill(platformDisplayName(asset.platform), platformIcon(asset.platform), TextSecondary)

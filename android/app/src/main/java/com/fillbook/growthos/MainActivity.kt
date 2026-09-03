@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -54,7 +55,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -286,35 +295,62 @@ private fun GrowthBottomNav(
                 .fillMaxWidth()
                 .background(SurfaceElevated)
                 .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = 8.dp, vertical = 10.dp),
+                .padding(horizontal = 4.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
             items.forEach { destination ->
                 val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
-                NavItem(destination.icon, destination.label, selected) { onSelect(destination.route) }
+                NavItem(destination.icon, destination.label, selected, Modifier.weight(1f)) { onSelect(destination.route) }
             }
-            NavItem(Icons.Filled.MoreHoriz, "More", onMoreScreen, onMore)
+            NavItem(Icons.Filled.MoreHoriz, "More", onMoreScreen, Modifier.weight(1f), onMore)
         }
     }
 }
 
+/**
+ * Every semantic a11y needs is set explicitly rather than relying on
+ * incidental merging: `role = Tab` + `selected` so TalkBack announces
+ * "Home, tab, selected", `mergeDescendants` so the label text (not a
+ * duplicate icon description) becomes the one accessible name, and the
+ * icon itself goes decorative (contentDescription = null) since its
+ * meaning is now carried by the merged label. `heightIn(min = 48.dp)`
+ * guarantees a real touch target even though the visual chrome (icon +
+ * small label) is shorter than that on its own.
+ */
 @Composable
-private fun NavItem(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
+private fun NavItem(icon: ImageVector, label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val color = if (selected) Accent else TextTertiary
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick).padding(horizontal = 4.dp),
+        modifier = modifier
+            .heightIn(min = 48.dp)
+            .clickable(onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                this.role = Role.Tab
+                this.selected = selected
+                contentDescription = label
+            }
+            .padding(horizontal = 2.dp),
     ) {
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(14.dp))
                 .background(if (selected) Accent.copy(alpha = 0.16f) else androidx.compose.ui.graphics.Color.Transparent)
-                .padding(horizontal = 18.dp, vertical = 6.dp),
+                .padding(horizontal = 14.dp, vertical = 6.dp),
         ) {
-            Icon(icon, contentDescription = label, tint = color, modifier = Modifier.size(22.dp))
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
         }
         Spacer(Modifier.height(3.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = color)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, lineHeight = 12.sp),
+            color = color,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            softWrap = false,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

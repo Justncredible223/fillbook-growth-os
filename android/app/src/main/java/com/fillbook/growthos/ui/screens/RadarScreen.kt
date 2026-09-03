@@ -1,7 +1,9 @@
 package com.fillbook.growthos.ui.screens
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,8 +18,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,6 +35,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.Opportunity
@@ -45,6 +53,7 @@ import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SearchField
+import com.fillbook.growthos.ui.components.copyToClipboard
 import com.fillbook.growthos.ui.components.explainOpportunity
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
@@ -69,7 +78,13 @@ fun RadarScreen(repo: GrowthOsRepository) {
     var pendingRun by remember { mutableStateOf<Opportunity?>(null) }
     var runningId by remember { mutableStateOf<String?>(null) }
     var runResultMessage by remember { mutableStateOf<String?>(null) }
+    var pendingReply by remember { mutableStateOf<Opportunity?>(null) }
+    var replyDraft by remember { mutableStateOf<String?>(null) }
+    var draftingReplyId by remember { mutableStateOf<String?>(null) }
+    var replyError by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     suspend fun refresh() {
         try {
@@ -102,11 +117,36 @@ fun RadarScreen(repo: GrowthOsRepository) {
         }
     }
 
+    fun startReply(opp: Opportunity) {
+        scope.launch {
+            draftingReplyId = opp.id
+            replyError = null
+            try {
+                replyDraft = repo.draftOpportunityReply(opp.id)
+                pendingReply = opp
+            } catch (e: Exception) {
+                replyError = "Couldn't draft a reply. Check your connection and try again."
+            }
+            draftingReplyId = null
+        }
+    }
+
+    fun copyAndOpenReply(opp: Opportunity, draft: String) {
+        copyToClipboard(context, "Reply to ${opp.title}", draft)
+        opp.sourceUrl?.let { url ->
+            context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+        }
+        pendingReply = null
+        replyDraft = null
+        scope.launch { snackbarHostState.showSnackbar("Copied — paste in X") }
+    }
+
     val filtered = remember(opportunities, query) {
         if (query.isBlank()) opportunities
         else opportunities.filter { it.title.contains(query, ignoreCase = true) || it.rationale.contains(query, ignoreCase = true) }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScreenHeader(
             "Radar",
@@ -114,18 +154,18 @@ fun RadarScreen(repo: GrowthOsRepository) {
             kicker = if (loaded && opportunities.isNotEmpty()) "${opportunities.size} open signal${if (opportunities.size == 1) "" else "s"}" else null,
         )
 
-        (errorMessage ?: runResultMessage)?.let { message ->
+        (errorMessage ?: replyError ?: runResultMessage)?.let { message ->
             Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
                     message,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (errorMessage != null) Danger else TextSecondary,
+                    color = if (errorMessage != null || replyError != null) Danger else TextSecondary,
                     modifier = Modifier.weight(1f),
                 )
                 if (errorMessage != null) {
                     TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
                 } else {
-                    TextButton(onClick = { runResultMessage = null }) { Text("Dismiss") }
+                    TextButton(onClick = { runResultMessage = null; replyError = null }) { Text("Dismiss") }
                 }
             }
         }
@@ -161,14 +201,18 @@ fun RadarScreen(repo: GrowthOsRepository) {
                             OpportunityCard(
                                 opp = opp,
                                 running = runningId == opp.id,
+                                draftingReply = draftingReplyId == opp.id,
                                 topRanked = opp.score == topScore,
                                 onRun = { pendingRun = opp },
+                                onReply = { startReply(opp) },
                             )
                         }
                     }
                 }
             }
         }
+    }
+    SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
     }
 
     pendingRun?.let { opp ->
@@ -186,6 +230,38 @@ fun RadarScreen(repo: GrowthOsRepository) {
             },
             dismissButton = {
                 TextButton(onClick = { pendingRun = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    pendingReply?.let { opp ->
+        val draft = replyDraft
+        AlertDialog(
+            onDismissRequest = { pendingReply = null; replyDraft = null },
+            title = { Text("Reply on X") },
+            text = {
+                Column {
+                    Text(
+                        "Review the draft below, then copy it and open the post -- posting is still up to you.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    if (draft != null) {
+                        Text(draft, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                    } else {
+                        CircularProgressIndicator(modifier = Modifier.height(18.dp))
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { draft?.let { copyAndOpenReply(opp, it) } },
+                    enabled = draft != null,
+                ) { Text("Copy + Open X") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingReply = null; replyDraft = null }) { Text("Cancel") }
             },
         )
     }
@@ -214,7 +290,14 @@ private fun splitTitle(title: String): Pair<String, String?> {
  * action so a long list doesn't turn into a stack of equally-loud buttons.
  */
 @Composable
-private fun OpportunityCard(opp: Opportunity, running: Boolean, topRanked: Boolean, onRun: () -> Unit) {
+private fun OpportunityCard(
+    opp: Opportunity,
+    running: Boolean,
+    draftingReply: Boolean,
+    topRanked: Boolean,
+    onRun: () -> Unit,
+    onReply: () -> Unit,
+) {
     val (headline, source) = splitTitle(opp.title)
     val band = scoreBand(opp.score.toInt())
     val bandColor = scoreBandColor(band)
@@ -223,12 +306,13 @@ private fun OpportunityCard(opp: Opportunity, running: Boolean, topRanked: Boole
 
     GrowthCard(accentBar = bandColor) {
         Row(verticalAlignment = Alignment.Top) {
-            ScoreBadge(score = opp.score.toInt())
+            ScoreBadge(score = opp.score.toInt(), semanticLabel = "Opportunity score ${opp.score.toInt()}, ${band.label}")
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Pill(band.label.uppercase(), bandColor)
                     if (topRanked) Pill("TOP PICK", Accent)
+                    if (opp.isEngagementOpportunity) Pill("ENGAGEMENT", TextSecondary)
                 }
                 Spacer(Modifier.height(6.dp))
                 Text(headline, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
@@ -247,7 +331,11 @@ private fun OpportunityCard(opp: Opportunity, running: Boolean, topRanked: Boole
 
             if (explanation.breakdown.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { showBreakdown = !showBreakdown }, contentPadding = PaddingValues(0.dp)) {
+                TextButton(
+                    onClick = { showBreakdown = !showBreakdown },
+                    contentPadding = PaddingValues(0.dp),
+                    modifier = Modifier.semantics { stateDescription = if (showBreakdown) "Expanded" else "Collapsed" },
+                ) {
                     Text(if (showBreakdown) "Hide score breakdown" else "View score breakdown", style = MaterialTheme.typography.labelMedium, color = Accent)
                 }
                 if (showBreakdown) {
@@ -268,7 +356,13 @@ private fun OpportunityCard(opp: Opportunity, running: Boolean, topRanked: Boole
 
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-            if (topRanked) {
+            if (opp.isEngagementOpportunity) {
+                if (topRanked) {
+                    PrimaryButton(text = "Reply on X", onClick = onReply, enabled = !draftingReply, busy = draftingReply)
+                } else {
+                    GhostButton(text = "Reply on X →", onClick = onReply, enabled = !draftingReply)
+                }
+            } else if (topRanked) {
                 PrimaryButton(text = "Build campaign", onClick = onRun, enabled = !running, busy = running)
             } else {
                 GhostButton(text = "Build campaign →", onClick = onRun, enabled = !running)

@@ -15,6 +15,17 @@ export interface Opportunity {
   status: OpportunityStatus;
   signalIds: string[];
   createdAt: Date;
+  /**
+   * The real X permalink, present only when this opportunity traces back
+   * to exactly one signal whose source is 'x_mention' -- see
+   * SupabaseOpportunityRepository.listOpen(). A multi-signal trend
+   * cluster has no single canonical post, so it's deliberately left
+   * undefined rather than picking one arbitrarily. Its presence is what
+   * the Android app uses to treat this as an "engagement" opportunity
+   * (reply-worthy) versus a "campaign/content" opportunity -- never
+   * inferred from title text.
+   */
+  sourceUrl?: string;
 }
 
 /** Inputs the scorer needs about a candidate opportunity's evidence. */

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import android.content.Intent
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Forum
@@ -23,8 +24,13 @@ import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Tag
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -37,20 +43,26 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.HealthItem
 import com.fillbook.growthos.data.HomeSummary
 import com.fillbook.growthos.data.InboundSummary
+import com.fillbook.growthos.data.TodayXPost
+import com.fillbook.growthos.data.TodayXPostState
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.HeroActionCard
 import com.fillbook.growthos.ui.components.InsetRow
 import com.fillbook.growthos.ui.components.MetricTile
 import com.fillbook.growthos.ui.components.QuickActionChip
+import com.fillbook.growthos.ui.components.QuietStatusLabel
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.SkeletonListLoading
+import com.fillbook.growthos.ui.components.StatusTone
 import com.fillbook.growthos.ui.components.autoDraftSkipReasonLabel
+import com.fillbook.growthos.ui.components.copyToClipboard
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Success
@@ -80,7 +92,11 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    var reviewingXPost by remember { mutableStateOf(false) }
+    var handingOff by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     suspend fun refresh() {
         try {
@@ -97,6 +113,24 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
 
     LaunchedEffect(Unit) { refresh() }
 
+    fun handOffXPost(assetId: String, previewText: String) {
+        scope.launch {
+            handingOff = true
+            try {
+                repo.handOffAsset(assetId)
+                copyToClipboard(context, "Today's X post", previewText)
+                context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://x.com/compose/post")))
+                reviewingXPost = false
+                refresh()
+                snackbarHostState.showSnackbar("Opened in X — posting is still up to you")
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar("Couldn't complete that -- check your connection and try again.")
+            }
+            handingOff = false
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
     PullToRefreshBox(
         isRefreshing = refreshing,
         onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
@@ -126,6 +160,8 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                 val issueCount = health.count { it.status.name == "DOWN" || it.status.name == "DEGRADED" }
 
                 item { Box20 { NextBestActionCard(s, inbound, onNavigate) } }
+
+                item { Box20 { TodayXPostCard(s.todayXPost, onReview = { reviewingXPost = true }) } }
 
                 item {
                     Box20 {
@@ -187,6 +223,40 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
             }
         }
     }
+    SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+
+    if (reviewingXPost) {
+        val post = summary?.todayXPost
+        AlertDialog(
+            onDismissRequest = { if (!handingOff) reviewingXPost = false },
+            title = { Text("Today's X Post") },
+            text = {
+                Column {
+                    Text(
+                        "Review the draft below, then copy it and open X -- posting is still up to you.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Text(post?.previewText.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val assetId = post?.campaignAssetId
+                        val text = post?.previewText
+                        if (assetId != null && text != null) handOffXPost(assetId, text)
+                    },
+                    enabled = !handingOff && post?.campaignAssetId != null,
+                ) { Text(if (handingOff) "Opening..." else "Copy + Open X") }
+            },
+            dismissButton = {
+                TextButton(onClick = { reviewingXPost = false }, enabled = !handingOff) { Text("Cancel") }
+            },
+        )
+    }
 }
 
 /** contentPadding was 20dp all around on the old flat LazyColumn; the masthead needs full-bleed control of its own padding now, so every other item opts into the same 20dp horizontal inset individually. */
@@ -247,6 +317,55 @@ private fun NextBestActionCard(summary: HomeSummary, inbound: InboundSummary?, o
         actionLabel = actionLabel,
         onClick = { onNavigate(route) },
     )
+}
+
+/**
+ * A separate, quieter card from the Next Best Action hero above it --
+ * NBA answers "what needs my attention right now" (interrupt-driven);
+ * this answers a different, routine question ("did I handle Fillbook's
+ * own X post today"), so it never competes with or reorders NBA's
+ * priority. Only ever shows a real campaign_assets row (see
+ * api/summary.ts's todayXPost) -- EMPTY is a genuine, honest state, not
+ * a loading placeholder, and HANDED_OFF never claims to know the post
+ * actually went out on X.
+ */
+@Composable
+private fun TodayXPostCard(post: TodayXPost, onReview: () -> Unit) {
+    GrowthCard(
+        onClick = if (post.state == TodayXPostState.READY) onReview else null,
+        accentBar = if (post.state == TodayXPostState.READY) Accent else null,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.Tag, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("Today's X Post", style = MaterialTheme.typography.titleMedium, color = TextPrimary, modifier = Modifier.weight(1f))
+            when (post.state) {
+                TodayXPostState.READY -> QuietStatusLabel("Ready for review", StatusTone.WAITING)
+                TodayXPostState.HANDED_OFF -> QuietStatusLabel("Opened in X", StatusTone.READY)
+                TodayXPostState.EMPTY -> {}
+            }
+        }
+        when (post.state) {
+            TodayXPostState.READY -> {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    post.previewText.orEmpty(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+            }
+            TodayXPostState.HANDED_OFF -> {
+                Spacer(Modifier.height(4.dp))
+                Text("You already opened X with this draft today.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+            }
+            TodayXPostState.EMPTY -> {
+                Spacer(Modifier.height(4.dp))
+                Text("Nothing queued for X today.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+            }
+        }
+    }
 }
 
 /**

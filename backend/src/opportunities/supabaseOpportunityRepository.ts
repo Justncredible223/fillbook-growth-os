@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Opportunity, OpportunityRepository } from "./types.js";
+import { enrichWithSourceUrls, singleSignalIds, type SignalSourceRow } from "./opportunitySourceEnrichment.js";
 
 function fromRow(data: Record<string, any>): Opportunity {
   return {
@@ -48,6 +49,25 @@ export class SupabaseOpportunityRepository implements OpportunityRepository {
       .eq("status", "open")
       .order("score", { ascending: false });
     if (error) throw new Error(`listOpen failed: ${error.message}`);
-    return (data ?? []).map(fromRow);
+    const opportunities = (data ?? []).map(fromRow);
+    return this.attachSourceUrls(opportunities);
+  }
+
+  /**
+   * A read-time join, not a stored column -- no migration, nothing to
+   * keep in sync. See opportunitySourceEnrichment.ts for the actual
+   * (unit-tested) enrichment rule.
+   */
+  private async attachSourceUrls(opportunities: Opportunity[]): Promise<Opportunity[]> {
+    const ids = singleSignalIds(opportunities);
+    if (ids.length === 0) return opportunities;
+
+    const { data: signals, error } = await this.client
+      .from("signals")
+      .select("id, source, source_reference")
+      .in("id", ids);
+    if (error) throw new Error(`listOpen source enrichment failed: ${error.message}`);
+
+    return enrichWithSourceUrls(opportunities, (signals ?? []) as SignalSourceRow[]);
   }
 }

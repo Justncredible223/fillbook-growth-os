@@ -119,6 +119,14 @@ class NetworkGrowthOsRepository(
                     )
                 },
             ),
+            todayXPost = json.optJSONObject("todayXPost")?.let { post ->
+                TodayXPost(
+                    state = runCatching { TodayXPostState.valueOf(post.getString("state").uppercase()) }
+                        .getOrDefault(TodayXPostState.EMPTY),
+                    campaignAssetId = post.optStringOrNull("campaignAssetId"),
+                    previewText = post.optStringOrNull("previewText"),
+                )
+            } ?: TodayXPost(TodayXPostState.EMPTY, null, null),
         )
     }
 
@@ -145,8 +153,15 @@ class NetworkGrowthOsRepository(
                     .getOrDefault(Urgency.NORMAL),
                 rationale = item.getString("rationale"),
                 channels = item.getJSONArray("recommendedChannels").mapStrings(),
+                sourceUrl = item.optStringOrNull("sourceUrl"),
             )
         }
+    }
+
+    override suspend fun draftOpportunityReply(opportunityId: String): String {
+        val body = JSONObject().put("action", "draft-reply").put("opportunityId", opportunityId)
+        val json = post("/api/opportunities", body)
+        return json.getString("draft")
     }
 
     override suspend fun runCampaignForOpportunity(opportunityId: String): CampaignRunResult {
@@ -242,6 +257,12 @@ class NetworkGrowthOsRepository(
 
     override suspend fun setPaused(paused: Boolean) {
         post("/api/summary", JSONObject().put("paused", paused))
+    }
+
+    override suspend fun handOffAsset(campaignAssetId: String): HandOffResult {
+        val body = JSONObject().put("action", "hand-off").put("campaignAssetId", campaignAssetId)
+        val json = post("/api/approvals", body)
+        return HandOffResult(campaignAssetId = json.getString("campaignAssetId"), stage = json.getString("stage"))
     }
 
     private fun JSONObject.toInboundEngagement() = InboundEngagement(
