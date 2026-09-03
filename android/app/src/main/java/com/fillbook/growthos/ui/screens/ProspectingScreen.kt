@@ -243,6 +243,7 @@ private fun ProspectingCard(
                 )
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Pill("CLASS ${candidate.replyClass}", Accent)
                     Pill(candidate.discoveryLabel, TextSecondary)
                     candidate.authorFollowerCount?.let { count -> Pill(formatFollowerCount(count), TextTertiary) }
                     if (candidate.creatorCandidate) Pill("CREATOR CANDIDATE", Success)

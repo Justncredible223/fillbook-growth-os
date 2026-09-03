@@ -328,6 +328,7 @@ class NetworkGrowthOsRepository(
         id = getString("id"),
         discoveryQuery = getString("discoveryQuery"),
         discoveryLabel = optStringOrNull("discoveryLabel") ?: getString("discoveryQuery"),
+        replyClass = optStringOrNull("replyClass") ?: "B",
         authorHandle = optStringOrNull("authorHandle"),
         authorFollowerCount = if (isNull("authorFollowerCount")) null else getInt("authorFollowerCount"),
         authorVerified = if (isNull("authorVerified")) null else getBoolean("authorVerified"),

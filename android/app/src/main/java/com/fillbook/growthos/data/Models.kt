@@ -190,6 +190,8 @@ data class ProspectingCandidate(
     val id: String,
     val discoveryQuery: String,
     val discoveryLabel: String,
+    /** "A" = direct fit, "B" = adjacent fit, "C" = relationship fit (no Fillbook mention required) -- see backend/src/prospecting/prospectingTopics.ts. */
+    val replyClass: String,
     val authorHandle: String?,
     val authorFollowerCount: Int?,
     val authorVerified: Boolean?,

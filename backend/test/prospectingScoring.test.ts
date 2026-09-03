@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { scoreProspectingCandidate } from "../src/prospecting/prospectingScoring";
 import type { ProspectingTopic } from "../src/prospecting/prospectingTopics";
 
-const topic: ProspectingTopic = { key: "trading_journal", query: '"trading journal"', label: "Trading journal", relevantFeature: "journaling" };
+const topic: ProspectingTopic = { key: "trading_journal", query: '"trading journal"', label: "Trading journal", replyClass: "A" };
 const now = new Date("2026-09-01T12:00:00Z");
 
 function baseInput(overrides: Partial<Parameters<typeof scoreProspectingCandidate>[0]> = {}) {
@@ -20,6 +20,34 @@ function baseInput(overrides: Partial<Parameters<typeof scoreProspectingCandidat
 }
 
 describe("scoreProspectingCandidate", () => {
+  it("excludes hashtag-stuffed/listicle-formatted posts (found live: a bot account scored 65+ before this check)", () => {
+    const result = scoreProspectingCandidate(
+      baseInput({
+        postText: "What's your best pair?\n\n.\n.\n.\n.\n\nforex trading tips\nforex trading psychology\nforex risk management\nforex market structure",
+      }),
+    );
+    expect(result.excluded).toBe(true);
+  });
+
+  it("excludes prop-firm discount-ad formatting (found live: scored 59+ before this check)", () => {
+    const result = scoreProspectingCandidate(
+      baseInput({
+        postText: "Get a 1 Step $100K Nano Account for only $240:\n\n💰 10% Profit Target\n📉 4% Max Daily Loss\n🛡️ No time limit",
+      }),
+    );
+    expect(result.excluded).toBe(true);
+  });
+
+  it("does NOT exclude a real conversational multi-line post (periods/questions, not short tag fragments)", () => {
+    const result = scoreProspectingCandidate(
+      baseInput({
+        postText:
+          "Two trading bots. Same strategy, same signals, the same 60% win rate. One runs 3x leverage. The other runs none. A year later, the results tell a very different story.",
+      }),
+    );
+    expect(result.excluded).toBe(false);
+  });
+
   it("excludes obvious spam/signal-selling posts outright, not just down-ranks them", () => {
     const result = scoreProspectingCandidate(baseInput({ postText: "DM me for signals, 100% win rate guaranteed!!!" }));
     expect(result.excluded).toBe(true);

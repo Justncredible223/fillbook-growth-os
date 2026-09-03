@@ -3,15 +3,19 @@ import { createLlmClient } from "../content/llmClient.js";
 import { recordCostEvent } from "../cost/costTracking.js";
 import { loadGroundingContext } from "../inbound/inboundHandlers.js";
 import { draftProspectingReply } from "./prospectingReplyWriter.js";
-import { discoveryLabelForKey } from "./prospectingTopics.js";
+import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
 import type { ProspectingCandidate } from "./types.js";
 
 export class ProspectingActionError extends Error {}
 
-/** Enriches a candidate with its human-readable topic label for the JSON response -- keeps discovery_query as the stable stored key while still giving the app something to display. */
+/** Enriches a candidate with its human-readable topic label and reply class for the JSON response -- keeps discovery_query as the stable stored key while still giving the app something to display. */
 export function toProspectingJson(candidate: ProspectingCandidate) {
-  return { ...candidate, discoveryLabel: discoveryLabelForKey(candidate.discoveryQuery) };
+  return {
+    ...candidate,
+    discoveryLabel: discoveryLabelForKey(candidate.discoveryQuery),
+    replyClass: replyClassForKey(candidate.discoveryQuery),
+  };
 }
 
 const QUEUE_STATUSES = ["new", "shown", "ready"] as const;

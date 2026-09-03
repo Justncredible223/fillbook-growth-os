@@ -1,5 +1,11 @@
 import type { ProspectingTopic } from "./prospectingTopics.js";
 
+// Real evidence this run's own results turned up (2026-09-03 live search):
+// a competitor prop-firm discount ad and a hashtag-stuffed forex-bot account
+// both scored high enough to reach the queue -- SPAM_PATTERNS below only
+// caught explicit signal-selling phrasing, not promotional listicle/ad
+// formatting. isListicleOrAdFormatted() below closes that gap.
+
 export interface ProspectingScoreInput {
   topic: ProspectingTopic;
   postText: string;
@@ -20,11 +26,15 @@ export interface ProspectingScoreResult {
   exclusionReason: string | null;
 }
 
-const FEATURE_WEIGHT: Record<ProspectingTopic["relevantFeature"], number> = {
-  prop_firm_rules: 20,
-  journaling: 20,
-  risk_management: 16,
-  general_futures: 10,
+// Class A (direct fit) weighted highest, Class C (relationship fit, no
+// Fillbook mention required) lowest but still meaningfully scored -- a
+// credible futures trader talking process/psychology is a real
+// opportunity per the "REACH + RELATIONSHIPS + REPUTATION" operating goal,
+// just a lower-priority one than a direct journaling/prop-firm-rules post.
+const CLASS_WEIGHT: Record<ProspectingTopic["replyClass"], number> = {
+  A: 20,
+  B: 15,
+  C: 10,
 };
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -42,7 +52,30 @@ const SPAM_PATTERNS = [
   /crypto airdrop/i,
   /\$\$\$+/,
   /follow.{0,15}back/i,
+  /\d+%\s*(off|discount)/i,
+  /(promo|discount) code/i,
+  /trader-?friendly conditions/i,
+  /\$\d+k?\s+(nano|micro)\s+account/i,
 ];
+
+/**
+ * Catches promotional/hashtag-listicle formatting that SPAM_PATTERNS'
+ * phrase matching misses -- e.g. a prop-firm ad's "profit target / max
+ * daily loss / ..." bullet list, or a bot account's repeated "forex
+ * trading X" tag lines. Heuristic: 4+ short lines (<=40 chars) with no
+ * terminal sentence punctuation is how X ad copy and hashtag-stuffing
+ * both actually look, versus a real conversational multi-line post whose
+ * lines end in periods/questions or run longer.
+ */
+function isListicleOrAdFormatted(text: string): boolean {
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 4) return false;
+  const shortUnpunctuatedLines = lines.filter((l) => l.length <= 40 && !/[.!?]$/.test(l));
+  return shortUnpunctuatedLines.length >= 4;
+}
 
 /**
  * Pure scoring function -- multi-factor, deliberately NOT
@@ -63,12 +96,20 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
       exclusionReason: "Looks like signal-selling/spam, not a real trader conversation.",
     };
   }
+  if (isListicleOrAdFormatted(input.postText)) {
+    return {
+      score: 0,
+      breakdown: { spam: "hashtag-stuffed or ad-listicle formatting -> excluded" },
+      excluded: true,
+      exclusionReason: "Reads as promotional/hashtag-listicle formatting, not a real trader conversation.",
+    };
+  }
 
   const breakdown: Record<string, string> = {};
 
-  // Topic/feature relevance -- which Fillbook capability this maps to.
-  const topicPoints = FEATURE_WEIGHT[input.topic.relevantFeature];
-  breakdown.topicRelevance = `"${input.topic.label}" (${input.topic.relevantFeature}) -> +${topicPoints}`;
+  // Topic/class relevance -- see CLASS_WEIGHT doc comment above.
+  const topicPoints = CLASS_WEIGHT[input.topic.replyClass];
+  breakdown.topicRelevance = `"${input.topic.label}" (Class ${input.topic.replyClass}) -> +${topicPoints}`;
 
   // Active discussion -- replies/quotes matter more than raw likes for
   // "other people are actively discussing this post."

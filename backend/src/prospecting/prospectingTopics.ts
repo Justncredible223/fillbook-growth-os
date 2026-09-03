@@ -1,26 +1,33 @@
 /**
  * Discovery queries for Prospecting's X search. Each query maps to a topic
- * label used for the "why this surfaced" context shown in the app.
+ * label used for the "why this surfaced" context shown in the app, and a
+ * reply class (A/B/C) matching the framework from the 2026-09-02 growth
+ * review: a post doesn't need to be an almost-perfect Fillbook product
+ * match to be reply-worthy -- it needs to be a conversation Fillbook can
+ * add a genuinely useful observation to.
+ *
+ *   CLASS A -- direct fit: journaling, prop-firm rules, drawdown/
+ *              consistency, the exact territory Fillbook is built for.
+ *   CLASS B -- adjacent fit: broader trading-psychology/behavior topics
+ *              (tilt, sizing, FOMO, losing streaks) that don't mention
+ *              journaling but are still natural Fillbook conversation
+ *              entry points.
+ *   CLASS C -- relationship fit: credible futures traders/creators
+ *              posting about process/psychology/execution in general --
+ *              no Fillbook mention required, the goal is a smart,
+ *              useful observation and long-term recognition.
+ *
  * Deliberately a plain code list, not a database table -- nothing else in
  * this codebase has an admin UI for config, and this is the same
  * expand-via-code-change convention as every other list in the repo
  * (KNOWN_EXTERNAL_WRITE_ACTIONS, PRICING_PER_MILLION_TOKENS, etc.).
  *
- * Sourced from two places, per the audit requirement in
- * fillbookhq/docs/social/MASTER_SOCIAL_STRATEGY.md's own directional
- * target ("~8-15 worthwhile X reply opportunities/day") and
- * COMMUNITY_INTELLIGENCE.md's observed trader language -- not invented
- * fresh here:
- *   1. Product-category terms the user supplied (prop firm names, trading
- *      terminology).
- *   2. Problem-phrased terms matching how traders actually talk, per
- *      COMMUNITY_INTELLIGENCE.md's Aug 31 2026 signals (e.g. "blown my
- *      account", "one bad trade" -- INITIAL SIGNAL confidence, included
- *      anyway since problem-language tends to surface genuine
- *      conversations, not spam/promo noise).
- *
- * Each query already gets " -is:retweet -is:reply lang:en" appended by
- * XSignalAdapter.searchRecentPosts -- don't duplicate that here.
+ * Sourced from the user's own supplied phrase list (2026-09-02 growth
+ * review), fillbookhq/docs/social/MASTER_SOCIAL_STRATEGY.md's directional
+ * target, and COMMUNITY_INTELLIGENCE.md's observed trader language --
+ * not invented fresh here. Fillbook = futures broadly (index, energy,
+ * metals, rates, grains, FX futures, prop-firm/funded futures), not only
+ * MNQ/NQ -- queries are written to avoid over-narrowing to one instrument.
  */
 export interface ProspectingTopic {
   /** Stable key stored on prospecting_candidates.discovery_query -- do not rename an existing key without a data migration. */
@@ -29,50 +36,66 @@ export interface ProspectingTopic {
   query: string;
   /** Human-readable label shown in the app ("why this surfaced"). */
   label: string;
-  /** Which Fillbook capability/expertise area this topic maps to -- feeds the "maps to a feature" ranking factor. */
-  relevantFeature: "journaling" | "prop_firm_rules" | "risk_management" | "general_futures";
+  /** A = direct fit, B = adjacent fit, C = relationship fit -- see file doc comment. Drives scoring weight (scoreProspectingCandidate). */
+  replyClass: "A" | "B" | "C";
 }
 
 export const PROSPECTING_TOPICS: ProspectingTopic[] = [
-  // Prop firm / funded account -- product-category terms
-  { key: "prop_firm", query: '"prop firm"', label: "Prop firm discussion", relevantFeature: "prop_firm_rules" },
-  { key: "funded_account", query: '"funded account"', label: "Funded account discussion", relevantFeature: "prop_firm_rules" },
-  { key: "apex_trader", query: '"Apex" (trader OR funded OR payout)', label: "Apex Trader Funding", relevantFeature: "prop_firm_rules" },
-  { key: "topstep", query: "Topstep (trader OR funded OR payout)", label: "Topstep", relevantFeature: "prop_firm_rules" },
-  { key: "lucid_trading", query: '"Lucid" (prop OR funded OR trading)', label: "Lucid Trading", relevantFeature: "prop_firm_rules" },
-  { key: "bulenox", query: "Bulenox", label: "Bulenox", relevantFeature: "prop_firm_rules" },
-  { key: "payout", query: '"payout" (prop OR funded OR firm)', label: "Prop firm payout", relevantFeature: "prop_firm_rules" },
-  { key: "consistency_rule", query: '"consistency rule"', label: "Consistency rule", relevantFeature: "prop_firm_rules" },
-  { key: "trailing_drawdown", query: '"trailing drawdown"', label: "Trailing drawdown", relevantFeature: "risk_management" },
-  { key: "daily_loss_limit", query: '"daily loss limit"', label: "Daily loss limit", relevantFeature: "risk_management" },
+  // ---- CLASS A -- direct fit ----
+  { key: "revenge_trading", query: '"revenge trading"', label: "Revenge trading", replyClass: "A" },
+  { key: "overtrading", query: "overtrading", label: "Overtrading", replyClass: "A" },
+  { key: "trading_journal", query: '"trading journal"', label: "Trading journal", replyClass: "A" },
+  { key: "expectancy", query: "trading expectancy", label: "Expectancy", replyClass: "A" },
+  { key: "consistency_rule", query: '"consistency rule" OR "consistency" prop', label: "Consistency rule", replyClass: "A" },
+  { key: "drawdown", query: "drawdown trading account", label: "Drawdown", replyClass: "A" },
+  { key: "trailing_drawdown", query: '"trailing drawdown"', label: "Trailing drawdown", replyClass: "A" },
+  { key: "prop_firm", query: '"prop firm"', label: "Prop firm", replyClass: "A" },
+  { key: "funded_account", query: '"funded account"', label: "Funded account", replyClass: "A" },
+  { key: "funded_discipline", query: "funded account discipline", label: "Funded-account discipline", replyClass: "A" },
+  { key: "behavior_tracking", query: "trading behavior tracking", label: "Behavior tracking", replyClass: "A" },
+  { key: "plan_adherence", query: '"trading plan" (follow OR stick OR broke)', label: "Plan adherence", replyClass: "A" },
+  { key: "trade_review", query: '"trade review"', label: "Trade review", replyClass: "A" },
+  { key: "trading_mistakes", query: "trading mistakes review", label: "Trade-review mistakes", replyClass: "A" },
+  { key: "first_loss", query: "first loss trading behavior", label: "First-loss behavior", replyClass: "A" },
+  { key: "why_i_lost", query: '"why I lost" trading', label: "Why I lost", replyClass: "A" },
+  { key: "blown_account", query: '"blew my account" OR "blown account"', label: "Blown account", replyClass: "A" },
+  { key: "broke_rules", query: '"broke my rules" OR "broke rules" trading', label: "Broke my rules", replyClass: "A" },
 
-  // Journaling / analytics -- product-category terms
-  { key: "trading_journal", query: '"trading journal"', label: "Trading journal", relevantFeature: "journaling" },
-  { key: "journaling_trades", query: "journaling (trades OR trading)", label: "Journaling trades", relevantFeature: "journaling" },
-  { key: "futures_journal", query: '"futures journal"', label: "Futures journal", relevantFeature: "journaling" },
-  { key: "trading_analytics", query: '"trading analytics"', label: "Trading analytics", relevantFeature: "journaling" },
-  { key: "trade_review", query: '"trade review"', label: "Trade review", relevantFeature: "journaling" },
+  // ---- CLASS B -- adjacent fit ----
+  { key: "position_sizing", query: '"position sizing"', label: "Position sizing", replyClass: "B" },
+  { key: "sized_up", query: '"sized up" trading loss', label: "Sizing up after losses", replyClass: "B" },
+  { key: "tilt", query: "trading tilt", label: "Trading tilt", replyClass: "B" },
+  { key: "losing_streak", query: '"losing streak" trading', label: "Losing streak", replyClass: "B" },
+  { key: "fomo_trading", query: "FOMO trading", label: "FOMO", replyClass: "B" },
+  { key: "trading_psychology", query: '"trading psychology"', label: "Trading psychology", replyClass: "B" },
+  { key: "execution_trading", query: "trade execution consistency", label: "Execution consistency", replyClass: "B" },
+  { key: "daily_loss", query: '"daily loss limit"', label: "Daily loss limit", replyClass: "B" },
+  { key: "strategy_hopping", query: "strategy hopping trading", label: "Strategy hopping", replyClass: "B" },
+  { key: "trading_routine", query: '"trading routine" OR "trading process"', label: "Trading routine", replyClass: "B" },
+  { key: "risk_management", query: '"risk management" futures', label: "Risk management (futures)", replyClass: "B" },
+  { key: "gave_back_profits", query: '"gave back" profits trading', label: "Gave back profits", replyClass: "B" },
+  { key: "too_many_trades", query: '"too many trades"', label: "Overtrading volume", replyClass: "B" },
+  { key: "hesitation_trading", query: "hesitation trading entry", label: "Hesitation", replyClass: "B" },
+  { key: "holding_losers", query: "holding losers cutting winners", label: "Holding losers", replyClass: "B" },
+  { key: "bad_trading_day", query: '"bad trading day"', label: "Bad trading day", replyClass: "B" },
 
-  // Futures instruments / general -- product-category terms
-  { key: "mnq_nq", query: "(MNQ OR NQ) futures trading", label: "MNQ/NQ futures", relevantFeature: "general_futures" },
-  { key: "futures_trading", query: '"futures trading"', label: "Futures trading", relevantFeature: "general_futures" },
-
-  // Problem-phrased terms -- how traders actually describe the pain, per
-  // COMMUNITY_INTELLIGENCE.md and the user's own supplied list
-  { key: "overtrading", query: "overtrading", label: "Overtrading", relevantFeature: "risk_management" },
-  { key: "revenge_trading", query: '"revenge trading"', label: "Revenge trading", relevantFeature: "risk_management" },
-  { key: "risk_management", query: '"risk management" trading', label: "Risk management", relevantFeature: "risk_management" },
-  { key: "position_sizing", query: '"position sizing"', label: "Position sizing", relevantFeature: "risk_management" },
-  { key: "drawdown", query: "drawdown trading account", label: "Drawdown", relevantFeature: "risk_management" },
-  { key: "trading_discipline", query: '"trading discipline"', label: "Trading discipline", relevantFeature: "journaling" },
-  { key: "blown_account", query: '"blew my account" OR "blown account"', label: "Blown account", relevantFeature: "risk_management" },
-  { key: "funded_reset", query: '"account reset" (funded OR prop)', label: "Funded account reset", relevantFeature: "prop_firm_rules" },
-  { key: "one_bad_trade", query: '"one bad trade"', label: "One bad trade", relevantFeature: "journaling" },
+  // ---- CLASS C -- relationship fit (credible futures traders/creators, no Fillbook fit required) ----
+  { key: "futures_trader", query: '"futures trader" process OR psychology', label: "Futures trader", replyClass: "C" },
+  { key: "futures_trading_general", query: '"futures trading"', label: "Futures trading", replyClass: "C" },
+  { key: "mnq_nq", query: "(MNQ OR NQ OR ES OR MES) futures trading", label: "Index futures (MNQ/NQ/ES)", replyClass: "C" },
+  { key: "energy_futures", query: "(crude oil OR CL) futures trading", label: "Energy futures", replyClass: "C" },
+  { key: "metals_futures", query: "(gold OR GC OR silver) futures trading", label: "Metals futures", replyClass: "C" },
+  { key: "rates_futures", query: "(treasury OR bonds) futures trading", label: "Rates futures", replyClass: "C" },
 ];
 
-const LABEL_BY_KEY = new Map(PROSPECTING_TOPICS.map((t) => [t.key, t.label]));
+const TOPIC_BY_KEY = new Map(PROSPECTING_TOPICS.map((t) => [t.key, t]));
 
 /** Resolves a stored discovery_query key back to its human-readable label for API responses. Falls back to the raw key (rather than throwing) so a candidate discovered under a topic later removed from this list still displays something sane instead of erroring the whole queue. */
 export function discoveryLabelForKey(key: string): string {
-  return LABEL_BY_KEY.get(key) ?? key;
+  return TOPIC_BY_KEY.get(key)?.label ?? key;
+}
+
+/** Resolves a stored discovery_query key to its reply class -- defaults to "B" (adjacent fit) for a topic later removed from this list, a safer default than assuming "A". */
+export function replyClassForKey(key: string): "A" | "B" | "C" {
+  return TOPIC_BY_KEY.get(key)?.replyClass ?? "B";
 }
