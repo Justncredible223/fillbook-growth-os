@@ -154,6 +154,7 @@ class NetworkGrowthOsRepository(
                 rationale = item.getString("rationale"),
                 channels = item.getJSONArray("recommendedChannels").mapStrings(),
                 sourceUrl = item.optStringOrNull("sourceUrl"),
+                authorHandle = item.optStringOrNull("authorHandle"),
             )
         }
     }

@@ -64,7 +64,7 @@ export class SupabaseOpportunityRepository implements OpportunityRepository {
 
     const { data: signals, error } = await this.client
       .from("signals")
-      .select("id, source, source_reference")
+      .select("id, source, source_reference, evidence")
       .in("id", ids);
     if (error) throw new Error(`listOpen source enrichment failed: ${error.message}`);
 

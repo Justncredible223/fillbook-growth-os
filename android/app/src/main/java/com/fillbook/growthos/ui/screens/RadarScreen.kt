@@ -14,12 +14,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -54,6 +57,7 @@ import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SearchField
 import com.fillbook.growthos.ui.components.copyToClipboard
+import com.fillbook.growthos.ui.components.creatorProfileUrl
 import com.fillbook.growthos.ui.components.explainOpportunity
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
@@ -62,6 +66,7 @@ import com.fillbook.growthos.ui.components.scoreBandColor
 import com.fillbook.growthos.ui.components.signalSourceDisplayName
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
+import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
@@ -75,6 +80,9 @@ fun RadarScreen(repo: GrowthOsRepository) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
+    // null = All. "engagement"/"campaign" narrow to Opportunity.isEngagementOpportunity --
+    // the same real-data discriminator the card CTA branching already uses, not a new concept.
+    var typeFilter by remember { mutableStateOf<String?>(null) }
     var pendingRun by remember { mutableStateOf<Opportunity?>(null) }
     var runningId by remember { mutableStateOf<String?>(null) }
     var runResultMessage by remember { mutableStateOf<String?>(null) }
@@ -141,9 +149,21 @@ fun RadarScreen(repo: GrowthOsRepository) {
         scope.launch { snackbarHostState.showSnackbar("Copied — paste in X") }
     }
 
-    val filtered = remember(opportunities, query) {
-        if (query.isBlank()) opportunities
-        else opportunities.filter { it.title.contains(query, ignoreCase = true) || it.rationale.contains(query, ignoreCase = true) }
+    val hasEngagement = opportunities.any { it.isEngagementOpportunity }
+    val hasCampaign = opportunities.any { !it.isEngagementOpportunity }
+
+    val filtered = remember(opportunities, query, typeFilter) {
+        opportunities
+            .filter {
+                when (typeFilter) {
+                    "engagement" -> it.isEngagementOpportunity
+                    "campaign" -> !it.isEngagementOpportunity
+                    else -> true
+                }
+            }
+            .filter {
+                query.isBlank() || it.title.contains(query, ignoreCase = true) || it.rationale.contains(query, ignoreCase = true)
+            }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -180,6 +200,17 @@ fun RadarScreen(repo: GrowthOsRepository) {
             )
         } else {
             SearchField(query, { query = it }, "Search opportunities", modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
+            if (hasEngagement && hasCampaign) {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    item { RadarTypeFilterChip("All", typeFilter == null) { typeFilter = null } }
+                    item { RadarTypeFilterChip("Engagement", typeFilter == "engagement") { typeFilter = "engagement" } }
+                    item { RadarTypeFilterChip("Campaigns", typeFilter == "campaign") { typeFilter = "campaign" } }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
             PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
@@ -189,7 +220,11 @@ fun RadarScreen(repo: GrowthOsRepository) {
                     PolishedEmptyState(
                         icon = Icons.Filled.Radar,
                         headline = "No matches",
-                        subtitle = "Nothing on Radar matches \"$query\".",
+                        subtitle = if (query.isBlank()) {
+                            "No ${if (typeFilter == "engagement") "engagement" else "campaign"} opportunities right now."
+                        } else {
+                            "Nothing on Radar matches \"$query\"."
+                        },
                     )
                 } else {
                     val topScore = filtered.maxOf { it.score }
@@ -252,6 +287,17 @@ fun RadarScreen(repo: GrowthOsRepository) {
                     } else {
                         CircularProgressIndicator(modifier = Modifier.height(18.dp))
                     }
+                    // Only ever the real handle X resolved for this mention --
+                    // never shown at all when unavailable, not a guessed link.
+                    opp.authorHandle?.let { handle ->
+                        creatorProfileUrl("x", handle)?.let { profileUrl ->
+                            Spacer(Modifier.height(10.dp))
+                            TextButton(
+                                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(profileUrl))) },
+                                contentPadding = PaddingValues(0.dp),
+                            ) { Text("View @$handle's profile", style = MaterialTheme.typography.labelMedium, color = Accent) }
+                        }
+                    }
                 }
             },
             confirmButton = {
@@ -265,6 +311,21 @@ fun RadarScreen(repo: GrowthOsRepository) {
             },
         )
     }
+}
+
+@Composable
+private fun RadarTypeFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(label) },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = Accent.copy(alpha = 0.2f),
+            selectedLabelColor = Accent,
+            containerColor = Surface,
+            labelColor = TextSecondary,
+        ),
+    )
 }
 
 /** Titles come from the backend as "source: text" (real provenance, not fluff) -- split it into a clean headline plus a source chip instead of showing the raw prefix. */

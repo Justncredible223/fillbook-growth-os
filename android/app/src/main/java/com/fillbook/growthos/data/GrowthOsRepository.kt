@@ -119,6 +119,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             rationale = "A single real X mention worth a direct reply, not a full campaign.",
             channels = listOf("X"),
             sourceUrl = "https://x.com/i/web/status/999",
+            authorHandle = "someTrader",
         ),
     )
 

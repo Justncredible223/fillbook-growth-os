@@ -66,14 +66,14 @@ export async function draftOpportunityReply(
   const messageText = typeof signalRow.evidence?.text === "string" ? (signalRow.evidence.text as string) : "";
   if (!messageText) throw new OpportunityReplyError("No message text recorded for this signal.");
 
-  // authorId (not authorHandle) is all xIngestion.ts captures for this
-  // path today -- deliberately left null rather than guessed. See
-  // docs/PROGRESS_LEDGER.md for the known follow-up (capture
-  // authorHandle in xIngestion.ts) that would remove this limitation.
+  // Real handle when xIngestion.ts captured one for this signal (it does
+  // whenever X's API resolved it); null, never guessed, otherwise.
+  const authorHandle = typeof signalRow.evidence?.authorHandle === "string" ? (signalRow.evidence.authorHandle as string) : null;
+
   return draftInboundResponse(
     llmClient,
     {
-      authorHandle: null,
+      authorHandle,
       messageText,
       inResponseToText: null,
       isRepeatEngager: false,

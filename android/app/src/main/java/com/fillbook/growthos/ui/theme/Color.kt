@@ -36,21 +36,30 @@ val Border = Color(0xFF27313F)
 val BorderStrong = Color(0xFF3A4658)
 
 // Brand -- cyan, matching frontend's --color-brand / --color-brand-2.
-val Accent = Color(0xFF0891B2)
+// Lightened just enough (same hue) to clear WCAG AAA's 7:1 against
+// Background -- was 5.41:1, now 7.03:1. AccentLight/AccentDim untouched
+// (AccentLight already clears AAA at 8.50:1; AccentDim is a fill, not text).
+val Accent = Color(0xFF09A7CC)
 val AccentLight = Color(0xFF22B8DC)
 val AccentDim = Color(0xFF0E4F60)
 
 val TextPrimary = Color(0xFFF5F7FA)
-val TextSecondary = Color(0xFF8B95A5)
+// Lightened (same hue) to clear WCAG AAA's 7:1 against Background -- was
+// 6.59:1 (AA-passing but short of AAA), now 7.00:1.
+val TextSecondary = Color(0xFF909AA9)
 // Decorative only (sub-4.5:1 contrast by design, matching the web app's own
 // documented policy) -- axis labels, timestamps, tertiary metadata. Must
 // never carry primary body copy or a value the user needs to read reliably.
+// Deliberately NOT raised to AAA: doing so would make it indistinguishable
+// from TextSecondary and defeat its purpose as the de-emphasized tier.
 val TextTertiary = Color(0xFF596474)
 
 // Outcome semantics -- matching frontend's --color-gain/--color-loss/--color-warn.
 val Success = Color(0xFF2FE6A0)
 val SuccessDim = Color(0xFF1C5F45)
-val Danger = Color(0xFFFF4D6A)
+// Lightened (same hue) to clear WCAG AAA's 7:1 against Background -- was
+// 6.19:1 (AA-passing but short of AAA), now 7.04:1.
+val Danger = Color(0xFFFF657E)
 val DangerDim = Color(0xFF6E2530)
 val Warning = Color(0xFFF5A623)
 val WarningDim = Color(0xFF6B4C12)

@@ -67,4 +67,38 @@ describe("enrichWithSourceUrls", () => {
     const [result] = enrichWithSourceUrls([opp], []);
     expect(result!.sourceUrl).toBeUndefined();
   });
+
+  it("attaches authorHandle alongside sourceUrl when the signal's evidence has one", () => {
+    const opp = makeOpportunity({ id: "a", signalIds: ["s1"] });
+    const [result] = enrichWithSourceUrls([opp], [
+      {
+        id: "s1",
+        source: "x_mention",
+        source_reference: "https://x.com/i/web/status/123",
+        evidence: { authorHandle: "someTrader" },
+      },
+    ]);
+    expect(result!.authorHandle).toBe("someTrader");
+  });
+
+  it("does not attach authorHandle when the signal's evidence has none", () => {
+    const opp = makeOpportunity({ id: "a", signalIds: ["s1"] });
+    const [result] = enrichWithSourceUrls([opp], [
+      { id: "s1", source: "x_mention", source_reference: "https://x.com/i/web/status/123", evidence: { authorHandle: null } },
+    ]);
+    expect(result!.authorHandle).toBeUndefined();
+  });
+
+  it("does not attach authorHandle when the opportunity has no sourceUrl either", () => {
+    const opp = makeOpportunity({ id: "a", signalIds: ["s1", "s2"] });
+    const [result] = enrichWithSourceUrls([opp], [
+      {
+        id: "s1",
+        source: "x_mention",
+        source_reference: "https://x.com/i/web/status/123",
+        evidence: { authorHandle: "someTrader" },
+      },
+    ]);
+    expect(result!.authorHandle).toBeUndefined();
+  });
 });

@@ -26,6 +26,13 @@ export interface Opportunity {
    * inferred from title text.
    */
   sourceUrl?: string;
+  /**
+   * The real @handle X resolved for the mention's author, present only
+   * alongside sourceUrl and only when X's API actually returned one for
+   * that signal (see xIngestion.ts / xAdapter.ts's user expansion).
+   * Never a guess -- absent, not fabricated, when unavailable.
+   */
+  authorHandle?: string;
 }
 
 /** Inputs the scorer needs about a candidate opportunity's evidence. */

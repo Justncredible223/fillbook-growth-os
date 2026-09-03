@@ -4,16 +4,20 @@ export interface SignalSourceRow {
   id: string;
   source: string;
   source_reference: string | null;
+  evidence?: Record<string, unknown> | null;
 }
 
 /**
  * Pure enrichment step, split out from SupabaseOpportunityRepository so
  * it's unit-testable without a live/mocked Supabase client -- see
  * autoDraftEligibility.ts for the same pattern elsewhere in this module.
- * Attaches a real sourceUrl only when an opportunity traces back to
- * exactly one signal whose source is 'x_mention' and that signal actually
- * has a source_reference. Never fabricates a value; a multi-signal trend
- * cluster or a non-X-mention signal is returned unchanged.
+ * Attaches a real sourceUrl (and, when the signal's evidence actually has
+ * one, authorHandle) only when an opportunity traces back to exactly one
+ * signal whose source is 'x_mention' and that signal has a
+ * source_reference. Never fabricates a value -- authorHandle is only
+ * ever the exact string xIngestion.ts captured from X's own API
+ * response; a multi-signal trend cluster, a non-X-mention signal, or a
+ * mention X never resolved a handle for is left without one.
  */
 export function enrichWithSourceUrls(opportunities: Opportunity[], signalRows: SignalSourceRow[]): Opportunity[] {
   const signalById = new Map(signalRows.map((s) => [s.id, s]));
@@ -22,7 +26,12 @@ export function enrichWithSourceUrls(opportunities: Opportunity[], signalRows: S
     if (o.signalIds.length !== 1) return o;
     const signal = signalById.get(o.signalIds[0]!);
     if (!signal || signal.source !== "x_mention" || !signal.source_reference) return o;
-    return { ...o, sourceUrl: signal.source_reference };
+    const authorHandle = signal.evidence?.authorHandle;
+    return {
+      ...o,
+      sourceUrl: signal.source_reference,
+      ...(typeof authorHandle === "string" && authorHandle ? { authorHandle } : {}),
+    };
   });
 }
 

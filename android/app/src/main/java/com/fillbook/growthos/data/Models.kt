@@ -19,6 +19,8 @@ data class Opportunity(
      * rather than a "campaign/content" opportunity.
      */
     val sourceUrl: String? = null,
+    /** The real @handle X resolved for the mention's author, when it did. Never guessed -- null, not a fake handle, when X couldn't resolve one. */
+    val authorHandle: String? = null,
 ) {
     val isEngagementOpportunity: Boolean get() = sourceUrl != null
 }

@@ -57,6 +57,30 @@ describe("ingestXMentions", () => {
     expect(signals[0]!.privacyClassification).toBe("public");
   });
 
+  it("captures the real author handle into evidence when the adapter resolved one", async () => {
+    const repo = new InMemorySignalRepository();
+    const graph = new SignalGraph(repo);
+    const cursors = new InMemoryIngestionCursorStore();
+    const adapter = new FakeXAdapter([
+      mention({ id: "1", text: "hi", authorId: "42", authorHandle: "someTrader" }),
+    ]);
+
+    const signals = await ingestXMentions(adapter as any, graph, cursors, "own-user-id", now);
+
+    expect(signals[0]!.evidence).toMatchObject({ authorHandle: "someTrader" });
+  });
+
+  it("does not fabricate an author handle when the adapter couldn't resolve one", async () => {
+    const repo = new InMemorySignalRepository();
+    const graph = new SignalGraph(repo);
+    const cursors = new InMemoryIngestionCursorStore();
+    const adapter = new FakeXAdapter([mention({ id: "1", text: "hi", authorId: "42", authorHandle: null })]);
+
+    const signals = await ingestXMentions(adapter as any, graph, cursors, "own-user-id", now);
+
+    expect(signals[0]!.evidence).toMatchObject({ authorHandle: null });
+  });
+
   it("falls back to `now` when a mention has no created_at", async () => {
     const repo = new InMemorySignalRepository();
     const graph = new SignalGraph(repo);

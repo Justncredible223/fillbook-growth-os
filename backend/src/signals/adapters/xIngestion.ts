@@ -37,6 +37,12 @@ export async function ingestXMentions(
           postId: mention.id,
           text: mention.text,
           authorId: mention.authorId,
+          // The adapter already resolves this from X's API (expansions=
+          // author_id&user.fields=username) -- it was being fetched and
+          // discarded here. Capturing it is what lets Radar's engagement
+          // opportunities show a real "Open profile" link instead of
+          // being permanently limited to the numeric author id.
+          authorHandle: mention.authorHandle,
           publicMetrics: mention.publicMetrics,
         },
         observedAt: mention.createdAt ?? now,
