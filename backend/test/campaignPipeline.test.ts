@@ -170,4 +170,45 @@ describe("runCampaignPipeline", () => {
       "Your funded account can get pulled even on a winning trade.",
     );
   });
+
+  it("tells the writer and every review agent this is a reply when the opportunity has a sourceUrl", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(draftResponse("Not yet -- most traders think another spreadsheet will fix it."))
+      .mockResolvedValue(verdictResponse(true));
+    const client = new LlmClient("test-key", fetchMock);
+    const campaignRepo = new InMemoryCampaignRepository();
+    const scoreRepo = new InMemoryContentScoreRepository();
+    const mentionOpportunity = { ...opportunity, sourceUrl: "https://x.com/someone/status/123", authorHandle: "someone" };
+
+    const result = await runCampaignPipeline(client, buildFactory(), scoreRepo, campaignRepo, mentionOpportunity, context);
+
+    expect(result.finalStage).toBe("ready_for_owner");
+
+    const draftCallBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(draftCallBody.messages[0].content).toContain("REPLY, not a standalone post");
+    expect(draftCallBody.messages[0].content).toContain("@someone");
+
+    for (const call of fetchMock.mock.calls.slice(1)) {
+      const body = JSON.parse(call[1]!.body as string);
+      expect(body.messages[0].content).toContain("this is a REPLY to a real X user's mention");
+    }
+  });
+
+  it("does not mention reply format for a normal content opportunity with no sourceUrl", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(draftResponse("Most funded accounts get pulled for violating a rule nobody reads twice."))
+      .mockResolvedValue(verdictResponse(true));
+    const client = new LlmClient("test-key", fetchMock);
+    const campaignRepo = new InMemoryCampaignRepository();
+    const scoreRepo = new InMemoryContentScoreRepository();
+
+    await runCampaignPipeline(client, buildFactory(), scoreRepo, campaignRepo, opportunity, context);
+
+    for (const call of fetchMock.mock.calls) {
+      const body = JSON.parse(call[1]!.body as string);
+      expect(body.messages[0].content).not.toContain("REPLY");
+    }
+  });
 });

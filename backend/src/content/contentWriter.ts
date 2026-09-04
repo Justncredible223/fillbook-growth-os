@@ -46,9 +46,27 @@ export async function draftContent(
   opportunity: { title: string; rationale: string },
   brandRulesSummary: string,
   verifiedKnowledgeSummary: string,
+  /**
+   * Present only when the opportunity traces to a real X mention (see
+   * Opportunity.sourceUrl's kdoc) -- tells the writer to draft an actual
+   * reply to that person, not a standalone post. Without this, the model
+   * inconsistently guessed at the format on its own (sometimes a reply,
+   * sometimes a generic post for the same kind of opportunity), which is
+   * what made hook_specialist's standalone-hook bar a coin flip instead
+   * of a consistent judgment.
+   */
+  replyTo?: { authorHandle: string | null },
 ): Promise<string> {
   const userMessage = [
     `Platform: ${platform}`,
+    replyTo
+      ? [
+          "Content format: REPLY, not a standalone post.",
+          `This replies to a real X user${replyTo.authorHandle ? ` (@${replyTo.authorHandle})` : ""} who mentioned Fillbook.`,
+          "Write ONLY the reply text, addressed naturally to them, continuing the conversation.",
+          "Do not write standalone-post hook copy -- this is read with their original post as context, not mid-scroll on its own.",
+        ].join("\n")
+      : null,
     `Opportunity: ${opportunity.title}`,
     `Rationale: ${opportunity.rationale}`,
     "",
@@ -57,7 +75,9 @@ export async function draftContent(
     "",
     "Verified knowledge (use ONLY these facts about Fillbook -- do not invent anything else):",
     verifiedKnowledgeSummary,
-  ].join("\n");
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
 
   const result = await client.callTool<{ body: string }>(SYSTEM_PROMPT, userMessage, "submit_draft", DRAFT_SCHEMA);
   return result.body;

@@ -18,6 +18,9 @@ export interface PipelineOpportunity {
   title: string;
   rationale: string;
   recommendedChannels: string[];
+  /** See Opportunity.sourceUrl's kdoc -- presence means this is a reply-worthy X mention, not a content/campaign opportunity. */
+  sourceUrl?: string;
+  authorHandle?: string;
 }
 
 export interface CampaignRepository {
@@ -70,13 +73,23 @@ export async function runCampaignPipeline(
 ): Promise<PipelineResult> {
   const platform = opportunity.recommendedChannels[0] ?? "x";
   const isVideo = VIDEO_PLATFORMS.has(platform);
+  // Same signal the Android app uses to tell an "engagement" opportunity
+  // from a "campaign/content" one -- never inferred from title text.
+  const isReply = Boolean(opportunity.sourceUrl);
   let draftText: string;
   let videoScript: VideoScript | null = null;
   if (isVideo) {
     videoScript = await draftVideoScript(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
     draftText = formatVideoScriptAsText(videoScript);
   } else {
-    draftText = await draftContent(llmClient, platform, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
+    draftText = await draftContent(
+      llmClient,
+      platform,
+      opportunity,
+      context.brandRulesSummary,
+      context.verifiedKnowledgeSummary,
+      isReply ? { authorHandle: opportunity.authorHandle ?? null } : undefined,
+    );
   }
 
   const campaignId = await campaignRepo.createCampaign(opportunity.id, opportunity.title);
@@ -108,6 +121,7 @@ export async function runCampaignPipeline(
     platform,
     brandRulesSummary: context.brandRulesSummary,
     verifiedKnowledgeSummary: context.verifiedKnowledgeSummary,
+    isReply,
   });
 
   if (!deepReview.passed) {
