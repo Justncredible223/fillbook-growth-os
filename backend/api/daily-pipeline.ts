@@ -24,6 +24,10 @@ import { buildSupabaseRunCampaignDeps } from "../src/content/runCampaignForOppor
 import { runProspectingSearch } from "../src/prospecting/prospectingSearch.js";
 import { SupabaseProspectingRepository } from "../src/prospecting/supabaseProspectingRepository.js";
 import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
+import { generateStrategy } from "../src/strategy/strategyEngine.js";
+import { SupabaseStrategyRepository, collectStrategyEngineInputs } from "../src/strategy/supabaseStrategyRepository.js";
+
+const STRATEGY_REGENERATION_INTERVAL_DAYS = 7;
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -226,6 +230,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return "already ran today -- idempotent skip";
       }
       throw new Error(result.error ?? "auto-draft failed for an unknown reason");
+    }),
+    // Safe to run automatically, unlike auto_draft: pure aggregation over
+    // this project's own already-collected data, no LLM/AI cost. Weekly
+    // per the master spec ("weekly strategy engine"), not daily -- checks
+    // the latest saved version's age rather than tracking its own
+    // separate schedule state, so a missed cron run just means the next
+    // one catches up instead of drifting.
+    await runStep("strategy_evolution", async () => {
+      const now = new Date();
+      const strategyRepo = new SupabaseStrategyRepository(client);
+      const latest = await strategyRepo.getLatest();
+      if (latest) {
+        const ageDays = (now.getTime() - new Date(latest.generatedAt).getTime()) / (1000 * 60 * 60 * 24);
+        if (ageDays < STRATEGY_REGENERATION_INTERVAL_DAYS) {
+          return `skipped -- last version is ${ageDays.toFixed(1)}d old, regenerates every ${STRATEGY_REGENERATION_INTERVAL_DAYS}d`;
+        }
+      }
+      const inputs = await collectStrategyEngineInputs(client, now);
+      const recommendation = generateStrategy(inputs);
+      const saved = await strategyRepo.save(recommendation);
+      return `generated version ${saved.version} (lowConfidence=${saved.lowConfidence})`;
     }),
   ];
 

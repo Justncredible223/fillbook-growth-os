@@ -381,6 +381,46 @@ class NetworkGrowthOsRepository(
     override suspend fun markProspectingAlreadyHandled(id: String) {
         post("/api/approvals?resource=prospecting", JSONObject().put("action", "already-handled").put("id", id))
     }
+
+    private fun JSONObject.toStrategyItemList(key: String): List<StrategyItem> =
+        getJSONArray(key).map { StrategyItem(label = it.optStringOrNull("topic") ?: it.getString("platform") + " / " + it.getString("assetType"), reason = it.getString("reason")) }
+
+    private fun JSONObject.toStrategyVersion(): StrategyVersion = StrategyVersion(
+        version = getInt("version"),
+        generatedAt = getString("generatedAt"),
+        topicsToIncrease = toStrategyItemList("topicsToIncrease"),
+        topicsToDecrease = toStrategyItemList("topicsToDecrease"),
+        contentToRetire = toStrategyItemList("contentToRetire"),
+        formatsToTest = toStrategyItemList("formatsToTest"),
+        seoOpportunities = getJSONArray("seoOpportunities").map {
+            SeoOpportunity(topic = it.getString("topic"), velocity = it.getDouble("velocity"), hasExistingOpportunity = it.getBoolean("hasExistingOpportunity"))
+        },
+        creatorOpportunities = getJSONArray("creatorOpportunities").map {
+            CreatorOpportunity(
+                id = it.getString("id"),
+                handle = it.getString("handle"),
+                category = it.getString("category"),
+                readinessScore = if (it.isNull("readinessScore")) null else it.getInt("readinessScore"),
+                daysSinceLastInteraction = if (it.isNull("daysSinceLastInteraction")) null else it.getInt("daysSinceLastInteraction"),
+            )
+        },
+        experimentsToRun = getJSONArray("experimentsToRun").map {
+            ExperimentSuggestion(hypothesis = it.getString("hypothesis"), rationale = it.getString("rationale"))
+        },
+        summary = getString("summary"),
+        lowConfidence = getBoolean("lowConfidence"),
+    )
+
+    // Folded into /api/summary (?resource=strategy) -- same 12-function-cap reasoning as inbound/prospecting above.
+    override suspend fun getLatestStrategy(): StrategyVersion? {
+        val json = get("/api/summary?resource=strategy")
+        return json.optJSONObject("strategy")?.toStrategyVersion()
+    }
+
+    override suspend fun regenerateStrategy(): StrategyVersion {
+        val json = post("/api/summary?resource=strategy", JSONObject())
+        return json.getJSONObject("strategy").toStrategyVersion()
+    }
 }
 
 /** [httpCode] lets callers (LoginScreen especially) tell "wrong access code" (401) apart from an unrelated server/network failure -- both used to surface as the same generic message. */

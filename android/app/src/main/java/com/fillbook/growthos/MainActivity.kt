@@ -263,7 +263,7 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, onL
             composable(Destination.ContentLibrary.route) { ContentLibraryScreen(repo) }
             composable(Destination.Research.route) { ResearchScreen() }
             composable(Destination.Creators.route) { CreatorsScreen(repo) }
-            composable(Destination.Strategy.route) { StrategyScreen() }
+            composable(Destination.Strategy.route) { StrategyScreen(repo) }
             composable(Destination.System.route) { SystemScreen(repo) }
             composable(Destination.Settings.route) { SettingsScreen(repo, onLogout = onLogout) }
         }

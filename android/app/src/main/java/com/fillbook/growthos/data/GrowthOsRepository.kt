@@ -66,6 +66,11 @@ interface GrowthOsRepository {
     suspend fun markProspectingSkipped(id: String, reason: String?)
     suspend fun markProspectingNotRelevant(id: String)
     suspend fun markProspectingAlreadyHandled(id: String)
+
+    /** The latest Strategy Evolution report, or null if none has been generated yet. */
+    suspend fun getLatestStrategy(): StrategyVersion?
+    /** Forces a fresh strategy report now, regardless of the normal weekly schedule -- for the Strategy screen's manual "Regenerate" action. */
+    suspend fun regenerateStrategy(): StrategyVersion
 }
 
 /**
@@ -363,5 +368,43 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     override suspend fun markProspectingAlreadyHandled(id: String) {
         val index = prospectingItems.indexOfFirst { it.id == id }
         if (index >= 0) prospectingItems[index] = prospectingItems[index].copy(status = "already_handled")
+    }
+
+    private var fakeStrategy: StrategyVersion? = StrategyVersion(
+        version = 1,
+        generatedAt = "2026-09-03T12:00:00Z",
+        topicsToIncrease = listOf(
+            StrategyItem("Trailing drawdown confusion", "80% review pass rate across 5 campaigns, 4 reached ready-for-owner."),
+        ),
+        topicsToDecrease = listOf(
+            StrategyItem("Generic motivation posts", "Only 20% review pass rate across 4 campaigns."),
+        ),
+        contentToRetire = emptyList(),
+        formatsToTest = listOf(
+            StrategyItem("x / post", "85% pass rate across 6 assets -- worth more volume here."),
+        ),
+        seoOpportunities = listOf(
+            SeoOpportunity("prop firm consistency rule", velocity = 3.0, hasExistingOpportunity = false),
+        ),
+        creatorOpportunities = listOf(
+            CreatorOpportunity("creator-fake-1", "@wannabechamp", "tier_b", 2, daysSinceLastInteraction = 34),
+        ),
+        experimentsToRun = listOf(
+            ExperimentSuggestion(
+                "Doubling down on \"Trailing drawdown confusion\"-style topics increases the ready-for-owner rate further.",
+                "80% review pass rate across 5 campaigns, 4 reached ready-for-owner.",
+            ),
+        ),
+        summary = "1 topic(s) to double down on, 1 to pull back on. 1 rising search topic(s) with no opportunity yet. 1 creator relationship(s) gone quiet.",
+        lowConfidence = true,
+    )
+
+    override suspend fun getLatestStrategy(): StrategyVersion? = fakeStrategy
+
+    override suspend fun regenerateStrategy(): StrategyVersion {
+        val current = fakeStrategy
+        val next = (current?.copy(version = current.version + 1) ?: fakeStrategy)!!
+        fakeStrategy = next
+        return next
     }
 }

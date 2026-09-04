@@ -4,19 +4,65 @@ import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { MONTHLY_AUTO_DRAFT_BUDGET_USD, BACKLOG_CAP } from "../src/opportunities/autoDraftEligibility.js";
 import { SupabaseAutoDraftRunRepository } from "../src/opportunities/autoDraftRunRepository.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
+import { generateStrategy } from "../src/strategy/strategyEngine.js";
+import { SupabaseStrategyRepository, collectStrategyEngineInputs } from "../src/strategy/supabaseStrategyRepository.js";
 
 /**
- * POST here is the Pause System control (Settings/System screens):
- * { paused: boolean }. Folded into this GET endpoint rather than a new
- * file -- this project is already at Vercel Hobby's 12-serverless-
- * function cap (see ingest.ts/daily-pipeline.ts), same reasoning as
- * approvals.ts combining its own GET/POST. Actually enforced, not just
- * a display value: see autoDraftStep.ts's isPaused dep and
- * run-campaign.ts's own check -- both real money-spending paths stop
- * when this is true.
+ * `?resource=strategy` handles Strategy Evolution -- a read of the latest
+ * versioned report (GET) or forcing a fresh one (POST). Folded in here
+ * for the same 12-function-cap reason as everything else in this file.
+ * See docs/PROGRESS_LEDGER.md and backend/src/strategy/types.ts.
+ */
+async function handleStrategy(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const client = getServiceClient();
+  const repo = new SupabaseStrategyRepository(client);
+
+  if (req.method === "GET") {
+    try {
+      if (req.query.history === "1") {
+        res.status(200).json({ versions: await repo.listHistory(20) });
+        return;
+      }
+      res.status(200).json({ strategy: await repo.getLatest() });
+    } catch (err) {
+      res.status(500).json({ error: errorMessage(err) });
+    }
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const now = new Date();
+    const inputs = await collectStrategyEngineInputs(client, now);
+    const recommendation = generateStrategy(inputs);
+    const saved = await repo.save(recommendation);
+    res.status(200).json({ strategy: saved });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+/**
+ * POST here (default resource) is the Pause System control (Settings/
+ * System screens): { paused: boolean }. Folded into this GET endpoint
+ * rather than a new file -- this project is already at Vercel Hobby's
+ * 12-serverless-function cap (see ingest.ts/daily-pipeline.ts), same
+ * reasoning as approvals.ts combining its own GET/POST. Actually
+ * enforced, not just a display value: see autoDraftStep.ts's isPaused
+ * dep and run-campaign.ts's own check -- both real money-spending paths
+ * stop when this is true.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res)) return;
+
+  if (req.query.resource === "strategy") {
+    await handleStrategy(req, res);
+    return;
+  }
 
   if (req.method === "POST") {
     try {

@@ -210,3 +210,42 @@ data class ProspectingCandidate(
     val replyMentionsFillbook: Boolean?,
     val replyUsedLink: Boolean?,
 )
+
+/** A topic or format worth acting on, with the plain-English reason the server computed it -- never a bare label with no evidence attached. */
+data class StrategyItem(val label: String, val reason: String)
+
+/** A rising search topic Growth OS hasn't turned into an opportunity yet. */
+data class SeoOpportunity(val topic: String, val velocity: Double, val hasExistingOpportunity: Boolean)
+
+/** A creator relationship that's gone quiet (30+ days) or was never actually contacted, surfaced so it doesn't just decay silently. */
+data class CreatorOpportunity(
+    val id: String,
+    val handle: String,
+    val category: String,
+    val readinessScore: Int?,
+    val daysSinceLastInteraction: Int?,
+)
+
+data class ExperimentSuggestion(val hypothesis: String, val rationale: String)
+
+/**
+ * One versioned Strategy Evolution report (see backend/src/strategy/types.ts).
+ * Built entirely from Growth OS's own data -- real conversion/attribution
+ * data from FillbookHQ itself isn't available to this project by design
+ * (see docs/ARCHITECTURE.md), so [lowConfidence] exists specifically to
+ * flag a report that doesn't yet have enough completed campaigns behind
+ * it to mean much -- never hide that caveat from the owner.
+ */
+data class StrategyVersion(
+    val version: Int,
+    val generatedAt: String,
+    val topicsToIncrease: List<StrategyItem>,
+    val topicsToDecrease: List<StrategyItem>,
+    val contentToRetire: List<StrategyItem>,
+    val formatsToTest: List<StrategyItem>,
+    val seoOpportunities: List<SeoOpportunity>,
+    val creatorOpportunities: List<CreatorOpportunity>,
+    val experimentsToRun: List<ExperimentSuggestion>,
+    val summary: String,
+    val lowConfidence: Boolean,
+)
