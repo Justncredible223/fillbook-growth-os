@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -35,7 +34,6 @@ import com.fillbook.growthos.data.HealthStatus
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.ScreenHeader
-import com.fillbook.growthos.ui.components.SecondaryButton
 import com.fillbook.growthos.ui.components.QuietStatusLabel
 import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.healthLabel
@@ -54,12 +52,11 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(repo: GrowthOsRepository, onLogout: () -> Unit) {
+fun SettingsScreen(repo: GrowthOsRepository) {
     var health by remember { mutableStateOf<List<HealthItem>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
-    var showLogoutConfirm by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -124,32 +121,9 @@ fun SettingsScreen(repo: GrowthOsRepository, onLogout: () -> Unit) {
                         }
                     }
 
-                    item { SectionHeader("Account") }
-                    item {
-                        SecondaryButton(
-                            text = "Log out",
-                            onClick = { showLogoutConfirm = true },
-                            contentColor = Danger,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                    }
                 }
             }
         }
-    }
-
-    if (showLogoutConfirm) {
-        AlertDialog(
-            onDismissRequest = { showLogoutConfirm = false },
-            title = { Text("Log out?") },
-            text = { Text("You'll need your access code again to sign back in.") },
-            confirmButton = {
-                TextButton(onClick = { showLogoutConfirm = false; onLogout() }) { Text("Log out") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutConfirm = false }) { Text("Cancel") }
-            },
-        )
     }
 }
 

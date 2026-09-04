@@ -28,39 +28,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
-import com.fillbook.growthos.ui.components.GhostButton
 import com.fillbook.growthos.ui.components.PrimaryButton
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.SurfaceElevated
 import com.fillbook.growthos.ui.theme.TextSecondary
 
-private const val AUTHENTICATORS = BiometricManager.Authenticators.BIOMETRIC_WEAK
-
 /**
- * True only when the device both has usable biometric hardware and has at
- * least one Face/Fingerprint actually enrolled -- anything else (no
- * hardware, hardware temporarily down, nothing enrolled) means a
- * biometric gate would just be a dead end, so callers fall back to the
- * plain saved-token flow instead of offering a toggle that can't work.
+ * The ONLY sign-in this app has: the phone's own lock -- fingerprint,
+ * face, or PIN/pattern/password -- via Android's own BiometricPrompt with
+ * both BIOMETRIC_STRONG and DEVICE_CREDENTIAL allowed. There is no
+ * separate app-level access code to type or lose; the actual API token
+ * that authorizes requests server-side is a fixed value compiled into
+ * the app (see MainActivity's APP_TOKEN, same trust tier as the existing
+ * Vercel protection-bypass secret), never something the owner has to
+ * remember or re-enter. If the device has no lock screen configured at
+ * all, [canUseDeviceLock] returns false and the caller skips this gate
+ * entirely rather than blocking access with a check that can't work.
  */
-fun canUseBiometrics(context: Context): Boolean =
+private const val AUTHENTICATORS = BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+
+fun canUseDeviceLock(context: Context): Boolean =
     BiometricManager.from(context).canAuthenticate(AUTHENTICATORS) == BiometricManager.BIOMETRIC_SUCCESS
 
-/**
- * Gates an already-saved token behind a Face/Fingerprint check instead of
- * ever asking the owner to retype the access code again. This never
- * re-authenticates against the backend -- the token was already accepted
- * once at LoginScreen and is stored for good (see TokenStore); biometrics
- * here only decide whether THIS unlock proceeds to use it, the same model
- * as a banking app's local app-lock, not a second server-side login.
- */
 @Composable
-fun BiometricGateScreen(
-    activity: FragmentActivity,
-    onUnlocked: () -> Unit,
-    onUseCodeInstead: () -> Unit,
-) {
+fun BiometricGateScreen(activity: FragmentActivity, onUnlocked: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
 
     fun prompt() {
@@ -74,23 +66,13 @@ fun BiometricGateScreen(
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    // Only an explicit tap on the prompt's own "Use access
-                    // code instead" button means the owner actually wants to
-                    // fall back and re-enter the code -- that's the sole
-                    // trigger for wiping the saved token. ERROR_USER_CANCELED
-                    // (and every other error/interruption: the screen
-                    // locking mid-prompt, a notification stealing focus, the
-                    // app backgrounding, an accidental back-press, or a
-                    // failed Face/Fingerprint attempt the owner backed out
-                    // of to retry) used to hit this same branch and destroy
-                    // the token for no reason -- this was the actual cause
-                    // of needing to dig up and retype the access code
-                    // multiple times a day. Those cases now just leave the
-                    // owner on this screen with "Try again", same as any
-                    // normal app-lock.
-                    if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
-                        onUseCodeInstead()
-                    } else {
+                    // Any cancellation/interruption (screen locking mid-
+                    // prompt, a notification stealing focus, the app
+                    // backgrounding, pressing back) just leaves the owner
+                    // here with "Try again" -- there is no separate code
+                    // to fall back to anymore, so there is nothing to
+                    // silently wipe or lose.
+                    if (errorCode != BiometricPrompt.ERROR_USER_CANCELED && errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
                         error = errString.toString()
                     }
                 }
@@ -102,8 +84,7 @@ fun BiometricGateScreen(
         )
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Unlock Growth OS")
-            .setSubtitle("Confirm it's you to continue")
-            .setNegativeButtonText("Use access code instead")
+            .setSubtitle("Use your fingerprint, face, or device PIN")
             .setAllowedAuthenticators(AUTHENTICATORS)
             .build()
         biometricPrompt.authenticate(promptInfo)
@@ -126,7 +107,6 @@ fun BiometricGateScreen(
                 Text(it, style = MaterialTheme.typography.bodySmall, color = Danger, modifier = Modifier.padding(top = 12.dp))
             }
             PrimaryButton(text = "Try again", onClick = ::prompt, modifier = Modifier.padding(top = 20.dp))
-            GhostButton(text = "Use access code instead", onClick = onUseCodeInstead)
         }
     }
 }

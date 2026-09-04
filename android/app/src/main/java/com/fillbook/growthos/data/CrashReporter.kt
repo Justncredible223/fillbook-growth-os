@@ -30,7 +30,7 @@ object CrashReporter {
     private const val TAG = "CrashReporter"
     private val executor = Executors.newSingleThreadExecutor()
 
-    fun install(context: Context, baseUrl: String, protectionBypassSecret: String, tokenStore: TokenStore) {
+    fun install(context: Context, baseUrl: String, protectionBypassSecret: String, appToken: String) {
         val appContext = context.applicationContext
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
 
@@ -38,7 +38,7 @@ object CrashReporter {
             try {
                 val stackTrace = StringWriter().also { throwable.printStackTrace(PrintWriter(it)) }.toString()
                 writeToLocalFile(appContext, throwable.message, stackTrace)
-                reportBestEffort(baseUrl, protectionBypassSecret, tokenStore, throwable.message, stackTrace)
+                reportBestEffort(baseUrl, protectionBypassSecret, appToken, throwable.message, stackTrace)
             } catch (loggingFailure: Exception) {
                 Log.e(TAG, "Failed while reporting a crash", loggingFailure)
             }
@@ -53,8 +53,7 @@ object CrashReporter {
     }
 
     /** Fire-and-forget: a crash report failing to upload must never itself crash the crash handler. */
-    private fun reportBestEffort(baseUrl: String, protectionBypassSecret: String, tokenStore: TokenStore, message: String?, stackTrace: String) {
-        val token = tokenStore.getToken() ?: return
+    private fun reportBestEffort(baseUrl: String, protectionBypassSecret: String, appToken: String, message: String?, stackTrace: String) {
         executor.execute {
             try {
                 val body = JSONObject()
@@ -68,7 +67,7 @@ object CrashReporter {
                     .url("$baseUrl/api/client-error")
                     .header("x-vercel-protection-bypass", protectionBypassSecret)
                     .header("x-vercel-set-bypass-cookie", "true")
-                    .header("Authorization", "Bearer $token")
+                    .header("Authorization", "Bearer $appToken")
                     .post(body.toString().toRequestBody("application/json".toMediaType()))
                     .build()
 

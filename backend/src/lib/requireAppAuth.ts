@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { timingSafeEqual } from "node:crypto";
 
 /**
  * Gate for every endpoint the Android app calls. Before this existed, the
@@ -20,10 +21,26 @@ export function requireAppAuth(req: VercelRequest, res: VercelResponse): boolean
   }
 
   const header = req.headers.authorization;
-  if (header !== `Bearer ${expected}`) {
+  if (!header || !constantTimeEquals(header, `Bearer ${expected}`)) {
     res.status(401).json({ error: "Missing or invalid Authorization header" });
     return false;
   }
 
   return true;
+}
+
+/**
+ * Plain `!==` leaks how many leading characters matched via response
+ * timing (V8 short-circuits on the first differing byte) -- low real-world
+ * risk over the internet given network jitter, but a free, correct fix
+ * for a single-owner app's one credential check. `timingSafeEqual`
+ * requires equal-length buffers, so a length mismatch is checked first
+ * (that comparison is already safe -- length alone reveals far less than
+ * a full prefix match would).
+ */
+function constantTimeEquals(a: string, b: string): boolean {
+  const bufferA = Buffer.from(a);
+  const bufferB = Buffer.from(b);
+  if (bufferA.length !== bufferB.length) return false;
+  return timingSafeEqual(bufferA, bufferB);
 }

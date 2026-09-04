@@ -34,7 +34,10 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Nightlight
+import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
@@ -74,23 +77,24 @@ import androidx.navigation.compose.rememberNavController
 import androidx.fragment.app.FragmentActivity
 import com.fillbook.growthos.data.CrashReporter
 import com.fillbook.growthos.data.NetworkGrowthOsRepository
-import com.fillbook.growthos.data.TokenStore
 import com.fillbook.growthos.ui.screens.AnalyticsScreen
 import com.fillbook.growthos.ui.screens.ApprovalsScreen
 import com.fillbook.growthos.ui.screens.BiometricGateScreen
+import com.fillbook.growthos.ui.screens.canUseDeviceLock
 import com.fillbook.growthos.ui.screens.CampaignsScreen
 import com.fillbook.growthos.ui.screens.ContentLibraryScreen
 import com.fillbook.growthos.ui.screens.CreatorsScreen
 import com.fillbook.growthos.ui.screens.HomeScreen
 import com.fillbook.growthos.ui.screens.InboundScreen
-import com.fillbook.growthos.ui.screens.LoginScreen
-import com.fillbook.growthos.ui.screens.canUseBiometrics
 import com.fillbook.growthos.ui.screens.ProspectingScreen
 import com.fillbook.growthos.ui.screens.RadarScreen
 import com.fillbook.growthos.ui.screens.ResearchScreen
 import com.fillbook.growthos.ui.screens.SettingsScreen
 import com.fillbook.growthos.ui.screens.StrategyScreen
 import com.fillbook.growthos.ui.screens.ExperimentsScreen
+import com.fillbook.growthos.ui.screens.NotificationsScreen
+import com.fillbook.growthos.ui.screens.MorningBriefScreen
+import com.fillbook.growthos.ui.screens.EveningReportScreen
 import com.fillbook.growthos.ui.screens.SystemScreen
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Background
@@ -115,6 +119,9 @@ private sealed class Destination(val route: String, val label: String, val icon:
     data object Creators : Destination("creators", "Creators", Icons.Filled.Groups)
     data object Strategy : Destination("strategy", "Strategy", Icons.Filled.Timeline)
     data object Experiments : Destination("experiments", "Experiments", Icons.Filled.QueryStats)
+    data object Notifications : Destination("notifications", "Notifications", Icons.Filled.NotificationsNone)
+    data object MorningBrief : Destination("morning_brief", "Morning Brief", Icons.Filled.WbSunny)
+    data object EveningReport : Destination("evening_report", "Evening Report", Icons.Filled.Nightlight)
     data object System : Destination("system", "System", Icons.Filled.Dns)
     data object Settings : Destination("settings", "Settings", Icons.Filled.Settings)
 }
@@ -141,6 +148,9 @@ private val moreDestinations = listOf(
     Destination.Research,
     Destination.Strategy,
     Destination.Experiments,
+    Destination.Notifications,
+    Destination.MorningBrief,
+    Destination.EveningReport,
 )
 
 private val allDestinations = primaryDestinations + moreDestinations
@@ -152,20 +162,33 @@ private const val BASE_URL = "https://fillbook-growth-os.vercel.app"
  * protection bypass token, not the Supabase service_role key -- safe to
  * embed client-side by design. It gets the app's requests PAST Vercel's
  * deployment protection; it is not what authorizes them against this
- * project's own data. That's TokenStore's job now (see LoginScreen).
+ * project's own data. That's APP_TOKEN's job now.
  */
 private const val PROTECTION_BYPASS_SECRET = "7TVBpvTPeeHbiGlZco9RDS8miXqtbfoi"
+
+/**
+ * The actual per-project access token `requireAppAuth` checks server-
+ * side. There is no more user-facing "access code" to type or lose --
+ * this is compiled into the app once, same trust tier as the bypass
+ * secret above, and the ONLY thing standing between a stranger with this
+ * APK and this project's data is (a) needing to decompile the APK to
+ * find both values, same baseline as any client-embedded secret, and
+ * (b) the ExternalWriteFirewall, which no token of any kind can bypass
+ * -- it rejects EXTERNAL_WRITE unconditionally regardless of who's
+ * asking. The owner's actual gate is BiometricGateScreen (fingerprint/
+ * face/device PIN), not this value.
+ */
+private const val APP_TOKEN = "_VSLHPVS8C0bBcF_cjuJG0RBj3Ps3_vRWhrefxHfHiI"
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val tokenStore = TokenStore(this)
-        CrashReporter.install(this, BASE_URL, PROTECTION_BYPASS_SECRET, tokenStore)
+        CrashReporter.install(this, BASE_URL, PROTECTION_BYPASS_SECRET, APP_TOKEN)
         setContent {
             FillbookGrowthOSTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    GrowthOsRoot(this, tokenStore)
+                    GrowthOsRoot(this)
                 }
             }
         }
@@ -173,60 +196,27 @@ class MainActivity : FragmentActivity() {
 }
 
 @Composable
-private fun GrowthOsRoot(activity: FragmentActivity, tokenStore: TokenStore) {
-    var appToken by remember { mutableStateOf(tokenStore.getToken()) }
-    var displayName by remember { mutableStateOf(tokenStore.getDisplayName()) }
-    // Re-checked once per process, not per recomposition -- whether Face/
-    // Fingerprint is enrolled doesn't change mid-session, and re-querying
-    // BiometricManager on every recomposition would be wasted work.
-    val biometricAvailable = remember { canUseBiometrics(activity) }
-    // Starts locked whenever a saved token + the owner's own "require
-    // biometric" choice both say it should -- set true either by a fresh
-    // LoginScreen pass (typing the real code already proves identity) or
-    // by clearing the biometric prompt.
-    var unlocked by remember { mutableStateOf(!(tokenStore.getToken() != null && biometricAvailable && tokenStore.isBiometricLockEnabled())) }
+private fun GrowthOsRoot(activity: FragmentActivity) {
+    // Re-checked once per process, not per recomposition. If the device
+    // has no lock screen configured at all, there's nothing to gate on --
+    // skip straight into the app rather than blocking access with a
+    // check that structurally can't work.
+    val deviceLockAvailable = remember { canUseDeviceLock(activity) }
+    var unlocked by remember { mutableStateOf(!deviceLockAvailable) }
 
-    val token = appToken
-    if (token == null) {
-        LoginScreen(
-            baseUrl = BASE_URL,
-            protectionBypassSecret = PROTECTION_BYPASS_SECRET,
-            biometricAvailable = biometricAvailable,
-            onLoginSuccess = { validatedToken, validatedName, requireBiometric ->
-                tokenStore.saveToken(validatedToken)
-                tokenStore.saveDisplayName(validatedName)
-                tokenStore.setBiometricLockEnabled(requireBiometric)
-                appToken = validatedToken
-                displayName = validatedName
-                unlocked = true
-            },
-        )
-    } else if (!unlocked) {
-        BiometricGateScreen(
-            activity = activity,
-            onUnlocked = { unlocked = true },
-            onUseCodeInstead = {
-                tokenStore.clearToken()
-                appToken = null
-            },
-        )
+    if (!unlocked) {
+        BiometricGateScreen(activity = activity, onUnlocked = { unlocked = true })
     } else {
-        val repo = remember(token) {
-            NetworkGrowthOsRepository(BASE_URL, PROTECTION_BYPASS_SECRET, token, displayName ?: "")
+        val repo = remember {
+            NetworkGrowthOsRepository(BASE_URL, PROTECTION_BYPASS_SECRET, APP_TOKEN, "Owner")
         }
-        GrowthOsApp(
-            repo = repo,
-            onLogout = {
-                tokenStore.clearToken()
-                appToken = null
-            },
-        )
+        GrowthOsApp(repo = repo)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, onLogout: () -> Unit) {
+private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
@@ -269,8 +259,11 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, onL
             composable(Destination.Creators.route) { CreatorsScreen(repo) }
             composable(Destination.Strategy.route) { StrategyScreen(repo) }
             composable(Destination.Experiments.route) { ExperimentsScreen(repo) }
+            composable(Destination.Notifications.route) { NotificationsScreen(repo) }
+            composable(Destination.MorningBrief.route) { MorningBriefScreen(repo) }
+            composable(Destination.EveningReport.route) { EveningReportScreen(repo) }
             composable(Destination.System.route) { SystemScreen(repo) }
-            composable(Destination.Settings.route) { SettingsScreen(repo, onLogout = onLogout) }
+            composable(Destination.Settings.route) { SettingsScreen(repo) }
         }
     }
 
