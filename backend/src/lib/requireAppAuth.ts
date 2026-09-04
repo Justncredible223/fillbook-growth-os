@@ -22,6 +22,20 @@ export function requireAppAuth(req: VercelRequest, res: VercelResponse): boolean
 
   const header = req.headers.authorization;
   if (!header || !constantTimeEquals(header, `Bearer ${expected}`)) {
+    // Temporary diagnostic -- never logs the actual secret values, only
+    // shapes (lengths, first/last few chars) to find a real mismatch
+    // between what the Android app sends and what's configured here.
+    // Remove once the intermittent 401 from the app is understood.
+    console.error("requireAppAuth mismatch", {
+      hasHeader: !!header,
+      headerLength: header?.length ?? 0,
+      headerPrefix: header?.slice(0, 12) ?? null,
+      headerSuffix: header?.slice(-6) ?? null,
+      expectedLength: expected.length,
+      expectedPrefix: expected.slice(0, 6),
+      expectedSuffix: expected.slice(-6),
+      userAgent: req.headers["user-agent"] ?? null,
+    });
     res.status(401).json({ error: "Missing or invalid Authorization header" });
     return false;
   }
