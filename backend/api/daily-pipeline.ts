@@ -26,8 +26,11 @@ import { SupabaseProspectingRepository } from "../src/prospecting/supabaseProspe
 import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
 import { generateStrategy } from "../src/strategy/strategyEngine.js";
 import { SupabaseStrategyRepository, collectStrategyEngineInputs } from "../src/strategy/supabaseStrategyRepository.js";
+import { decideNotifications } from "../src/notifications/notificationEngine.js";
+import { SupabaseNotificationRepository, collectNotificationInputs } from "../src/notifications/supabaseNotificationRepository.js";
 
 const STRATEGY_REGENERATION_INTERVAL_DAYS = 7;
+const NOTIFICATION_LOOKBACK_HOURS = 25; // safe margin over the ~24h cron cadence
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -253,6 +256,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return `generated version ${saved.version} (lowConfidence=${saved.lowConfidence})`;
     }),
   ];
+
+  // Runs last, over this run's own results plus real DB state -- never
+  // fires for routine/expected activity, only for what the master spec
+  // calls "meaningful events." See notificationEngine.ts's own "avoid
+  // spam" discipline.
+  const notificationsResult = await runStep("notifications", async () => {
+    const now = new Date();
+    const since = new Date(now.getTime() - NOTIFICATION_LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
+    const failedSteps = results.filter((r) => !r.ok).map((r) => ({ step: r.step, detail: r.detail }));
+    const inputs = await collectNotificationInputs(client, failedSteps, since);
+    const toCreate = decideNotifications(inputs);
+    const notifRepo = new SupabaseNotificationRepository(client);
+    for (const notif of toCreate) {
+      await notifRepo.create(notif);
+    }
+    return `${toCreate.length} created`;
+  });
+  results.push(notificationsResult);
 
   const allOk = results.every((r) => r.ok);
   res.status(allOk ? 200 : 207).json({ results });

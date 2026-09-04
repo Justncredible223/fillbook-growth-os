@@ -79,6 +79,14 @@ interface GrowthOsRepository {
     /** Computes a final result and marks the experiment completed. */
     suspend fun completeExperiment(id: String): Experiment
     suspend fun abortExperiment(id: String)
+
+    /** Real, meaningful-events-only in-app notifications -- see backend/src/notifications/notificationEngine.ts. Not OS-level push (that needs Firebase, a separate owner setup step). */
+    suspend fun getNotifications(): Pair<List<AppNotification>, Int>
+    suspend fun markNotificationRead(id: String)
+    suspend fun markAllNotificationsRead()
+
+    suspend fun getMorningBrief(): MorningBrief
+    suspend fun getEveningReport(): EveningReport
 }
 
 /**
@@ -476,4 +484,52 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         val index = fakeExperiments.indexOfFirst { it.id == id }
         if (index >= 0) fakeExperiments[index] = fakeExperiments[index].copy(status = "aborted")
     }
+
+    private val fakeNotifications = mutableListOf(
+        AppNotification(
+            id = "notif-fake-1",
+            type = "high_value_opportunity",
+            title = "High-value opportunity: Trailing drawdown confusion",
+            body = "Score 80 -- worth a look in Radar.",
+            severity = "info",
+            createdAt = "2026-09-03T13:00:00Z",
+            readAt = null,
+            relatedId = "opp-1",
+        ),
+    )
+
+    override suspend fun getNotifications(): Pair<List<AppNotification>, Int> =
+        fakeNotifications.toList() to fakeNotifications.count { it.readAt == null }
+
+    override suspend fun markNotificationRead(id: String) {
+        val index = fakeNotifications.indexOfFirst { it.id == id }
+        if (index >= 0) fakeNotifications[index] = fakeNotifications[index].copy(readAt = "2026-09-03T13:05:00Z")
+    }
+
+    override suspend fun markAllNotificationsRead() {
+        for (i in fakeNotifications.indices) {
+            if (fakeNotifications[i].readAt == null) fakeNotifications[i] = fakeNotifications[i].copy(readAt = "2026-09-03T13:05:00Z")
+        }
+    }
+
+    override suspend fun getMorningBrief() = MorningBrief(
+        generatedAt = "2026-09-03T13:00:00Z",
+        signalsOvernight = 4,
+        topNewOpportunities = listOf(OpportunitySummary("opp-1", "Trailing drawdown confusion", 80.0)),
+        pendingApprovals = 1,
+        inboundNeedsResponse = 2,
+        strategySummary = "1 topic(s) to double down on, 1 to pull back on.",
+        unreadNotificationCount = 1,
+    )
+
+    override suspend fun getEveningReport() = EveningReport(
+        generatedAt = "2026-09-03T23:00:00Z",
+        assetsDrafted = 2,
+        approvedToday = 1,
+        rejectedToday = 0,
+        reviewPassRate = 0.85,
+        costTodayUsd = 0.09,
+        inboundResolvedToday = 3,
+        topOpportunity = OpportunitySummary("opp-1", "Trailing drawdown confusion", 80.0),
+    )
 }

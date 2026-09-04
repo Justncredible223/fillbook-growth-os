@@ -9,6 +9,7 @@ import { SupabaseStrategyRepository, collectStrategyEngineInputs } from "../src/
 import { interpretExperiment } from "../src/experiments/experimentEngine.js";
 import { SupabaseExperimentRepository, measureExperiment } from "../src/experiments/supabaseExperimentRepository.js";
 import type { NewExperiment } from "../src/experiments/types.js";
+import { SupabaseNotificationRepository } from "../src/notifications/supabaseNotificationRepository.js";
 
 /**
  * `?resource=strategy` handles Strategy Evolution -- a read of the latest
@@ -132,6 +133,138 @@ async function handleExperiments(req: VercelRequest, res: VercelResponse): Promi
 }
 
 /**
+ * `?resource=notifications` -- the real in-app Notification System (see
+ * backend/src/notifications/notificationEngine.ts). GET lists recent
+ * notifications + unread count; POST { id, action: "mark-read" } or
+ * { action: "mark-all-read" }. In-app only, not OS-level push -- that
+ * needs a Firebase Cloud Messaging project (a new external service the
+ * owner would have to set up), not attempted without that owner action.
+ */
+async function handleNotifications(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const client = getServiceClient();
+  const repo = new SupabaseNotificationRepository(client);
+
+  if (req.method === "GET") {
+    try {
+      const [notifications, unreadCount] = await Promise.all([repo.list(50), repo.countUnread()]);
+      res.status(200).json({ notifications, unreadCount });
+    } catch (err) {
+      res.status(500).json({ error: errorMessage(err) });
+    }
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const body = req.body as { id?: string; action?: string } | undefined;
+    if (body?.action === "mark-all-read") {
+      await repo.markAllRead();
+      res.status(200).json({ ok: true });
+      return;
+    }
+    if (body?.action === "mark-read" && body.id) {
+      await repo.markRead(body.id);
+      res.status(200).json({ ok: true });
+      return;
+    }
+    res.status(400).json({ error: "action must be 'mark-read' (with id) or 'mark-all-read'" });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+/**
+ * `?resource=brief` (Morning Brief) and `?resource=evening-report`
+ * (Evening Report) -- both computed on read from real data, not stored
+ * separately, since there's nothing to store that isn't already a
+ * snapshot of other tables. "Overnight"/"today" both mean the trailing
+ * 24h from the request time, not a calendar-day boundary -- simpler and
+ * correct regardless of which timezone the owner is actually in.
+ */
+async function handleBrief(req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (req.method !== "GET") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+  try {
+    const client = getServiceClient();
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const [signalsSince, newOpportunities, pendingApprovals, inboundSummaryRow, strategy, unreadNotifications] = await Promise.all([
+      client.from("signals").select("id", { count: "exact", head: true }).gte("observed_at", since),
+      client.from("opportunities").select("id, title, score").eq("status", "open").gte("created_at", since).order("score", { ascending: false }).limit(5),
+      client.from("campaign_assets").select("id, campaigns!inner(status)", { count: "exact", head: true }).eq("stage", "ready_for_owner").eq("campaigns.status", "in_review"),
+      client.from("inbound_engagements").select("status"),
+      new SupabaseStrategyRepository(client).getLatest(),
+      client.from("notifications").select("id, title, severity").is("read_at", null).order("created_at", { ascending: false }).limit(5),
+    ]);
+
+    const needsResponse = ((inboundSummaryRow.data ?? []) as Array<{ status: string }>).filter(
+      (r) => r.status === "needs_response" || r.status === "review_needed" || r.status === "draft_ready",
+    ).length;
+
+    res.status(200).json({
+      generatedAt: new Date().toISOString(),
+      signalsOvernight: signalsSince.count ?? 0,
+      topNewOpportunities: (newOpportunities.data ?? []).map((o: any) => ({ id: o.id, title: o.title, score: Number(o.score) })),
+      pendingApprovals: pendingApprovals.count ?? 0,
+      inboundNeedsResponse: needsResponse,
+      strategySummary: strategy?.summary ?? null,
+      unreadNotifications: unreadNotifications.data ?? [],
+    });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+async function handleEveningReport(req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (req.method !== "GET") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+  try {
+    const client = getServiceClient();
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const [assetsDrafted, decidedToday, scoresToday, costToday, inboundResolvedToday, topCampaign] = await Promise.all([
+      client.from("campaign_assets").select("id", { count: "exact", head: true }).gte("created_at", since),
+      client.from("campaigns").select("status").gte("decided_at", since),
+      client.from("content_scores").select("verdict").gte("created_at", since),
+      client.from("cost_events").select("cost_usd").gte("created_at", since),
+      client.from("inbound_engagements").select("id", { count: "exact", head: true }).gte("responded_at", since),
+      client.from("opportunities").select("title, score").gte("created_at", since).order("score", { ascending: false }).limit(1).maybeSingle(),
+    ]);
+
+    const decided = (decidedToday.data ?? []) as Array<{ status: string }>;
+    const approvedCount = decided.filter((c) => c.status === "approved").length;
+    const rejectedCount = decided.filter((c) => c.status === "retired").length;
+
+    const scores = (scoresToday.data ?? []) as Array<{ verdict: string }>;
+    const passCount = scores.filter((s) => s.verdict === "pass").length;
+    const reviewPassRate = scores.length > 0 ? passCount / scores.length : null;
+
+    const totalCostToday = (costToday.data ?? []).reduce((sum: number, r: { cost_usd: number }) => sum + Number(r.cost_usd), 0);
+
+    res.status(200).json({
+      generatedAt: new Date().toISOString(),
+      assetsDrafted: assetsDrafted.count ?? 0,
+      approvedToday: approvedCount,
+      rejectedToday: rejectedCount,
+      reviewPassRate,
+      costTodayUsd: Number(totalCostToday.toFixed(6)),
+      inboundResolvedToday: inboundResolvedToday.count ?? 0,
+      topOpportunity: topCampaign.data ? { title: (topCampaign.data as any).title, score: Number((topCampaign.data as any).score) } : null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+/**
  * POST here (default resource) is the Pause System control (Settings/
  * System screens): { paused: boolean }. Folded into this GET endpoint
  * rather than a new file -- this project is already at Vercel Hobby's
@@ -150,6 +283,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.query.resource === "experiments") {
     await handleExperiments(req, res);
+    return;
+  }
+  if (req.query.resource === "notifications") {
+    await handleNotifications(req, res);
+    return;
+  }
+  if (req.query.resource === "brief") {
+    await handleBrief(req, res);
+    return;
+  }
+  if (req.query.resource === "evening-report") {
+    await handleEveningReport(req, res);
     return;
   }
 

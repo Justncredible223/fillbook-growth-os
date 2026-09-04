@@ -278,6 +278,41 @@ data class Experiment(
     val result: ExperimentResult?,
 )
 
+data class AppNotification(
+    val id: String,
+    val type: String,
+    val title: String,
+    val body: String,
+    val severity: String,
+    val createdAt: String,
+    val readAt: String?,
+    val relatedId: String?,
+)
+
+data class OpportunitySummary(val id: String, val title: String, val score: Double)
+
+/** Real, computed from the trailing 24h -- see backend/api/summary.ts's handleBrief. Nothing here is fabricated when a field is empty; it just means nothing meaningful happened in that window. */
+data class MorningBrief(
+    val generatedAt: String,
+    val signalsOvernight: Int,
+    val topNewOpportunities: List<OpportunitySummary>,
+    val pendingApprovals: Int,
+    val inboundNeedsResponse: Int,
+    val strategySummary: String?,
+    val unreadNotificationCount: Int,
+)
+
+data class EveningReport(
+    val generatedAt: String,
+    val assetsDrafted: Int,
+    val approvedToday: Int,
+    val rejectedToday: Int,
+    val reviewPassRate: Double?,
+    val costTodayUsd: Double,
+    val inboundResolvedToday: Int,
+    val topOpportunity: OpportunitySummary?,
+)
+
 data class ExperimentResult(
     val controlRate: Double?,
     val treatmentRate: Double?,

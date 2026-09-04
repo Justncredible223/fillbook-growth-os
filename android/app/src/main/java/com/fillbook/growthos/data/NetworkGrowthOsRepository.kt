@@ -25,16 +25,19 @@ import java.util.concurrent.TimeUnit
  *
  * [appToken] is the second, separate credential that actually gates this
  * project's own business data (see backend/src/lib/requireAppAuth.ts).
- * Unlike the Vercel bypass secret above, this one is never baked into the
- * source or the APK -- the user enters it once on LoginScreen and it's
- * kept in EncryptedSharedPreferences via TokenStore. Every request here
- * sends it as a standard Authorization: Bearer header; the backend
- * rejects anything that doesn't match its own APP_API_TOKEN env var.
+ * Same trust tier as the Vercel bypass secret above -- compiled into the
+ * app once (MainActivity's APP_TOKEN), never something the owner types
+ * or retrieves. The owner's actual gate is BiometricGateScreen
+ * (fingerprint/face/device PIN); this token exists so a stranger who
+ * only has the Vercel bypass secret still can't reach this project's
+ * data without also having decompiled the APK for this value too. Every
+ * request here sends it as a standard Authorization: Bearer header; the
+ * backend rejects anything that doesn't match its own APP_API_TOKEN env
+ * var.
  *
- * [deciderName] is the display name entered alongside the access code --
- * not a real account system, just enough to answer "who approved this"
- * when two people share the same phone/token (see migration
- * 0013_campaign_decision_audit.sql).
+ * [deciderName] answers "who approved this" for the audit trail (see
+ * migration 0013_campaign_decision_audit.sql) -- fixed to "Owner" for
+ * this single-owner app rather than a real account system.
  */
 class NetworkGrowthOsRepository(
     private val baseUrl: String,
@@ -490,9 +493,67 @@ class NetworkGrowthOsRepository(
     override suspend fun abortExperiment(id: String) {
         post("/api/summary?resource=experiments", JSONObject().put("id", id).put("action", "abort"))
     }
+
+    private fun JSONObject.toAppNotification() = AppNotification(
+        id = getString("id"),
+        type = getString("type"),
+        title = getString("title"),
+        body = getString("body"),
+        severity = getString("severity"),
+        createdAt = getString("createdAt"),
+        readAt = optStringOrNull("readAt"),
+        relatedId = optStringOrNull("relatedId"),
+    )
+
+    override suspend fun getNotifications(): Pair<List<AppNotification>, Int> {
+        val json = get("/api/summary?resource=notifications")
+        val items = json.getJSONArray("notifications").map { it.toAppNotification() }
+        return items to json.getInt("unreadCount")
+    }
+
+    override suspend fun markNotificationRead(id: String) {
+        post("/api/summary?resource=notifications", JSONObject().put("id", id).put("action", "mark-read"))
+    }
+
+    override suspend fun markAllNotificationsRead() {
+        post("/api/summary?resource=notifications", JSONObject().put("action", "mark-all-read"))
+    }
+
+    private fun JSONObject.toOpportunitySummary() = OpportunitySummary(
+        id = getString("id"),
+        title = getString("title"),
+        score = getDouble("score"),
+    )
+
+    override suspend fun getMorningBrief(): MorningBrief {
+        val json = get("/api/summary?resource=brief")
+        return MorningBrief(
+            generatedAt = json.getString("generatedAt"),
+            signalsOvernight = json.getInt("signalsOvernight"),
+            topNewOpportunities = json.getJSONArray("topNewOpportunities").map { it.toOpportunitySummary() },
+            pendingApprovals = json.getInt("pendingApprovals"),
+            inboundNeedsResponse = json.getInt("inboundNeedsResponse"),
+            strategySummary = json.optStringOrNull("strategySummary"),
+            unreadNotificationCount = json.getJSONArray("unreadNotifications").length(),
+        )
+    }
+
+    override suspend fun getEveningReport(): EveningReport {
+        val json = get("/api/summary?resource=evening-report")
+        return EveningReport(
+            generatedAt = json.getString("generatedAt"),
+            assetsDrafted = json.getInt("assetsDrafted"),
+            approvedToday = json.getInt("approvedToday"),
+            rejectedToday = json.getInt("rejectedToday"),
+            reviewPassRate = if (json.isNull("reviewPassRate")) null else json.getDouble("reviewPassRate"),
+            costTodayUsd = json.getDouble("costTodayUsd"),
+            inboundResolvedToday = json.getInt("inboundResolvedToday"),
+            topOpportunity = json.optJSONObject("topOpportunity")?.toOpportunitySummary(),
+        )
+    }
 }
 
-/** [httpCode] lets callers (LoginScreen especially) tell "wrong access code" (401) apart from an unrelated server/network failure -- both used to surface as the same generic message. */
+/** [httpCode] lets callers tell an auth/config problem (401/500) apart from an unrelated server/network failure -- both used to surface as the same generic message before this existed. */
 class NetworkException(message: String, val httpCode: Int? = null) : Exception(message)
 
 /** Small helpers since org.json's JSONArray predates Kotlin collections. */
