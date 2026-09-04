@@ -6,6 +6,9 @@ import { SupabaseAutoDraftRunRepository } from "../src/opportunities/autoDraftRu
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 import { generateStrategy } from "../src/strategy/strategyEngine.js";
 import { SupabaseStrategyRepository, collectStrategyEngineInputs } from "../src/strategy/supabaseStrategyRepository.js";
+import { interpretExperiment } from "../src/experiments/experimentEngine.js";
+import { SupabaseExperimentRepository, measureExperiment } from "../src/experiments/supabaseExperimentRepository.js";
+import type { NewExperiment } from "../src/experiments/types.js";
 
 /**
  * `?resource=strategy` handles Strategy Evolution -- a read of the latest
@@ -47,6 +50,88 @@ async function handleStrategy(req: VercelRequest, res: VercelResponse): Promise<
 }
 
 /**
+ * `?resource=experiments` -- before/after content-performance tests (see
+ * backend/src/experiments/types.ts for why "control vs treatment" means
+ * time periods here, not a randomized split). GET lists all; POST with
+ * no `id` creates+starts one; POST with `{ id, action: "measure" }`
+ * computes/refreshes its result without ending it; POST with
+ * `{ id, action: "complete" }` computes a final result and closes it;
+ * POST with `{ id, action: "abort" }` cancels one early. Folded in here
+ * for the same 12-function-cap reason as strategy above.
+ */
+async function handleExperiments(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const client = getServiceClient();
+  const repo = new SupabaseExperimentRepository(client);
+
+  if (req.method === "GET") {
+    try {
+      res.status(200).json({ experiments: await repo.list() });
+    } catch (err) {
+      res.status(500).json({ error: errorMessage(err) });
+    }
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const body = req.body as
+      | { id?: string; action?: string; hypothesis?: string; scope?: { platform?: string; assetType?: string }; guardrailNote?: string; startDate?: string; controlWindowDays?: number }
+      | undefined;
+
+    if (!body?.id) {
+      if (!body?.hypothesis || !body?.startDate) {
+        res.status(400).json({ error: "Body must include { hypothesis, startDate } to create an experiment" });
+        return;
+      }
+      const input: NewExperiment = {
+        hypothesis: body.hypothesis,
+        scope: body.scope ?? {},
+        guardrailNote: body.guardrailNote ?? null,
+        startDate: body.startDate,
+        controlWindowDays: body.controlWindowDays ?? 14,
+      };
+      const created = await repo.create(input);
+      res.status(200).json({ experiment: created });
+      return;
+    }
+
+    const experiment = await repo.get(body.id);
+    if (!experiment) {
+      res.status(404).json({ error: "Experiment not found" });
+      return;
+    }
+
+    if (body.action === "abort") {
+      await repo.abort(body.id);
+      res.status(200).json({ id: body.id, status: "aborted" });
+      return;
+    }
+
+    if (body.action === "measure" || body.action === "complete") {
+      const now = new Date();
+      const { control, treatment } = await measureExperiment(client, experiment, now);
+      const result = interpretExperiment(control, treatment, now);
+
+      if (body.action === "complete") {
+        const completed = await repo.complete(body.id, result, now.toISOString().slice(0, 10));
+        res.status(200).json({ experiment: completed });
+        return;
+      }
+      res.status(200).json({ experiment: { ...experiment, result } });
+      return;
+    }
+
+    res.status(400).json({ error: "action must be one of: measure, complete, abort" });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+/**
  * POST here (default resource) is the Pause System control (Settings/
  * System screens): { paused: boolean }. Folded into this GET endpoint
  * rather than a new file -- this project is already at Vercel Hobby's
@@ -61,6 +146,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.query.resource === "strategy") {
     await handleStrategy(req, res);
+    return;
+  }
+  if (req.query.resource === "experiments") {
+    await handleExperiments(req, res);
     return;
   }
 

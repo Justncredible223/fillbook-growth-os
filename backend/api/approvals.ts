@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
+import { buildUtmParams, utmQueryString } from "../src/attribution/utmBuilder.js";
 import {
   InboundActionError,
   closeInbound,
@@ -336,9 +337,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
 
+        const campaignTitle = asset.campaigns?.thesis ?? "(untitled campaign)";
+        const utmParams = buildUtmParams(asset.id, asset.platform, campaignTitle);
+
         return {
           id: asset.id,
-          campaignTitle: asset.campaigns?.thesis ?? "(untitled campaign)",
+          campaignTitle,
           platform: asset.platform,
           assetType: asset.asset_type,
           previewText: latestVersion?.body ?? "",
@@ -348,6 +352,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           generatedAt: autoDraft ? autoDraft.created_at : null,
           reviewPassCount,
           reviewFailCount,
+          // See backend/src/attribution/utmBuilder.ts's kdoc: this is the
+          // honest, buildable slice of Attribution -- a consistent tag to
+          // append to any fillbookhq.com link in the post, not real
+          // click/signup tracking (which needs access this project
+          // doesn't have).
+          trackingQuery: utmQueryString(utmParams),
         };
       }),
     );

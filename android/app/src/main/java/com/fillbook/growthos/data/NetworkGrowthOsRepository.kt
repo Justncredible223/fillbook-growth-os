@@ -191,6 +191,7 @@ class NetworkGrowthOsRepository(
                 generatedAt = item.optStringOrNull("generatedAt"),
                 reviewPassCount = item.optInt("reviewPassCount", 0),
                 reviewFailCount = item.optInt("reviewFailCount", 0),
+                trackingQuery = item.optStringOrNull("trackingQuery") ?: "",
             )
         }
     }
@@ -420,6 +421,74 @@ class NetworkGrowthOsRepository(
     override suspend fun regenerateStrategy(): StrategyVersion {
         val json = post("/api/summary?resource=strategy", JSONObject())
         return json.getJSONObject("strategy").toStrategyVersion()
+    }
+
+    private fun JSONObject.toExperimentResult(): ExperimentResult? {
+        if (isNull("result")) return null
+        val r = getJSONObject("result")
+        return ExperimentResult(
+            controlRate = if (r.isNull("controlRate")) null else r.getDouble("controlRate"),
+            treatmentRate = if (r.isNull("treatmentRate")) null else r.getDouble("treatmentRate"),
+            absoluteDifference = if (r.isNull("absoluteDifference")) null else r.getDouble("absoluteDifference"),
+            pValue = if (r.isNull("pValue")) null else r.getDouble("pValue"),
+            isSignificant = r.getBoolean("isSignificant"),
+            insufficientSample = r.getBoolean("insufficientSample"),
+            controlSampleSize = r.getInt("controlSampleSize"),
+            treatmentSampleSize = r.getInt("treatmentSampleSize"),
+            interpretation = r.getString("interpretation"),
+            computedAt = r.getString("computedAt"),
+        )
+    }
+
+    private fun JSONObject.toExperiment(): Experiment {
+        val scope = optJSONObject("scope")
+        return Experiment(
+            id = getString("id"),
+            hypothesis = getString("hypothesis"),
+            scopePlatform = scope?.optStringOrNull("platform"),
+            scopeAssetType = scope?.optStringOrNull("assetType"),
+            guardrailNote = optStringOrNull("guardrailNote"),
+            status = getString("status"),
+            startDate = getString("startDate"),
+            endDate = optStringOrNull("endDate"),
+            controlWindowStart = getString("controlWindowStart"),
+            createdAt = getString("createdAt"),
+            result = toExperimentResult(),
+        )
+    }
+
+    // Folded into /api/summary (?resource=experiments) -- same 12-function-cap reasoning as strategy above.
+    override suspend fun getExperiments(): List<Experiment> {
+        val json = get("/api/summary?resource=experiments")
+        return json.getJSONArray("experiments").map { it.toExperiment() }
+    }
+
+    override suspend fun createExperiment(hypothesis: String, scopePlatform: String?, scopeAssetType: String?, guardrailNote: String?, startDate: String, controlWindowDays: Int): Experiment {
+        val scope = JSONObject()
+        if (scopePlatform != null) scope.put("platform", scopePlatform)
+        if (scopeAssetType != null) scope.put("assetType", scopeAssetType)
+        val body = JSONObject()
+            .put("hypothesis", hypothesis)
+            .put("scope", scope)
+            .put("startDate", startDate)
+            .put("controlWindowDays", controlWindowDays)
+        if (guardrailNote != null) body.put("guardrailNote", guardrailNote)
+        val json = post("/api/summary?resource=experiments", body)
+        return json.getJSONObject("experiment").toExperiment()
+    }
+
+    override suspend fun measureExperiment(id: String): Experiment {
+        val json = post("/api/summary?resource=experiments", JSONObject().put("id", id).put("action", "measure"))
+        return json.getJSONObject("experiment").toExperiment()
+    }
+
+    override suspend fun completeExperiment(id: String): Experiment {
+        val json = post("/api/summary?resource=experiments", JSONObject().put("id", id).put("action", "complete"))
+        return json.getJSONObject("experiment").toExperiment()
+    }
+
+    override suspend fun abortExperiment(id: String) {
+        post("/api/summary?resource=experiments", JSONObject().put("id", id).put("action", "abort"))
     }
 }
 

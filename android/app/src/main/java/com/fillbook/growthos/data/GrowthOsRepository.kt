@@ -71,6 +71,14 @@ interface GrowthOsRepository {
     suspend fun getLatestStrategy(): StrategyVersion?
     /** Forces a fresh strategy report now, regardless of the normal weekly schedule -- for the Strategy screen's manual "Regenerate" action. */
     suspend fun regenerateStrategy(): StrategyVersion
+
+    suspend fun getExperiments(): List<Experiment>
+    suspend fun createExperiment(hypothesis: String, scopePlatform: String?, scopeAssetType: String?, guardrailNote: String?, startDate: String, controlWindowDays: Int): Experiment
+    /** Refreshes a running experiment's result without ending it. */
+    suspend fun measureExperiment(id: String): Experiment
+    /** Computes a final result and marks the experiment completed. */
+    suspend fun completeExperiment(id: String): Experiment
+    suspend fun abortExperiment(id: String)
 }
 
 /**
@@ -406,5 +414,66 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         val next = (current?.copy(version = current.version + 1) ?: fakeStrategy)!!
         fakeStrategy = next
         return next
+    }
+
+    private val fakeExperiments = mutableListOf(
+        Experiment(
+            id = "exp-fake-1",
+            hypothesis = "More video_script assets on tiktok improve the review pass rate",
+            scopePlatform = "tiktok",
+            scopeAssetType = "video_script",
+            guardrailNote = null,
+            status = "running",
+            startDate = "2026-08-27",
+            endDate = null,
+            controlWindowStart = "2026-08-13",
+            createdAt = "2026-08-27T12:00:00Z",
+            result = ExperimentResult(
+                controlRate = 0.4,
+                treatmentRate = 0.4,
+                absoluteDifference = 0.0,
+                pValue = null,
+                isSignificant = false,
+                insufficientSample = true,
+                controlSampleSize = 3,
+                treatmentSampleSize = 2,
+                interpretation = "Not enough data yet (control: 3, treatment: 2 -- both need 5+). Keep running before drawing a conclusion.",
+                computedAt = "2026-09-03T12:00:00Z",
+            ),
+        ),
+    )
+
+    override suspend fun getExperiments(): List<Experiment> = fakeExperiments.toList()
+
+    override suspend fun createExperiment(hypothesis: String, scopePlatform: String?, scopeAssetType: String?, guardrailNote: String?, startDate: String, controlWindowDays: Int): Experiment {
+        val created = Experiment(
+            id = "exp-fake-${fakeExperiments.size + 1}",
+            hypothesis = hypothesis,
+            scopePlatform = scopePlatform,
+            scopeAssetType = scopeAssetType,
+            guardrailNote = guardrailNote,
+            status = "running",
+            startDate = startDate,
+            endDate = null,
+            controlWindowStart = startDate,
+            createdAt = startDate,
+            result = null,
+        )
+        fakeExperiments.add(0, created)
+        return created
+    }
+
+    override suspend fun measureExperiment(id: String): Experiment = fakeExperiments.first { it.id == id }
+
+    override suspend fun completeExperiment(id: String): Experiment {
+        val index = fakeExperiments.indexOfFirst { it.id == id }
+        val updated = fakeExperiments[index].copy(status = "completed", endDate = "2026-09-03")
+        fakeExperiments[index] = updated
+        return updated
+    }
+
+    override suspend fun abortExperiment(id: String) {
+        val index = fakeExperiments.indexOfFirst { it.id == id }
+        if (index >= 0) fakeExperiments[index] = fakeExperiments[index].copy(status = "aborted")
     }
 }

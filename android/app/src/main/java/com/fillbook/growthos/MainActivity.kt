@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
@@ -89,6 +90,7 @@ import com.fillbook.growthos.ui.screens.RadarScreen
 import com.fillbook.growthos.ui.screens.ResearchScreen
 import com.fillbook.growthos.ui.screens.SettingsScreen
 import com.fillbook.growthos.ui.screens.StrategyScreen
+import com.fillbook.growthos.ui.screens.ExperimentsScreen
 import com.fillbook.growthos.ui.screens.SystemScreen
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Background
@@ -112,6 +114,7 @@ private sealed class Destination(val route: String, val label: String, val icon:
     data object Research : Destination("research", "Research", Icons.Filled.Science)
     data object Creators : Destination("creators", "Creators", Icons.Filled.Groups)
     data object Strategy : Destination("strategy", "Strategy", Icons.Filled.Timeline)
+    data object Experiments : Destination("experiments", "Experiments", Icons.Filled.QueryStats)
     data object System : Destination("system", "System", Icons.Filled.Dns)
     data object Settings : Destination("settings", "Settings", Icons.Filled.Settings)
 }
@@ -137,6 +140,7 @@ private val moreDestinations = listOf(
     Destination.Settings,
     Destination.Research,
     Destination.Strategy,
+    Destination.Experiments,
 )
 
 private val allDestinations = primaryDestinations + moreDestinations
@@ -264,6 +268,7 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, onL
             composable(Destination.Research.route) { ResearchScreen() }
             composable(Destination.Creators.route) { CreatorsScreen(repo) }
             composable(Destination.Strategy.route) { StrategyScreen(repo) }
+            composable(Destination.Experiments.route) { ExperimentsScreen(repo) }
             composable(Destination.System.route) { SystemScreen(repo) }
             composable(Destination.Settings.route) { SettingsScreen(repo, onLogout = onLogout) }
         }

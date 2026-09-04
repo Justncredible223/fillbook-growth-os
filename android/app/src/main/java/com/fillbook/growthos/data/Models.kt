@@ -44,6 +44,13 @@ data class ApprovalAsset(
     val generatedAt: String?,
     val reviewPassCount: Int,
     val reviewFailCount: Int,
+    /**
+     * A consistent UTM query string (utm_source/medium/campaign/content)
+     * to append to any fillbookhq.com link in the post -- NOT real click/
+     * signup tracking (Growth OS has no access to FillbookHQ's analytics
+     * to read that back). See backend/src/attribution/utmBuilder.ts.
+     */
+    val trackingQuery: String,
 )
 
 data class HealthItem(
@@ -248,4 +255,38 @@ data class StrategyVersion(
     val experimentsToRun: List<ExperimentSuggestion>,
     val summary: String,
     val lowConfidence: Boolean,
+)
+
+/**
+ * A before/after content-performance test -- NOT a randomized traffic
+ * split (there's one X/YouTube/TikTok account, no infrastructure to show
+ * different content to different visitors). "Control" is the period
+ * before [startDate], "treatment" is [startDate] onward, both measured
+ * on the same real metric (see backend/src/experiments/types.ts).
+ */
+data class Experiment(
+    val id: String,
+    val hypothesis: String,
+    val scopePlatform: String?,
+    val scopeAssetType: String?,
+    val guardrailNote: String?,
+    val status: String,
+    val startDate: String,
+    val endDate: String?,
+    val controlWindowStart: String,
+    val createdAt: String,
+    val result: ExperimentResult?,
+)
+
+data class ExperimentResult(
+    val controlRate: Double?,
+    val treatmentRate: Double?,
+    val absoluteDifference: Double?,
+    val pValue: Double?,
+    val isSignificant: Boolean,
+    val insufficientSample: Boolean,
+    val controlSampleSize: Int,
+    val treatmentSampleSize: Int,
+    val interpretation: String,
+    val computedAt: String,
 )

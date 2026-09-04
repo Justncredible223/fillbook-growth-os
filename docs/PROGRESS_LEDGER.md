@@ -1115,3 +1115,103 @@ of only catchable by live runs. Confirmed live post-fix: 19 need response,
 16 overdue, 4 repeat engagers -- all real.
 
 **Cumulative backend test count: 281/281 passing, typecheck clean.**
+
+## Phase 19 — Strategy Evolution (real, self-contained)
+
+Built entirely on data this project already owns -- campaigns,
+campaign_assets, content_versions/content_scores, signals, creators --
+rather than FillbookHQ's separate production database, which this
+project has no read access to by design (see docs/ARCHITECTURE.md).
+That's the deciding factor for what got built this pass vs. what didn't:
+Strategy Evolution and Experiments (below) don't need that access;
+Attribution's real half, Growth Genome, and Research Lab do (see the
+blocker note at the end of this entry).
+
+`backend/src/strategy/strategyEngine.ts`: pure recommendation logic
+(topics to increase/decrease, content to retire, formats to test, SEO
+gaps, stale creator relationships, experiment suggestions) against fixed
+thresholds with a minimum sample size (`MIN_SAMPLE_SIZE = 3`) -- never
+recommends off 1-2 data points. The whole report is flagged
+`lowConfidence` when fewer than 2 topics have enough data, rather than
+presenting a thin first read as settled (master spec: "avoid fake
+statistical certainty"). `supabaseStrategyRepository.ts` does the real
+aggregation; `strategy_versions` (migration 0016) stores versioned
+snapshots, not a mutable row, so past reads stay auditable. Wired into
+`/api/summary?resource=strategy` (GET latest/history, POST to
+regenerate) and a new weekly step in `daily-pipeline.ts` -- safe to
+automate since it's pure aggregation with no LLM cost, unlike auto_draft.
+
+Android: `StrategyScreen.kt` replaces its `ComingSoonScreen` placeholder
+with the real report. 11 new tests, cumulative 352/352, typecheck clean.
+`./gradlew :app:assembleDebug` verified BUILD SUCCESSFUL.
+
+## Phase 17 — Experiments (before/after, not randomized split)
+
+Built the honest shape an experiment can take without real traffic-
+splitting infrastructure: this is one X/YouTube/TikTok account, not two,
+so there's no way to show different content to different visitors.
+"Control" is the period before an experiment's `startDate`, "treatment"
+is `startDate` onward, both measured on the same real metric (review
+pass rate for campaign_assets matching the experiment's scope).
+
+`backend/src/experiments/statisticalTest.ts`: a real two-proportion
+z-test (Abramowitz-Stegun normal-CDF approximation, no external stats
+library) -- `MIN_SAMPLE_SIZE = 5` per group, below which the result is
+`insufficientSample` and never claims significance regardless of the raw
+numbers. `experimentEngine.ts` turns that into a plain-language
+interpretation. `supabaseExperimentRepository.ts`'s `measureExperiment`
+does the real query: latest `content_versions` per matching
+`campaign_asset`, `content_scores` verdicts, split by the control/
+treatment date boundary. `experiments` table (migration 0017). Wired
+into `/api/summary?resource=experiments` (list, create+start, measure/
+complete/abort).
+
+Android: new `ExperimentsScreen.kt` (via the More menu) -- create a
+hypothesis with an optional platform/asset-type scope, see running
+experiments' live interpretation, Check now/Complete/Abort actions. 11
+new tests (statisticalTest + experimentEngine), typecheck clean.
+`./gradlew :app:assembleDebug` verified BUILD SUCCESSFUL.
+
+## Attribution -- the honest, buildable slice only
+
+Real click-to-signup attribution needs either FillbookHQ's own website
+reporting back which visits/signups came from which link, or Growth OS
+reading FillbookHQ's production analytics directly -- neither exists,
+and building the full master-spec Attribution system (site visit ->
+signup -> activation -> trial -> paid -> retention, per campaign/hook/
+CTA) without one of those is not honestly possible from this project
+alone. Also worth knowing: FillbookHQ already has its own `/go/` short-
+redirect system (see `fillbookhq/docs/CLAUDE_HANDOFF.md`) and its own
+UTM tracking, which the same docs flag as broken/unconfirmed (in-app
+browsers stripping params) -- a second, parallel redirect system inside
+Growth OS would compound that confusion, not fix it.
+
+What IS real and buildable now, and was built this pass:
+`backend/src/attribution/utmBuilder.ts` generates a consistent, campaign-
+asset-tagged UTM query string (`utm_source`/`medium`/`campaign`/
+`content`, the last being the exact `campaign_assets.id`) for every
+handed-off draft, wired into `GET /api/approvals`'s response
+(`trackingQuery`) and shown on the Android Approvals card with a
+one-tap copy button ("append this to any fillbookhq.com link in the
+post"). This doesn't itself close the attribution loop -- it just means
+the tagging convention already exists and is consistent if/when real
+click/signup data ever becomes readable. 5 new tests, typecheck clean.
+
+**BLOCKER (real, specific, not pursued further this pass):** closing the
+attribution loop, Growth Genome (correlating structured content features
+with real outcomes), and Research Lab (anonymized trading-behavior
+insights) all need one of:
+1. A read-only Postgres role on FillbookHQ's Supabase project
+   (`Edgelog`, ref `xfelnxhumxjakwjhgapf`) that Growth OS could query for
+   aggregated/anonymized signup and usage events, or
+2. FillbookHQ's own codebase (a separate repo, out of scope for Growth
+   OS to modify) adding a webhook/event call to Growth OS's API when a
+   tagged visit converts.
+Neither was pursued this pass without the owner explicitly deciding to
+grant that access -- crossing into FillbookHQ's production database or
+codebase is exactly the kind of boundary `docs/ARCHITECTURE.md` drew
+deliberately, and re-drawing it isn't a call to make unilaterally.
+Building Growth Genome or Research Lab's schemas/screens now, with
+nothing real to fill them, would be hollow scaffolding -- not attempted.
+
+**Cumulative backend test count: 368/368 passing, typecheck clean.**

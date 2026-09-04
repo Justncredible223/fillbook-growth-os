@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.ApprovalAsset
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.ui.components.CopyButton
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GhostButton
 import com.fillbook.growthos.ui.components.GrowthCard
@@ -265,6 +266,24 @@ private fun ApprovalCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = Warning,
                 )
+            }
+        }
+        if (asset.trackingQuery.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            InsetRow {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Tracking tag", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                        Text(
+                            "Append to any fillbookhq.com link: ?${asset.trackingQuery}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextSecondary,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    }
+                    CopyButton(text = "?${asset.trackingQuery}", label = "Tag")
+                }
             }
         }
         Spacer(Modifier.height(14.dp))
