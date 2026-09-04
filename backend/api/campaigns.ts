@@ -46,14 +46,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             let passCount = 0;
             let failCount = 0;
+            const failReasons: Array<{ evaluator: string; verdict: string; notes: string | null }> = [];
             if (latestVersion) {
               const { data: scores } = await client
                 .from("content_scores")
-                .select("verdict")
+                .select("evaluator, verdict, notes")
                 .eq("content_version_id", latestVersion.id);
-              for (const row of (scores ?? []) as Array<{ verdict: string }>) {
-                if (row.verdict === "pass") passCount++;
-                else failCount++;
+              for (const row of (scores ?? []) as Array<{ evaluator: string; verdict: string; notes: string | null }>) {
+                if (row.verdict === "pass") {
+                  passCount++;
+                } else {
+                  failCount++;
+                  failReasons.push({ evaluator: row.evaluator, verdict: row.verdict, notes: row.notes });
+                }
               }
             }
 
@@ -65,6 +70,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               latestBody: latestVersion?.body ?? null,
               reviewPassCount: passCount,
               reviewFailCount: failCount,
+              // Why a final_draft asset never reached the owner -- empty for
+              // anything that passed every reviewer or hasn't been scored yet.
+              failReasons,
             };
           }),
         );
