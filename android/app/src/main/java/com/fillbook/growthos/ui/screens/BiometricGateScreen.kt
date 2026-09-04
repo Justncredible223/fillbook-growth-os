@@ -74,7 +74,21 @@ fun BiometricGateScreen(
                 }
 
                 override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                    if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON || errorCode == BiometricPrompt.ERROR_USER_CANCELED) {
+                    // Only an explicit tap on the prompt's own "Use access
+                    // code instead" button means the owner actually wants to
+                    // fall back and re-enter the code -- that's the sole
+                    // trigger for wiping the saved token. ERROR_USER_CANCELED
+                    // (and every other error/interruption: the screen
+                    // locking mid-prompt, a notification stealing focus, the
+                    // app backgrounding, an accidental back-press, or a
+                    // failed Face/Fingerprint attempt the owner backed out
+                    // of to retry) used to hit this same branch and destroy
+                    // the token for no reason -- this was the actual cause
+                    // of needing to dig up and retype the access code
+                    // multiple times a day. Those cases now just leave the
+                    // owner on this screen with "Try again", same as any
+                    // normal app-lock.
+                    if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
                         onUseCodeInstead()
                     } else {
                         error = errString.toString()
