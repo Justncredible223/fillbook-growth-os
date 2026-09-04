@@ -1,4 +1,4 @@
-import { twoProportionZTest, type ProportionSample } from "./statisticalTest";
+import { twoProportionZTest, type ProportionSample } from "./statisticalTest.js";
 import type { ExperimentResult } from "./types";
 
 /**
