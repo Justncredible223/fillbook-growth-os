@@ -118,6 +118,20 @@ describe("hasConcretePartnershipBasis", () => {
     expect(hasConcretePartnershipBasis({ rawExcerpts: ["The whole prop firm industry is a mess right now, so many firms changing their rules overnight."] })).toBe(false);
   });
 
+  it("FIXED (found while running the real production reassessment): fails third-party criticism that merely mentions OTHER people's mentorship groups -- real 'Nehemiah' production shape, bare 'mentorship' was a false-positive risk before this was tightened to require 'my/our mentorship'", () => {
+    expect(
+      hasConcretePartnershipBasis({
+        rawExcerpts: [
+          "It's just amusing how these young lads are able to pull things stunts. Selling dreams to vulnerable people, when in essence that's not what gave them the wealth they display. Take away prop firm affiliations, demo trades, signal or mentorship groups, this guys can't make 10%.",
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it("still passes a real first-person mentorship offering", () => {
+    expect(hasConcretePartnershipBasis({ rawExcerpts: ["I run a small mentorship for funded futures traders, weekly calls and real accountability."] })).toBe(true);
+  });
+
   it("fails empty evidence", () => {
     expect(hasConcretePartnershipBasis({ rawExcerpts: [] })).toBe(false);
   });
