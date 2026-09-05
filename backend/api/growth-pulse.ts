@@ -16,6 +16,7 @@ import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
 import { createRedditSignalAdapter } from "../src/signals/adapters/redditAdapter.js";
 import { ingestRedditInboundMentions } from "../src/inbound/redditIngestion.js";
 import { runRedditProspectingSearch } from "../src/prospecting/redditProspectingSearch.js";
+import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 
 interface StepResult {
   step: string;
@@ -35,6 +36,7 @@ export interface StepGroups {
   x: boolean;
   redditInbound: boolean;
   redditProspecting: boolean;
+  partnerships: boolean;
 }
 
 /**
@@ -49,11 +51,17 @@ export interface StepGroups {
  */
 export function resolveStepGroups(query: Record<string, unknown>): StepGroups {
   const isTrue = (v: unknown) => v === "1" || v === "true";
-  const anyFlagPresent = ["x", "redditInbound", "redditProspecting"].some((k) => k in query);
+  const anyFlagPresent = ["x", "redditInbound", "redditProspecting", "partnerships"].some((k) => k in query);
   return {
     x: !anyFlagPresent || isTrue(query.x),
     redditInbound: !anyFlagPresent || isTrue(query.redditInbound),
     redditProspecting: !anyFlagPresent || isTrue(query.redditProspecting),
+    // Piggybacks on the same once/day 09:00 Phoenix slot as Reddit
+    // prospecting -- discovery.ts's own SCHEDULED_CADENCE_DAYS=7 gate
+    // means most of these daily calls are a cheap no-op anyway (see
+    // discovery.ts's doc comment), so no separate schedule slot is
+    // needed and none of Vercel's 2 cron slots are spent on this.
+    partnerships: !anyFlagPresent || isTrue(query.partnerships),
   };
 }
 
@@ -109,9 +117,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { x: runX, redditInbound: runRedditInbound, redditProspecting: runRedditProspecting } = resolveStepGroups(
-    req.query as Record<string, unknown>,
-  );
+  const {
+    x: runX,
+    redditInbound: runRedditInbound,
+    redditProspecting: runRedditProspecting,
+    partnerships: runPartnerships,
+  } = resolveStepGroups(req.query as Record<string, unknown>);
 
   const client = getServiceClient();
   const now = new Date();
@@ -238,6 +249,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
   }
 
+  if (runPartnerships) {
+    results.push(
+      await runStep("partnerships_discovery", async () => {
+        let adapter = null;
+        try {
+          adapter = createXSignalAdapter(client);
+        } catch {
+          // X credentials not configured -- discovery still runs against
+          // existing-records sources (creators/prospecting/inbound) only.
+        }
+        const result = await runPartnershipDiscoveryStep({ client, adapter, triggeredBy: "scheduled", now });
+        return `${result.status}: ${result.newCandidates} new (sources: ${result.sourcesSearched.join(", ") || "none"}, $${result.costUsd.toFixed(4)})${result.skipReason ? ` -- ${result.skipReason}` : ""}`;
+      }),
+    );
+  }
+
   const allOk = results.every((r) => r.ok);
-  res.status(allOk ? 200 : 207).json({ results, ranGroups: { x: runX, redditInbound: runRedditInbound, redditProspecting: runRedditProspecting } });
+  res.status(allOk ? 200 : 207).json({
+    results,
+    ranGroups: { x: runX, redditInbound: runRedditInbound, redditProspecting: runRedditProspecting, partnerships: runPartnerships },
+  });
 }

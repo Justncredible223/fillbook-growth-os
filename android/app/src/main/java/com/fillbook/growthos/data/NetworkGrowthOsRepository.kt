@@ -460,12 +460,31 @@ class NetworkGrowthOsRepository(
             previewText = optStringOrNull("previewText"),
             contactedAt = optStringOrNull("contactedAt"),
             contactedChannel = optStringOrNull("contactedChannel"),
+            discoveryScore = if (isNull("discoveryScore")) null else optDouble("discoveryScore").toInt(),
+            discoveryConfidence = optStringOrNull("discoveryConfidence"),
+            discoveredVia = optString("discoveredVia", "manual"),
         )
     }
 
-    override suspend fun getPartnerships(): List<PartnershipProspect> {
+    private fun JSONObject.toDiscoveryRunResult(): PartnershipDiscoveryRunResult = PartnershipDiscoveryRunResult(
+        status = getString("status"),
+        newCandidates = optInt("newCandidates", 0),
+        sourcesSearched = optJSONArray("sourcesSearched")?.mapStrings() ?: emptyList(),
+        costUsd = optDouble("costUsd", 0.0),
+        error = optStringOrNull("error"),
+        skipReason = optStringOrNull("skipReason"),
+    )
+
+    override suspend fun getPartnerships(): PartnershipsSummary {
         val json = get("/api/approvals?resource=partnerships")
-        return json.getJSONArray("items").map { it.toPartnershipProspect() }
+        val items = json.getJSONArray("items").map { it.toPartnershipProspect() }
+        val lastRun = json.optJSONObject("lastDiscoveryRun")?.toDiscoveryRunResult()
+        return PartnershipsSummary(items, lastRun)
+    }
+
+    override suspend fun refreshPartnershipDiscovery(): PartnershipDiscoveryRunResult {
+        val json = post("/api/approvals?resource=partnerships", JSONObject().put("action", "refresh-discovery"))
+        return json.toDiscoveryRunResult()
     }
 
     override suspend fun createPartnership(organizationName: String, contactName: String?, partnerCategory: PartnerCategory, websiteUrl: String?, proposedCollaboration: String?): PartnershipProspect {
@@ -498,7 +517,7 @@ class NetworkGrowthOsRepository(
         post("/api/approvals?resource=partnerships", JSONObject().put("action", "generate-draft").put("id", id))
         // The generate-draft response is a lightweight result (status/cost), not the full prospect shape --
         // re-fetch this one prospect's real current state (including the new previewText) from the list.
-        return getPartnerships().first { it.id == id }
+        return getPartnerships().items.first { it.id == id }
     }
 
     override suspend fun markPartnershipContacted(id: String, channel: String, finalText: String): PartnershipProspect =

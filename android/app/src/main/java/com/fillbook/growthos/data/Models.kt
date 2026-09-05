@@ -398,4 +398,25 @@ data class PartnershipProspect(
     val previewText: String?,
     val contactedAt: String?,
     val contactedChannel: String?,
+    /** 0-100 ranking score from discoveryScoring.ts -- null for a manually entered prospect. */
+    val discoveryScore: Int?,
+    val discoveryConfidence: String?,
+    /** "manual" for owner-entered prospects; otherwise which automated source found this one. */
+    val discoveredVia: String,
+)
+
+/** The result of one discovery run (scheduled or owner-triggered "Refresh") -- see backend/src/partnerships/discovery.ts's DiscoveryRunResult. */
+data class PartnershipDiscoveryRunResult(
+    val status: String, // "found" | "no_matches" | "budget_exhausted" | "error" | "skipped_cadence"
+    val newCandidates: Int,
+    val sourcesSearched: List<String>,
+    val costUsd: Double,
+    val error: String?,
+    val skipReason: String?,
+)
+
+/** GET /api/approvals?resource=partnerships' full response -- items plus what the most recent discovery run (scheduled or owner-triggered) actually did, so the UI can distinguish "never run" / "found N" / "no matches" / "budget exhausted" / "errored" without triggering a new run itself. */
+data class PartnershipsSummary(
+    val items: List<PartnershipProspect>,
+    val lastDiscoveryRun: PartnershipDiscoveryRunResult?,
 )

@@ -29,14 +29,23 @@ export function evaluatePartnershipBudget(monthSpendUsd: number, budgetUsd: numb
   return { eligible: true };
 }
 
-/** Real recorded spend this calendar month for Partnerships' own LLM calls -- same event_type-scoped-sum pattern as getProspectingMonthSpendUsd (costTracking.ts), fully independent of every other feature's budget line. */
+/**
+ * Real recorded spend this calendar month across BOTH of Partnerships'
+ * own cost sources -- pitch-generation LLM calls ("partnership_llm_call")
+ * and discovery's X search reads ("partnership_x_search_read", see
+ * costTracking.ts's recordPartnershipXSearchCostEvent) -- summed under
+ * ONE gate, per the mission's Phase 7 requirement that discovery and
+ * generation share a single budget rather than each getting its own.
+ * Fully independent of every other feature's budget line (Prospecting's
+ * own X-search spend is tracked under the separate "x_search_read" type).
+ */
 export async function getPartnershipMonthSpendUsd(client: SupabaseClient, now: Date = new Date()): Promise<number> {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
   const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
   const { data, error } = await client
     .from("cost_events")
     .select("cost_usd")
-    .eq("event_type", "partnership_llm_call")
+    .in("event_type", ["partnership_llm_call", "partnership_x_search_read"])
     .gte("created_at", monthStart)
     .lt("created_at", nextMonthStart);
   if (error) throw new Error(`getPartnershipMonthSpendUsd failed: ${error.message}`);

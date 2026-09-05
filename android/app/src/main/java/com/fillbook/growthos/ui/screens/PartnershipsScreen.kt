@@ -43,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.PartnerCategory
+import com.fillbook.growthos.data.PartnershipDiscoveryRunResult
 import com.fillbook.growthos.data.PartnershipProspect
 import com.fillbook.growthos.data.PartnershipStage
 import com.fillbook.growthos.ui.components.ExpandableText
@@ -81,10 +82,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun PartnershipsScreen(repo: GrowthOsRepository) {
     var items by remember { mutableStateOf<List<PartnershipProspect>>(emptyList()) }
+    var lastDiscoveryRun by remember { mutableStateOf<PartnershipDiscoveryRunResult?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    var discoveryBusy by remember { mutableStateOf(false) }
     var busyId by remember { mutableStateOf<String?>(null) }
     var showCreateDialog by remember { mutableStateOf(false) }
     var contactingId by remember { mutableStateOf<String?>(null) }
@@ -100,12 +103,27 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
 
     suspend fun refresh() {
         try {
-            items = repo.getPartnerships()
+            val summary = repo.getPartnerships()
+            items = summary.items
+            lastDiscoveryRun = summary.lastDiscoveryRun
             errorMessage = null
         } catch (e: Exception) {
             errorMessage = "Couldn't load Partnerships. Check your connection and try again."
         }
         loaded = true
+    }
+
+    fun runDiscoveryRefresh() {
+        scope.launch {
+            discoveryBusy = true
+            try {
+                lastDiscoveryRun = repo.refreshPartnershipDiscovery()
+                refresh()
+            } catch (e: Exception) {
+                actionError = "Couldn't refresh discovery. Check your connection and try again."
+            }
+            discoveryBusy = false
+        }
     }
 
     LaunchedEffect(Unit) { refresh() }
@@ -158,10 +176,6 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
             kicker = if (loaded && items.isNotEmpty()) "${items.size} prospect${if (items.size == 1) "" else "s"}" else null,
         )
 
-        Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
-            TextButton(onClick = { showCreateDialog = true }) { Text("+ Add prospect") }
-        }
-
         (errorMessage ?: actionError)?.let { message ->
             Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.weight(1f))
@@ -178,11 +192,24 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
         } else if (errorMessage == null && items.isEmpty()) {
             PolishedEmptyState(
                 icon = Icons.Filled.Handshake,
-                headline = "No prospects yet",
-                subtitle = "Add a prospect to start researching and qualifying a potential partner.",
+                headline = "No recommendations yet",
+                subtitle = "Discovery hasn't found a qualifying match yet -- tap Refresh discovery below, or add a prospect yourself.",
             )
+            Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                PrimaryButton(text = if (discoveryBusy) "Searching..." else "Refresh discovery", onClick = { runDiscoveryRefresh() }, enabled = !discoveryBusy, busy = discoveryBusy, modifier = Modifier.weight(1f))
+            }
+            Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+                TextButton(onClick = { showCreateDialog = true }) { Text("+ Add prospect") }
+            }
         } else {
-            val active = items.filter { it.stage != PartnershipStage.CLOSED && it.stage != PartnershipStage.ARCHIVED && it.stage != PartnershipStage.DO_NOT_CONTACT }
+            // Recommendations = not yet contacted (the shortlist the owner reviews and acts on);
+            // In progress = already contacted or further along (existing pipeline tracking).
+            val recommendations = items
+                .filter { it.stage == PartnershipStage.PROSPECT || it.stage == PartnershipStage.QUALIFIED || it.stage == PartnershipStage.DRAFT_READY }
+                .sortedByDescending { it.discoveryScore ?: -1 }
+            val inProgress = items.filter {
+                it.stage == PartnershipStage.CONTACTED || it.stage == PartnershipStage.REPLIED || it.stage == PartnershipStage.PILOT || it.stage == PartnershipStage.ACTIVE_PARTNER
+            }
             PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
@@ -192,7 +219,21 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    items(active, key = { it.id }) { prospect ->
+                    item {
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Recommended partners", style = MaterialTheme.typography.titleMedium, color = TextPrimary, modifier = Modifier.weight(1f))
+                                TextButton(onClick = { runDiscoveryRefresh() }, enabled = !discoveryBusy) { Text(if (discoveryBusy) "Searching..." else "Refresh discovery") }
+                            }
+                            discoveryStatusLine(lastDiscoveryRun)?.let {
+                                Text(it, style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                            }
+                        }
+                    }
+                    if (recommendations.isEmpty()) {
+                        item { Text("No recommendations right now.", style = MaterialTheme.typography.bodySmall, color = TextTertiary) }
+                    }
+                    items(recommendations, key = { it.id }) { prospect ->
                         PartnershipCard(
                             prospect = prospect,
                             editedText = editedDrafts[prospect.id],
@@ -210,6 +251,37 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                             onArchive = { runAction(prospect) { repo.archivePartnership(prospect.id, "Not pursuing further.") } },
                             onDoNotContact = { runAction(prospect) { repo.markPartnershipDoNotContact(prospect.id, "Owner marked do-not-contact.") } },
                         )
+                    }
+
+                    item {
+                        Row(modifier = Modifier.padding(top = 4.dp)) {
+                            TextButton(onClick = { showCreateDialog = true }) { Text("+ Add prospect") }
+                        }
+                    }
+
+                    if (inProgress.isNotEmpty()) {
+                        item {
+                            Text("In progress", style = MaterialTheme.typography.titleMedium, color = TextPrimary, modifier = Modifier.padding(top = 8.dp))
+                        }
+                        items(inProgress, key = { it.id }) { prospect ->
+                            PartnershipCard(
+                                prospect = prospect,
+                                editedText = editedDrafts[prospect.id],
+                                onEditedTextChange = { editedDrafts[prospect.id] = it },
+                                busy = busyId == prospect.id,
+                                onQualify = { runAction(prospect) { repo.qualifyPartnership(prospect.id, "Owner-reviewed: futures-relevant audience, no competing journal found.") } },
+                                onGenerateDraft = { runAction(prospect) { repo.generatePartnershipDraft(prospect.id) } },
+                                onCopyAndOpen = { copyAndOpen(prospect) },
+                                onMarkContacted = {
+                                    val finalText = editedDrafts[prospect.id] ?: prospect.previewText.orEmpty()
+                                    runAction(prospect) { repo.markPartnershipContacted(prospect.id, channelForRoute(prospect.contactRoute), finalText) }
+                                },
+                                onRecordReply = { runAction(prospect) { repo.recordPartnershipReply(prospect.id, "Owner recorded a reply.") } },
+                                onStartPilot = { pilotDialogProspect = prospect },
+                                onArchive = { runAction(prospect) { repo.archivePartnership(prospect.id, "Not pursuing further.") } },
+                                onDoNotContact = { runAction(prospect) { repo.markPartnershipDoNotContact(prospect.id, "Owner marked do-not-contact.") } },
+                            )
+                        }
                     }
                 }
             }
@@ -327,6 +399,28 @@ private fun CreatePartnershipDialog(onDismiss: () -> Unit, onCreate: (String, Pa
     )
 }
 
+/**
+ * The four discovery states the mission calls for (running / no qualified
+ * matches / source failure / budget exhaustion) plus the two additional
+ * real states this feature can actually be in (never run yet; skipped by
+ * its own cadence/interval gate, distinct from a genuine zero-matches
+ * run). "Running" itself is the caller's own discoveryBusy flag, not
+ * something this reads from -- there's no server-tracked async job to
+ * poll (see discovery.ts's own doc comment on why "running" is a
+ * request-in-flight state here, not a background job status).
+ */
+private fun discoveryStatusLine(lastRun: PartnershipDiscoveryRunResult?): String? {
+    if (lastRun == null) return "Discovery hasn't run yet."
+    return when (lastRun.status) {
+        "found" -> "Last discovery run found ${lastRun.newCandidates} new candidate${if (lastRun.newCandidates == 1) "" else "s"} (via ${lastRun.sourcesSearched.joinToString(", ")})."
+        "no_matches" -> "Last discovery run found no qualifying matches (via ${lastRun.sourcesSearched.joinToString(", ").ifEmpty { "existing records" }})."
+        "budget_exhausted" -> "Discovery is paused -- this month's Partnerships budget is used up. ${lastRun.skipReason.orEmpty()}"
+        "skipped_cadence" -> lastRun.skipReason?.let { "Discovery was skipped: $it" } ?: "Discovery was skipped."
+        "error" -> "Last discovery run failed: ${lastRun.error ?: "unknown error"}."
+        else -> null
+    }
+}
+
 private fun stageLabel(stage: PartnershipStage): String = when (stage) {
     PartnershipStage.PROSPECT -> "Prospect"
     PartnershipStage.QUALIFIED -> "Qualified"
@@ -394,21 +488,40 @@ private fun PartnershipCard(
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Pill(prospect.partnerCategory.name.replace("_", " "), TextSecondary)
             prospect.contactRoute?.let { Pill(it, TextTertiary) }
+            prospect.discoveryScore?.let { score ->
+                Pill("Match ${score}/100 (${prospect.discoveryConfidence ?: "unknown"} confidence)", if (score >= 60) Accent else TextTertiary)
+            }
+        }
+
+        // A discovered candidate's "why" is the recommendation itself --
+        // shown prominently, not buried as generic "research" the way a
+        // manually entered prospect's own notes are.
+        val isDiscovered = prospect.discoveredVia != "manual"
+        if (isDiscovered && prospect.qualificationRationale != null) {
+            Spacer(Modifier.height(8.dp))
+            Text("WHY THIS PARTNER", style = MaterialTheme.typography.labelMedium, color = Accent)
+            Spacer(Modifier.height(2.dp))
+            ExpandableText(prospect.qualificationRationale, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 3)
         }
 
         // Secondary "view research" section -- source URLs, evidence, rationale.
-        if (prospect.audienceFocus != null || prospect.futuresRelevanceEvidence != null || prospect.qualificationRationale != null || prospect.sourceUrls.isNotEmpty()) {
+        if (prospect.audienceFocus != null || (!isDiscovered && prospect.futuresRelevanceEvidence != null) || (!isDiscovered && prospect.qualificationRationale != null) || prospect.sourceUrls.isNotEmpty()) {
             Spacer(Modifier.height(8.dp))
             Column {
                 prospect.audienceFocus?.let { Text("Audience: $it", style = MaterialTheme.typography.bodySmall, color = TextTertiary) }
-                prospect.futuresRelevanceEvidence?.let { Text("Evidence: $it", style = MaterialTheme.typography.bodySmall, color = TextTertiary) }
-                prospect.qualificationRationale?.let { Text("Rationale: $it", style = MaterialTheme.typography.bodySmall, color = TextTertiary) }
+                if (!isDiscovered) {
+                    prospect.futuresRelevanceEvidence?.let { Text("Evidence: $it", style = MaterialTheme.typography.bodySmall, color = TextTertiary) }
+                    prospect.qualificationRationale?.let { Text("Rationale: $it", style = MaterialTheme.typography.bodySmall, color = TextTertiary) }
+                }
+                if (prospect.sourceUrls.isNotEmpty()) {
+                    Text("Sources: ${prospect.sourceUrls.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                }
             }
         }
 
         prospect.proposedCollaboration?.let { collaboration ->
             Spacer(Modifier.height(8.dp))
-            Text("PROPOSED COLLABORATION", style = MaterialTheme.typography.labelMedium, color = Accent)
+            Text(if (isDiscovered) "SUGGESTED COLLABORATION" else "PROPOSED COLLABORATION", style = MaterialTheme.typography.labelMedium, color = Accent)
             Spacer(Modifier.height(2.dp))
             ExpandableText(collaboration, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 3)
         }

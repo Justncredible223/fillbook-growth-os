@@ -87,8 +87,10 @@ interface GrowthOsRepository {
     suspend fun markProspectingNotRelevant(id: String)
     suspend fun markProspectingAlreadyHandled(id: String)
 
-    /** The full Partnerships pipeline -- prospect/qualify/draft/contact/pilot/outcome. Never sends anything; every write here is either a plain field edit or an explicit, human-confirmed step. */
-    suspend fun getPartnerships(): List<PartnershipProspect>
+    /** The full Partnerships pipeline -- prospect/qualify/draft/contact/pilot/outcome. Never sends anything; every write here is either a plain field edit or an explicit, human-confirmed step. Includes what the last discovery run (scheduled or owner-triggered) actually did. */
+    suspend fun getPartnerships(): PartnershipsSummary
+    /** Owner-triggered, bounded discovery refresh (see backend's discovery.ts) -- never contacts anyone, only qualifies new candidates for review. */
+    suspend fun refreshPartnershipDiscovery(): PartnershipDiscoveryRunResult
     suspend fun createPartnership(
         organizationName: String,
         contactName: String?,
@@ -561,6 +563,9 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             previewText = null,
             contactedAt = null,
             contactedChannel = null,
+            discoveryScore = 78,
+            discoveryConfidence = "high",
+            discoveredVia = "x_search",
         ),
         PartnershipProspect(
             id = "partnership-fake-2",
@@ -592,18 +597,72 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             previewText = null,
             contactedAt = null,
             contactedChannel = null,
+            discoveryScore = 62,
+            discoveryConfidence = "medium",
+            discoveredVia = "prospecting",
         ),
     )
 
     /** FIXTURE-ONLY: when true, the next getPartnerships() call throws once (then resets) -- lets error-state rendering be verified on-device without a real network failure. Never used by production code. */
     var debugFailNextPartnershipsCall: Boolean = false
 
-    override suspend fun getPartnerships(): List<PartnershipProspect> {
+    /** FIXTURE-ONLY: overrides what the next refreshPartnershipDiscovery() call returns (and whether it adds a fixture row) -- lets every discovery-status banner (found/no_matches/budget_exhausted/error) be verified on-device without a real network call. Resets to null (default "found" behavior) after one use. Never used by production code. */
+    var debugNextDiscoveryResult: PartnershipDiscoveryRunResult? = null
+    private var lastDiscoveryRun: PartnershipDiscoveryRunResult? = null
+
+    override suspend fun getPartnerships(): PartnershipsSummary {
         if (debugFailNextPartnershipsCall) {
             debugFailNextPartnershipsCall = false
             throw RuntimeException("fixture-only simulated failure")
         }
-        return partnershipItems.toList()
+        return PartnershipsSummary(partnershipItems.toList(), lastDiscoveryRun)
+    }
+
+    override suspend fun refreshPartnershipDiscovery(): PartnershipDiscoveryRunResult {
+        val forced = debugNextDiscoveryResult
+        debugNextDiscoveryResult = null
+        val result = forced ?: run {
+            val newId = "partnership-fake-discovered-${partnershipItems.size + 1}"
+            partnershipItems.add(
+                PartnershipProspect(
+                    id = newId,
+                    organizationName = "Ridgeline Futures Mentorship",
+                    contactName = null,
+                    partnerCategory = PartnerCategory.EDUCATOR_COACH,
+                    stage = PartnershipStage.QUALIFIED,
+                    websiteUrl = null,
+                    socialLinks = mapOf("x" to "https://x.com/ridgelinefutures"),
+                    contactRoute = "X DM: @ridgelinefutures",
+                    contactRouteSource = "Discovered via x_search",
+                    audienceFocus = "Matched topics: trading coach, journaling",
+                    futuresRelevanceEvidence = "Discovered via x search. 2 on-topic posts found (topics: trading coach, journaling), most recent 2026-09-04.",
+                    sourceUrls = listOf("https://x.com/ridgelinefutures/status/1"),
+                    researchDate = "2026-09-05",
+                    competingJournalRelationships = null,
+                    competingJournalEvidence = null,
+                    proposedCollaboration = "A guided journaling pilot for a small cohort of their traders.",
+                    qualificationRationale = "Discovered via x search. 2 on-topic posts found (topics: trading coach, journaling), most recent 2026-09-04.",
+                    ownerNotes = null,
+                    nextAction = null,
+                    nextActionDueDate = null,
+                    pilotTermsProposed = null,
+                    pilotTermsAgreed = null,
+                    pilotStartDate = null,
+                    pilotEndDate = null,
+                    followUpCount = 0,
+                    approvedCampaignAssetId = null,
+                    previewText = null,
+                    contactedAt = null,
+                    contactedChannel = null,
+                    discoveryScore = 71,
+                    discoveryConfidence = "medium",
+                    discoveredVia = "x_search",
+                ),
+            )
+            PartnershipDiscoveryRunResult(status = "found", newCandidates = 1, sourcesSearched = listOf("creators", "prospecting", "inbound", "x_search"), costUsd = 0.15, error = null, skipReason = null)
+        }
+        lastDiscoveryRun = result
+        return result
     }
 
     override suspend fun createPartnership(
@@ -643,6 +702,9 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             previewText = null,
             contactedAt = null,
             contactedChannel = null,
+            discoveryScore = null,
+            discoveryConfidence = null,
+            discoveredVia = "manual",
         )
         partnershipItems.add(created)
         return created

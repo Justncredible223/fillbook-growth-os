@@ -43,6 +43,9 @@ function fromRow(row: Record<string, any>): PartnershipProspect {
     contactedChannel: row.contacted_channel,
     normalizedDomain: row.normalized_domain,
     normalizedHandle: row.normalized_handle,
+    discoveryScore: row.discovery_score === null || row.discovery_score === undefined ? null : Number(row.discovery_score),
+    discoveryConfidence: row.discovery_confidence ?? null,
+    discoveredVia: row.discovered_via ?? "manual",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -77,6 +80,9 @@ function toRow(input: Partial<NewPartnershipProspect>): Record<string, unknown> 
   if (input.proposedCollaboration !== undefined) row.proposed_collaboration = input.proposedCollaboration;
   if (input.qualificationRationale !== undefined) row.qualification_rationale = input.qualificationRationale;
   if (input.ownerNotes !== undefined) row.owner_notes = input.ownerNotes;
+  if (input.discoveryScore !== undefined) row.discovery_score = input.discoveryScore;
+  if (input.discoveryConfidence !== undefined) row.discovery_confidence = input.discoveryConfidence;
+  if (input.discoveredVia !== undefined) row.discovered_via = input.discoveredVia;
   return row;
 }
 
@@ -99,6 +105,7 @@ export class SupabasePartnershipRepository implements PartnershipRepository {
     const { data, error } = await this.client
       .from("partnership_prospects")
       .insert({
+        discovered_via: "manual",
         ...toRow(input),
         stage: "prospect",
         follow_up_count: 0,

@@ -210,12 +210,17 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                                 busy = xPostActionBusy,
                                 onReview = { reviewingXPost = true },
                                 onRegenerate = { regenerateXPost() },
-                                // HANDED_OFF shows no editable field -- editedXPostText is
-                                // only ever populated by the READY-state review dialog, so
-                                // it's blank whenever the app opens directly into an
-                                // already-handed-off post (see markXPostPosted's kdoc).
-                                // The text actually copied to X at handoff must be used here.
-                                onMarkPosted = { s.todayXPost.campaignAssetId?.let { markXPostPosted(it, s.todayXPost.previewText?.takeIf(String::isNotBlank) ?: editedXPostText) } },
+                                // editedXPostText is the same state the owner edited before
+                                // handoff (survives it -- campaignAssetId doesn't change), so
+                                // a same-session Mark posted already carries any edit
+                                // correctly; do NOT prefer server text over it here, or an
+                                // owner's edit would be silently replaced by the original
+                                // generated draft (the backend never persists an edit -- see
+                                // handOffAsset's kdoc). Its own rememberSaveable initializer
+                                // (line ~110) is what fixes the cross-restart blank-text case,
+                                // now that todayXPost.previewText is populated for HANDED_OFF
+                                // too (see deriveTodayXPostView's kdoc).
+                                onMarkPosted = { s.todayXPost.campaignAssetId?.let { markXPostPosted(it, editedXPostText) } },
                             )
                             TextButton(onClick = { onNavigate("x_feed_post_history") }) { Text("Previous drafts") }
                         }

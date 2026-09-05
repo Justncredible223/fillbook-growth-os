@@ -59,6 +59,11 @@ export interface PartnershipProspect {
   contactedChannel: string | null;
   normalizedDomain: string | null;
   normalizedHandle: string | null;
+  /** 0-100 ranking score computed at discovery time by discoveryScoring.ts -- null for manually entered prospects. */
+  discoveryScore: number | null;
+  discoveryConfidence: "low" | "medium" | "high" | null;
+  /** 'manual' for owner-entered prospects; otherwise which discovery source found this one. Never overwritten after creation. */
+  discoveredVia: "manual" | "creators" | "prospecting" | "inbound" | "x_search";
   createdAt: string;
   updatedAt: string;
 }
@@ -88,6 +93,9 @@ export interface NewPartnershipProspect {
   proposedCollaboration?: string | null;
   qualificationRationale?: string | null;
   ownerNotes?: string | null;
+  discoveryScore?: number | null;
+  discoveryConfidence?: "low" | "medium" | "high" | null;
+  discoveredVia?: "manual" | "creators" | "prospecting" | "inbound" | "x_search";
 }
 
 export interface PartnershipRepository {

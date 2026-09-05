@@ -77,6 +77,39 @@ export async function recordXSearchCostEvent(
 }
 
 /**
+ * Same $0.005/read rate as recordXSearchCostEvent, but its OWN event_type
+ * -- Partnerships discovery must never inflate Prospecting's separate
+ * getProspectingMonthSpendUsd budget gate (it sums ALL "x_search_read"
+ * rows regardless of caller), and Partnerships' own
+ * getPartnershipMonthSpendUsd needs to see this spend alongside its LLM
+ * pitch-generation cost to enforce ONE shared $3/month cap across
+ * discovery + ranking + drafting, per docs/PARTNERSHIPS_MISSION.md
+ * Phase 7 ("account for research/provider costs and model
+ * generation/review costs ... together").
+ */
+export async function recordPartnershipXSearchCostEvent(
+  client: SupabaseClient,
+  resultsReturned: number,
+  context: Record<string, unknown> = {},
+): Promise<number> {
+  const costUsd = resultsReturned * X_SEARCH_COST_PER_READ_USD;
+  try {
+    await client.from("cost_events").insert({
+      event_type: "partnership_x_search_read",
+      provider: "x",
+      model: "search/recent",
+      input_tokens: 0,
+      output_tokens: resultsReturned,
+      cost_usd: costUsd,
+      context,
+    });
+  } catch {
+    // Deliberately swallowed -- see recordCostEvent's docstring above.
+  }
+  return costUsd;
+}
+
+/**
  * Reddit's free tier has no documented per-call dollar cost (see
  * docs/REDDIT_INTEGRATION.md), so this records a $0 cost_events row purely
  * for the same per-source/run observability every other adapter gets

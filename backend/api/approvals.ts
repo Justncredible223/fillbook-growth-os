@@ -48,6 +48,8 @@ import {
   updatePartnership,
 } from "../src/partnerships/partnershipsHandlers.js";
 import type { NewPartnershipProspect, PartnershipOutcomeMetric, PartnershipOutcomeSource } from "../src/partnerships/types.js";
+import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
+import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
 
 /**
  * `?resource=inbound` handles the Inbound Engagement Queue -- a
@@ -227,7 +229,23 @@ async function handlePartnerships(req: VercelRequest, res: VercelResponse): Prom
         ...toPartnershipJson(p),
         previewText: p.approvedCampaignAssetId ? (previewByAssetId.get(p.approvedCampaignAssetId) ?? null) : null,
       }));
-      res.status(200).json({ items });
+      const { data: lastRunRow } = await client
+        .from("partnership_discovery_runs")
+        .select("status, new_candidates, sources_searched, cost_usd, error, created_at")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const lastDiscoveryRun = lastRunRow
+        ? {
+            status: (lastRunRow as { status: string }).status,
+            newCandidates: (lastRunRow as { new_candidates: number }).new_candidates,
+            sourcesSearched: (lastRunRow as { sources_searched: string[] }).sources_searched,
+            costUsd: (lastRunRow as { cost_usd: number }).cost_usd,
+            error: (lastRunRow as { error: string | null }).error,
+            createdAt: (lastRunRow as { created_at: string }).created_at,
+          }
+        : null;
+      res.status(200).json({ items, lastDiscoveryRun });
     } catch (err) {
       res.status(500).json({ error: errorMessage(err) });
     }
@@ -266,6 +284,23 @@ async function handlePartnerships(req: VercelRequest, res: VercelResponse): Prom
       }
       const { prospect, existingMatches } = await createPartnership(client, body as NewPartnershipProspect);
       res.status(200).json({ ...toPartnershipJson(prospect), previewText: null, existingMatches });
+      return;
+    }
+
+    if (action === "refresh-discovery") {
+      // Owner-triggered, bounded (see discovery.ts's MAX_NEW_CANDIDATES_PER_RUN
+      // and MIN_INTERVAL_MINUTES) -- force:true only bypasses the 7-day
+      // SCHEDULED cadence gate, never the budget gate or the minimum-interval
+      // gate, so repeated taps can't silently keep spending.
+      let adapter = null;
+      try {
+        adapter = createXSignalAdapter(client);
+      } catch {
+        // X credentials not configured -- discovery still runs against
+        // existing-records sources only, never treated as a hard failure.
+      }
+      const result = await runPartnershipDiscoveryStep({ client, adapter, triggeredBy: "owner", force: true });
+      res.status(200).json(result);
       return;
     }
 
@@ -329,7 +364,7 @@ async function handlePartnerships(req: VercelRequest, res: VercelResponse): Prom
       default:
         res.status(400).json({
           error:
-            "action must be one of: create, update, qualify, generate-draft, mark-contacted, record-reply, start-pilot, activate, close, archive, do-not-contact, record-outcome",
+            "action must be one of: create, refresh-discovery, update, qualify, generate-draft, mark-contacted, record-reply, start-pilot, activate, close, archive, do-not-contact, record-outcome",
         });
     }
   } catch (err) {
