@@ -426,6 +426,102 @@ class NetworkGrowthOsRepository(
         post("/api/approvals?resource=prospecting", JSONObject().put("action", "already-handled").put("id", id))
     }
 
+    private fun JSONObject.toPartnershipProspect(): PartnershipProspect {
+        val socialLinksObj = optJSONObject("socialLinks")
+        val socialLinks = mutableMapOf<String, String>()
+        socialLinksObj?.keys()?.forEach { key -> socialLinks[key] = socialLinksObj.getString(key) }
+        return PartnershipProspect(
+            id = getString("id"),
+            organizationName = getString("organizationName"),
+            contactName = optStringOrNull("contactName"),
+            partnerCategory = runCatching { PartnerCategory.valueOf(getString("partnerCategory").uppercase()) }.getOrDefault(PartnerCategory.OTHER),
+            stage = runCatching { PartnershipStage.valueOf(getString("stage").uppercase()) }.getOrDefault(PartnershipStage.PROSPECT),
+            websiteUrl = optStringOrNull("websiteUrl"),
+            socialLinks = socialLinks,
+            contactRoute = optStringOrNull("contactRoute"),
+            contactRouteSource = optStringOrNull("contactRouteSource"),
+            audienceFocus = optStringOrNull("audienceFocus"),
+            futuresRelevanceEvidence = optStringOrNull("futuresRelevanceEvidence"),
+            sourceUrls = optJSONArray("sourceUrls")?.mapStrings() ?: emptyList(),
+            researchDate = optStringOrNull("researchDate"),
+            competingJournalRelationships = optStringOrNull("competingJournalRelationships"),
+            competingJournalEvidence = optStringOrNull("competingJournalEvidence"),
+            proposedCollaboration = optStringOrNull("proposedCollaboration"),
+            qualificationRationale = optStringOrNull("qualificationRationale"),
+            ownerNotes = optStringOrNull("ownerNotes"),
+            nextAction = optStringOrNull("nextAction"),
+            nextActionDueDate = optStringOrNull("nextActionDueDate"),
+            pilotTermsProposed = optStringOrNull("pilotTermsProposed"),
+            pilotTermsAgreed = optStringOrNull("pilotTermsAgreed"),
+            pilotStartDate = optStringOrNull("pilotStartDate"),
+            pilotEndDate = optStringOrNull("pilotEndDate"),
+            followUpCount = optInt("followUpCount", 0),
+            approvedCampaignAssetId = optStringOrNull("approvedCampaignAssetId"),
+            previewText = optStringOrNull("previewText"),
+            contactedAt = optStringOrNull("contactedAt"),
+            contactedChannel = optStringOrNull("contactedChannel"),
+        )
+    }
+
+    override suspend fun getPartnerships(): List<PartnershipProspect> {
+        val json = get("/api/approvals?resource=partnerships")
+        return json.getJSONArray("items").map { it.toPartnershipProspect() }
+    }
+
+    override suspend fun createPartnership(organizationName: String, contactName: String?, partnerCategory: PartnerCategory, websiteUrl: String?, proposedCollaboration: String?): PartnershipProspect {
+        val body = JSONObject()
+            .put("action", "create")
+            .put("organizationName", organizationName)
+            .put("partnerCategory", partnerCategory.name.lowercase())
+        if (contactName != null) body.put("contactName", contactName)
+        if (websiteUrl != null) body.put("websiteUrl", websiteUrl)
+        if (proposedCollaboration != null) body.put("proposedCollaboration", proposedCollaboration)
+        return post("/api/approvals?resource=partnerships", body).toPartnershipProspect()
+    }
+
+    override suspend fun updatePartnership(id: String, ownerNotes: String?, nextAction: String?, nextActionDueDate: String?, contactRoute: String?, contactRouteSource: String?, audienceFocus: String?, futuresRelevanceEvidence: String?): PartnershipProspect {
+        val body = JSONObject().put("action", "update").put("id", id)
+        ownerNotes?.let { body.put("ownerNotes", it) }
+        nextAction?.let { body.put("nextAction", it) }
+        nextActionDueDate?.let { body.put("nextActionDueDate", it) }
+        contactRoute?.let { body.put("contactRoute", it) }
+        contactRouteSource?.let { body.put("contactRouteSource", it) }
+        audienceFocus?.let { body.put("audienceFocus", it) }
+        futuresRelevanceEvidence?.let { body.put("futuresRelevanceEvidence", it) }
+        return post("/api/approvals?resource=partnerships", body).toPartnershipProspect()
+    }
+
+    override suspend fun qualifyPartnership(id: String, rationale: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "qualify").put("id", id).put("rationale", rationale)).toPartnershipProspect()
+
+    override suspend fun generatePartnershipDraft(id: String): PartnershipProspect {
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "generate-draft").put("id", id))
+        // The generate-draft response is a lightweight result (status/cost), not the full prospect shape --
+        // re-fetch this one prospect's real current state (including the new previewText) from the list.
+        return getPartnerships().first { it.id == id }
+    }
+
+    override suspend fun markPartnershipContacted(id: String, channel: String, finalText: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "mark-contacted").put("id", id).put("channel", channel).put("finalText", finalText)).toPartnershipProspect()
+
+    override suspend fun recordPartnershipReply(id: String, summary: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "record-reply").put("id", id).put("summary", summary)).toPartnershipProspect()
+
+    override suspend fun startPartnershipPilot(id: String, termsAgreed: String, startDate: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "start-pilot").put("id", id).put("termsAgreed", termsAgreed).put("startDate", startDate)).toPartnershipProspect()
+
+    override suspend fun activatePartnership(id: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "activate").put("id", id)).toPartnershipProspect()
+
+    override suspend fun closePartnership(id: String, reason: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "close").put("id", id).put("reason", reason)).toPartnershipProspect()
+
+    override suspend fun archivePartnership(id: String, reason: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "archive").put("id", id).put("reason", reason)).toPartnershipProspect()
+
+    override suspend fun markPartnershipDoNotContact(id: String, reason: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "do-not-contact").put("id", id).put("reason", reason)).toPartnershipProspect()
+
     private fun JSONObject.toStrategyItemList(key: String): List<StrategyItem> =
         getJSONArray(key).map { StrategyItem(label = it.optStringOrNull("topic") ?: it.getString("platform") + " / " + it.getString("assetType"), reason = it.getString("reason")) }
 

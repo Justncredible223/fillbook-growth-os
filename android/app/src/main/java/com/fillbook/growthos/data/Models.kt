@@ -354,3 +354,48 @@ data class ExperimentResult(
     val interpretation: String,
     val computedAt: String,
 )
+
+enum class PartnerCategory { EDUCATOR_COACH, CREATOR_COMMUNITY, PROP_FIRM, PLATFORM_BROKER, OTHER }
+
+enum class PartnershipStage { PROSPECT, QUALIFIED, DRAFT_READY, CONTACTED, REPLIED, PILOT, ACTIVE_PARTNER, CLOSED, ARCHIVED, DO_NOT_CONTACT }
+
+/**
+ * A potential Fillbook partner and where things stand with them -- never a
+ * cold list of guesses. Every research-derived field (audienceFocus,
+ * futuresRelevanceEvidence, sourceUrls, etc.) stays null/empty rather than
+ * fabricated when genuinely unknown; the UI must show that plainly, not
+ * paper over it. previewText, if present, is the currently-approved
+ * pitch's real reviewed text (from campaign_assets/content_versions via
+ * approvedCampaignAssetId) -- never invented client-side.
+ */
+data class PartnershipProspect(
+    val id: String,
+    val organizationName: String,
+    val contactName: String?,
+    val partnerCategory: PartnerCategory,
+    val stage: PartnershipStage,
+    val websiteUrl: String?,
+    val socialLinks: Map<String, String>,
+    val contactRoute: String?,
+    val contactRouteSource: String?,
+    val audienceFocus: String?,
+    val futuresRelevanceEvidence: String?,
+    val sourceUrls: List<String>,
+    val researchDate: String?,
+    val competingJournalRelationships: String?,
+    val competingJournalEvidence: String?,
+    val proposedCollaboration: String?,
+    val qualificationRationale: String?,
+    val ownerNotes: String?,
+    val nextAction: String?,
+    val nextActionDueDate: String?,
+    val pilotTermsProposed: String?,
+    val pilotTermsAgreed: String?,
+    val pilotStartDate: String?,
+    val pilotEndDate: String?,
+    val followUpCount: Int,
+    val approvedCampaignAssetId: String?,
+    val previewText: String?,
+    val contactedAt: String?,
+    val contactedChannel: String?,
+)

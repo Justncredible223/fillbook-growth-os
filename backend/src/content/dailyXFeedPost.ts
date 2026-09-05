@@ -917,7 +917,17 @@ export function deriveTodayXPostView(
   if (assetStage === "handed_off") {
     return run.postedAt
       ? { state: "posted", campaignAssetId: run.campaignAssetId ?? undefined, topicLabel, canRegenerate: false }
-      : { state: "handed_off", campaignAssetId: run.campaignAssetId ?? undefined, topicLabel, canRegenerate: false };
+      : {
+          state: "handed_off",
+          campaignAssetId: run.campaignAssetId ?? undefined,
+          // The text actually copied to X at handoff -- Mark posted needs
+          // this as the postedText it records, since HANDED_OFF shows no
+          // editable field the owner could have changed it in (see
+          // HomeScreen.kt's markXPostPosted call site).
+          previewText: previewText ?? undefined,
+          topicLabel,
+          canRegenerate: false,
+        };
   }
 
   return {

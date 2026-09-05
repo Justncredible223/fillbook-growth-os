@@ -53,6 +53,20 @@ export interface PipelineContext {
    * what keeps Home's Today's X Post genuinely separate from replies.
    */
   assetTypeOverride?: string;
+  /**
+   * Tells the deep-review agents what shape of content this actually is,
+   * beyond the existing post/reply distinction -- a partnership pitch is
+   * a third shape (a private, one-recipient business proposition, not
+   * public content), and judging it with the wrong bar (e.g.
+   * hook_specialist expecting a scroll-stopping public hook) produces
+   * wrong verdicts. Omitted defaults to the existing isReply-based
+   * post/reply distinction, so every existing caller is unaffected.
+   */
+  contentFormat?: "post" | "reply" | "partnership_pitch";
+  /** Only meaningful when contentFormat is "partnership_pitch" -- who this specific pitch is addressed to, so growth_strategist can judge recipient-specific relevance rather than a generic audience bar. */
+  pitchRecipientOrganization?: string;
+  /** Only meaningful when contentFormat is "partnership_pitch" -- which channel this will actually be sent through, so hook_specialist judges an email subject/opener vs an X DM opener appropriately. */
+  pitchChannel?: "email" | "x";
 }
 
 export interface PipelineResult {
@@ -134,6 +148,9 @@ export async function runCampaignPipeline(
     brandRulesSummary: context.brandRulesSummary,
     verifiedKnowledgeSummary: context.verifiedKnowledgeSummary,
     isReply,
+    contentFormat: context.contentFormat,
+    pitchRecipientOrganization: context.pitchRecipientOrganization,
+    pitchChannel: context.pitchChannel,
   });
 
   if (!deepReview.passed) {

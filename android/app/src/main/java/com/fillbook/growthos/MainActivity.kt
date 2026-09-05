@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Handshake
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
@@ -96,6 +97,7 @@ import com.fillbook.growthos.ui.screens.ExperimentsScreen
 import com.fillbook.growthos.ui.screens.NotificationsScreen
 import com.fillbook.growthos.ui.screens.MorningBriefScreen
 import com.fillbook.growthos.ui.screens.EveningReportScreen
+import com.fillbook.growthos.ui.screens.PartnershipsScreen
 import com.fillbook.growthos.ui.screens.SystemScreen
 import com.fillbook.growthos.ui.screens.XFeedPostHistoryScreen
 import com.fillbook.growthos.ui.theme.Accent
@@ -127,6 +129,7 @@ private sealed class Destination(val route: String, val label: String, val icon:
     data object System : Destination("system", "System", Icons.Filled.Dns)
     data object Settings : Destination("settings", "Settings", Icons.Filled.Settings)
     data object XFeedPostHistory : Destination("x_feed_post_history", "Previous X Drafts", Icons.Filled.History)
+    data object Partnerships : Destination("partnerships", "Partnerships", Icons.Filled.Handshake)
 }
 
 /**
@@ -140,7 +143,7 @@ private sealed class Destination(val route: String, val label: String, val icon:
  * is a periodic review that doesn't need a permanent slot -- it's still
  * one tap away in More.
  */
-private val primaryDestinations = listOf(Destination.Home, Destination.Radar, Destination.Prospecting, Destination.Inbound)
+private val primaryDestinations = listOf(Destination.Home, Destination.Radar, Destination.Prospecting, Destination.Inbound, Destination.Partnerships)
 
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
@@ -272,6 +275,7 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository) {
             composable(Destination.System.route) { SystemScreen(repo) }
             composable(Destination.Settings.route) { SettingsScreen(repo) }
             composable(Destination.XFeedPostHistory.route) { XFeedPostHistoryScreen(repo) }
+            composable(Destination.Partnerships.route) { PartnershipsScreen(repo) }
         }
     }
 

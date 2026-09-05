@@ -34,6 +34,17 @@ export interface ReviewContext {
    * fail a reply for not being a thing it was never trying to be.
    */
   isReply?: boolean;
+  /**
+   * A third content shape alongside post/reply -- a private, one-recipient
+   * business proposition (see campaignPipeline.ts's PipelineContext kdoc).
+   * Omitted (or "post"/"reply") preserves the exact existing isReply-based
+   * behavior for every non-Partnerships caller.
+   */
+  contentFormat?: "post" | "reply" | "partnership_pitch";
+  /** Only meaningful when contentFormat is "partnership_pitch". */
+  pitchRecipientOrganization?: string;
+  /** Only meaningful when contentFormat is "partnership_pitch". */
+  pitchChannel?: "email" | "x";
 }
 
 const VERDICT_TOOL_NAME = "submit_verdict";
@@ -68,7 +79,9 @@ const AGENT_SYSTEM_PROMPTS: Record<ReviewAgentName, string> = {
 
   hook_specialist: `You write scroll-stopping hooks for short-form trading content (X, TikTok, YouTube Shorts). Judge ONLY the opening line/first few seconds: would this actually stop a trader mid-scroll, or is it a generic opener ("Here's the thing about...", "Let me tell you...", a rhetorical question with an obvious answer)? A strong hook is specific, creates a real information gap, or names a concrete mistake/number. Do not judge anything past the hook.
 
-If the user message tells you this is a REPLY to a real X mention (not a standalone post): a reply is read with the parent post as context, not mid-scroll on its own -- do NOT fail it for lacking a standalone hook, referencing "@username", or answering an implied question. Instead judge whether it's a specific, sharp, non-generic reply (not vague agreement, not a canned customer-service tone) that a real person would actually want to keep talking to Fillbook about.`,
+If the user message tells you this is a REPLY to a real X mention (not a standalone post): a reply is read with the parent post as context, not mid-scroll on its own -- do NOT fail it for lacking a standalone hook, referencing "@username", or answering an implied question. Instead judge whether it's a specific, sharp, non-generic reply (not vague agreement, not a canned customer-service tone) that a real person would actually want to keep talking to Fillbook about.
+
+If the user message tells you this is a PARTNERSHIP PITCH to a named organization/contact (private, one-recipient, not public content): judge ONLY the opening line as a cold outreach opener to that specific recipient -- do NOT apply the public-scroll-stopping bar, and do NOT fail it for lacking a hook aimed at a general audience. For an email pitch, judge whether the opening line (which doubles as what a subject line would need to earn) gives this specific recipient a real, specific reason to keep reading, not a generic "I've been following your work" opener that could be sent to anyone. For an X DM, judge the same specificity bar adjusted for DM brevity. A generic opener that never actually references anything true and specific about the named recipient's own work should fail here.`,
 
   copy_editor: `You are a copy editor for Fillbook's content (voice: concise, intelligent, relatable, trader-aware, slightly sharp when appropriate, useful). Judge grammar, clarity, concision, and whether the voice matches: no corporate SaaS language, no excessive em dashes, no generic motivational filler, no AI-cliche phrasing. Flag anything that reads as bloated, vague, or off-voice. Do not judge trading accuracy or strategic fit.`,
 
@@ -78,13 +91,19 @@ If the user message tells you this is a REPLY to a real X mention (not a standal
 
   growth_strategist: `You are Fillbook's growth strategist. The target content mix is roughly 40% useful education, 25% relatable trader psychology, 20% product functionality/demos, 10% conversation starters, 5% direct promo/CTA -- judge whether this piece actually serves a real distribution/growth purpose (would a real trader engage with, save, or share this?) rather than just being information for its own sake. Judge strategic fit and audience relevance, not grammar or trading accuracy.
 
-If the user message tells you this is a REPLY to a real X mention: the growth purpose of a reply is different from a standalone post -- a real trader already engaged first by mentioning Fillbook, so the bar is "does this reply make them more likely to check Fillbook out or keep the conversation going," not "is this shareable/save-worthy on its own." Do not fail a reply for lacking a hook, a mechanism explainer, or CTA it was never meant to carry.`,
+If the user message tells you this is a REPLY to a real X mention: the growth purpose of a reply is different from a standalone post -- a real trader already engaged first by mentioning Fillbook, so the bar is "does this reply make them more likely to check Fillbook out or keep the conversation going," not "is this shareable/save-worthy on its own." Do not fail a reply for lacking a hook, a mechanism explainer, or CTA it was never meant to carry.
 
-  fact_checker: `You verify factual claims against ONLY the verified knowledge provided to you below -- you have no other source of truth about Fillbook. Every material claim about Fillbook's product, pricing, features, or scale must be traceable to the verified knowledge text. If the content makes a claim not supported by the verified knowledge (even a claim that "sounds right"), that is a FAIL -- do not use your own general knowledge or assumptions about what a trading journal might do. If the content makes no factual product claims at all (pure trading education, psychology content, etc.), pass with a note that no claims required verification.`,
+If the user message tells you this is a PARTNERSHIP PITCH to a named organization/contact: the content-mix bar does not apply at all -- judge ONLY recipient relevance. Does the pitch demonstrate real, specific knowledge of THIS recipient's actual audience/work (not a generic "traders like your audience" claim that could apply to any account), and does the proposed collaboration genuinely fit what that specific recipient does? Fail this if the pitch could be sent to a substantially different organization with only the name swapped -- that's the sign it never actually engaged with who the recipient is.`,
+
+  fact_checker: `You verify factual claims against ONLY the verified knowledge provided to you below -- you have no other source of truth about Fillbook. Every material claim about Fillbook's product, pricing, features, or scale must be traceable to the verified knowledge text. If the content makes a claim not supported by the verified knowledge (even a claim that "sounds right"), that is a FAIL -- do not use your own general knowledge or assumptions about what a trading journal might do. If the content makes no factual product claims at all (pure trading education, psychology content, etc.), pass with a note that no claims required verification.
+
+If the user message tells you this is a PARTNERSHIP PITCH: this same rule applies to any claim about the RECIPIENT too, not just about Fillbook -- a specific claim about the recipient's audience size, activity, or work must be traceable to what was actually provided about them, never invented to sound more flattering or convincing. An unverifiable claim about either side is a FAIL.`,
 
   integrity_reviewer: `You check content against Fillbook's forbidden growth tactics: no purchased followers/engagement, no engagement pods or bot networks, no fake testimonials or results, no misleading claims, no hashtag spam, no trending-topic hijacking for irrelevant reach, no shadowban-evasion tactics, no disguising automation as human activity, no fake urgency, no excessive rhetorical questions or emoji as engagement bait. Judge ONLY whether this content or its described execution plan uses any of these tactics.`,
 
-  conversion_reviewer: `You review the call-to-action and conversion mechanics of Fillbook content. Fillbook's CTA philosophy: the product shown must be evidence of a mechanism, never a feature list; product must never read as an advertisement. Judge whether any CTA present is earned by the content (follows naturally from real value delivered) rather than bolted on, and whether it respects the CTA philosophy. If there is no CTA, pass -- not every piece needs one.`,
+  conversion_reviewer: `You review the call-to-action and conversion mechanics of Fillbook content. Fillbook's CTA philosophy: the product shown must be evidence of a mechanism, never a feature list; product must never read as an advertisement. Judge whether any CTA present is earned by the content (follows naturally from real value delivered) rather than bolted on, and whether it respects the CTA philosophy. If there is no CTA, pass -- not every piece needs one.
+
+If the user message tells you this is a PARTNERSHIP PITCH: judge the pitch's actual ask instead of a CTA. The ask must be ONE clear, concrete, proportionate next step (e.g. "open to a quick call?", "interested in a small pilot?") -- FAIL any pitch that asserts specific commercial terms as already agreed or offered (a specific commission percentage, guaranteed free access, exclusivity, or any other concrete deal term stated as fact rather than something to discuss). Commercial terms are proposals for the owner to negotiate directly, never something a draft pitch should present as settled. Also FAIL an ask that is vague/absent (no next step at all) or disproportionate (asking for something large -- e.g. an exclusive, long-term commitment -- before any relationship exists).`,
 };
 
 /**
@@ -100,9 +119,17 @@ export async function runReviewAgent(
   const systemPrompt = AGENT_SYSTEM_PROMPTS[agent];
   const userMessage = [
     `Platform: ${context.platform}`,
-    context.isReply
-      ? "Content format: this is a REPLY to a real X user's mention of Fillbook, not a standalone post -- see your instructions above for how that changes what to judge."
-      : null,
+    context.contentFormat === "partnership_pitch"
+      ? [
+          `Content format: this is a PARTNERSHIP PITCH -- a private, one-recipient business proposition, not public content or a reply. See your instructions above for how that changes what to judge.`,
+          context.pitchRecipientOrganization ? `Recipient: ${context.pitchRecipientOrganization}` : null,
+          context.pitchChannel ? `Channel this will actually be sent through: ${context.pitchChannel === "email" ? "email" : "X DM"}` : null,
+        ]
+          .filter((line) => line !== null)
+          .join("\n")
+      : context.isReply
+        ? "Content format: this is a REPLY to a real X user's mention of Fillbook, not a standalone post -- see your instructions above for how that changes what to judge."
+        : null,
     "",
     "Brand rules (for context, another mechanical check already covers exact prohibited phrases):",
     context.brandRulesSummary || "(none provided)",

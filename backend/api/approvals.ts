@@ -30,6 +30,24 @@ import {
   markProspectingSkipped,
   toProspectingJson,
 } from "../src/prospecting/prospectingHandlers.js";
+import {
+  PartnershipActionError,
+  activatePartnership,
+  archivePartnership,
+  closePartnership,
+  createPartnership,
+  generateDraftForPartnership,
+  listPartnerships,
+  markPartnershipContacted,
+  markPartnershipDoNotContact,
+  qualifyPartnership,
+  recordPartnershipOutcome,
+  recordPartnershipReply,
+  startPartnershipPilot,
+  toPartnershipJson,
+  updatePartnership,
+} from "../src/partnerships/partnershipsHandlers.js";
+import type { NewPartnershipProspect, PartnershipOutcomeMetric, PartnershipOutcomeSource } from "../src/partnerships/types.js";
 
 /**
  * `?resource=inbound` handles the Inbound Engagement Queue -- a
@@ -179,6 +197,151 @@ async function handleProspecting(req: VercelRequest, res: VercelResponse): Promi
 }
 
 /**
+ * `?resource=partnerships` handles the Partnerships prospect/pitch/pilot
+ * pipeline -- a manual-first workflow distinct from prospecting (public
+ * posts) and inbound (people who engaged with @FillbookHQ). Folded in
+ * here for the same Vercel Hobby 12-function-cap reason as inbound and
+ * prospecting above. See docs/PARTNERSHIPS_MISSION.md.
+ */
+async function handlePartnerships(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const client = getServiceClient();
+
+  if (req.method === "GET") {
+    try {
+      const prospects = await listPartnerships(client);
+      const withApprovedDraft = prospects.filter((p) => p.approvedCampaignAssetId);
+      let previewByAssetId = new Map<string, string>();
+      if (withApprovedDraft.length > 0) {
+        const { data: versions } = await client
+          .from("content_versions")
+          .select("campaign_asset_id, body, version")
+          .in("campaign_asset_id", withApprovedDraft.map((p) => p.approvedCampaignAssetId));
+        const latestByAsset = new Map<string, { body: string; version: number }>();
+        for (const row of (versions ?? []) as Array<{ campaign_asset_id: string; body: string; version: number }>) {
+          const current = latestByAsset.get(row.campaign_asset_id);
+          if (!current || row.version > current.version) latestByAsset.set(row.campaign_asset_id, row);
+        }
+        previewByAssetId = new Map([...latestByAsset.entries()].map(([assetId, v]) => [assetId, v.body]));
+      }
+      const items = prospects.map((p) => ({
+        ...toPartnershipJson(p),
+        previewText: p.approvedCampaignAssetId ? (previewByAssetId.get(p.approvedCampaignAssetId) ?? null) : null,
+      }));
+      res.status(200).json({ items });
+    } catch (err) {
+      res.status(500).json({ error: errorMessage(err) });
+    }
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const body = req.body as
+      | ({
+          action?: string;
+          id?: string;
+          channel?: string;
+          finalText?: string;
+          reason?: string;
+          summary?: string;
+          rationale?: string;
+          termsAgreed?: string;
+          startDate?: string;
+          metric?: PartnershipOutcomeMetric;
+          value?: number | null;
+          source?: PartnershipOutcomeSource;
+          note?: string | null;
+        } & Partial<NewPartnershipProspect>)
+      | undefined;
+    const action = body?.action;
+
+    if (action === "create") {
+      if (!body?.organizationName || !body?.partnerCategory) {
+        res.status(400).json({ error: "Body must include { organizationName, partnerCategory } to create a prospect" });
+        return;
+      }
+      const { prospect, existingMatches } = await createPartnership(client, body as NewPartnershipProspect);
+      res.status(200).json({ ...toPartnershipJson(prospect), previewText: null, existingMatches });
+      return;
+    }
+
+    const id = body?.id;
+    if (!id) {
+      res.status(400).json({ error: "Body must include { id: string }" });
+      return;
+    }
+
+    switch (action) {
+      case "update":
+        res.status(200).json(toPartnershipJson(await updatePartnership(client, id, body as Partial<NewPartnershipProspect>)));
+        return;
+      case "qualify":
+        if (!body?.rationale) {
+          res.status(400).json({ error: "qualify requires { rationale: string }" });
+          return;
+        }
+        res.status(200).json(toPartnershipJson(await qualifyPartnership(client, id, body.rationale)));
+        return;
+      case "generate-draft":
+        res.status(200).json(await generateDraftForPartnership(client, id));
+        return;
+      case "mark-contacted":
+        if (!body?.channel || !body?.finalText) {
+          res.status(400).json({ error: "mark-contacted requires { channel: string, finalText: string }" });
+          return;
+        }
+        res.status(200).json(toPartnershipJson(await markPartnershipContacted(client, id, body.channel, body.finalText)));
+        return;
+      case "record-reply":
+        res.status(200).json(toPartnershipJson(await recordPartnershipReply(client, id, body?.summary ?? "Reply received.")));
+        return;
+      case "start-pilot":
+        if (!body?.termsAgreed || !body?.startDate) {
+          res.status(400).json({ error: "start-pilot requires { termsAgreed: string, startDate: string }" });
+          return;
+        }
+        res.status(200).json(toPartnershipJson(await startPartnershipPilot(client, id, body.termsAgreed, body.startDate)));
+        return;
+      case "activate":
+        res.status(200).json(toPartnershipJson(await activatePartnership(client, id)));
+        return;
+      case "close":
+        res.status(200).json(toPartnershipJson(await closePartnership(client, id, body?.reason ?? "")));
+        return;
+      case "archive":
+        res.status(200).json(toPartnershipJson(await archivePartnership(client, id, body?.reason ?? "")));
+        return;
+      case "do-not-contact":
+        res.status(200).json(toPartnershipJson(await markPartnershipDoNotContact(client, id, body?.reason ?? "")));
+        return;
+      case "record-outcome":
+        if (!body?.metric || !body?.source) {
+          res.status(400).json({ error: "record-outcome requires { metric: string, source: 'measured'|'manual_entry' }" });
+          return;
+        }
+        await recordPartnershipOutcome(client, id, body.metric, body.value ?? null, body.source, body.note);
+        res.status(200).json({ id, recorded: true });
+        return;
+      default:
+        res.status(400).json({
+          error:
+            "action must be one of: create, update, qualify, generate-draft, mark-contacted, record-reply, start-pilot, activate, close, archive, do-not-contact, record-outcome",
+        });
+    }
+  } catch (err) {
+    if (err instanceof PartnershipActionError) {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+/**
  * Wires CampaignFactory.handOffToOwner() -- built, tested, and never
  * called from any route until now -- to a real action. EXTERNAL_DRAFT
  * only ("opened the platform's own composer / staged the file for the
@@ -235,6 +398,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.query.resource === "prospecting") {
     await handleProspecting(req, res);
+    return;
+  }
+  if (req.query.resource === "partnerships") {
+    await handlePartnerships(req, res);
     return;
   }
   const client = getServiceClient();

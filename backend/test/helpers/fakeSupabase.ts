@@ -78,6 +78,9 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: FakeError | nu
   in(column: string, values: unknown[]) { this.entry.filters.push({ kind: "in", column, value: values }); return this; }
   is(column: string, value: unknown) { this.entry.filters.push({ kind: "is", column, value }); return this; }
   not(column: string, operator: string, value: unknown) { this.entry.filters.push({ kind: `not.${operator}`, column, value }); return this; }
+  ilike(column: string, pattern: string) { this.entry.filters.push({ kind: "ilike", column, value: pattern }); return this; }
+  /** Minimal PostgREST-style `or("col.eq.val,col2.eq.val2")` support -- only the `eq` operator, since that's all this project's callers use. */
+  or(filterString: string) { this.entry.filters.push({ kind: "or", column: "", value: filterString }); return this; }
   order(column: string, options?: { ascending?: boolean }) { this.orderBy = { column, ascending: options?.ascending ?? true }; return this; }
   limit(n: number) { this.entry.limit = n; return this; }
   maybeSingle() { this.singleMode = "maybeSingle"; return this; }
@@ -100,6 +103,21 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: FakeError | nu
         case "in": return (value as unknown[]).includes(actual);
         case "is": return value === null ? actual === null || actual === undefined : actual === value;
         case "not.is": return value === null ? actual !== null && actual !== undefined : actual !== value;
+        case "ilike": {
+          if (actual === null || actual === undefined) return false;
+          const pattern = String(value).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*");
+          return new RegExp(`^${pattern}$`).test(String(actual).toLowerCase());
+        }
+        case "or": {
+          const clauses = String(value).split(",");
+          return clauses.some((clause) => {
+            const match = /^([^.]+)\.([^.]+)\.(.*)$/.exec(clause);
+            if (!match) return false;
+            const [, col, op, val] = match;
+            if (op !== "eq" || !col) return false;
+            return row[col] === val;
+          });
+        }
         default: throw new Error(`FakeSupabaseClient: unsupported filter ${kind}`);
       }
     });

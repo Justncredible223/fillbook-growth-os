@@ -87,6 +87,28 @@ interface GrowthOsRepository {
     suspend fun markProspectingNotRelevant(id: String)
     suspend fun markProspectingAlreadyHandled(id: String)
 
+    /** The full Partnerships pipeline -- prospect/qualify/draft/contact/pilot/outcome. Never sends anything; every write here is either a plain field edit or an explicit, human-confirmed step. */
+    suspend fun getPartnerships(): List<PartnershipProspect>
+    suspend fun createPartnership(
+        organizationName: String,
+        contactName: String?,
+        partnerCategory: PartnerCategory,
+        websiteUrl: String?,
+        proposedCollaboration: String?,
+    ): PartnershipProspect
+    suspend fun updatePartnership(id: String, ownerNotes: String?, nextAction: String?, nextActionDueDate: String?, contactRoute: String?, contactRouteSource: String?, audienceFocus: String?, futuresRelevanceEvidence: String?): PartnershipProspect
+    suspend fun qualifyPartnership(id: String, rationale: String): PartnershipProspect
+    /** Runs the real campaign pipeline (mechanical gate + all 9 review agents) -- costs real LLM tokens, gated by Partnerships' own independent monthly budget. */
+    suspend fun generatePartnershipDraft(id: String): PartnershipProspect
+    /** The ONLY action that ever moves a prospect to 'contacted' -- never inferred from copying/opening a channel. [finalText] is the actual text sent, which may differ from the draft after an edit. */
+    suspend fun markPartnershipContacted(id: String, channel: String, finalText: String): PartnershipProspect
+    suspend fun recordPartnershipReply(id: String, summary: String): PartnershipProspect
+    suspend fun startPartnershipPilot(id: String, termsAgreed: String, startDate: String): PartnershipProspect
+    suspend fun activatePartnership(id: String): PartnershipProspect
+    suspend fun closePartnership(id: String, reason: String): PartnershipProspect
+    suspend fun archivePartnership(id: String, reason: String): PartnershipProspect
+    suspend fun markPartnershipDoNotContact(id: String, reason: String): PartnershipProspect
+
     /** The latest Strategy Evolution report, or null if none has been generated yet. */
     suspend fun getLatestStrategy(): StrategyVersion?
     /** Forces a fresh strategy report now, regardless of the normal weekly schedule -- for the Strategy screen's manual "Regenerate" action. */
@@ -507,6 +529,177 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         val index = prospectingItems.indexOfFirst { it.id == id }
         if (index >= 0) prospectingItems[index] = prospectingItems[index].copy(status = "already_handled")
     }
+
+    private val partnershipItems = mutableListOf(
+        PartnershipProspect(
+            id = "partnership-fake-1",
+            organizationName = "Apex Journaling Coach LLC",
+            contactName = "Dana Rivera",
+            partnerCategory = PartnerCategory.EDUCATOR_COACH,
+            stage = PartnershipStage.QUALIFIED,
+            websiteUrl = "https://apexjournalingcoach.example",
+            socialLinks = mapOf("x" to "https://x.com/apexjournaling"),
+            contactRoute = "email: dana@apexjournalingcoach.example",
+            contactRouteSource = "Contact page on their site",
+            audienceFocus = "Futures day traders working on risk management and consistency",
+            futuresRelevanceEvidence = "Weekly YouTube series on prop-firm drawdown rules, ~8k subscribers",
+            sourceUrls = listOf("https://apexjournalingcoach.example/about"),
+            researchDate = "2026-09-05",
+            competingJournalRelationships = null,
+            competingJournalEvidence = null,
+            proposedCollaboration = "A guided journaling pilot for a small cohort (10-15) of her current students.",
+            qualificationRationale = "Strong futures-specific audience, no competing journal found, clear mutual benefit.",
+            ownerNotes = null,
+            nextAction = "Generate a draft pitch",
+            nextActionDueDate = null,
+            pilotTermsProposed = null,
+            pilotTermsAgreed = null,
+            pilotStartDate = null,
+            pilotEndDate = null,
+            followUpCount = 0,
+            approvedCampaignAssetId = null,
+            previewText = null,
+            contactedAt = null,
+            contactedChannel = null,
+        ),
+        PartnershipProspect(
+            id = "partnership-fake-2",
+            organizationName = "Futures Grind Community",
+            contactName = "Jordan Lee",
+            partnerCategory = PartnerCategory.CREATOR_COMMUNITY,
+            stage = PartnershipStage.QUALIFIED,
+            websiteUrl = null,
+            socialLinks = mapOf("x" to "https://x.com/futuresgrind"),
+            contactRoute = "X DM: @futuresgrind",
+            contactRouteSource = "Public X bio",
+            audienceFocus = "Small-account futures traders sharing daily P&L",
+            futuresRelevanceEvidence = "Daily community X Spaces on funded-account rules, ~5k followers",
+            sourceUrls = listOf("https://x.com/futuresgrind"),
+            researchDate = "2026-09-05",
+            competingJournalRelationships = null,
+            competingJournalEvidence = null,
+            proposedCollaboration = "A referral partnership promoting Fillbook to the community.",
+            qualificationRationale = "Active daily engagement, futures-specific, no competing journal mentioned.",
+            ownerNotes = null,
+            nextAction = "Generate a draft pitch",
+            nextActionDueDate = null,
+            pilotTermsProposed = null,
+            pilotTermsAgreed = null,
+            pilotStartDate = null,
+            pilotEndDate = null,
+            followUpCount = 0,
+            approvedCampaignAssetId = null,
+            previewText = null,
+            contactedAt = null,
+            contactedChannel = null,
+        ),
+    )
+
+    /** FIXTURE-ONLY: when true, the next getPartnerships() call throws once (then resets) -- lets error-state rendering be verified on-device without a real network failure. Never used by production code. */
+    var debugFailNextPartnershipsCall: Boolean = false
+
+    override suspend fun getPartnerships(): List<PartnershipProspect> {
+        if (debugFailNextPartnershipsCall) {
+            debugFailNextPartnershipsCall = false
+            throw RuntimeException("fixture-only simulated failure")
+        }
+        return partnershipItems.toList()
+    }
+
+    override suspend fun createPartnership(
+        organizationName: String,
+        contactName: String?,
+        partnerCategory: PartnerCategory,
+        websiteUrl: String?,
+        proposedCollaboration: String?,
+    ): PartnershipProspect {
+        val created = PartnershipProspect(
+            id = "partnership-fake-${partnershipItems.size + 1}",
+            organizationName = organizationName,
+            contactName = contactName,
+            partnerCategory = partnerCategory,
+            stage = PartnershipStage.PROSPECT,
+            websiteUrl = websiteUrl,
+            socialLinks = emptyMap(),
+            contactRoute = null,
+            contactRouteSource = null,
+            audienceFocus = null,
+            futuresRelevanceEvidence = null,
+            sourceUrls = emptyList(),
+            researchDate = null,
+            competingJournalRelationships = null,
+            competingJournalEvidence = null,
+            proposedCollaboration = proposedCollaboration,
+            qualificationRationale = null,
+            ownerNotes = null,
+            nextAction = null,
+            nextActionDueDate = null,
+            pilotTermsProposed = null,
+            pilotTermsAgreed = null,
+            pilotStartDate = null,
+            pilotEndDate = null,
+            followUpCount = 0,
+            approvedCampaignAssetId = null,
+            previewText = null,
+            contactedAt = null,
+            contactedChannel = null,
+        )
+        partnershipItems.add(created)
+        return created
+    }
+
+    private fun updatePartnershipItem(id: String, transform: (PartnershipProspect) -> PartnershipProspect): PartnershipProspect {
+        val index = partnershipItems.indexOfFirst { it.id == id }
+        val updated = transform(partnershipItems[index])
+        partnershipItems[index] = updated
+        return updated
+    }
+
+    override suspend fun updatePartnership(id: String, ownerNotes: String?, nextAction: String?, nextActionDueDate: String?, contactRoute: String?, contactRouteSource: String?, audienceFocus: String?, futuresRelevanceEvidence: String?): PartnershipProspect =
+        updatePartnershipItem(id) {
+            it.copy(
+                ownerNotes = ownerNotes ?: it.ownerNotes,
+                nextAction = nextAction ?: it.nextAction,
+                nextActionDueDate = nextActionDueDate ?: it.nextActionDueDate,
+                contactRoute = contactRoute ?: it.contactRoute,
+                contactRouteSource = contactRouteSource ?: it.contactRouteSource,
+                audienceFocus = audienceFocus ?: it.audienceFocus,
+                futuresRelevanceEvidence = futuresRelevanceEvidence ?: it.futuresRelevanceEvidence,
+            )
+        }
+
+    override suspend fun qualifyPartnership(id: String, rationale: String): PartnershipProspect =
+        updatePartnershipItem(id) { it.copy(stage = PartnershipStage.QUALIFIED, qualificationRationale = rationale) }
+
+    override suspend fun generatePartnershipDraft(id: String): PartnershipProspect =
+        updatePartnershipItem(id) {
+            it.copy(
+                stage = PartnershipStage.DRAFT_READY,
+                approvedCampaignAssetId = "asset-fake-partnership-${id}",
+                previewText = "Hi ${it.contactName ?: "there"} -- I've been following ${it.organizationName}'s work with futures traders on risk management. Fillbook is a broker-agnostic trading journal built around session review and visible account-rule tracking. ${it.proposedCollaboration.orEmpty()} Would you be open to a quick call?",
+            )
+        }
+
+    override suspend fun markPartnershipContacted(id: String, channel: String, finalText: String): PartnershipProspect =
+        updatePartnershipItem(id) { it.copy(stage = PartnershipStage.CONTACTED, contactedChannel = channel, contactedAt = "2026-09-05T20:00:00Z") }
+
+    override suspend fun recordPartnershipReply(id: String, summary: String): PartnershipProspect =
+        updatePartnershipItem(id) { it.copy(stage = PartnershipStage.REPLIED) }
+
+    override suspend fun startPartnershipPilot(id: String, termsAgreed: String, startDate: String): PartnershipProspect =
+        updatePartnershipItem(id) { it.copy(stage = PartnershipStage.PILOT, pilotTermsAgreed = termsAgreed, pilotStartDate = startDate) }
+
+    override suspend fun activatePartnership(id: String): PartnershipProspect =
+        updatePartnershipItem(id) { it.copy(stage = PartnershipStage.ACTIVE_PARTNER) }
+
+    override suspend fun closePartnership(id: String, reason: String): PartnershipProspect =
+        updatePartnershipItem(id) { it.copy(stage = PartnershipStage.CLOSED) }
+
+    override suspend fun archivePartnership(id: String, reason: String): PartnershipProspect =
+        updatePartnershipItem(id) { it.copy(stage = PartnershipStage.ARCHIVED) }
+
+    override suspend fun markPartnershipDoNotContact(id: String, reason: String): PartnershipProspect =
+        updatePartnershipItem(id) { it.copy(stage = PartnershipStage.DO_NOT_CONTACT) }
 
     private var fakeStrategy: StrategyVersion? = StrategyVersion(
         version = 1,

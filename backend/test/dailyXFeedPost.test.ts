@@ -437,9 +437,20 @@ describe("deriveTodayXPostView -- Home's exact state mapping (ready / handed_off
     });
   });
 
-  it("a ready run whose asset has been handed off (not yet marked posted) -> handed_off, no preview text needed, no Regenerate", () => {
+  it("a ready run whose asset has been handed off (not yet marked posted) -> handed_off, no Regenerate", () => {
     const view = deriveTodayXPostView(readyRun, "handed_off", false, null);
     expect(view).toEqual({ state: "handed_off", campaignAssetId: "asset-1", topicLabel: FEED_POST_TOPICS[0]!.label, canRegenerate: false });
+  });
+
+  it("a handed-off run still carries the text that was actually copied to X, so Mark posted has something real to record (the app shows no editable field in this state)", () => {
+    const view = deriveTodayXPostView(readyRun, "handed_off", false, "Most funded accounts get pulled for violating a rule nobody reads twice.");
+    expect(view).toEqual({
+      state: "handed_off",
+      campaignAssetId: "asset-1",
+      previewText: "Most funded accounts get pulled for violating a rule nobody reads twice.",
+      topicLabel: FEED_POST_TOPICS[0]!.label,
+      canRegenerate: false,
+    });
   });
 
   it("a ready run whose asset was handed off AND the owner confirmed posting -> posted, separate from handoff", () => {
