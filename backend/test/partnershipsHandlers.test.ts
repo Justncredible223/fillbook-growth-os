@@ -20,11 +20,19 @@ import type { NewPartnershipProspect } from "../src/partnerships/types";
 function jsonResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
 }
+// Real Anthropic responses always carry a `usage` block; onUsage (and so
+// recordCostEvent/cost_events) only fires when it's present -- omitting it
+// silently meant costUsd/cost_events were always zero/empty in every test
+// here, which is exactly what let the partnership_llm_call event-type bug
+// go unnoticed.
 function draftResponse(body: string) {
-  return jsonResponse({ content: [{ type: "tool_use", name: "submit_draft", input: { body } }] });
+  return jsonResponse({ content: [{ type: "tool_use", name: "submit_draft", input: { body } }], usage: { input_tokens: 500, output_tokens: 100 } });
 }
 function verdictResponse(pass: boolean, reasoning = "ok") {
-  return jsonResponse({ content: [{ type: "tool_use", name: "submit_verdict", input: { pass, score: pass ? 1 : 0.2, reasoning, issues: [] } }] });
+  return jsonResponse({
+    content: [{ type: "tool_use", name: "submit_verdict", input: { pass, score: pass ? 1 : 0.2, reasoning, issues: [] } }],
+    usage: { input_tokens: 500, output_tokens: 50 },
+  });
 }
 function verdicts(pass: boolean, reasoning = "ok"): Response[] {
   return Array.from({ length: 9 }, () => verdictResponse(pass, reasoning));
@@ -130,6 +138,26 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     const updated = (await listPartnerships(asSupabase(client))).find((p) => p.id === prospect.id)!;
     expect(updated.stage).toBe("draft_ready");
     expect(updated.approvedCampaignAssetId).toBe(result.campaignAssetId);
+  });
+
+  it("records its LLM cost under 'partnership_llm_call' (not the generic 'llm_call' every other feature shares) so its OWN budget gate actually sees real spend -- regression test for a real production gap: the budget check queries 'partnership_llm_call' specifically, and recordCostEvent's default event_type never matched it until this was fixed, so the $3/month cap never actually gated generation cost", async () => {
+    const fetchMock = sequenceFetch([draftResponse(GOOD_DRAFT), ...verdicts(true)]);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect());
+    await qualifyPartnership(asSupabase(client), prospect.id, "Good fit.");
+
+    await generateDraftForPartnership(asSupabase(client), prospect.id);
+    // recordCostEvent is deliberately fire-and-forget (void, not awaited) so
+    // a cost-write failure never blocks the real pipeline -- flush pending
+    // microtasks so this test observes the writes it triggered.
+    await new Promise((resolve) => setImmediate(resolve));
+
+    const costRows = client.tables.cost_events!;
+    expect(costRows.length).toBeGreaterThan(0);
+    expect(costRows.every((r) => r.event_type === "partnership_llm_call")).toBe(true);
+    expect(costRows.some((r) => r.event_type === "llm_call")).toBe(false);
   });
 
   it("refuses to generate a draft before proposedCollaboration is set -- no blank-ask pitches", async () => {

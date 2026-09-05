@@ -24,15 +24,28 @@ export function estimateCostUsd(usage: LlmUsage): number {
  * Persists one real LLM call's cost. Never blocks or fails the caller's
  * actual work if this write fails -- cost visibility matters, but it
  * should never be the reason a real review agent call gets lost.
+ *
+ * [eventType] defaults to "llm_call" (every existing caller's exact
+ * prior behavior -- auto-draft, prospecting's reply writer, Today's X
+ * Post, video scripts). Partnerships passes "partnership_llm_call"
+ * explicitly -- confirmed live in production that without this, every
+ * partnership pitch-generation call was silently recorded under the
+ * generic "llm_call" type, which getPartnershipMonthSpendUsd never
+ * queries (it only looks for "partnership_llm_call"), so the $3/month
+ * cap was never actually gating LLM generation cost, only the separate
+ * X-search-read cost. A single shared event_type here would have the
+ * opposite problem -- Partnerships' budget would then also count every
+ * OTHER feature's LLM spend against its own $3 cap, and vice versa.
  */
 export async function recordCostEvent(
   client: SupabaseClient,
   usage: LlmUsage,
   context: Record<string, unknown> = {},
+  eventType: string = "llm_call",
 ): Promise<void> {
   try {
     await client.from("cost_events").insert({
-      event_type: "llm_call",
+      event_type: eventType,
       provider: "anthropic",
       model: usage.model,
       input_tokens: usage.inputTokens,

@@ -133,7 +133,7 @@ export async function generateDraftForPartnership(client: SupabaseClient, id: st
   const usages: LlmUsage[] = [];
   const llmClient = createLlmClient(process.env, (usage) => {
     usages.push(usage);
-    void recordCostEvent(client, usage, { endpoint: "partnerships", partnershipId: id });
+    void recordCostEvent(client, usage, { endpoint: "partnerships", partnershipId: id }, "partnership_llm_call");
   });
 
   const { data: opportunityRow, error: opportunityError } = await client
