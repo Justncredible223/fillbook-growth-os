@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { MONTHLY_AUTO_DRAFT_BUDGET_USD, BACKLOG_CAP } from "../src/opportunities/autoDraftEligibility.js";
@@ -11,6 +12,10 @@ import { SupabaseExperimentRepository, measureExperiment } from "../src/experime
 import type { NewExperiment } from "../src/experiments/types.js";
 import { SupabaseNotificationRepository } from "../src/notifications/supabaseNotificationRepository.js";
 import { getTodaySpendUsd } from "../src/cost/costTracking.js";
+import { deriveTodayXPostView, runDailyXFeedPostStep, feedPostTopicLabel, type TodayXPostView } from "../src/content/dailyXFeedPost.js";
+import { buildXFeedPostStepDeps } from "../src/content/buildXFeedPostStepDeps.js";
+import { SupabaseXFeedPostRunRepository } from "../src/content/xFeedPostRunRepository.js";
+import { getOperatingDate, getScheduleTimezone } from "../src/config/scheduleConfig.js";
 
 /**
  * `?resource=strategy` handles Strategy Evolution -- a read of the latest
@@ -291,6 +296,209 @@ async function handleEveningReport(req: VercelRequest, res: VercelResponse): Pro
  * byte-for-byte identical to the old endpoint; only the URL changed
  * (Android's NetworkGrowthOsRepository.getCostSummary() updated to match).
  */
+/**
+ * Real, timezone-correct lookup for Home's Today's X Post -- keyed by
+ * x_feed_post_runs.operating_date (America/Phoenix by default), never
+ * by campaign_assets.created_at falling in a UTC calendar-day window.
+ * See dailyXFeedPost.ts's own doc comment for why that distinction is
+ * exactly what made this field sit empty for days at a time.
+ */
+export async function computeTodayXPostView(client: SupabaseClient, now: Date): Promise<TodayXPostView> {
+  try {
+    return await computeTodayXPostViewOrThrow(client, now);
+  } catch (err) {
+    // A missing x_feed_post_runs table (this backend deployed before its
+    // migration was applied -- see docs/PROGRESS_LEDGER.md) or any other
+    // query failure here must NEVER take down the rest of Home: this
+    // function is one entry in GET /api/summary's Promise.all, and an
+    // unguarded throw here would reject the whole thing, turning "Today's
+    // X Post" trouble into a 500 for signals/opportunities/analytics too.
+    // Surfaced as "failed" (not "empty") so it stays visibly distinct
+    // from a genuine no-post day -- see this file's own doc comment on
+    // deriveTodayXPostView for that distinction.
+    return { state: "failed", reason: `Couldn't load today's post status: ${errorMessage(err)}`, canRegenerate: false };
+  }
+}
+
+async function computeTodayXPostViewOrThrow(client: SupabaseClient, now: Date): Promise<TodayXPostView> {
+  const operatingDate = getOperatingDate(now, getScheduleTimezone());
+  const runRepo = new SupabaseXFeedPostRunRepository(client);
+  const run = await runRepo.getRun(operatingDate);
+
+  if (!run || run.status !== "ready" || !run.campaignAssetId) {
+    return deriveTodayXPostView(run, null, false, null);
+  }
+
+  // Posted is a hard terminal state -- never re-derive a "dismissed"
+  // read on an already-posted asset (its campaign could theoretically be
+  // retired for unrelated bookkeeping reasons after the fact; that must
+  // never make an already-posted post disappear or look regenerable).
+  if (run.postedAt) {
+    return deriveTodayXPostView(run, "handed_off", false, null);
+  }
+
+  const { data: asset } = await client
+    .from("campaign_assets")
+    .select("stage, campaigns(status)")
+    .eq("id", run.campaignAssetId)
+    .maybeSingle();
+  const campaigns = (asset as { campaigns: { status: string } | { status: string }[] | null } | null)?.campaigns;
+  const campaignStatus = Array.isArray(campaigns) ? campaigns[0]?.status : campaigns?.status;
+  const dismissed = campaignStatus === "retired";
+
+  let previewText: string | null = null;
+  if (!dismissed) {
+    const { data: latestVersion } = await client
+      .from("content_versions")
+      .select("body")
+      .eq("campaign_asset_id", run.campaignAssetId)
+      .order("version", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    previewText = latestVersion?.body ?? null;
+  }
+
+  return deriveTodayXPostView(run, asset?.stage ?? null, dismissed, previewText);
+}
+
+/**
+ * `?resource=x-feed-post` -- owner-triggered actions for Today's X Post
+ * that don't fit GET /api/summary's read-only response: POST
+ * { action: "regenerate" } forces a fresh attempt (bounded, see
+ * dailyXFeedPost.ts's MAX_ATTEMPTS_PER_DAY); POST { action: "mark-posted",
+ * campaignAssetId } records the owner's own explicit confirmation that
+ * the post actually went out on X -- a separate, later step than handoff
+ * (which only means "opened X with the draft copied"), same reasoning as
+ * Inbound's "Mark responded": this backend has no way to verify a post
+ * via the X API, so it's a human confirmation, never an inference.
+ */
+async function handleXFeedPost(req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const client = getServiceClient();
+    const body = req.body as { action?: string; campaignAssetId?: string; postedText?: string } | undefined;
+    const now = new Date();
+    const operatingDate = getOperatingDate(now, getScheduleTimezone());
+
+    if (body?.action === "regenerate") {
+      const { deps } = await buildXFeedPostStepDeps(client);
+      const start = Date.now();
+      await runDailyXFeedPostStep(deps, operatingDate, true, now, start + 55_000);
+      res.status(200).json({ todayXPost: await computeTodayXPostView(client, now) });
+      return;
+    }
+
+    if (body?.action === "mark-posted" && body.campaignAssetId) {
+      // The owner's final confirmed text is required, not optional: it's
+      // what future originality/editorial-tag comparisons must compare
+      // against (see markPosted's kdoc) -- a mark-posted with no text
+      // would silently fall back to comparing against the pre-edit draft
+      // forever, which is exactly the gap this closes.
+      if (!body.postedText || !body.postedText.trim()) {
+        res.status(400).json({ error: "postedText is required when marking posted" });
+        return;
+      }
+      const runRepo = new SupabaseXFeedPostRunRepository(client);
+      const run = await runRepo.getRun(operatingDate);
+      if (!run || run.campaignAssetId !== body.campaignAssetId) {
+        res.status(404).json({ error: "No matching Today's X Post run for this asset" });
+        return;
+      }
+      await runRepo.markPosted(operatingDate, now.toISOString(), body.postedText);
+      res.status(200).json({ todayXPost: await computeTodayXPostView(client, now) });
+      return;
+    }
+
+    res.status(400).json({ error: "action must be 'regenerate' or 'mark-posted' (with campaignAssetId and postedText)" });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+export interface XFeedPostHistoryEntry {
+  operatingDate: string;
+  state: "unposted_draft" | "posted" | "failed";
+  topicLabel?: string;
+  previewText?: string;
+  reason?: string;
+  campaignAssetId?: string;
+}
+
+/** How many days back Previous drafts/history looks -- deliberately independent of RECENT_EDITORIAL_HISTORY_DAYS (that one drives repetition scoring; this one is just how far back the owner can browse). */
+const HISTORY_WINDOW_DAYS = 14;
+
+/**
+ * A ready-but-unposted prior day's run is a recoverable draft (item 3's
+ * "Previous drafts" surface), not just an editorial-repetition input.
+ * Skips 'running' rows (an abandoned prior-day claim -- nothing readable
+ * to show) and excludes today's own operating date, which the main
+ * Today's X Post card already covers.
+ */
+async function computeXFeedPostHistory(client: SupabaseClient, now: Date): Promise<XFeedPostHistoryEntry[]> {
+  const operatingDate = getOperatingDate(now, getScheduleTimezone());
+  const runRepo = new SupabaseXFeedPostRunRepository(client);
+  const since = new Date(new Date(operatingDate + "T00:00:00Z").getTime() - HISTORY_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const runs = (await runRepo.listRecentRuns(since)).filter((r) => r.operatingDate < operatingDate);
+
+  const entries: XFeedPostHistoryEntry[] = [];
+  for (const run of runs) {
+    if (run.status === "failed") {
+      entries.push({ operatingDate: run.operatingDate, state: "failed", topicLabel: feedPostTopicLabel(run.topicKey) ?? undefined, reason: run.error ?? undefined });
+      continue;
+    }
+    if (run.status === "ready" && run.campaignAssetId) {
+      if (run.postedAt) {
+        entries.push({
+          operatingDate: run.operatingDate,
+          state: "posted",
+          topicLabel: feedPostTopicLabel(run.topicKey) ?? undefined,
+          previewText: run.postedText ?? undefined,
+          campaignAssetId: run.campaignAssetId,
+        });
+      } else {
+        const { data: latestVersion } = await client
+          .from("content_versions")
+          .select("body")
+          .eq("campaign_asset_id", run.campaignAssetId)
+          .order("version", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        entries.push({
+          operatingDate: run.operatingDate,
+          state: "unposted_draft",
+          topicLabel: feedPostTopicLabel(run.topicKey) ?? undefined,
+          previewText: latestVersion?.body ?? undefined,
+          campaignAssetId: run.campaignAssetId,
+        });
+      }
+    }
+    // status "running" for a PRIOR day is an abandoned claim (the
+    // operating date rolled over before it could even self-heal) -- there
+    // is nothing generated to show, so it's silently skipped rather than
+    // rendered as a confusing empty history row.
+  }
+  return entries;
+}
+
+/** `?resource=x-feed-post-history` -- read-only GET for the Previous drafts / history surface (item 3). Never accepts writes; Regenerate/Mark-posted stay on `?resource=x-feed-post`. */
+async function handleXFeedPostHistory(req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (req.method !== "GET") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+  try {
+    const client = getServiceClient();
+    const entries = await computeXFeedPostHistory(client, new Date());
+    res.status(200).json({ entries });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
 async function handleCostSummary(res: VercelResponse): Promise<void> {
   try {
     const client = getServiceClient();
@@ -343,6 +551,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await handleNotifications(req, res);
     return;
   }
+  if (req.query.resource === "x-feed-post") {
+    await handleXFeedPost(req, res);
+    return;
+  }
+  if (req.query.resource === "x-feed-post-history") {
+    await handleXFeedPostHistory(req, res);
+    return;
+  }
   if (req.query.resource === "brief") {
     await handleBrief(req, res);
     return;
@@ -389,7 +605,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const autoDraftRunRepo = new SupabaseAutoDraftRunRepository(client);
 
-    const [signalsToday, openOpportunities, readyAssetsAwaitingDecision, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftSpendUsd, xAssetsToday, todaySpendUsd] =
+    const now = new Date();
+    const [signalsToday, openOpportunities, readyAssetsAwaitingDecision, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftSpendUsd, todayXPost, todaySpendUsd] =
       await Promise.all([
         client.from("signals").select("id", { count: "exact", head: true }).gte("observed_at", startOfToday.toISOString()),
         client.from("opportunities").select("id", { count: "exact", head: true }).eq("status", "open"),
@@ -412,17 +629,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         client.from("cost_events").select("cost_usd"),
         autoDraftRunRepo.getLastRun(),
         autoDraftRunRepo.getMonthSpendUsd(yearMonth),
-        // Today's X Post: real candidates only -- an X-platform asset
-        // actually created today, at a stage the owner can act on or has
-        // already acted on. Never assumes Auto-Draft targeted X; this is
-        // independent of which pipeline produced it.
-        client
-          .from("campaign_assets")
-          .select("id, stage, campaign_id, campaigns!inner(status)")
-          .eq("platform", "x")
-          .gte("created_at", startOfToday.toISOString())
-          .in("stage", ["ready_for_owner", "handed_off"])
-          .order("created_at", { ascending: false }),
+        computeTodayXPostView(client, now),
         getTodaySpendUsd(client),
       ]);
 
@@ -435,31 +642,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return counts;
     };
     const totalCostUsd = (costRows.data ?? []).reduce((sum: number, r: { cost_usd: number }) => sum + Number(r.cost_usd), 0);
-
-    // A handed-off asset (owner already opened X with it) outranks a
-    // still-pending ready one -- if both exist, the story is "already
-    // handled today," not "still waiting."
-    type XAssetRow = { id: string; stage: string; campaign_id: string; campaigns: { status: string } | { status: string }[] };
-    const xCandidates = (xAssetsToday.data ?? []) as XAssetRow[];
-    const statusOf = (row: XAssetRow): string | undefined =>
-      Array.isArray(row.campaigns) ? row.campaigns[0]?.status : row.campaigns?.status;
-    const handedOff = xCandidates.find((a) => a.stage === "handed_off");
-    const readyForOwner = xCandidates.find((a) => a.stage === "ready_for_owner" && statusOf(a) === "in_review");
-    const chosenXAsset = handedOff ?? readyForOwner ?? null;
-
-    let todayXPost: { state: "empty" | "ready" | "handed_off"; campaignAssetId?: string; previewText?: string } = { state: "empty" };
-    if (chosenXAsset?.stage === "handed_off") {
-      todayXPost = { state: "handed_off", campaignAssetId: chosenXAsset.id };
-    } else if (chosenXAsset) {
-      const { data: latestVersion } = await client
-        .from("content_versions")
-        .select("body")
-        .eq("campaign_asset_id", chosenXAsset.id)
-        .order("version", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      todayXPost = { state: "ready", campaignAssetId: chosenXAsset.id, previewText: latestVersion?.body ?? "" };
-    }
 
     res.status(200).json({
       todayXPost,

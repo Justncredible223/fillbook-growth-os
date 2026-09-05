@@ -171,3 +171,19 @@ export function isWithinScheduleWindow(localTimes: string[], timezone: string, n
     return Math.min(raw, 24 - raw) <= toleranceHours;
   });
 }
+
+/**
+ * The calendar date, as "YYYY-MM-DD", that `instant` falls on in
+ * `timezone` -- the "operating day" every once-per-day feature in this
+ * codebase should key off of, instead of `instant.toISOString().slice(0,
+ * 10)` (which is the UTC date and silently drifts from the configured
+ * schedule timezone -- for America/Phoenix, UTC is 7 hours ahead, so
+ * anything after 5pm Phoenix time already reads as "tomorrow" in UTC).
+ * Uses the "en-CA" locale specifically because it renders
+ * Intl.DateTimeFormat dates as YYYY-MM-DD directly -- no manual
+ * component reassembly, and no ambiguity from a locale that reorders
+ * month/day.
+ */
+export function getOperatingDate(instant: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
+}

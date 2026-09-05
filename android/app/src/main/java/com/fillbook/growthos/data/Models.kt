@@ -87,22 +87,47 @@ data class HomeSummary(
     val pendingReview: Int,
     val systemPaused: Boolean,
     val analytics: AnalyticsBreakdown,
-    val todayXPost: TodayXPost = TodayXPost(TodayXPostState.EMPTY, null, null),
+    val todayXPost: TodayXPost = TodayXPost(TodayXPostState.EMPTY, null, null, null, null, null, false),
 )
 
-enum class TodayXPostState { EMPTY, READY, HANDED_OFF }
+enum class TodayXPostState { EMPTY, RUNNING, READY, HANDED_OFF, POSTED, FAILED }
 
 /**
- * Never fabricated: EMPTY means no real X asset was created today, full
- * stop -- Home must not invent a placeholder. READY/HANDED_OFF only ever
- * reflect a genuine campaign_assets row (see api/summary.ts). HANDED_OFF
- * means the owner already opened X with this draft -- never "published,"
- * this app has no way to confirm an actual post happened.
+ * Never fabricated: EMPTY means no real, still-wanted X feed post exists
+ * for today's operating day, full stop -- Home must not invent a
+ * placeholder. RUNNING/READY/HANDED_OFF/POSTED/FAILED only ever reflect a
+ * genuine x_feed_post_runs + campaign_assets row (see api/summary.ts's
+ * computeTodayXPostView). RUNNING means generation is genuinely (or
+ * apparently) in flight right now -- distinct from EMPTY (nothing has
+ * even started). HANDED_OFF means the owner already opened X with this
+ * draft -- never "published." POSTED is a SEPARATE, later, explicit
+ * owner confirmation ("Mark posted") that the post actually went out --
+ * this app has no way to verify that via the X API, same reasoning as
+ * Inbound's "Mark responded." FAILED means a genuine generation attempt
+ * ran and didn't produce a passing post -- [reason] carries the real
+ * cause, and [canRegenerate] says whether a retry is offered.
  */
 data class TodayXPost(
     val state: TodayXPostState,
     val campaignAssetId: String?,
     val previewText: String?,
+    val topicLabel: String? = null,
+    val reason: String? = null,
+    /** Why this angle was selected over the other candidates actually compared for today -- see backend's selectFeedPostAngle. Null for a run created before this field existed, or when not yet generated. */
+    val selectionReason: String? = null,
+    val canRegenerate: Boolean = false,
+)
+
+enum class XFeedPostHistoryState { UNPOSTED_DRAFT, POSTED, FAILED }
+
+/** One prior day's X feed post run, for the Previous drafts / history surface -- never today's own (that's TodayXPost above). */
+data class XFeedPostHistoryEntry(
+    val operatingDate: String,
+    val state: XFeedPostHistoryState,
+    val topicLabel: String?,
+    val previewText: String?,
+    val reason: String?,
+    val campaignAssetId: String?,
 )
 
 enum class CreatorCategory { TIER_B, RESEARCH_NEXT, REJECTED }

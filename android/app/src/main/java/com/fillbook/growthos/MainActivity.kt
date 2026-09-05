@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Insights
@@ -96,6 +97,7 @@ import com.fillbook.growthos.ui.screens.NotificationsScreen
 import com.fillbook.growthos.ui.screens.MorningBriefScreen
 import com.fillbook.growthos.ui.screens.EveningReportScreen
 import com.fillbook.growthos.ui.screens.SystemScreen
+import com.fillbook.growthos.ui.screens.XFeedPostHistoryScreen
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Background
 import com.fillbook.growthos.ui.theme.Border
@@ -124,6 +126,7 @@ private sealed class Destination(val route: String, val label: String, val icon:
     data object EveningReport : Destination("evening_report", "Evening Report", Icons.Filled.Nightlight)
     data object System : Destination("system", "System", Icons.Filled.Dns)
     data object Settings : Destination("settings", "Settings", Icons.Filled.Settings)
+    data object XFeedPostHistory : Destination("x_feed_post_history", "Previous X Drafts", Icons.Filled.History)
 }
 
 /**
@@ -154,6 +157,7 @@ private val moreDestinations = listOf(
     Destination.Notifications,
     Destination.MorningBrief,
     Destination.EveningReport,
+    Destination.XFeedPostHistory,
 )
 
 private val allDestinations = primaryDestinations + moreDestinations
@@ -267,6 +271,7 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository) {
             composable(Destination.EveningReport.route) { EveningReportScreen(repo) }
             composable(Destination.System.route) { SystemScreen(repo) }
             composable(Destination.Settings.route) { SettingsScreen(repo) }
+            composable(Destination.XFeedPostHistory.route) { XFeedPostHistoryScreen(repo) }
         }
     }
 

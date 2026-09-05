@@ -39,6 +39,26 @@ interface GrowthOsRepository {
     /** Wires CampaignFactory.handOffToOwner() -- EXTERNAL_DRAFT only, "opened the composer," never a publish. */
     suspend fun handOffAsset(campaignAssetId: String): HandOffResult
 
+    /**
+     * Forces a fresh attempt at Today's X Post -- used for the Home
+     * screen's "Regenerate" action after a failed generation, or to
+     * replace a post the owner explicitly dismissed. Bounded server-side
+     * (see backend's MAX_ATTEMPTS_PER_DAY); never replaces a post that's
+     * still genuinely ready/handed off/posted.
+     */
+    suspend fun regenerateTodayXPost(): TodayXPost
+    /**
+     * The owner's own explicit confirmation that a handed-off X feed post
+     * actually went out on X -- a separate, later step than handoff
+     * itself (see TodayXPost's kdoc). Never inferred. [postedText] is the
+     * FINAL text as edited by the owner (not necessarily the original
+     * draft) -- required so future originality checks compare against
+     * what was actually posted, not a pre-edit draft.
+     */
+    suspend fun markTodayXPostPosted(campaignAssetId: String, postedText: String): TodayXPost
+    /** Prior days' X feed post runs (never today's own) -- the Previous Drafts / history surface. */
+    suspend fun getTodayXPostHistory(): List<XFeedPostHistoryEntry>
+
     /** Backs the Settings/System "Pause System" control -- actually stops auto-draft and manual campaign runs server-side, not just a display flag. */
     suspend fun setPaused(paused: Boolean)
 
@@ -96,6 +116,87 @@ interface GrowthOsRepository {
  * backend.
  */
 class FakeGrowthOsRepository : GrowthOsRepository {
+    private var fakeTodayXPost = TodayXPost(
+        state = TodayXPostState.READY,
+        campaignAssetId = "asset-fake-1",
+        previewText = "Revenge trading doesn't show up as \"revenge\" in your P&L -- it shows up as funded-account breach.",
+        topicLabel = "The mechanics of a revenge-trading spiral",
+        selectionReason = "Selected \"The mechanics of a revenge-trading spiral\" (score 15.5) over 2 other candidates considered, incl. \"Position sizing in the hour after a loss\" (14.0): less overlap with recently used lessons/conclusions. This is the strongest of the candidates actually compared here, not a claim that no better post exists.",
+    )
+    private var fakeHistory = listOf(
+        XFeedPostHistoryEntry(
+            operatingDate = "2026-09-04",
+            state = XFeedPostHistoryState.UNPOSTED_DRAFT,
+            topicLabel = "What a prop-firm consistency rule actually enforces",
+            previewText = "Consistency rules usually cap what ONE day can count toward your payout, not your total P&L -- a great day can quietly exceed that cap without you ever \"overtrading.\"",
+            reason = null,
+            campaignAssetId = "asset-fake-history-1",
+        ),
+        XFeedPostHistoryEntry(
+            operatingDate = "2026-09-03",
+            state = XFeedPostHistoryState.FAILED,
+            topicLabel = "Trailing drawdown mechanics",
+            previewText = null,
+            reason = "review gate: fact_checker: unverified claim about breach statistics",
+            campaignAssetId = null,
+        ),
+        XFeedPostHistoryEntry(
+            operatingDate = "2026-09-02",
+            state = XFeedPostHistoryState.POSTED,
+            topicLabel = "The journaling habit that actually sticks",
+            previewText = "Most journals die because they only log wins and losses -- never the process that led to either. Track the decision, not just the outcome.",
+            reason = null,
+            campaignAssetId = "asset-fake-history-3",
+        ),
+    )
+
+    /**
+     * FIXTURE-ONLY: switches the fake Today's X Post state to one of the
+     * named scenarios below, for on-device rendering verification (see
+     * docs/PROGRESS_LEDGER.md's Today's X Post release-readiness section)
+     * -- never used by real app code, only a temporary debug affordance
+     * while FakeGrowthOsRepository is wired in for screenshotting.
+     */
+    fun debugSetTodayXPostFixture(scenario: String) {
+        fakeTodayXPost = when (scenario) {
+            "ready" -> TodayXPost(
+                state = TodayXPostState.READY,
+                campaignAssetId = "asset-fake-1",
+                previewText = "Revenge trading doesn't show up as \"revenge\" in your P&L -- it shows up as funded-account breach.",
+                topicLabel = "The mechanics of a revenge-trading spiral",
+                selectionReason = "Selected \"The mechanics of a revenge-trading spiral\" over 2 other candidates -- less overlap with recently used lessons.",
+            )
+            "running" -> TodayXPost(state = TodayXPostState.RUNNING, campaignAssetId = null, previewText = null)
+            "failed" -> TodayXPost(
+                state = TodayXPostState.FAILED,
+                campaignAssetId = null,
+                previewText = null,
+                reason = "review gate: fact_checker: unverified claim about breach statistics; skeptic: reads as hype",
+                canRegenerate = true,
+            )
+            "replacement_failure" -> TodayXPost(
+                state = TodayXPostState.FAILED,
+                campaignAssetId = null,
+                previewText = null,
+                reason = "stopped mid-run: monthly_budget_reached (\$6.0000 spent, cap is \$6.00) -- Regenerate attempt did not produce a passing replacement",
+                canRegenerate = true,
+            )
+            "handed_off" -> TodayXPost(
+                state = TodayXPostState.HANDED_OFF,
+                campaignAssetId = "asset-fake-1",
+                previewText = null,
+                topicLabel = "The mechanics of a revenge-trading spiral",
+            )
+            "posted" -> TodayXPost(
+                state = TodayXPostState.POSTED,
+                campaignAssetId = "asset-fake-1",
+                previewText = null,
+                topicLabel = "The mechanics of a revenge-trading spiral",
+            )
+            else -> fakeTodayXPost
+        }
+    }
+
     override suspend fun getHomeSummary() = HomeSummary(
         signalsAnalyzedToday = 0,
         opportunitiesFound = 1,
@@ -119,11 +220,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
                 monthBudgetUsd = 5.0,
             ),
         ),
-        todayXPost = TodayXPost(
-            state = TodayXPostState.READY,
-            campaignAssetId = "asset-fake-1",
-            previewText = "Revenge trading doesn't show up as \"revenge\" in your P&L -- it shows up as funded-account breach.",
-        ),
+        todayXPost = fakeTodayXPost,
     )
 
     override suspend fun getHealth() = listOf(
@@ -217,7 +314,31 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         // No backend to call in fake mode -- no-op.
     }
 
-    override suspend fun handOffAsset(campaignAssetId: String) = HandOffResult(campaignAssetId, "handed_off")
+    override suspend fun handOffAsset(campaignAssetId: String): HandOffResult {
+        if (fakeTodayXPost.campaignAssetId == campaignAssetId) {
+            fakeTodayXPost = fakeTodayXPost.copy(state = TodayXPostState.HANDED_OFF)
+        }
+        return HandOffResult(campaignAssetId, "handed_off")
+    }
+
+    override suspend fun regenerateTodayXPost(): TodayXPost {
+        fakeTodayXPost = TodayXPost(
+            state = TodayXPostState.READY,
+            campaignAssetId = "asset-fake-regenerated",
+            previewText = "A flat stretch on your equity curve can be a controlled drawdown, not stagnation -- check the trade count, not just the slope.",
+            topicLabel = "What your own equity curve is actually telling you",
+        )
+        return fakeTodayXPost
+    }
+
+    override suspend fun markTodayXPostPosted(campaignAssetId: String, postedText: String): TodayXPost {
+        if (fakeTodayXPost.campaignAssetId == campaignAssetId) {
+            fakeTodayXPost = fakeTodayXPost.copy(state = TodayXPostState.POSTED)
+        }
+        return fakeTodayXPost
+    }
+
+    override suspend fun getTodayXPostHistory(): List<XFeedPostHistoryEntry> = fakeHistory
 
     private val inboundItems = mutableListOf(
         InboundEngagement(

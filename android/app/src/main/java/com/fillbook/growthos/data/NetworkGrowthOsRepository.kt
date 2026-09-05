@@ -123,14 +123,21 @@ class NetworkGrowthOsRepository(
                     )
                 },
             ),
-            todayXPost = json.optJSONObject("todayXPost")?.let { post ->
-                TodayXPost(
-                    state = runCatching { TodayXPostState.valueOf(post.getString("state").uppercase()) }
-                        .getOrDefault(TodayXPostState.EMPTY),
-                    campaignAssetId = post.optStringOrNull("campaignAssetId"),
-                    previewText = post.optStringOrNull("previewText"),
-                )
-            } ?: TodayXPost(TodayXPostState.EMPTY, null, null),
+            todayXPost = json.optJSONObject("todayXPost").toTodayXPost(),
+        )
+    }
+
+    /** Shared parsing for GET /api/summary's embedded todayXPost and the x-feed-post resource's own responses -- same shape from both. */
+    private fun JSONObject?.toTodayXPost(): TodayXPost {
+        if (this == null) return TodayXPost(TodayXPostState.EMPTY, null, null)
+        return TodayXPost(
+            state = runCatching { TodayXPostState.valueOf(getString("state").uppercase()) }.getOrDefault(TodayXPostState.EMPTY),
+            campaignAssetId = optStringOrNull("campaignAssetId"),
+            previewText = optStringOrNull("previewText"),
+            topicLabel = optStringOrNull("topicLabel"),
+            reason = optStringOrNull("reason"),
+            selectionReason = optStringOrNull("selectionReason"),
+            canRegenerate = optBoolean("canRegenerate", false),
         )
     }
 
@@ -272,6 +279,32 @@ class NetworkGrowthOsRepository(
         val body = JSONObject().put("action", "hand-off").put("campaignAssetId", campaignAssetId)
         val json = post("/api/approvals", body)
         return HandOffResult(campaignAssetId = json.getString("campaignAssetId"), stage = json.getString("stage"))
+    }
+
+    override suspend fun regenerateTodayXPost(): TodayXPost {
+        val json = post("/api/summary?resource=x-feed-post", JSONObject().put("action", "regenerate"))
+        return json.optJSONObject("todayXPost").toTodayXPost()
+    }
+
+    override suspend fun markTodayXPostPosted(campaignAssetId: String, postedText: String): TodayXPost {
+        val body = JSONObject().put("action", "mark-posted").put("campaignAssetId", campaignAssetId).put("postedText", postedText)
+        val json = post("/api/summary?resource=x-feed-post", body)
+        return json.optJSONObject("todayXPost").toTodayXPost()
+    }
+
+    override suspend fun getTodayXPostHistory(): List<XFeedPostHistoryEntry> {
+        val json = get("/api/summary?resource=x-feed-post-history")
+        return json.getJSONArray("entries").map { item ->
+            XFeedPostHistoryEntry(
+                operatingDate = item.getString("operatingDate"),
+                state = runCatching { XFeedPostHistoryState.valueOf(item.getString("state").uppercase()) }
+                    .getOrDefault(XFeedPostHistoryState.FAILED),
+                topicLabel = item.optStringOrNull("topicLabel"),
+                previewText = item.optStringOrNull("previewText"),
+                reason = item.optStringOrNull("reason"),
+                campaignAssetId = item.optStringOrNull("campaignAssetId"),
+            )
+        }
     }
 
     private fun JSONObject.toInboundEngagement() = InboundEngagement(

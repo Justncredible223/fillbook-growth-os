@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import android.content.Intent
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Forum
@@ -29,6 +28,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -40,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,7 +65,9 @@ import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.StatusTone
 import com.fillbook.growthos.ui.components.autoDraftSkipReasonLabel
 import com.fillbook.growthos.ui.components.copyToClipboard
+import com.fillbook.growthos.ui.components.openExternalUrl
 import com.fillbook.growthos.ui.theme.Accent
+import com.fillbook.growthos.ui.theme.Border
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Success
 import com.fillbook.growthos.ui.theme.TextPrimary
@@ -92,8 +96,20 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
-    var reviewingXPost by remember { mutableStateOf(false) }
+    // rememberSaveable, not remember: reopening after a tab switch or a
+    // config change should not silently lose the owner's place mid-review.
+    var reviewingXPost by rememberSaveable { mutableStateOf(false) }
     var handingOff by remember { mutableStateOf(false) }
+    var xPostActionBusy by remember { mutableStateOf(false) } // Regenerate / Mark posted -- distinct from the review dialog's own handingOff
+    // Owner edits before copy -- keyed by campaignAssetId so a genuinely
+    // NEW post (a fresh Regenerate result) starts from its own draft
+    // text, while edits to the SAME post survive the dialog closing,
+    // configuration changes, and (via rememberSaveable) navigating away
+    // and back. Never sent anywhere until Copy + Open X is tapped; a
+    // draft the owner never touches copies exactly as the LLM wrote it.
+    var editedXPostText by rememberSaveable(summary?.todayXPost?.campaignAssetId) {
+        mutableStateOf(summary?.todayXPost?.previewText.orEmpty())
+    }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -119,14 +135,39 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
             try {
                 repo.handOffAsset(assetId)
                 copyToClipboard(context, "Today's X post", previewText)
-                context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://x.com/compose/post")))
+                val opened = openExternalUrl(context, "https://x.com/compose/post")
                 reviewingXPost = false
                 refresh()
-                snackbarHostState.showSnackbar("Opened in X — posting is still up to you")
+                snackbarHostState.showSnackbar(if (opened) "Opened in X — posting is still up to you" else "Copied, but no app could open X")
             } catch (e: Exception) {
                 snackbarHostState.showSnackbar("Couldn't complete that -- check your connection and try again.")
             }
             handingOff = false
+        }
+    }
+
+    fun regenerateXPost() {
+        scope.launch {
+            xPostActionBusy = true
+            try {
+                summary = summary?.copy(todayXPost = repo.regenerateTodayXPost())
+                errorMessage = null
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar("Couldn't regenerate today's post. Check your connection and try again.")
+            }
+            xPostActionBusy = false
+        }
+    }
+
+    fun markXPostPosted(assetId: String, postedText: String) {
+        scope.launch {
+            xPostActionBusy = true
+            try {
+                summary = summary?.copy(todayXPost = repo.markTodayXPostPosted(assetId, postedText))
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar("Couldn't mark that posted. Check your connection and try again.")
+            }
+            xPostActionBusy = false
         }
     }
 
@@ -161,7 +202,20 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
 
                 item { Box20 { NextBestActionCard(s, inbound, onNavigate) } }
 
-                item { Box20 { TodayXPostCard(s.todayXPost, onReview = { reviewingXPost = true }) } }
+                item {
+                    Box20 {
+                        Column {
+                            TodayXPostCard(
+                                post = s.todayXPost,
+                                busy = xPostActionBusy,
+                                onReview = { reviewingXPost = true },
+                                onRegenerate = { regenerateXPost() },
+                                onMarkPosted = { s.todayXPost.campaignAssetId?.let { markXPostPosted(it, editedXPostText) } },
+                            )
+                            TextButton(onClick = { onNavigate("x_feed_post_history") }) { Text("Previous drafts") }
+                        }
+                    }
+                }
 
                 item {
                     Box20 {
@@ -234,22 +288,27 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
             text = {
                 Column {
                     Text(
-                        "Review the draft below, then copy it and open X -- posting is still up to you.",
+                        "Edit the draft below if you want, then copy it and open X -- posting is still up to you.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = TextSecondary,
                     )
                     Spacer(Modifier.height(10.dp))
-                    Text(post?.previewText.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                    OutlinedTextField(
+                        value = editedXPostText,
+                        onValueChange = { editedXPostText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, cursorColor = Accent, unfocusedBorderColor = Border),
+                    )
                 }
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         val assetId = post?.campaignAssetId
-                        val text = post?.previewText
-                        if (assetId != null && text != null) handOffXPost(assetId, text)
+                        if (assetId != null) handOffXPost(assetId, editedXPostText)
                     },
-                    enabled = !handingOff && post?.campaignAssetId != null,
+                    enabled = !handingOff && post?.campaignAssetId != null && editedXPostText.isNotBlank(),
                 ) { Text(if (handingOff) "Opening..." else "Copy + Open X") }
             },
             dismissButton = {
@@ -324,16 +383,28 @@ private fun NextBestActionCard(summary: HomeSummary, inbound: InboundSummary?, o
  * NBA answers "what needs my attention right now" (interrupt-driven);
  * this answers a different, routine question ("did I handle Fillbook's
  * own X post today"), so it never competes with or reorders NBA's
- * priority. Only ever shows a real campaign_assets row (see
- * api/summary.ts's todayXPost) -- EMPTY is a genuine, honest state, not
- * a loading placeholder, and HANDED_OFF never claims to know the post
- * actually went out on X.
+ * priority. Only ever shows a real x_feed_post_runs + campaign_assets row
+ * (see api/summary.ts's computeTodayXPostView) -- EMPTY is a genuine,
+ * honest state, not a loading placeholder; HANDED_OFF never claims to
+ * know the post actually went out on X (POSTED is the owner's own,
+ * separate, later confirmation of that); FAILED surfaces the real reason
+ * generation didn't produce a passing post, with a bounded Regenerate.
  */
 @Composable
-private fun TodayXPostCard(post: TodayXPost, onReview: () -> Unit) {
+private fun TodayXPostCard(
+    post: TodayXPost,
+    busy: Boolean,
+    onReview: () -> Unit,
+    onRegenerate: () -> Unit,
+    onMarkPosted: () -> Unit,
+) {
     GrowthCard(
         onClick = if (post.state == TodayXPostState.READY) onReview else null,
-        accentBar = if (post.state == TodayXPostState.READY) Accent else null,
+        accentBar = when (post.state) {
+            TodayXPostState.READY -> Accent
+            TodayXPostState.FAILED -> Warning
+            else -> null
+        },
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Filled.Tag, contentDescription = null, tint = TextTertiary, modifier = Modifier.size(18.dp))
@@ -341,9 +412,16 @@ private fun TodayXPostCard(post: TodayXPost, onReview: () -> Unit) {
             Text("Today's X Post", style = MaterialTheme.typography.titleMedium, color = TextPrimary, modifier = Modifier.weight(1f))
             when (post.state) {
                 TodayXPostState.READY -> QuietStatusLabel("Ready for review", StatusTone.WAITING)
+                TodayXPostState.RUNNING -> QuietStatusLabel("Generating...", StatusTone.WAITING)
                 TodayXPostState.HANDED_OFF -> QuietStatusLabel("Opened in X", StatusTone.READY)
+                TodayXPostState.POSTED -> QuietStatusLabel("Posted", StatusTone.READY)
+                TodayXPostState.FAILED -> QuietStatusLabel("Needs attention", StatusTone.BLOCKED)
                 TodayXPostState.EMPTY -> {}
             }
+        }
+        post.topicLabel?.let { label ->
+            Spacer(Modifier.height(2.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = Accent)
         }
         when (post.state) {
             TodayXPostState.READY -> {
@@ -355,14 +433,46 @@ private fun TodayXPostCard(post: TodayXPost, onReview: () -> Unit) {
                     maxLines = 2,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                 )
+                post.selectionReason?.let { reason ->
+                    Spacer(Modifier.height(4.dp))
+                    Text(reason, style = MaterialTheme.typography.bodySmall, color = TextTertiary, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                }
+            }
+            TodayXPostState.RUNNING -> {
+                Spacer(Modifier.height(4.dp))
+                Text("Working on it -- check back shortly.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
             }
             TodayXPostState.HANDED_OFF -> {
                 Spacer(Modifier.height(4.dp))
                 Text("You already opened X with this draft today.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = onMarkPosted, enabled = !busy) { Text(if (busy) "Marking..." else "Mark posted") }
+            }
+            TodayXPostState.POSTED -> {
+                Spacer(Modifier.height(4.dp))
+                Text("Confirmed posted to X today.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+            }
+            TodayXPostState.FAILED -> {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    post.reason?.let { "Couldn't produce a quality post: $it" } ?: "Couldn't produce a quality post today.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                    maxLines = 3,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                )
+                if (post.canRegenerate) {
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = onRegenerate, enabled = !busy) { Text(if (busy) "Regenerating..." else "Regenerate") }
+                }
             }
             TodayXPostState.EMPTY -> {
                 Spacer(Modifier.height(4.dp))
                 Text("Nothing queued for X today.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                if (post.canRegenerate) {
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = onRegenerate, enabled = !busy) { Text(if (busy) "Regenerating..." else "Regenerate") }
+                }
             }
         }
     }

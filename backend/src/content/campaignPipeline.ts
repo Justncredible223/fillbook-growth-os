@@ -41,6 +41,18 @@ export interface PipelineContext {
   brandRulesSummary: string;
   verifiedKnowledgeSummary: string;
   recentTextsForSameTopic: string[];
+  /**
+   * Overrides the asset_type this run creates -- defaults to the
+   * existing "video_script" (video platforms) / "post" (everything
+   * else) inference when omitted, so every existing caller (manual
+   * /api/run-campaign, auto-draft) is unaffected. Used by the daily X
+   * feed-post step to mark its output with a distinct, dedicated
+   * asset_type (X_FEED_POST_ASSET_TYPE) instead of the generic "post"
+   * value replies/opportunity-drafts already use -- see
+   * dailyXFeedPost.ts's own doc comment for why that distinction is
+   * what keeps Home's Today's X Post genuinely separate from replies.
+   */
+  assetTypeOverride?: string;
 }
 
 export interface PipelineResult {
@@ -93,7 +105,7 @@ export async function runCampaignPipeline(
   }
 
   const campaignId = await campaignRepo.createCampaign(opportunity.id, opportunity.title);
-  const campaignAssetId = await campaignRepo.createCampaignAsset(campaignId, platform, isVideo ? "video_script" : "post");
+  const campaignAssetId = await campaignRepo.createCampaignAsset(campaignId, platform, context.assetTypeOverride ?? (isVideo ? "video_script" : "post"));
   const contentVersionId = await campaignRepo.insertContentVersion(
     campaignAssetId,
     1,
