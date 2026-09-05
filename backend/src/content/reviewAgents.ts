@@ -45,6 +45,18 @@ export interface ReviewContext {
   pitchRecipientOrganization?: string;
   /** Only meaningful when contentFormat is "partnership_pitch". */
   pitchChannel?: "email" | "x";
+  /**
+   * Only meaningful when contentFormat is "partnership_pitch" -- the
+   * recipient's OWN real words (discovery's rawExcerpts), so reviewers
+   * can actually check a specificity/fact claim against real evidence
+   * instead of judging blind. Without this, fact_checker has no way to
+   * verify a claim about the recipient at all, and hook_specialist/
+   * growth_strategist can only guess whether the pitch shows real
+   * knowledge of them -- confirmed missing in a real production pitch
+   * that failed for "zero evidence the sender knows anything about"
+   * the recipient, which reviewers could only assert, not verify.
+   */
+  pitchEvidenceExcerpts?: string[];
 }
 
 const VERDICT_TOOL_NAME = "submit_verdict";
@@ -124,6 +136,9 @@ export async function runReviewAgent(
           `Content format: this is a PARTNERSHIP PITCH -- a private, one-recipient business proposition, not public content or a reply. See your instructions above for how that changes what to judge.`,
           context.pitchRecipientOrganization ? `Recipient: ${context.pitchRecipientOrganization}` : null,
           context.pitchChannel ? `Channel this will actually be sent through: ${context.pitchChannel === "email" ? "email" : "X DM"}` : null,
+          context.pitchEvidenceExcerpts && context.pitchEvidenceExcerpts.length > 0
+            ? `Real evidence about the recipient (their own words, for checking specificity/fact claims against):\n${context.pitchEvidenceExcerpts.map((e) => `- "${e}"`).join("\n")}`
+            : null,
         ]
           .filter((line) => line !== null)
           .join("\n")

@@ -87,6 +87,10 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
+    // Full raw reviewer/skip-reason text -- shown only behind an explicit
+    // "Show details" disclosure, never dumped alongside the short reason.
+    var actionErrorDetails by remember { mutableStateOf<String?>(null) }
+    var actionErrorDetailsExpanded by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
     var discoveryBusy by remember { mutableStateOf(false) }
     var busyId by remember { mutableStateOf<String?>(null) }
@@ -136,13 +140,20 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                 action()
                 refresh()
                 actionError = null
+                actionErrorDetails = null
             } catch (e: PartnershipDraftRejectedException) {
                 // A real, meaningful outcome (failed review gate, budget exhausted)
-                // -- never a "check your connection" problem, so show it verbatim
-                // rather than the generic network message below.
-                actionError = e.message
+                // -- never a "check your connection" problem. Short reason shown
+                // directly; the full raw reviewer text stays behind "Show details"
+                // (see actionErrorDetails). The prospect's own existing draft/edit
+                // (editedDrafts, items) is untouched here -- refresh() was never
+                // called, so nothing about the prior state is replaced.
+                actionError = e.shortReason
+                actionErrorDetails = e.details
+                actionErrorDetailsExpanded = false
             } catch (e: Exception) {
                 actionError = "Couldn't complete that action. Check your connection and try again."
+                actionErrorDetails = null
             }
             busyId = null
         }
@@ -183,12 +194,26 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
         )
 
         (errorMessage ?: actionError)?.let { message ->
-            Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.weight(1f))
-                if (errorMessage != null) {
-                    TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
-                } else {
-                    TextButton(onClick = { actionError = null }) { Text("Dismiss") }
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.weight(1f))
+                    if (errorMessage != null) {
+                        TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
+                    } else {
+                        TextButton(onClick = { actionError = null; actionErrorDetails = null }) { Text("Dismiss") }
+                    }
+                }
+                // The full raw reviewer/skip-reason text -- long and technical
+                // (a real one carries all 9 reviewers' own reasoning), so it
+                // stays collapsed by default rather than dumped under the
+                // short reason above.
+                if (errorMessage == null && actionErrorDetails != null) {
+                    TextButton(onClick = { actionErrorDetailsExpanded = !actionErrorDetailsExpanded }) {
+                        Text(if (actionErrorDetailsExpanded) "Hide details" else "Show details")
+                    }
+                    if (actionErrorDetailsExpanded) {
+                        Text(actionErrorDetails!!, style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                    }
                 }
             }
         }
@@ -560,7 +585,7 @@ private fun PartnershipCard(
         Spacer(Modifier.height(12.dp))
         when (prospect.stage) {
             PartnershipStage.PROSPECT -> PrimaryButton(text = "Qualify", onClick = onQualify, enabled = !busy, busy = busy, modifier = Modifier.fillMaxWidth())
-            PartnershipStage.QUALIFIED -> PrimaryButton(text = if (busy) "Generating..." else "Generate draft", onClick = onGenerateDraft, enabled = !busy, busy = busy, modifier = Modifier.fillMaxWidth())
+            PartnershipStage.QUALIFIED -> PrimaryButton(text = if (busy) "Generating & reviewing (up to 2 attempts)..." else "Generate draft", onClick = onGenerateDraft, enabled = !busy, busy = busy, modifier = Modifier.fillMaxWidth())
             PartnershipStage.DRAFT_READY -> {
                 if (draft != null) {
                     PrimaryButton(text = "Copy + Open ${prospect.contactRoute?.let { if (it.startsWith("email", true)) "Email" else "X" } ?: "channel"}", onClick = onCopyAndOpen, enabled = !busy, modifier = Modifier.fillMaxWidth())

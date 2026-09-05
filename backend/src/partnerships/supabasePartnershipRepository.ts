@@ -24,6 +24,7 @@ function fromRow(row: Record<string, any>): PartnershipProspect {
     audienceFocus: row.audience_focus,
     futuresRelevanceEvidence: row.futures_relevance_evidence,
     sourceUrls: row.source_urls ?? [],
+    evidenceExcerpts: row.evidence_excerpts ?? [],
     researchDate: row.research_date,
     competingJournalRelationships: row.competing_journal_relationships,
     competingJournalEvidence: row.competing_journal_evidence,
@@ -74,6 +75,7 @@ function toRow(input: Partial<NewPartnershipProspect>): Record<string, unknown> 
   if (input.audienceFocus !== undefined) row.audience_focus = input.audienceFocus;
   if (input.futuresRelevanceEvidence !== undefined) row.futures_relevance_evidence = input.futuresRelevanceEvidence;
   if (input.sourceUrls !== undefined) row.source_urls = input.sourceUrls;
+  if (input.evidenceExcerpts !== undefined) row.evidence_excerpts = input.evidenceExcerpts;
   if (input.researchDate !== undefined) row.research_date = input.researchDate;
   if (input.competingJournalRelationships !== undefined) row.competing_journal_relationships = input.competingJournalRelationships;
   if (input.competingJournalEvidence !== undefined) row.competing_journal_evidence = input.competingJournalEvidence;

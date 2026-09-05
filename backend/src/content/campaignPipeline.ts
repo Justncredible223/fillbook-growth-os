@@ -67,6 +67,10 @@ export interface PipelineContext {
   pitchRecipientOrganization?: string;
   /** Only meaningful when contentFormat is "partnership_pitch" -- which channel this will actually be sent through, so hook_specialist judges an email subject/opener vs an X DM opener appropriately. */
   pitchChannel?: "email" | "x";
+  /** Only meaningful when contentFormat is "partnership_pitch" -- the recipient's OWN real words, given to both the writer (for personalization) and every reviewer (for specificity/fact-claim verification). See reviewAgents.ts's own doc comment for why this closed a real gap. */
+  pitchEvidenceExcerpts?: string[];
+  /** Only meaningful when contentFormat is "partnership_pitch" -- a prior failed attempt's own review-gate feedback, passed to the writer on a bounded revision retry so a rewrite targets the ACTUAL rejection reasons instead of guessing again from scratch. */
+  pitchPriorFeedback?: string;
 }
 
 export interface PipelineResult {
@@ -115,6 +119,15 @@ export async function runCampaignPipeline(
       context.brandRulesSummary,
       context.verifiedKnowledgeSummary,
       isReply ? { authorHandle: opportunity.authorHandle ?? null } : undefined,
+      context.contentFormat === "partnership_pitch" && context.pitchRecipientOrganization && context.pitchChannel
+        ? {
+            recipientOrganization: context.pitchRecipientOrganization,
+            channel: context.pitchChannel,
+            evidenceExcerpts: context.pitchEvidenceExcerpts ?? [],
+            proposedCollaboration: opportunity.rationale,
+            priorFeedback: context.pitchPriorFeedback,
+          }
+        : undefined,
     );
   }
 
@@ -151,6 +164,7 @@ export async function runCampaignPipeline(
     contentFormat: context.contentFormat,
     pitchRecipientOrganization: context.pitchRecipientOrganization,
     pitchChannel: context.pitchChannel,
+    pitchEvidenceExcerpts: context.pitchEvidenceExcerpts,
   });
 
   if (!deepReview.passed) {

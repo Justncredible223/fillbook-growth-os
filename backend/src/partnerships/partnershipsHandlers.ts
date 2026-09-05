@@ -66,7 +66,12 @@ export interface GenerateDraftResult {
   error?: string;
   costUsd: number;
   aiCalls: number;
+  /** How many full draft+review attempts actually ran (1 or 2 -- see MAX_DRAFT_ATTEMPTS). */
+  attempts: number;
 }
+
+/** One initial attempt plus one bounded revision using the first attempt's own review-gate feedback -- never more, so a stubborn rejection can't loop indefinitely burning budget. Both attempts count against the same per-call cost/budget accounting. */
+const MAX_DRAFT_ATTEMPTS = 2;
 
 /**
  * Generates and reviews a pitch draft for a qualified prospect, reusing
@@ -82,6 +87,15 @@ export interface GenerateDraftResult {
  * approval" is enforced here: there is only ever one current approved
  * draft per prospect, and generating a new one is the only way its text
  * changes.
+ *
+ * If the first attempt fails the mechanical or review gate, ONE bounded
+ * revision is attempted automatically, feeding the writer the exact
+ * block reasons from the first attempt (see contentWriter.ts's
+ * pitchContext.priorFeedback) -- never a second blind guess. Both
+ * attempts share this one call's budget check; the loop stops early if
+ * the budget runs out between attempts. Neither attempt ever lowers the
+ * mechanical gate or skips a reviewer -- a revision must pass the exact
+ * same bar as a first attempt.
  */
 export async function generateDraftForPartnership(client: SupabaseClient, id: string): Promise<GenerateDraftResult> {
   const repo = new SupabasePartnershipRepository(client);
@@ -96,7 +110,7 @@ export async function generateDraftForPartnership(client: SupabaseClient, id: st
   const monthSpend = await getPartnershipMonthSpendUsd(client);
   const budgetCheck = evaluatePartnershipBudget(monthSpend);
   if (!budgetCheck.eligible) {
-    return { status: "skipped", skipReason: budgetCheck.reason, costUsd: 0, aiCalls: 0 };
+    return { status: "skipped", skipReason: budgetCheck.reason, costUsd: 0, aiCalls: 0, attempts: 0 };
   }
 
   const brandConstitution = new BrandConstitution(new SupabaseBrandConstitutionRepository(client));
@@ -129,7 +143,7 @@ export async function generateDraftForPartnership(client: SupabaseClient, id: st
       score: 0,
       urgency: "normal",
       confidence: 1,
-      rationale: prospect.qualificationRationale ?? prospect.proposedCollaboration,
+      rationale: prospect.proposedCollaboration,
       recommended_channels: [prospect.contactRoute?.toLowerCase().includes("x") ? "x" : "email"],
       recommended_campaign_type: "partnership_pitch",
       approval_class: "EXTERNAL_DRAFT",
@@ -145,47 +159,64 @@ export async function generateDraftForPartnership(client: SupabaseClient, id: st
   const opportunity: PipelineOpportunity = {
     id: opportunityRow.id,
     title: `Partnership pitch to ${prospect.organizationName}`,
-    rationale: [
-      `Contact: ${prospect.contactName ?? "(unknown contact name)"} at ${prospect.organizationName}.`,
-      `Audience focus: ${prospect.audienceFocus ?? "(not researched)"}`,
-      `Evidence of futures relevance: ${prospect.futuresRelevanceEvidence ?? "(not researched)"}`,
-      `Proposed collaboration: ${prospect.proposedCollaboration}`,
-    ].join("\n"),
+    rationale: prospect.proposedCollaboration,
     recommendedChannels: [pitchChannel],
   };
 
   const factory = new CampaignFactory(new ContentQualityGate(brandConstitution));
-  const result = await runCampaignPipeline(
-    llmClient,
-    factory,
-    new SupabaseContentScoreRepository(client),
-    new SupabaseCampaignRepository(client),
-    opportunity,
-    {
-      brandRulesSummary,
-      verifiedKnowledgeSummary,
-      recentTextsForSameTopic,
-      assetTypeOverride: PARTNERSHIP_ASSET_TYPE,
-      contentFormat: "partnership_pitch",
-      pitchRecipientOrganization: prospect.organizationName,
-      pitchChannel,
-    },
-  );
 
+  let attempts = 0;
+  let priorFeedback: string | undefined;
+  let lastResult: Awaited<ReturnType<typeof runCampaignPipeline>> | null = null;
+
+  while (attempts < MAX_DRAFT_ATTEMPTS) {
+    if (attempts > 0) {
+      // Re-check budget before a revision attempt -- the first attempt's
+      // own cost may have already used up what was left.
+      const spendSoFar = await getPartnershipMonthSpendUsd(client);
+      if (!evaluatePartnershipBudget(spendSoFar).eligible) break;
+    }
+    attempts += 1;
+    lastResult = await runCampaignPipeline(
+      llmClient,
+      factory,
+      new SupabaseContentScoreRepository(client),
+      new SupabaseCampaignRepository(client),
+      opportunity,
+      {
+        brandRulesSummary,
+        verifiedKnowledgeSummary,
+        recentTextsForSameTopic,
+        assetTypeOverride: PARTNERSHIP_ASSET_TYPE,
+        contentFormat: "partnership_pitch",
+        pitchRecipientOrganization: prospect.organizationName,
+        pitchChannel,
+        pitchEvidenceExcerpts: prospect.evidenceExcerpts,
+        pitchPriorFeedback: priorFeedback,
+      },
+    );
+    if (lastResult.finalStage === "ready_for_owner") break;
+    priorFeedback =
+      lastResult.mechanicalBlockReasons.length > 0
+        ? `quality gate: ${lastResult.mechanicalBlockReasons.join("; ")}`
+        : `review gate: ${lastResult.deepReview?.blockReasons.join("; ") ?? "unknown"}`;
+  }
+
+  const result = lastResult!;
   const costUsd = usages.reduce((sum, u) => sum + estimateCostUsd(u), 0);
 
   if (result.finalStage === "ready_for_owner") {
     await repo.setApprovedDraft(id, result.campaignAssetId);
-    await repo.insertInteraction(id, "draft_generated", `Draft generated and passed review (campaign_asset ${result.campaignAssetId}).`);
+    await repo.insertInteraction(id, "draft_generated", `Draft generated and passed review after ${attempts} attempt${attempts === 1 ? "" : "s"} (campaign_asset ${result.campaignAssetId}).`);
     if (prospect.stage === "qualified") {
       await repo.transitionStage(id, "draft_ready", { interactionType: "note", summary: "Moved to draft_ready after a passing draft." });
     }
-    return { status: "ready", campaignAssetId: result.campaignAssetId, costUsd, aiCalls: usages.length };
+    return { status: "ready", campaignAssetId: result.campaignAssetId, costUsd, aiCalls: usages.length, attempts };
   }
 
-  const error = result.mechanicalBlockReasons.length > 0 ? `quality gate: ${result.mechanicalBlockReasons.join("; ")}` : `review gate: ${result.deepReview?.blockReasons.join("; ") ?? "unknown"}`;
+  const error = `(after ${attempts} attempt${attempts === 1 ? "" : "s"}) ${priorFeedback ?? "unknown"}`;
   await repo.insertInteraction(id, "draft_generated", `Draft attempt failed: ${error}`);
-  return { status: "failed", error, costUsd, aiCalls: usages.length };
+  return { status: "failed", error, costUsd, aiCalls: usages.length, attempts };
 }
 
 /**

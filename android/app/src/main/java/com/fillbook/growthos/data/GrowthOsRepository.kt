@@ -740,8 +740,14 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         val forced = debugNextGenerateDraftOutcome
         debugNextGenerateDraftOutcome = null
         when (forced) {
-            "failed" -> throw PartnershipDraftRejectedException("Draft didn't pass review: hook_specialist: generic opener; growth_strategist: no recipient-specific evidence.")
-            "skipped" -> throw PartnershipDraftRejectedException("Draft generation skipped: monthly_budget_reached (\$3.0000 spent, cap is \$3.00)")
+            "failed" -> throw PartnershipDraftRejectedException(
+                shortReason = "Didn't pass review after 2 attempts -- needs stronger, more specific personalization for this recipient.",
+                details = "hook_specialist: generic opener, could be sent to any recipient with the name swapped.; growth_strategist: no recipient-specific evidence of their actual work or audience.; fact_checker: the claim about their audience size cannot be traced to any verified evidence provided.",
+            )
+            "skipped" -> throw PartnershipDraftRejectedException(
+                shortReason = "Draft generation skipped -- this month's Partnerships budget is used up.",
+                details = "monthly_budget_reached (\$3.0000 spent, cap is \$3.00)",
+            )
         }
         return updatePartnershipItem(id) {
             it.copy(

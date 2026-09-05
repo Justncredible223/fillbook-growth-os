@@ -22,6 +22,17 @@ export interface DiscoveryCandidate {
   mostRecentMatchAt: string | null;
   sourceUrls: string[];
   discoveredVia: "creators" | "prospecting" | "inbound" | "x_search";
+  /**
+   * The ACTUAL text discovery read (real post bodies, creator notes) --
+   * not a description of the discovery process. This is the only
+   * material the pitch writer and reviewers can use to personalize a
+   * pitch to this specific recipient; without it, a pitch can only ever
+   * be generic. Populated by discovery.ts, optionally supplemented by
+   * discoverFromXSearch's own per-handle enrichment lookup when this
+   * would otherwise be too thin. Never fabricated -- empty if nothing
+   * real was found.
+   */
+  rawExcerpts: string[];
 }
 
 export type DiscoveryConfidence = "low" | "medium" | "high";
@@ -39,6 +50,18 @@ export interface RankedRecommendation {
     complementaryValue: number;
     contactability: number;
   };
+  /**
+   * True only when candidate.rawExcerpts carries enough real text to
+   * actually personalize a pitch (see MIN_PERSONALIZATION_CHARS). A
+   * candidate can qualify (score/topics/contactability all clear) while
+   * still being false here -- that's exactly the case that must NOT be
+   * presented as "ready to pursue": there's a real match, but not enough
+   * of the recipient's own words yet to write anything but a generic
+   * pitch, which the review gate correctly rejects every time.
+   */
+  sufficientForPitch: boolean;
+  /** Set only when sufficientForPitch is false -- what's actually missing, shown to the owner instead of a false "ready" presentation. */
+  evidenceGap: string | null;
 }
 
 /**
@@ -84,6 +107,24 @@ function clamp01(n: number): number {
   return Math.max(0, Math.min(1, n));
 }
 
+/**
+ * A pitch writer needs real, quotable material to say something a
+ * generic template couldn't -- one short keyword match ("prop firm")
+ * with no actual sentence around it isn't enough, and a real production
+ * run confirmed this exact gap (5 of 9 reviewers rejected a pitch for
+ * demonstrating "zero evidence the sender knows anything about" the
+ * recipient, even though the candidate had technically "qualified").
+ * Deliberately modest (30 chars is roughly one short sentence fragment,
+ * not a real bar for good writing) -- this is a floor against total
+ * emptiness, not a quality guarantee; the review gate still judges the
+ * actual pitch.
+ */
+export const MIN_PERSONALIZATION_CHARS = 30;
+
+export function hasSufficientEvidenceForPitch(candidate: DiscoveryCandidate): boolean {
+  return candidate.rawExcerpts.join(" ").trim().length >= MIN_PERSONALIZATION_CHARS;
+}
+
 function daysSince(iso: string | null, now: Date): number | null {
   if (!iso) return null;
   const then = new Date(iso).getTime();
@@ -122,7 +163,20 @@ export function scoreCandidate(candidate: DiscoveryCandidate, now: Date = new Da
       ? `${candidate.postsMatched} on-topic post${candidate.postsMatched === 1 ? "" : "s"} found (topics: ${candidate.matchedTopics.join(", ") || "none matched"}), most recent ${candidate.mostRecentMatchAt ?? "unknown date"}.`
       : `No on-topic posts found yet -- listed from existing records only (topics: ${candidate.matchedTopics.join(", ") || "none matched"}).`;
 
-  const whyThisPartner = `Discovered via ${candidate.discoveredVia.replace("_", " ")}. ${evidenceLine}`;
+  const sufficientForPitch = hasSufficientEvidenceForPitch(candidate);
+  // The longest excerpt is the most useful one to quote (and, when
+  // enrichment added a real post after an initial thin keyword-only
+  // match, it's also the substantive one -- the original thin match
+  // stays first in the array, so picking by length rather than index 0
+  // matters here).
+  const bestExcerpt = [...candidate.rawExcerpts].sort((a, b) => b.length - a.length)[0];
+  const excerptLine = bestExcerpt ? ` Their own words: "${bestExcerpt.slice(0, 240)}"` : "";
+
+  const whyThisPartner = `Discovered via ${candidate.discoveredVia.replace("_", " ")}. ${evidenceLine}${excerptLine}`;
+
+  const evidenceGap = sufficientForPitch
+    ? null
+    : "Not enough of this recipient's own words were found to personalize a pitch confidently yet -- only a keyword/category match, no real quotable content. Needs manual research (their actual posts, site, or a direct look at their profile) before drafting.";
 
   return {
     candidate,
@@ -131,6 +185,8 @@ export function scoreCandidate(candidate: DiscoveryCandidate, now: Date = new Da
     whyThisPartner,
     suggestedCollaboration: SUGGESTED_COLLABORATION[candidate.partnerCategory],
     scoreBreakdown: { audienceFit, evidenceOfActivity, complementaryValue, contactability },
+    sufficientForPitch,
+    evidenceGap,
   };
 }
 

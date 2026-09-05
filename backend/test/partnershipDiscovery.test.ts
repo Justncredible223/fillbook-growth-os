@@ -47,6 +47,36 @@ describe("runPartnershipDiscoveryStep", () => {
     expect(created[0]!.approved_campaign_asset_id).toBeNull();
   });
 
+  it("surfaces a qualifying-but-thin-evidence candidate as a plain 'prospect' (not 'qualified'), never presented as ready to pitch, when no adapter is available to enrich it", async () => {
+    const client = new FakeSupabaseClient({ creators: [], prospecting_candidates: [], inbound_engagements: [], partnership_prospects: [], cost_events: [] });
+    // "prop firm" alone matches a keyword but is far too short to personalize a pitch with.
+    const adapter = fakeAdapter({ "prop firm mentorship OR funded trader program": [xResult({ authorHandle: "thinacct", text: "prop firm" })] });
+
+    const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW });
+
+    expect(result.newCandidates).toBe(1);
+    const created = client.tables.partnership_prospects![0]!;
+    expect(created.stage).toBe("prospect");
+    expect(created.qualification_rationale).toBeNull();
+    expect(created.futures_relevance_evidence).toContain("Needs manual research");
+  });
+
+  it("enriches a thin candidate with a per-handle lookup and qualifies it once real content is found", async () => {
+    const client = new FakeSupabaseClient({ creators: [], prospecting_candidates: [], inbound_engagements: [], partnership_prospects: [], cost_events: [] });
+    const adapter = fakeAdapter({
+      "prop firm mentorship OR funded trader program": [xResult({ authorHandle: "thinacct", text: "prop firm" })],
+      "from:thinacct": [xResult({ authorHandle: "thinacct", text: "Running a funded-trader mentorship cohort this quarter -- 12 traders, weekly risk reviews, real accountability." })],
+    });
+
+    const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW });
+
+    expect(result.newCandidates).toBe(1);
+    expect(result.sourcesSearched).toContain("x_search_enrichment");
+    const created = client.tables.partnership_prospects![0]!;
+    expect(created.stage).toBe("qualified");
+    expect(created.qualification_rationale).toContain("mentorship cohort");
+  });
+
   it("never duplicates a candidate already known in partnership_prospects (idempotent re-run)", async () => {
     const client = new FakeSupabaseClient({
       creators: [],

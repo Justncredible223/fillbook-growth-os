@@ -10,6 +10,9 @@ import type { PartnerCategory } from "./types.js";
 /** Caps how much of the discovery run's budget any one run can spend -- see DISCOVERY_X_SEARCH_QUERIES below for what this actually buys (~$0.15-0.20/run at 3 queries x 10 results). */
 const RESULTS_PER_QUERY = 10;
 const MAX_NEW_CANDIDATES_PER_RUN = 10;
+/** How many otherwise-qualifying-but-thin-evidence candidates get one per-handle enrichment lookup per run (see enrichThinCandidates) -- bounds the extra cost at MAX_ENRICHMENT_LOOKUPS * ENRICHMENT_RESULTS_PER_HANDLE * $0.005 (5 * 5 * $0.005 = $0.125/run). */
+const MAX_ENRICHMENT_LOOKUPS = 5;
+const ENRICHMENT_RESULTS_PER_HANDLE = 5;
 /** How often the SCHEDULED (unforced) run is allowed to actually search -- an owner-triggered refresh (force=true) ignores this, but both respect MIN_INTERVAL_MINUTES below. */
 const SCHEDULED_CADENCE_DAYS = 7;
 /** Applies to every run, scheduled or forced -- prevents a rapid double-tap (or an overlapping scheduled+manual run) from burning budget twice for the same window. */
@@ -102,6 +105,7 @@ async function discoverFromCreators(client: SupabaseClient): Promise<DiscoveryCa
       mostRecentMatchAt: row.last_interaction_at,
       sourceUrls: row.platform === "x" && row.handle ? [`https://x.com/${normalizeHandle(row.handle)}`] : [],
       discoveredVia: "creators" as const,
+      rawExcerpts: text.trim() ? [text.trim()] : [],
     };
   });
 }
@@ -137,6 +141,7 @@ async function discoverFromProspecting(client: SupabaseClient): Promise<Discover
       mostRecentMatchAt: entry.dates.sort().at(-1) ?? null,
       sourceUrls: entry.urls.slice(0, 3),
       discoveredVia: "prospecting" as const,
+      rawExcerpts: entry.texts.slice(0, 3),
     });
   }
   return candidates;
@@ -170,6 +175,7 @@ async function discoverFromInbound(client: SupabaseClient): Promise<DiscoveryCan
       mostRecentMatchAt: entry.dates.sort().at(-1) ?? null,
       sourceUrls: entry.urls.slice(0, 3),
       discoveredVia: "inbound" as const,
+      rawExcerpts: entry.texts.slice(0, 3),
     });
   }
   return candidates;
@@ -206,9 +212,52 @@ async function discoverFromXSearch(adapter: XSignalAdapter, client: SupabaseClie
       mostRecentMatchAt: entry.dates.sort().at(-1) ?? null,
       sourceUrls: entry.urls.slice(0, 3),
       discoveredVia: "x_search" as const,
+      rawExcerpts: entry.texts.slice(0, 3),
     });
   }
   return { candidates, costUsd };
+}
+
+/**
+ * For candidates that already clear the qualifying bar (topic match,
+ * score, contactability) but don't yet have enough of the recipient's
+ * OWN words to personalize a pitch (see hasSufficientEvidenceForPitch),
+ * do ONE targeted per-handle lookup (X's `from:` search operator, same
+ * authorized integration, no new capability) to gather a few more of
+ * their real recent posts. Bounded to MAX_ENRICHMENT_LOOKUPS candidates
+ * per run so a batch of thin matches can't blow the budget. Mutates
+ * candidate.rawExcerpts in place; callers must re-score afterward.
+ */
+async function enrichThinCandidates(
+  adapter: XSignalAdapter | null | undefined,
+  client: SupabaseClient,
+  candidates: DiscoveryCandidate[],
+  now: Date,
+): Promise<{ enrichedCount: number; costUsd: number }> {
+  if (!adapter) return { enrichedCount: 0, costUsd: 0 };
+  let costUsd = 0;
+  let enrichedCount = 0;
+  for (const candidate of candidates) {
+    if (enrichedCount >= MAX_ENRICHMENT_LOOKUPS) break;
+    if (!candidate.handle) continue;
+    if (candidate.rawExcerpts.join(" ").trim().length >= 30) continue; // already sufficient -- see MIN_PERSONALIZATION_CHARS
+    try {
+      const results = await adapter.searchRecentPosts(`from:${candidate.handle}`, ENRICHMENT_RESULTS_PER_HANDLE, now);
+      costUsd += await recordPartnershipXSearchCostEvent(client, results.length, { enrichment: true, handle: candidate.handle });
+      enrichedCount += 1;
+      for (const r of results) {
+        candidate.rawExcerpts.push(r.text);
+        if (r.createdAt && (!candidate.mostRecentMatchAt || r.createdAt.toISOString() > candidate.mostRecentMatchAt)) {
+          candidate.mostRecentMatchAt = r.createdAt.toISOString();
+        }
+      }
+    } catch {
+      // A per-candidate enrichment failure (rate limit, transient API error)
+      // must never abort the whole run -- that candidate just stays thin,
+      // same as if enrichment had never been attempted.
+    }
+  }
+  return { enrichedCount, costUsd };
 }
 
 /**
@@ -276,6 +325,22 @@ export async function runPartnershipDiscoveryStep(deps: PartnershipDiscoveryDeps
     return result;
   }
 
+  // First pass ranks on whatever evidence existing-records/x_search already
+  // gathered; candidates that qualify but are too thin to personalize get
+  // ONE targeted per-handle lookup before the real (final) ranking, rather
+  // than qualifying them on category+recency alone and leaving the actual
+  // pitch to fail the review gate for demonstrating no real knowledge of
+  // the recipient (confirmed happening in production before this existed).
+  const firstPassRanked = rankCandidates(allCandidates, now);
+  const { enrichedCount, costUsd: enrichmentCost } = await enrichThinCandidates(
+    deps.adapter,
+    client,
+    firstPassRanked.map((r) => r.candidate),
+    now,
+  );
+  costUsd += enrichmentCost;
+  if (enrichedCount > 0) sourcesSearched.push("x_search_enrichment");
+
   const ranked = rankCandidates(allCandidates, now);
 
   let created = 0;
@@ -286,6 +351,12 @@ export async function runPartnershipDiscoveryStep(deps: PartnershipDiscoveryDeps
     const matches = await findExistingMatches(client, { domain, handle });
     if (matches.length > 0) continue; // already known somewhere -- including archived/do_not_contact rows in partnership_prospects itself
 
+    // A candidate that qualifies (real topic match, decent score,
+    // contactable) but still lacks enough of the recipient's own words
+    // after enrichment is surfaced as a plain 'prospect' -- visible for
+    // the owner to research further -- rather than 'qualified', which
+    // reads as "ready to pursue" and would send every such candidate
+    // straight into a doomed, budget-spending draft attempt.
     const { prospect } = await createPartnership(client, {
       organizationName: rec.candidate.organizationName,
       contactName: rec.candidate.contactName,
@@ -294,16 +365,19 @@ export async function runPartnershipDiscoveryStep(deps: PartnershipDiscoveryDeps
       contactRoute: rec.candidate.handle ? `X DM: @${rec.candidate.handle}` : null,
       contactRouteSource: rec.candidate.handle ? `Discovered via ${rec.candidate.discoveredVia}` : null,
       audienceFocus: rec.candidate.matchedTopics.length > 0 ? `Matched topics: ${rec.candidate.matchedTopics.join(", ")}` : null,
-      futuresRelevanceEvidence: rec.whyThisPartner,
+      futuresRelevanceEvidence: rec.sufficientForPitch ? rec.whyThisPartner : `${rec.whyThisPartner} ${rec.evidenceGap}`,
       sourceUrls: rec.candidate.sourceUrls,
+      evidenceExcerpts: rec.candidate.rawExcerpts,
       researchDate: now.toISOString().slice(0, 10),
       proposedCollaboration: rec.suggestedCollaboration,
-      qualificationRationale: rec.whyThisPartner,
+      qualificationRationale: rec.sufficientForPitch ? rec.whyThisPartner : null,
       discoveryScore: rec.score,
       discoveryConfidence: rec.confidence,
       discoveredVia: rec.candidate.discoveredVia,
     });
-    await qualifyPartnership(client, prospect.id, rec.whyThisPartner);
+    if (rec.sufficientForPitch) {
+      await qualifyPartnership(client, prospect.id, rec.whyThisPartner);
+    }
     created += 1;
   }
 

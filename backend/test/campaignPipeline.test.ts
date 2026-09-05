@@ -195,6 +195,33 @@ describe("runCampaignPipeline", () => {
     }
   });
 
+  it("threads the recipient's real evidence excerpts to BOTH the writer and every review agent for a partnership pitch -- not just the recipient name", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(draftResponse("Fillbook is a broker-agnostic futures trading journal -- a natural fit for a guided journaling pilot."))
+      .mockResolvedValue(verdictResponse(true));
+    const client = new LlmClient("test-key", fetchMock);
+    const campaignRepo = new InMemoryCampaignRepository();
+    const scoreRepo = new InMemoryContentScoreRepository();
+    const pitchContext = {
+      ...context,
+      contentFormat: "partnership_pitch" as const,
+      pitchRecipientOrganization: "Apex Journaling Coach",
+      pitchChannel: "email" as const,
+      pitchEvidenceExcerpts: ["We run a 6-week risk-management cohort for funded futures traders."],
+    };
+
+    await runCampaignPipeline(client, buildFactory(), scoreRepo, campaignRepo, opportunity, pitchContext);
+
+    const draftCallBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(draftCallBody.messages[0].content).toContain("6-week risk-management cohort");
+
+    for (const call of fetchMock.mock.calls.slice(1)) {
+      const body = JSON.parse(call[1]!.body as string);
+      expect(body.messages[0].content).toContain("6-week risk-management cohort");
+    }
+  });
+
   it("does not mention reply format for a normal content opportunity with no sourceUrl", async () => {
     const fetchMock = vi
       .fn()

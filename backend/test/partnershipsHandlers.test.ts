@@ -31,7 +31,7 @@ function verdicts(pass: boolean, reasoning = "ok"): Response[] {
 }
 function sequenceFetch(responses: Response[]) {
   let i = 0;
-  return vi.fn(async () => responses[Math.min(i++, responses.length - 1)]!);
+  return vi.fn(async (_url?: string, _init?: RequestInit) => responses[Math.min(i++, responses.length - 1)]!);
 }
 
 const GOOD_DRAFT = "Fillbook is a broker-agnostic futures trading journal built for session review and visible account-rule tracking -- a natural fit for a guided journaling pilot with a small cohort of your students.";
@@ -164,6 +164,66 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     const updated = (await listPartnerships(asSupabase(client))).find((p) => p.id === prospect.id)!;
     expect(updated.stage).toBe("qualified"); // unchanged -- never advanced on a failed attempt
     expect(updated.approvedCampaignAssetId).toBeNull();
+  });
+
+  it("bounded revision: a first attempt rejected by review is retried ONCE with that feedback, and a passing second attempt reports attempts:2", async () => {
+    const fetchMock = sequenceFetch([
+      draftResponse("Hi -- interested in a pilot?"), // attempt 1 draft
+      ...verdicts(false, "too generic, no recipient-specific evidence"), // attempt 1: all 9 reject
+      draftResponse(GOOD_DRAFT), // attempt 2 draft (writer sees priorFeedback)
+      ...verdicts(true), // attempt 2: all 9 pass
+    ]);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect());
+    await qualifyPartnership(asSupabase(client), prospect.id, "Good fit.");
+
+    const result = await generateDraftForPartnership(asSupabase(client), prospect.id);
+
+    expect(result.status).toBe("ready");
+    expect(result.attempts).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(20); // 2 full (draft + 9 reviewers) attempts
+
+    // The second attempt's draft call must actually carry the first attempt's rejection reasons.
+    const secondDraftUserMessage = JSON.parse((fetchMock.mock.calls[10]![1] as RequestInit).body as string).messages[0].content as string;
+    expect(secondDraftUserMessage).toContain("A prior draft was rejected for these specific reasons");
+    expect(secondDraftUserMessage).toContain("too generic");
+  });
+
+  it("never retries a third time -- two straight rejections stop at attempts:2, still reported as failed", async () => {
+    const fetchMock = sequenceFetch([
+      draftResponse("Hi -- interested in a pilot?"),
+      ...verdicts(false, "still generic"),
+      draftResponse("Hi -- still interested in a pilot?"),
+      ...verdicts(false, "still generic"),
+    ]);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect());
+    await qualifyPartnership(asSupabase(client), prospect.id, "Good fit.");
+
+    const result = await generateDraftForPartnership(asSupabase(client), prospect.id);
+
+    expect(result.status).toBe("failed");
+    expect(result.attempts).toBe(2);
+    expect(fetchMock).toHaveBeenCalledTimes(20); // exactly 2 attempts, never a 3rd
+  });
+
+  it("threads the recipient's real evidence excerpts to every reviewer, not just the recipient name", async () => {
+    const fetchMock = sequenceFetch([draftResponse(GOOD_DRAFT), ...verdicts(true)]);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect({ evidenceExcerpts: ["We run a 6-week risk-management cohort for funded futures traders."] }));
+    await qualifyPartnership(asSupabase(client), prospect.id, "Good fit.");
+
+    await generateDraftForPartnership(asSupabase(client), prospect.id);
+
+    const reviewerCallBody = JSON.parse((fetchMock.mock.calls[1]![1] as RequestInit).body as string);
+    const reviewerUserMessage = reviewerCallBody.messages[0].content as string;
+    expect(reviewerUserMessage).toContain("6-week risk-management cohort");
   });
 
   it("is skipped, spending nothing, once the independent partnership budget is exhausted -- never touches auto-draft/prospecting/x-feed-post's own budgets", async () => {

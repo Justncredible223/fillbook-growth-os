@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scoreCandidate, rankCandidates, isQualifyingRecommendation, type DiscoveryCandidate } from "../src/partnerships/discoveryScoring";
+import { scoreCandidate, rankCandidates, isQualifyingRecommendation, hasSufficientEvidenceForPitch, type DiscoveryCandidate } from "../src/partnerships/discoveryScoring";
 
 const NOW = new Date("2026-09-05T00:00:00Z");
 
@@ -15,6 +15,7 @@ function candidate(overrides: Partial<DiscoveryCandidate> = {}): DiscoveryCandid
     mostRecentMatchAt: "2026-09-01T00:00:00Z",
     sourceUrls: ["https://x.com/apexcoach/status/1"],
     discoveredVia: "x_search",
+    rawExcerpts: ["Just wrapped week 3 of our journaling cohort for funded traders -- risk management habits are finally sticking for half the group."],
     ...overrides,
   };
 }
@@ -72,6 +73,27 @@ describe("scoreCandidate", () => {
     expect(rec.whyThisPartner).toContain("4");
     expect(rec.whyThisPartner).toContain("trading coach");
     expect(rec.whyThisPartner).toContain("x search");
+  });
+
+  it("whyThisPartner quotes the candidate's own real words when excerpts exist, not just meta-commentary about the discovery process", () => {
+    const rec = scoreCandidate(candidate({ rawExcerpts: ["We help funded traders build a real journaling habit before their next eval."] }), NOW);
+    expect(rec.whyThisPartner).toContain("We help funded traders build a real journaling habit");
+  });
+
+  it("marks a candidate insufficient for pitching when it has no real quotable excerpts, even if it otherwise qualifies", () => {
+    const rec = scoreCandidate(candidate({ rawExcerpts: [] }), NOW);
+    expect(rec.sufficientForPitch).toBe(false);
+    expect(rec.evidenceGap).toBeTruthy();
+    expect(isQualifyingRecommendation(rec)).toBe(true); // still qualifies to be SURFACED -- just not presented as pitch-ready
+  });
+
+  it("marks a candidate insufficient when its only excerpt is too short to personalize anything", () => {
+    const rec = scoreCandidate(candidate({ rawExcerpts: ["prop firm"] }), NOW);
+    expect(rec.sufficientForPitch).toBe(false);
+  });
+
+  it("marks a candidate sufficient once it has a real excerpt over the minimum length", () => {
+    expect(hasSufficientEvidenceForPitch({ ...candidate(), rawExcerpts: ["A real sentence about their actual trading education work and audience."] })).toBe(true);
   });
 });
 

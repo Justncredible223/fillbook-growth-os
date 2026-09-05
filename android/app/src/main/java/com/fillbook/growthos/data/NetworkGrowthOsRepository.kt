@@ -521,8 +521,17 @@ class NetworkGrowthOsRepository(
         // Thrown here (rather than swallowed) so PartnershipsScreen's existing
         // error-display path shows the real reason instead of a generic message.
         when (result.optString("status")) {
-            "failed" -> throw PartnershipDraftRejectedException(result.optString("error", "the draft didn't pass review").let { "Draft didn't pass review: $it" })
-            "skipped" -> throw PartnershipDraftRejectedException(result.optString("skipReason", "budget exhausted").let { "Draft generation skipped: $it" })
+            "failed" -> {
+                val attempts = result.optInt("attempts", 1)
+                throw PartnershipDraftRejectedException(
+                    shortReason = "Didn't pass review after $attempts attempt${if (attempts == 1) "" else "s"} -- needs stronger, more specific personalization for this recipient.",
+                    details = result.optString("error", "no details returned"),
+                )
+            }
+            "skipped" -> throw PartnershipDraftRejectedException(
+                shortReason = "Draft generation skipped -- this month's Partnerships budget is used up.",
+                details = result.optString("skipReason", "no details returned"),
+            )
         }
         // The generate-draft response is a lightweight result (status/cost), not the full prospect shape --
         // re-fetch this one prospect's real current state (including the new previewText) from the list.
@@ -720,8 +729,18 @@ class NetworkGrowthOsRepository(
 /** [httpCode] lets callers tell an auth/config problem (401/500) apart from an unrelated server/network failure -- both used to surface as the same generic message before this existed. */
 class NetworkException(message: String, val httpCode: Int? = null) : Exception(message)
 
-/** A real, meaningful outcome from generate-draft (failed review/mechanical gate, or budget exhaustion) -- distinct from NetworkException so callers never mistake a legitimate content-quality rejection for a connectivity problem. */
-class PartnershipDraftRejectedException(message: String) : Exception(message)
+/**
+ * A real, meaningful outcome from generate-draft (failed review/mechanical
+ * gate, or budget exhaustion) -- distinct from NetworkException so callers
+ * never mistake a legitimate content-quality rejection for a connectivity
+ * problem. [shortReason] is a plain-language one-liner for the primary
+ * error display; [details] is the full raw reviewer/skip text, shown only
+ * behind an explicit "Show details" disclosure -- the real per-agent
+ * critique is long and technical (confirmed on a real device: nine
+ * reviewers' full reasoning at once is a wall of text), not something to
+ * dump on the owner by default.
+ */
+class PartnershipDraftRejectedException(val shortReason: String, val details: String) : Exception(shortReason)
 
 /** Small helpers since org.json's JSONArray predates Kotlin collections. */
 private fun <T> JSONArray.map(transform: (JSONObject) -> T): List<T> =

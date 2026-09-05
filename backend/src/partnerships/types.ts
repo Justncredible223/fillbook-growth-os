@@ -39,6 +39,8 @@ export interface PartnershipProspect {
   audienceFocus: string | null;
   futuresRelevanceEvidence: string | null;
   sourceUrls: string[];
+  /** The recipient's own real words (post text, bio, creator notes) -- see 0022_partnership_evidence_excerpts.sql. Empty for most manually entered prospects. */
+  evidenceExcerpts: string[];
   researchDate: string | null;
   competingJournalRelationships: string | null;
   competingJournalEvidence: string | null;
@@ -87,6 +89,7 @@ export interface NewPartnershipProspect {
   audienceFocus?: string | null;
   futuresRelevanceEvidence?: string | null;
   sourceUrls?: string[];
+  evidenceExcerpts?: string[];
   researchDate?: string | null;
   competingJournalRelationships?: string | null;
   competingJournalEvidence?: string | null;
