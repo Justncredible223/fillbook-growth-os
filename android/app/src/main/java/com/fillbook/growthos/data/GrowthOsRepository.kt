@@ -131,8 +131,6 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         HealthItem("Job queue", HealthStatus.HEALTHY, "0 pending, 0 dead-lettered"),
         HealthItem("Search Console", HealthStatus.NOT_CONNECTED, "Needs a Google Cloud OAuth app (owner action)"),
         HealthItem("X", HealthStatus.NOT_CONNECTED, "Needs an X developer app (owner action)"),
-        HealthItem("TikTok", HealthStatus.NOT_CONNECTED, "Promote is account-blocked; organic staging only"),
-        HealthItem("YouTube", HealthStatus.NOT_CONNECTED, "Needs a Google Cloud OAuth app (owner action)"),
         HealthItem("AI provider", HealthStatus.NOT_CONNECTED, "Needs an API key for deep content review"),
     )
 
@@ -292,6 +290,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     private val prospectingItems = mutableListOf(
         ProspectingCandidate(
             id = "prospect-fake-1",
+            platform = "x",
             discoveryQuery = "trailing_drawdown",
             discoveryLabel = "Trailing drawdown",
             replyClass = "A",
@@ -317,6 +316,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         ),
         ProspectingCandidate(
             id = "prospect-fake-2",
+            platform = "x",
             discoveryQuery = "blown_account",
             discoveryLabel = "Blown account",
             replyClass = "A",

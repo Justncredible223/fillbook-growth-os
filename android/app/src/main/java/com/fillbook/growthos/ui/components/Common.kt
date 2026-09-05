@@ -125,11 +125,24 @@ fun IconPill(text: String, icon: ImageVector, color: Color, modifier: Modifier =
  */
 fun platformIcon(platform: String): ImageVector = when (platform.lowercase()) {
     "x" -> Icons.Filled.Tag
+    "reddit" -> Icons.Filled.Forum
     "youtube" -> Icons.Filled.SmartDisplay
     "tiktok" -> Icons.Filled.MusicNote
     "blog" -> Icons.Filled.Article
     else -> Icons.Filled.Public
 }
+
+/**
+ * Opens a URL in whatever app handles it (X, Reddit, a browser). Returns
+ * false instead of throwing when nothing on the device can handle the
+ * intent (no browser, a restricted profile) or the system refuses it --
+ * callers show a visible error rather than letting the tap silently do
+ * nothing or crash the screen.
+ */
+fun openExternalUrl(context: Context, url: String): Boolean = runCatching {
+    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+    true
+}.getOrElse { false }
 
 /** "video_script" -> "Video script", "post" -> "Post" -- same lowercase-DB-value pattern as platformDisplayName. */
 fun assetTypeDisplayName(assetType: String): String =
@@ -144,6 +157,7 @@ fun assetTypeIcon(assetType: String): ImageVector = when (assetType) {
 
 fun platformDisplayName(platform: String): String = when (platform.lowercase()) {
     "x" -> "X"
+    "reddit" -> "Reddit"
     "youtube" -> "YouTube"
     "tiktok" -> "TikTok"
     else -> platform.replaceFirstChar { it.uppercase() }

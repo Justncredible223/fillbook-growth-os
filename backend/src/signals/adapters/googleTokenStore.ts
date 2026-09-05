@@ -8,10 +8,10 @@ export interface GoogleTokenState {
 
 /**
  * Same shape and reasoning as XTokenStore -- persists the Google OAuth
- * token pair (shared by the Search Console and YouTube adapters, since
- * they were authorized together under one client/consent grant) between
- * invocations. Stored as platform="google" in the same
- * platform_oauth_credentials table the X adapter uses.
+ * token pair used by the Search Console adapter between invocations
+ * (it was once also shared with a YouTube adapter, removed with YouTube
+ * signal ingestion -- see api/ingest.ts). Stored as platform="google" in
+ * the same platform_oauth_credentials table the X adapter uses.
  */
 export interface GoogleTokenStore {
   load(): Promise<GoogleTokenState | null>;

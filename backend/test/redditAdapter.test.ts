@@ -163,6 +163,27 @@ describe("RedditSignalAdapter", () => {
     });
   });
 
+  it("pages OLDER with Reddit's `after` anchor and never sends `before` (a `before` anchor goes blank once its item leaves the listing)", async () => {
+    const store = new InMemoryRedditTokenStore({
+      accessToken: "valid-token",
+      refreshToken: "refresh-token",
+      expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+    });
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: { children: [] } }));
+    const adapter = new RedditSignalAdapter("client-id", "client-secret", UA, store, fetchMock);
+
+    await adapter.fetchInboxActivity(undefined, 25, now);
+    await adapter.fetchInboxActivity("t1_lastOnPage", 25, now);
+
+    const first = new URL(fetchMock.mock.calls[0]![0] as string);
+    const second = new URL(fetchMock.mock.calls[1]![0] as string);
+    expect(first.pathname).toBe("/message/inbox");
+    expect(first.searchParams.has("after")).toBe(false);
+    expect(first.searchParams.has("before")).toBe(false);
+    expect(second.searchParams.get("after")).toBe("t1_lastOnPage");
+    expect(second.searchParams.has("before")).toBe(false);
+  });
+
   it("resolves the own username from /api/v1/me", async () => {
     const store = new InMemoryRedditTokenStore({
       accessToken: "valid-token",

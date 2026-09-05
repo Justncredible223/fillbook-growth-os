@@ -66,36 +66,53 @@ export class SupabaseNotificationRepository implements NotificationRepository {
   }
 }
 
+/** Thrown when any of the collection queries fails -- names the query so the daily pipeline's step detail says exactly which read broke. */
+export class NotificationCollectionError extends Error {
+  constructor(public readonly query: string, cause: { message: string }) {
+    super(`notification input query "${query}" failed: ${cause.message}`);
+    this.name = "NotificationCollectionError";
+  }
+}
+
 /**
  * Real inputs for decideNotifications() -- de-duplicates against
  * notifications already created (by relatedId) so a re-run of the daily
  * pipeline never notifies about the same opportunity/strategy version/
  * experiment twice.
+ *
+ * Every query's error is checked and rethrown as a
+ * NotificationCollectionError. A failed read must NOT degrade to "nothing
+ * new": with the dedupe set empty the engine would re-notify everything,
+ * and with the opportunities/strategy/experiments reads empty it would
+ * silently drop real alerts while the pipeline step reported success.
+ * Throwing lets runStep() record the notifications step as failed.
  */
 export async function collectNotificationInputs(
   client: SupabaseClient,
   failedSteps: Array<{ step: string; detail: string }>,
   sinceIso: string,
 ) {
-  const { data: existingNotifs } = await client.from("notifications").select("related_id").gte("created_at", sinceIso);
-  const alreadyNotified = new Set(((existingNotifs ?? []) as Array<{ related_id: string | null }>).map((n) => n.related_id));
+  const existing = await client.from("notifications").select("related_id").gte("created_at", sinceIso);
+  if (existing.error) throw new NotificationCollectionError("existing notifications", existing.error);
+  const alreadyNotified = new Set(((existing.data ?? []) as Array<{ related_id: string | null }>).map((n) => n.related_id));
 
-  const { data: newOpportunities } = await client
-    .from("opportunities")
-    .select("id, title, score")
-    .gte("created_at", sinceIso)
-    .gte("score", 75);
-  const newHighScoreOpportunities = ((newOpportunities ?? []) as Array<{ id: string; title: string; score: number }>).filter(
+  const opportunities = await client.from("opportunities").select("id, title, score").gte("created_at", sinceIso).gte("score", 75);
+  if (opportunities.error) throw new NotificationCollectionError("new high-score opportunities", opportunities.error);
+  const newHighScoreOpportunities = ((opportunities.data ?? []) as Array<{ id: string; title: string; score: number }>).filter(
     (o) => !alreadyNotified.has(o.id),
   );
 
-  const { data: latestStrategy } = await client
+  const strategy = await client
     .from("strategy_versions")
     .select("id, version, generated_at, topics_to_increase, topics_to_decrease, content_to_retire, formats_to_test")
     .gte("generated_at", sinceIso)
     .order("version", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (strategy.error) throw new NotificationCollectionError("latest strategy version", strategy.error);
+  const latestStrategy = strategy.data as
+    | { version: number; topics_to_increase?: unknown[]; topics_to_decrease?: unknown[]; content_to_retire?: unknown[]; formats_to_test?: unknown[] }
+    | null;
   let freshStrategyVersion: { version: number; actionableCount: number } | null = null;
   if (latestStrategy && !alreadyNotified.has(`strategy-${latestStrategy.version}`)) {
     const actionableCount =
@@ -106,11 +123,9 @@ export async function collectNotificationInputs(
     freshStrategyVersion = { version: latestStrategy.version, actionableCount };
   }
 
-  const { data: experiments } = await client
-    .from("experiments")
-    .select("id, hypothesis, result")
-    .not("result", "is", null);
-  const newSignificantExperiments = ((experiments ?? []) as Array<{ id: string; hypothesis: string; result: any }>)
+  const experiments = await client.from("experiments").select("id, hypothesis, result").not("result", "is", null);
+  if (experiments.error) throw new NotificationCollectionError("experiments with results", experiments.error);
+  const newSignificantExperiments = ((experiments.data ?? []) as Array<{ id: string; hypothesis: string; result: any }>)
     .filter((e) => e.result?.isSignificant && e.result?.computedAt >= sinceIso && !alreadyNotified.has(e.id))
     .map((e) => ({ id: e.id, hypothesis: e.hypothesis, interpretation: e.result.interpretation as string }));
 

@@ -36,6 +36,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.AutoDraftStatus
 import com.fillbook.growthos.data.CostSummary
@@ -81,6 +83,10 @@ fun SystemScreen(repo: GrowthOsRepository) {
     var actionError by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     var showPauseConfirm by remember { mutableStateOf(false) }
+    // True while the pause/unpause request is in flight -- the switch is
+    // disabled so a second tap can't race the first and land the system
+    // in the opposite state from what the owner last saw.
+    var pauseInFlight by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -98,13 +104,21 @@ fun SystemScreen(repo: GrowthOsRepository) {
     }
 
     fun togglePause() {
+        if (pauseInFlight) return
         scope.launch {
+            pauseInFlight = true
             try {
                 repo.setPaused(!systemPaused)
                 actionError = null
                 refresh()
             } catch (e: Exception) {
-                actionError = "Couldn't change that. Check your connection and try again."
+                actionError = if (systemPaused) {
+                    "Couldn't unpause the system. Check your connection and try again."
+                } else {
+                    "Couldn't pause the system. Check your connection and try again."
+                }
+            } finally {
+                pauseInFlight = false
             }
         }
     }
@@ -119,10 +133,12 @@ fun SystemScreen(repo: GrowthOsRepository) {
         ScreenHeader("System", "Live diagnostics for every subsystem and integration.", kicker = "Diagnostics")
 
         (errorMessage ?: actionError)?.let { message ->
-            Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.weight(1f))
                 if (errorMessage != null) {
                     TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
+                } else {
+                    TextButton(onClick = { actionError = null }) { Text("Dismiss") }
                 }
             }
         }
@@ -169,7 +185,7 @@ fun SystemScreen(repo: GrowthOsRepository) {
                         }
                         item { AutoDraftCard(status) }
                     }
-                    item { PauseSystemCard(paused = systemPaused, onToggle = { showPauseConfirm = true }) }
+                    item { PauseSystemCard(paused = systemPaused, enabled = !pauseInFlight, onToggle = { showPauseConfirm = true }) }
                     item { SectionHeader("Subsystems") }
                     items(health) { item -> SystemHealthCard(item) }
                     item { SectionHeader("Diagnostics") }
@@ -211,18 +227,30 @@ fun SystemScreen(repo: GrowthOsRepository) {
 }
 
 @Composable
-private fun PauseSystemCard(paused: Boolean, onToggle: () -> Unit) {
+private fun PauseSystemCard(paused: Boolean, enabled: Boolean, onToggle: () -> Unit) {
     GrowthCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("Pause System", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    if (paused) "Paused -- auto-draft and manual runs are stopped." else "Running -- auto-draft and manual runs are allowed.",
+                    when {
+                        !enabled -> "Updating..."
+                        paused -> "Paused -- auto-draft and manual runs are stopped."
+                        else -> "Running -- auto-draft and manual runs are allowed."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextTertiary,
                 )
             }
-            Switch(checked = paused, onCheckedChange = { onToggle() }, colors = SwitchDefaults.colors())
+            // The switch is the only actionable control here, so it carries
+            // the spoken label; the text beside it is the visual explanation.
+            Switch(
+                checked = paused,
+                onCheckedChange = { onToggle() },
+                enabled = enabled,
+                colors = SwitchDefaults.colors(),
+                modifier = Modifier.semantics { contentDescription = if (paused) "Pause system, on" else "Pause system, off" },
+            )
         }
     }
 }

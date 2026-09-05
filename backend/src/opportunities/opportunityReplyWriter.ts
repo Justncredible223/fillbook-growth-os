@@ -73,6 +73,7 @@ export async function draftOpportunityReply(
   return draftInboundResponse(
     llmClient,
     {
+      platform: "x", // guaranteed by the x_mention source check above
       authorHandle,
       messageText,
       inResponseToText: null,

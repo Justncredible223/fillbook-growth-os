@@ -1,10 +1,11 @@
 package com.fillbook.growthos.ui.screens
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.InboundEngagement
@@ -46,9 +47,11 @@ import com.fillbook.growthos.data.InboundSummary
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
+import com.fillbook.growthos.ui.components.InboundFilter
 import com.fillbook.growthos.ui.components.InsetRow
 import com.fillbook.growthos.ui.components.MetricTile
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.PlatformActions
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.PrimaryButton
 import com.fillbook.growthos.ui.components.ScreenHeader
@@ -60,6 +63,7 @@ import com.fillbook.growthos.ui.components.inboundPriorityColor
 import com.fillbook.growthos.ui.components.inboundPriorityLabel
 import com.fillbook.growthos.ui.components.inboundStatusLabel
 import com.fillbook.growthos.ui.components.inboundStatusTone
+import com.fillbook.growthos.ui.components.openExternalUrl
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
@@ -74,12 +78,16 @@ import kotlinx.coroutines.launch
 
 /**
  * The Inbound Engagement Queue -- surfaces every person who replied to,
- * mentioned, or quoted @FillbookHQ so a meaningful reply is never missed.
- * Never sends anything: "Draft response" only generates text for the
- * owner to review, and "Mark responded" is the one explicit action that
- * records a reply actually went out (this app cannot verify that via the
- * X API, so it's a human confirmation, not an assumption -- see
- * docs/INBOUND_ENGAGEMENT.md).
+ * mentioned, or quoted Fillbook on X or Reddit so a meaningful reply is
+ * never missed. Never sends anything: "Draft response" only generates
+ * text for the owner to review, and "Mark responded" is the one explicit
+ * action that records a reply actually went out (this app cannot verify
+ * that via either platform's API, so it's a human confirmation, not an
+ * assumption -- see docs/INBOUND_ENGAGEMENT.md).
+ *
+ * Every operator action funnels through [runAction] so a failure always
+ * produces the same visible, dismissable error and never escapes the
+ * coroutine as an uncaught exception.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,7 +103,9 @@ fun InboundScreen(repo: GrowthOsRepository) {
     // Without this, a "Follow up" tap has no way back -- the item just sits
     // wherever it landed in the date-sorted list, potentially many screens
     // down once a handful of newer items arrive. Defaults to null (all
-    // active statuses), same as the pre-filter behavior.
+    // active statuses), same as the pre-filter behavior. Reconciled against
+    // the live list after every refresh (see InboundFilter.reconcile) so it
+    // can never point at a status with no remaining items.
     var statusFilter by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -103,8 +113,10 @@ fun InboundScreen(repo: GrowthOsRepository) {
 
     suspend fun refresh() {
         try {
-            items = repo.getInboundQueue()
+            val fresh = repo.getInboundQueue()
+            items = fresh
             summary = repo.getInboundSummary()
+            statusFilter = InboundFilter.reconcile(statusFilter, fresh.map { it.status })
             errorMessage = null
         } catch (e: Exception) {
             errorMessage = "Couldn't load inbound engagement. Check your connection and try again."
@@ -116,25 +128,26 @@ fun InboundScreen(repo: GrowthOsRepository) {
 
     // One combined action instead of a separate Copy button and Open
     // icon -- the owner still does the actual posting, this just removes
-    // a redundant tap. Never touches status: opening X must never imply
-    // a reply was sent, so "Mark responded" stays its own explicit action.
+    // a redundant tap. Never touches status: opening the platform must
+    // never imply a reply was sent, so "Mark responded" stays its own
+    // explicit action. Opens the item's OWN platform (Reddit for a Reddit
+    // reply) and words the confirmation to match; a device with nothing
+    // able to open the link gets told so instead of a silent no-op.
     fun copyAndOpen(item: InboundEngagement) {
         val draft = item.draftResponse
-        if (draft != null) copyToClipboard(context, "Reply to @${item.authorHandle ?: "unknown"}", draft)
+        if (draft != null) copyToClipboard(context, "Reply to ${item.authorHandle ?: "unknown"}", draft)
         val sourceReference = item.sourceReference
-        if (sourceReference != null) {
-            context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(sourceReference)))
-        }
-        val message = when {
-            draft != null && sourceReference != null -> "Copied — paste in X"
-            draft != null -> "Copied"
-            sourceReference != null -> "Opened in X"
-            else -> null
-        }
+        val opened = sourceReference != null && openExternalUrl(context, sourceReference)
+        val message = PlatformActions.copyAndOpenMessage(
+            platform = item.platform,
+            copied = draft != null,
+            hadLink = sourceReference != null,
+            opened = opened,
+        )
         if (message != null) scope.launch { snackbarHostState.showSnackbar(message) }
     }
 
-    fun runAction(id: String, action: suspend () -> Unit) {
+    fun runAction(id: String, failureMessage: String, action: suspend () -> Unit) {
         scope.launch {
             busyId = id
             try {
@@ -142,9 +155,25 @@ fun InboundScreen(repo: GrowthOsRepository) {
                 actionError = null
                 refresh()
             } catch (e: Exception) {
-                actionError = "Couldn't complete that action. Check your connection and try again."
+                actionError = failureMessage
+            } finally {
+                busyId = null
             }
-            busyId = null
+        }
+    }
+
+    fun runBacklogRecovery() {
+        scope.launch {
+            recovering = true
+            try {
+                repo.runInboundBacklogRecovery()
+                actionError = null
+                refresh()
+            } catch (e: Exception) {
+                actionError = "Couldn't check for missed replies. Check your connection and try again."
+            } finally {
+                recovering = false
+            }
         }
     }
 
@@ -152,15 +181,17 @@ fun InboundScreen(repo: GrowthOsRepository) {
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScreenHeader(
             "Inbound",
-            "People who engaged with @FillbookHQ -- nothing here ever sends itself.",
+            "People who engaged with Fillbook on X and Reddit -- nothing here ever sends itself.",
             kicker = summary?.takeIf { it.needsResponse > 0 }?.let { "${it.needsResponse} need${if (it.needsResponse == 1) "s" else ""} a response" },
         )
 
         (errorMessage ?: actionError)?.let { message ->
-            Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.weight(1f))
                 if (errorMessage != null) {
                     TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
+                } else {
+                    TextButton(onClick = { actionError = null }) { Text("Dismiss") }
                 }
             }
         }
@@ -201,11 +232,11 @@ fun InboundScreen(repo: GrowthOsRepository) {
                 }
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
                     OutlinedButton(
-                        onClick = { scope.launch { recovering = true; repo.runInboundBacklogRecovery(); refresh(); recovering = false } },
+                        onClick = { runBacklogRecovery() },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !recovering,
                     ) {
-                        Text(if (recovering) "Checking..." else "Check for missed replies")
+                        Text(if (recovering) "Checking..." else "Check for missed replies", maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
             }
@@ -214,7 +245,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
                 PolishedEmptyState(
                     icon = Icons.Filled.Forum,
                     headline = "Nothing waiting on you",
-                    subtitle = "New replies, mentions, and follow-ups from @FillbookHQ's audience show up here.",
+                    subtitle = "New replies, mentions, and follow-ups from Fillbook's audience on X and Reddit show up here.",
                 )
             } else {
                 val availableStatuses = remember(items) { items.map { it.status }.distinct() }
@@ -238,20 +269,36 @@ fun InboundScreen(repo: GrowthOsRepository) {
                     onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    LazyColumn(
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        items(filteredItems, key = { it.id }) { item ->
-                            InboundCard(
-                                item = item,
-                                busy = busyId == item.id,
-                                onDraft = { runAction(item.id) { repo.draftInboundResponse(item.id) } },
-                                onMarkResponded = { runAction(item.id) { repo.markInboundResponded(item.id) } },
-                                onFollowUp = { runAction(item.id) { repo.markInboundFollowUp(item.id) } },
-                                onClose = { runAction(item.id) { repo.closeInbound(item.id) } },
-                                onCopyAndOpen = { copyAndOpen(item) },
+                    if (filteredItems.isEmpty()) {
+                        // Defensive: reconcile() clears a stale filter on
+                        // refresh, but a status can still empty out between
+                        // renders. Never show a blank queue without a way back.
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.Forum,
+                                headline = "No items in this filter",
+                                subtitle = "Other items are still waiting -- switch back to All to see them.",
                             )
+                            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.Center) {
+                                TextButton(onClick = { statusFilter = null }) { Text("Show all") }
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            items(filteredItems, key = { it.id }) { item ->
+                                InboundCard(
+                                    item = item,
+                                    busy = busyId == item.id,
+                                    onDraft = { runAction(item.id, "Couldn't draft a response. Check your connection and try again.") { repo.draftInboundResponse(item.id) } },
+                                    onMarkResponded = { runAction(item.id, "Couldn't mark that as responded. Check your connection and try again.") { repo.markInboundResponded(item.id) } },
+                                    onFollowUp = { runAction(item.id, "Couldn't flag that for follow-up. Check your connection and try again.") { repo.markInboundFollowUp(item.id) } },
+                                    onClose = { runAction(item.id, "Couldn't close that. Check your connection and try again.") { repo.closeInbound(item.id) } },
+                                    onCopyAndOpen = { copyAndOpen(item) },
+                                )
+                            }
                         }
                     }
                 }
@@ -262,6 +309,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun InboundCard(
     item: InboundEngagement,
@@ -275,9 +323,11 @@ private fun InboundCard(
     GrowthCard(accentBar = inboundPriorityColor(item.priority)) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("@${item.authorHandle ?: "unknown"}", style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text("@${item.authorHandle ?: "unknown"}", style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // FlowRow: three variable-width chips wrap onto a second line
+                // on a narrow phone instead of clipping the last one.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconPill(platformDisplayName(item.platform), platformIcon(item.platform), TextSecondary)
                     Pill(inboundPriorityLabel(item.priority), inboundPriorityColor(item.priority))
                     if (item.isRepeatEngager) Pill("REPEAT", Accent)
@@ -294,7 +344,7 @@ private fun InboundCard(
             InsetRow {
                 Text("Replying to:", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
                 Spacer(Modifier.height(2.dp))
-                Text(context, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                Text(context, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
 
@@ -320,20 +370,20 @@ private fun InboundCard(
                 PrimaryButton(text = "Draft response", onClick = onDraft, enabled = !busy, busy = busy, modifier = Modifier.fillMaxWidth())
             } else {
                 PrimaryButton(
-                    text = if (item.sourceReference != null) "Copy + Open X" else "Copy reply",
+                    text = PlatformActions.copyAndOpenLabel(item.platform, hasLink = item.sourceReference != null),
                     onClick = onCopyAndOpen,
                     enabled = !busy,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
             Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                TextButton(onClick = onFollowUp, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Follow up") }
-                TextButton(onClick = onMarkResponded, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Mark responded") }
-                TextButton(onClick = onClose, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Close") }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = onFollowUp, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Follow up", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                TextButton(onClick = onMarkResponded, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Responded", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                TextButton(onClick = onClose, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Close", maxLines = 1, overflow = TextOverflow.Ellipsis) }
             }
         } else if (item.sourceReference != null) {
-            SecondaryButton(text = "Open on ${platformDisplayName(item.platform)}", onClick = onCopyAndOpen, modifier = Modifier.fillMaxWidth())
+            SecondaryButton(text = PlatformActions.openLabel(item.platform), onClick = onCopyAndOpen, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -344,7 +394,7 @@ private fun InboundFilterChip(label: String, selected: Boolean, onClick: () -> U
     FilterChip(
         selected = selected,
         onClick = onClick,
-        label = { Text(label) },
+        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         colors = FilterChipDefaults.filterChipColors(
             selectedContainerColor = Accent.copy(alpha = 0.2f),
             selectedLabelColor = Accent,

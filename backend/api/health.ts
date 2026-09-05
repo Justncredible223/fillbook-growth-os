@@ -36,9 +36,9 @@ function checkAiProvider(): HealthItem {
 
 /**
  * A row for `cursorSource` in signal_ingestion_cursors only ever gets
- * written after a real, successful ingest call (see xIngestion.ts /
- * youtubeIngestion.ts) -- its presence is real evidence the adapter
- * works, not just that credentials exist.
+ * written after a real, successful ingest call (see xIngestion.ts) --
+ * its presence is real evidence the adapter works, not just that
+ * credentials exist.
  */
 async function checkCursorBackedIntegration(
   client: SupabaseClient,
@@ -225,28 +225,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await checkCursorBackedIntegration(client, "X", "x_mention", "Credentials wired, not yet verified against the real API"),
   );
   health.push(await checkSearchConsole(client));
-  health.push(
-    await checkCursorBackedIntegration(
-      client,
-      "YouTube",
-      "youtube_video",
-      "Credentials wired, not yet verified against the real API",
-    ),
-  );
-  // Promote (TikTok's paid-boost feature) is separately, permanently
-  // blocked at the account level for @fillbookhq -- "Prohibited Industry
-  // - Financial Opportunity", confirmed twice against real videos, see
-  // docs/CLAUDE_HANDOFF.md in the fillbookhq project. That's unrelated to
-  // and unaffected by this check: this only ever reads organic video
-  // stats (views/likes/comments/shares), never posts or promotes.
-  health.push(
-    await checkCursorBackedIntegration(
-      client,
-      "TikTok",
-      "tiktok_video",
-      "Credentials wired, not yet verified against the real API (Promote is separately account-blocked -- organic only)",
-    ),
-  );
+  // YouTube and TikTok signal ingestion were removed outright (see
+  // api/ingest.ts) -- video distribution happens through Fliki, outside
+  // this system -- so they are deliberately absent here rather than
+  // permanently reporting "not yet verified" for adapters that no longer
+  // exist.
 
   health.push(await checkInboundSync(client));
   health.push(await checkProspectingSync(client));

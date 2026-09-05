@@ -189,13 +189,23 @@ export class RedditSignalAdapter {
    * conversation" endpoint -- those simply show up here as ordinary
    * comment_reply items with a different parent_id, which the ingestion
    * layer resolves against already-tracked rows via conversationId
-   * (link_id). `before` is Reddit's own cursor param (a fullname); passing
-   * it re-fetches only items newer than that fullname, mirroring
-   * X's since_id pattern.
+   * (link_id).
+   *
+   * Pagination: Reddit listings are anchored slices, NOT X-style
+   * since_id windows. `after=<fullname>` returns the page that follows
+   * that item in listing order (i.e. OLDER items); `before=<fullname>`
+   * returns the slice preceding it, and returns NOTHING at all once the
+   * anchor item has left the listing (deleted comment, removed by a mod,
+   * aged past Reddit's ~1000-item listing cap). That makes a stored
+   * fullname unsafe as a forward cursor. This method therefore only
+   * exposes `after` (walk older) and always starts from the top of the
+   * inbox when `after` is omitted; the "only process what's new"
+   * decision is made by redditIngestion.ts's timestamp high-water mark,
+   * which cannot be invalidated by an item disappearing.
    */
-  async fetchInboxActivity(before?: string, limit = 25, now: Date = new Date()): Promise<RedditInboxItem[]> {
+  async fetchInboxActivity(after?: string, limit = 25, now: Date = new Date()): Promise<RedditInboxItem[]> {
     const params: Record<string, string> = { limit: String(Math.min(Math.max(limit, 1), 100)) };
-    if (before) params.before = before;
+    if (after) params.after = after;
 
     const json = (await this.authedGet("/message/inbox", params, now)) as RawListing<RawInboxData>;
     return (json.data?.children ?? []).map((child) => {

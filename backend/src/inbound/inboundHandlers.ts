@@ -141,6 +141,7 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
   const draft = await draftInboundResponse(
     llmClient,
     {
+      platform: row.platform,
       authorHandle: row.authorHandle,
       messageText: row.body,
       inResponseToText: row.inResponseToText,

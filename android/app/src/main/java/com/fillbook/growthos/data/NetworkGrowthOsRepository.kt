@@ -334,6 +334,9 @@ class NetworkGrowthOsRepository(
 
     private fun JSONObject.toProspectingCandidate() = ProspectingCandidate(
         id = getString("id"),
+        // Every row has a platform server-side; "x" is only the fallback for a
+        // response predating the field, never a guess about a Reddit row.
+        platform = optStringOrNull("platform") ?: "x",
         discoveryQuery = getString("discoveryQuery"),
         discoveryLabel = optStringOrNull("discoveryLabel") ?: getString("discoveryQuery"),
         replyClass = optStringOrNull("replyClass") ?: "B",

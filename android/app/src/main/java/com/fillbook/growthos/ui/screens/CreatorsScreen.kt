@@ -4,6 +4,8 @@ import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -160,6 +162,7 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CreatorCard(creator: Creator) {
     val accentBar = when (creator.category) {
@@ -183,7 +186,7 @@ private fun CreatorCard(creator: Creator) {
                     Text(relationshipStageLabel(creator.readinessScore), style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
                 }
                 Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconPill(platformDisplayName(creator.platform), platformIcon(creator.platform), TextSecondary)
                     creator.followerCount?.let { count -> Pill(formatFollowers(count), TextSecondary) }
                     if (creator.category == CreatorCategory.REJECTED) {

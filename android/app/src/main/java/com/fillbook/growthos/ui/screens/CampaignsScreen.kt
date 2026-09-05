@@ -3,6 +3,8 @@ package com.fillbook.growthos.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -202,10 +204,11 @@ private fun stageRank(stage: String): Int = when (stage) {
     else -> 0
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AssetRow(asset: CampaignAsset) {
     InsetRow {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             IconPill(platformDisplayName(asset.platform), platformIcon(asset.platform), TextSecondary)
             QuietStatusLabel(assetStageDisplayName(asset.stage), assetStageTone(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {

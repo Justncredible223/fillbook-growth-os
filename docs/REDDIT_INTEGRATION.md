@@ -126,6 +126,17 @@ opaque error deep inside a fetch call.
   messages together, most-recent first) via
   `RedditSignalAdapter.fetchInboxActivity()`, using its own cursor
   (`reddit_inbound`, independent of X's `x_mention_inbound` cursor).
+  That cursor is a **timestamp high-water mark**
+  (`<created_utc ISO>|<fullname>`), not a Reddit listing anchor: Reddit's
+  `before=<fullname>` returns an empty slice as soon as the anchor item
+  is deleted or ages out of the listing, which would silently blank the
+  feed forever. Every run instead reads the inbox from the top and pages
+  older via `after` until it passes the mark (capped at
+  `REDDIT_INBOX_MAX_PAGES_PER_RUN` pages); items strictly older than the
+  mark are skipped, items in the mark's same second are re-submitted and
+  deduped on `(platform, externalId)`, and the mark only ever moves
+  forward. A pre-existing bare-fullname cursor is treated as "no mark"
+  and rewritten on the next run.
   `comment_reply` and `username_mention` items become
   `inbound_engagements` rows (`platform='reddit'`), classified with the
   SAME deterministic `classifyPriority()` X inbound uses. `private_message`

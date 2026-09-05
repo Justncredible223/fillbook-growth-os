@@ -29,7 +29,13 @@ interface StepResult {
   detail: string;
 }
 
-async function runStep(step: string, fn: () => Promise<string>): Promise<StepResult> {
+/**
+ * Every pipeline step runs through this: a thrown error becomes a visible
+ * `ok: false` result with the error's message, never a crash and never a
+ * silent success. Exported so the contract ("a step that throws is
+ * recorded as failed") is directly testable against real step bodies.
+ */
+export async function runStep(step: string, fn: () => Promise<string>): Promise<StepResult> {
   try {
     return { step, ok: true, detail: await fn() };
   } catch (err) {

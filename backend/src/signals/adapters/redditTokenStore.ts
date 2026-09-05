@@ -8,7 +8,7 @@ export interface RedditTokenState {
 
 /**
  * Persists the Reddit OAuth 2.0 token pair between adapter runs -- same
- * bootstrap-then-self-persist shape as xTokenStore.ts/tiktokTokenStore.ts.
+ * bootstrap-then-self-persist shape as xTokenStore.ts.
  * Env vars (REDDIT_ACCESS_TOKEN/REDDIT_REFRESH_TOKEN) only bootstrap the
  * very first run; after that, refreshed tokens live in
  * platform_oauth_credentials (platform="reddit", same table every other

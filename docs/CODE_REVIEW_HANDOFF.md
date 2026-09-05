@@ -65,10 +65,12 @@ android/.../ui/screens/ -- one file per screen (Home, Prospecting, Inbound, Appr
    swapped a typed access code for biometric/PIN unlock.
 2. YouTube and TikTok signal ingestion were deliberately removed from
    the scheduled pipeline (owner distributes video content through a
-   separate tool called Fliki) — but `backend/api/ingest.ts` still has
-   the YouTube/TikTok adapter code as a dead, manually-triggered-only
-   endpoint nothing calls automatically. Worth a second opinion on
-   whether to delete it outright.
+   separate tool called Fliki). Following the first external review, the
+   dead manual-only path in `backend/api/ingest.ts` and the underlying
+   YouTube/TikTok adapters, ingestion modules, token store, health
+   checks, and tests were removed outright; `ingest.ts` now accepts only
+   `x` and `search_console`. The `youtube_video`/`tiktok_video` signal
+   source values remain valid for historical rows.
 3. Just fixed one UI bug found live on-device: `ProspectingScreen.kt`'s
    action-button row had 4 `TextButton`s sharing equal width with
    `maxLines = 1` and no overflow handling — "Not relevant" got clipped
@@ -95,8 +97,10 @@ android/.../ui/screens/ -- one file per screen (Home, Prospecting, Inbound, Appr
    `Row`/`Column` with fixed-width children and text that could overflow
    on a real device, especially anything with `maxLines` set without
    `overflow = TextOverflow.Ellipsis`.
-2. **Dead code** — is `backend/api/ingest.ts`'s YouTube/TikTok path (and
-   the underlying adapters) worth deleting now that nothing schedules it?
+2. **Dead code** — `backend/api/ingest.ts`'s YouTube/TikTok path and the
+   underlying adapters have now been deleted (see Recent changes above);
+   anything else that is reachable only by hand and never exercised is
+   still worth flagging.
 3. **Error handling gaps** — places where a failed API call might surface
    a confusing state to the user rather than a clear error/retry.
 4. **Test coverage gaps** — especially around the newly merged features

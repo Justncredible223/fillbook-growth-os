@@ -3,6 +3,8 @@ package com.fillbook.growthos.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -66,7 +68,7 @@ import kotlinx.coroutines.launch
  * should read as directional, not settled, per the master spec's own
  * "avoid fake statistical certainty" requirement.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun StrategyScreen(repo: GrowthOsRepository) {
     var strategy by remember { mutableStateOf<StrategyVersion?>(null) }
@@ -139,7 +141,7 @@ fun StrategyScreen(repo: GrowthOsRepository) {
                     ) {
                         item {
                             GrowthCard {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     if (current.lowConfidence) {
                                         Pill("Directional -- not enough data yet", Warning)
                                     } else {

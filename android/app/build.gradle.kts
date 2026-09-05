@@ -108,4 +108,11 @@ dependencies {
     implementation("androidx.biometric:biometric:1.1.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // Plain JVM unit tests (app/src/test) for the pure-Kotlin logic the
+    // screens render from -- platform wording, filter reconciliation,
+    // experiment list merging. No emulator or instrumentation needed:
+    // `./gradlew :app:testDebugUnitTest`.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }

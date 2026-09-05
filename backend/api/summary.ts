@@ -56,7 +56,7 @@ async function handleStrategy(req: VercelRequest, res: VercelResponse): Promise<
  * backend/src/experiments/types.ts for why "control vs treatment" means
  * time periods here, not a randomized split). GET lists all; POST with
  * no `id` creates+starts one; POST with `{ id, action: "measure" }`
- * computes/refreshes its result without ending it; POST with
+ * computes and PERSISTS an interim result without ending it; POST with
  * `{ id, action: "complete" }` computes a final result and closes it;
  * POST with `{ id, action: "abort" }` cancels one early. Folded in here
  * for the same 12-function-cap reason as strategy above.
@@ -123,7 +123,11 @@ async function handleExperiments(req: VercelRequest, res: VercelResponse): Promi
         res.status(200).json({ experiment: completed });
         return;
       }
-      res.status(200).json({ experiment: { ...experiment, result } });
+      // "measure" persists the interim result (status untouched, still
+      // running) so it survives the app's next refresh instead of living
+      // only in this response -- and the response is the persisted row.
+      const measured = await repo.recordProvisionalResult(body.id, result);
+      res.status(200).json({ experiment: measured });
       return;
     }
 

@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -350,6 +352,7 @@ private fun splitTitle(title: String): Pair<String, String?> {
  * and a brighter card border; every other card gets a quiet text-only
  * action so a long list doesn't turn into a stack of equally-loud buttons.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OpportunityCard(
     opp: Opportunity,
@@ -370,7 +373,7 @@ private fun OpportunityCard(
             ScoreBadge(score = opp.score.toInt(), semanticLabel = "Opportunity score ${opp.score.toInt()}, ${band.label}")
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Pill(band.label.uppercase(), bandColor)
                     if (topRanked) Pill("TOP PICK", Accent)
                     if (opp.isEngagementOpportunity) Pill("ENGAGEMENT", TextSecondary)
@@ -378,7 +381,7 @@ private fun OpportunityCard(
                 Spacer(Modifier.height(6.dp))
                 Text(headline, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     opp.channels.forEach { channel -> IconPill(platformDisplayName(channel), platformIcon(channel), TextSecondary) }
                     source?.let { Pill(signalSourceDisplayName(it), TextSecondary) }
                 }

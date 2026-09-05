@@ -1,10 +1,11 @@
 package com.fillbook.growthos.ui.screens
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,13 +44,18 @@ import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.ProspectingCandidate
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.PlatformActions
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.PrimaryButton
 import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.copyToClipboard
+import com.fillbook.growthos.ui.components.openExternalUrl
+import com.fillbook.growthos.ui.components.platformDisplayName
+import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Border
@@ -63,11 +69,12 @@ import kotlinx.coroutines.launch
 /**
  * Prospecting -- the proactive-outreach half of growth, distinct from
  * Radar/Inbound (which only ever surface people already talking TO
- * @FillbookHQ). This queue surfaces OTHER traders' public X posts worth
- * joining. Same non-negotiable guarantee as everywhere else in this app:
- * nothing here ever posts anything. The furthest any action here reaches
- * is "opened X with a draft copied to the clipboard" -- the owner reviews,
- * edits, and posts every reply themselves (see
+ * Fillbook). This queue surfaces OTHER traders' public posts on X and
+ * Reddit worth joining. Same non-negotiable guarantee as everywhere else
+ * in this app: nothing here ever posts anything. The furthest any action
+ * here reaches is "opened the candidate's own platform with a draft copied
+ * to the clipboard" -- the owner reviews, edits, and posts every reply
+ * themselves (see
  * fillbookhq/docs/social/MASTER_SOCIAL_STRATEGY.md's human-execution
  * boundary, which this screen implements as an app UI instead of a manual
  * chat workflow).
@@ -123,13 +130,19 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
         }
     }
 
+    // Copies the (possibly edited) draft and opens the post in the
+    // candidate's OWN platform app -- Reddit for a Reddit thread, X for an
+    // X post -- with the confirmation worded to match. A failed launch
+    // (no handler on the device) is reported, not swallowed; the timestamp
+    // call is best-effort and never blocks the owner.
     fun copyAndOpen(candidate: ProspectingCandidate) {
         val text = editedDrafts[candidate.id] ?: candidate.draftReply
-        if (text != null) copyToClipboard(context, "Reply to @${candidate.authorHandle ?: "unknown"}", text)
-        context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(candidate.postUrl)))
+        if (text != null) copyToClipboard(context, "Reply to ${candidate.authorHandle ?: "unknown"}", text)
+        val opened = openExternalUrl(context, candidate.postUrl)
         scope.launch {
-            runCatching { repo.openProspectingCandidate(candidate.id) }
-            snackbarHostState.showSnackbar(if (text != null) "Copied — paste in X" else "Opened in X")
+            if (opened) runCatching { repo.openProspectingCandidate(candidate.id) }
+            PlatformActions.copyAndOpenMessage(candidate.platform, copied = text != null, hadLink = true, opened = opened)
+                ?.let { snackbarHostState.showSnackbar(it) }
         }
     }
 
@@ -217,6 +230,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ProspectingCard(
     candidate: ProspectingCandidate,
@@ -243,7 +257,11 @@ private fun ProspectingCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // FlowRow, not Row: up to five variable-width chips here, and
+                // "CREATOR CANDIDATE" alone can be wider than a narrow phone
+                // leaves after the score badge -- wrapping beats clipping.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconPill(platformDisplayName(candidate.platform), platformIcon(candidate.platform), TextSecondary)
                     Pill("CLASS ${candidate.replyClass}", Accent)
                     Pill(candidate.discoveryLabel, TextSecondary)
                     candidate.authorFollowerCount?.let { count -> Pill(formatFollowerCount(count), TextTertiary) }
@@ -292,7 +310,7 @@ private fun ProspectingCard(
         if (draft == null) {
             PrimaryButton(text = "Draft reply", onClick = onDraft, enabled = !drafting, busy = drafting, modifier = Modifier.fillMaxWidth())
         } else {
-            PrimaryButton(text = "Copy + Open X", onClick = onCopyAndOpen, enabled = !busy, modifier = Modifier.fillMaxWidth())
+            PrimaryButton(text = PlatformActions.copyAndOpenLabel(candidate.platform, hasLink = true), onClick = onCopyAndOpen, enabled = !busy, modifier = Modifier.fillMaxWidth())
         }
 
         Spacer(Modifier.height(6.dp))
