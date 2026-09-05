@@ -297,10 +297,10 @@ private fun ProspectingCard(
 
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-            TextButton(onClick = onReplied, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Replied", maxLines = 1) }
-            TextButton(onClick = onSkip, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Skip", maxLines = 1) }
-            TextButton(onClick = onNotRelevant, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Not relevant", maxLines = 1) }
-            TextButton(onClick = onAlreadyHandled, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Handled", maxLines = 1) }
+            TextButton(onClick = onReplied, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Replied", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            TextButton(onClick = onSkip, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Skip", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            TextButton(onClick = onNotRelevant, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Irrelevant", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            TextButton(onClick = onAlreadyHandled, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Handled", maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
     }
 }
