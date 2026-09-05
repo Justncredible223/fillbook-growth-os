@@ -93,6 +93,20 @@ describe("runPartnershipDiscoveryStep", () => {
     expect(client.tables.partnership_prospects).toHaveLength(1); // still just the pre-existing row
   });
 
+  it("a real end-to-end re-run (via the actual createPartnership path, not a hand-seeded fixture) never duplicates the same candidate -- regression test for a real production bug where normalizeHandle stored a full URL while discovery's own pre-insert check compared against the bare handle", async () => {
+    const client = new FakeSupabaseClient({ creators: [], prospecting_candidates: [], inbound_engagements: [], partnership_prospects: [], cost_events: [] });
+    const adapter = fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] });
+
+    const first = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW });
+    expect(first.newCandidates).toBe(1);
+
+    const oneHourLater = new Date(NOW.getTime() + 61 * 60 * 1000);
+    const second = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: oneHourLater });
+
+    expect(second.newCandidates).toBe(0);
+    expect(client.tables.partnership_prospects).toHaveLength(1); // still just the one real row from the first run
+  });
+
   it("never re-surfaces a candidate that was already archived or marked do-not-contact", async () => {
     const client = new FakeSupabaseClient({
       creators: [],

@@ -20,11 +20,25 @@ export function normalizeDomain(url: string | null | undefined): string | null {
   }
 }
 
-/** Lowercases and strips a leading "@" -- the same shape used across creators/prospecting/inbound handle columns. */
+/**
+ * Lowercases and strips a leading "@" -- the same shape used across
+ * creators/prospecting/inbound handle columns. Also accepts a full
+ * X/Twitter profile URL (e.g. "https://x.com/handle") and extracts just
+ * the handle -- createPartnership calls this on
+ * `Object.values(socialLinks)[0]`, and discovery.ts's own
+ * socialLinks.x is always a full URL, not a bare handle. Without this,
+ * the stored normalized_handle was the entire URL string while every
+ * OTHER dedup check (discovery.ts's own pre-insert lookup, cross-table
+ * checks) compares against the bare handle -- a real mismatch that let
+ * every fresh discovery run silently re-create the same candidates as
+ * duplicates instead of matching them, confirmed in production.
+ */
 export function normalizeHandle(handle: string | null | undefined): string | null {
   if (!handle) return null;
   const trimmed = handle.trim().toLowerCase();
   if (!trimmed) return null;
+  const urlMatch = /^(?:https?:\/\/)?(?:www\.)?(?:x\.com|twitter\.com)\/([^/?#]+)/i.exec(trimmed);
+  if (urlMatch) return urlMatch[1]!;
   return trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;
 }
 

@@ -27,6 +27,19 @@ describe("normalizeHandle", () => {
     expect(normalizeHandle(null)).toBeNull();
     expect(normalizeHandle("")).toBeNull();
   });
+
+  it("extracts the bare handle from a full X/Twitter profile URL -- regression test for a real production bug: createPartnership calls this on socialLinks.x, which discovery.ts always sets to a full URL, and the mismatch against the bare-handle value used everywhere else silently broke dedup, letting every discovery run re-create the same candidates as duplicates", () => {
+    expect(normalizeHandle("https://x.com/phinloco")).toBe("phinloco");
+    expect(normalizeHandle("https://twitter.com/SomeCoach")).toBe("somecoach");
+    expect(normalizeHandle("http://www.x.com/handle")).toBe("handle");
+    expect(normalizeHandle("https://x.com/handle/status/123")).toBe("handle"); // trailing path segments ignored
+    expect(normalizeHandle("https://x.com/handle?ref=abc")).toBe("handle");
+  });
+
+  it("a URL-form handle and its equivalent bare-handle form normalize identically -- the actual guarantee dedup depends on", () => {
+    expect(normalizeHandle("https://x.com/phinloco")).toBe(normalizeHandle("@phinloco"));
+    expect(normalizeHandle("https://x.com/phinloco")).toBe(normalizeHandle("phinloco"));
+  });
 });
 
 describe("findExistingMatches -- cross-system dedup", () => {
