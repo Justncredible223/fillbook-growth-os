@@ -1,9 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { XSignalAdapter } from "../signals/adapters/xAdapter.js";
 import { recordPartnershipXSearchCostEvent } from "../cost/costTracking.js";
-import { evaluatePartnershipBudget, getPartnershipMonthSpendUsd } from "./budget.js";
+import { reservePartnershipBudget, releasePartnershipBudgetReservation } from "./budgetReservation.js";
+import { shouldSkipPaidDiscoveryForBacklog, countFreshQualifiedBacklog, MIN_BACKLOG_BEFORE_SKIPPING_DISCOVERY } from "./discoveryEligibility.js";
 import { normalizeDomain, normalizeHandle, findExistingMatches } from "./dedup.js";
-import { qualifyPartnership, createPartnership } from "./partnershipsHandlers.js";
+import { qualifyPartnership, createPartnership, listPartnerships } from "./partnershipsHandlers.js";
 import { DISCOVERY_TOPIC_KEYWORDS, rankCandidates, type DiscoveryCandidate } from "./discoveryScoring.js";
 import type { PartnerCategory } from "./types.js";
 
@@ -17,6 +18,19 @@ const ENRICHMENT_RESULTS_PER_HANDLE = 5;
 const SCHEDULED_CADENCE_DAYS = 7;
 /** Applies to every run, scheduled or forced -- prevents a rapid double-tap (or an overlapping scheduled+manual run) from burning budget twice for the same window. */
 const MIN_INTERVAL_MINUTES = 60;
+
+/**
+ * Worst-case ceiling for ONE discovery run's paid portion, reserved
+ * atomically (see budgetReservation.ts) before dispatching any real X
+ * search call -- structural, not average: DISCOVERY_X_SEARCH_QUERIES.length
+ * (3) * RESULTS_PER_QUERY (10) + MAX_ENRICHMENT_LOOKUPS (5) *
+ * ENRICHMENT_RESULTS_PER_HANDLE (5) = 55 reads max, at $0.005/read =
+ * $0.275. This is what closes the cross-request budget race for
+ * discovery: a concurrent generation attempt (or another discovery run)
+ * now serializes through the same reservation check instead of each
+ * independently reading a stale month-spend total.
+ */
+const DISCOVERY_RUN_RESERVATION_CEILING_USD = 0.275;
 
 /** One real X search query per PartnerCategory that has a keyword group -- deliberately small (see this module's own budget-accounting doc comment in budget.ts). "other" has no dedicated query; it's reachable only via the existing-records sources. */
 const DISCOVERY_X_SEARCH_QUERIES: Array<{ category: PartnerCategory; query: string }> = [
@@ -41,7 +55,7 @@ function matchTopics(text: string): { topics: string[]; category: PartnerCategor
 }
 
 export interface DiscoveryRunResult {
-  status: "found" | "no_matches" | "budget_exhausted" | "error" | "skipped_cadence";
+  status: "found" | "no_matches" | "budget_exhausted" | "error" | "skipped_cadence" | "skipped_backlog_sufficient";
   newCandidates: number;
   sourcesSearched: string[];
   costUsd: number;
@@ -294,10 +308,19 @@ export async function runPartnershipDiscoveryStep(deps: PartnershipDiscoveryDeps
     }
   }
 
-  const monthSpend = await getPartnershipMonthSpendUsd(client);
-  const budgetCheck = evaluatePartnershipBudget(monthSpend);
-  if (!budgetCheck.eligible) {
-    const result: DiscoveryRunResult = { status: "budget_exhausted", newCandidates: 0, sourcesSearched: [], costUsd: 0, skipReason: budgetCheck.reason };
+  // Owner-approved: daily paid discovery isn't needed. Skip spending
+  // anything (scheduled OR owner-forced -- `force` only ever bypasses
+  // SCHEDULED_CADENCE_DAYS above, never this) whenever there's already
+  // enough of a fresh, qualified, uncontacted backlog to work through.
+  const existingProspects = await listPartnerships(client);
+  if (shouldSkipPaidDiscoveryForBacklog(existingProspects, now)) {
+    const result: DiscoveryRunResult = {
+      status: "skipped_backlog_sufficient",
+      newCandidates: 0,
+      sourcesSearched: [],
+      costUsd: 0,
+      skipReason: `${countFreshQualifiedBacklog(existingProspects, now)} fresh qualified/draft_ready prospects already on hand (skip threshold is ${MIN_BACKLOG_BEFORE_SKIPPING_DISCOVERY}) -- paid discovery skipped until the backlog thins out`,
+    };
     await recordRun(client, deps.triggeredBy, result);
     return result;
   }
@@ -314,32 +337,44 @@ export async function runPartnershipDiscoveryStep(deps: PartnershipDiscoveryDeps
     allCandidates = [...fromCreators, ...fromProspecting, ...fromInbound];
 
     if (deps.adapter) {
-      const { candidates: fromXSearch, costUsd: xSearchCost } = await discoverFromXSearch(deps.adapter, client, now);
-      allCandidates = [...allCandidates, ...fromXSearch];
-      costUsd += xSearchCost;
-      sourcesSearched.push("x_search");
+      // Reserved BEFORE dispatching any real X search call, atomically
+      // against both the discovery bucket and the shared cap (see
+      // budgetReservation.ts) -- covers discoverFromXSearch AND the
+      // enrichment pass below as ONE paid unit of work for this run, so a
+      // concurrent generation attempt (or another discovery run) can't
+      // each read a stale month-spend total and jointly overspend.
+      const reservation = await reservePartnershipBudget(client, "discovery", DISCOVERY_RUN_RESERVATION_CEILING_USD);
+      if (!reservation.eligible) {
+        const result: DiscoveryRunResult = { status: "budget_exhausted", newCandidates: 0, sourcesSearched, costUsd: 0, skipReason: reservation.reason };
+        await recordRun(client, deps.triggeredBy, result);
+        return result;
+      }
+      try {
+        const { candidates: fromXSearch, costUsd: xSearchCost } = await discoverFromXSearch(deps.adapter, client, now);
+        allCandidates = [...allCandidates, ...fromXSearch];
+        costUsd += xSearchCost;
+        sourcesSearched.push("x_search");
+
+        // First pass ranks on whatever evidence existing-records/x_search
+        // already gathered; candidates that qualify but are too thin to
+        // personalize get ONE targeted per-handle lookup before the real
+        // (final) ranking, rather than qualifying them on category+recency
+        // alone and leaving the actual pitch to fail the review gate for
+        // demonstrating no real knowledge of the recipient (confirmed
+        // happening in production before this existed).
+        const firstPassRanked = rankCandidates(allCandidates, now);
+        const { enrichedCount, costUsd: enrichmentCost } = await enrichThinCandidates(deps.adapter, client, firstPassRanked.map((r) => r.candidate), now);
+        costUsd += enrichmentCost;
+        if (enrichedCount > 0) sourcesSearched.push("x_search_enrichment");
+      } finally {
+        await releasePartnershipBudgetReservation(client, reservation.reservationId);
+      }
     }
   } catch (err) {
     const result: DiscoveryRunResult = { status: "error", newCandidates: 0, sourcesSearched, costUsd, error: err instanceof Error ? err.message : String(err) };
     await recordRun(client, deps.triggeredBy, result);
     return result;
   }
-
-  // First pass ranks on whatever evidence existing-records/x_search already
-  // gathered; candidates that qualify but are too thin to personalize get
-  // ONE targeted per-handle lookup before the real (final) ranking, rather
-  // than qualifying them on category+recency alone and leaving the actual
-  // pitch to fail the review gate for demonstrating no real knowledge of
-  // the recipient (confirmed happening in production before this existed).
-  const firstPassRanked = rankCandidates(allCandidates, now);
-  const { enrichedCount, costUsd: enrichmentCost } = await enrichThinCandidates(
-    deps.adapter,
-    client,
-    firstPassRanked.map((r) => r.candidate),
-    now,
-  );
-  costUsd += enrichmentCost;
-  if (enrichedCount > 0) sourcesSearched.push("x_search_enrichment");
 
   const ranked = rankCandidates(allCandidates, now);
 

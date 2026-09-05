@@ -514,7 +514,26 @@ class NetworkGrowthOsRepository(
         post("/api/approvals?resource=partnerships", JSONObject().put("action", "qualify").put("id", id).put("rationale", rationale)).toPartnershipProspect()
 
     override suspend fun generatePartnershipDraft(id: String): PartnershipProspect {
-        val result = post("/api/approvals?resource=partnerships", JSONObject().put("action", "generate-draft").put("id", id))
+        val result =
+            try {
+                post("/api/approvals?resource=partnerships", JSONObject().put("action", "generate-draft").put("id", id))
+            } catch (e: NetworkException) {
+                // approvals.ts converts a thrown PartnershipActionError into an
+                // HTTP 404 with a real, actionable {error: message} body (e.g.
+                // the evidence-insufficiency guard, or the generation_claimed_at
+                // duplicate-request mutex rejection) -- BEFORE this fix, that
+                // fell through as a bare NetworkException, which
+                // PartnershipsScreen's catch block has no specific handler for,
+                // so it silently became the generic "Couldn't complete that
+                // action. Check your connection and try again." -- hiding the
+                // real, useful reason the owner actually needed to see (add
+                // more evidence; wait for the in-flight generation to finish).
+                // Confirmed by tracing this exact path end-to-end while
+                // verifying this round's new error messages on-device.
+                val parsedError = extractPartnershipActionErrorMessage(e.httpCode, e.message)
+                if (parsedError != null) throw PartnershipDraftRejectedException(shortReason = parsedError)
+                throw e
+            }
         // "failed" (didn't pass the mechanical/review gates) and "skipped" (budget
         // exhausted) are real, meaningful outcomes the owner needs to actually see
         // -- not a connection problem, and not something to silently discard.
@@ -730,6 +749,41 @@ class NetworkGrowthOsRepository(
 class NetworkException(message: String, val httpCode: Int? = null) : Exception(message)
 
 /**
+ * Pure, unit-testable extraction of the real actionable message
+ * approvals.ts sends back when it catches a thrown PartnershipActionError
+ * (evidence-insufficiency, the generation_claimed_at duplicate-request
+ * mutex) -- it converts that into an HTTP 404 with a JSON `{error: string}`
+ * body (see approvals.ts's own catch block), which post()'s generic
+ * failure path wraps into `NetworkException("POST $path failed: HTTP 404 --
+ * $responseBody", 404)`. Before this existed, that whole message fell
+ * through PartnershipsScreen's catch-all as a bare NetworkException,
+ * silently replacing the real reason with "Couldn't complete that action.
+ * Check your connection and try again." -- confirmed by tracing this exact
+ * path while verifying this round's new error messages on-device. Returns
+ * null (never throws) for anything that isn't this specific shape, so a
+ * genuine network/auth failure still surfaces as NetworkException.
+ */
+// Deliberately a hand-rolled regex, not JSONObject -- org.json is an
+// unmocked Android stub under a plain JVM unit test (no Robolectric in
+// this project), so a real parse here would silently return null in every
+// test and only work on-device. approvals.ts's error bodies are always a
+// single flat `{"error": "..."}` (see its catch block), so this is a
+// bounded, safe simplification, not a general JSON parser.
+private val ERROR_FIELD_PATTERN = Regex(""""error"\s*:\s*"((?:[^"\\]|\\.)*)"""")
+
+private fun unescapeJsonString(s: String): String =
+    s.replace("\\\"", "\"").replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t").replace("\\\\", "\\")
+
+fun extractPartnershipActionErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
+    if (httpCode != 404) return null
+    val body = networkExceptionMessage?.substringAfter(" -- ", missingDelimiterValue = "") ?: return null
+    if (body.isBlank()) return null
+    val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null
+    val error = unescapeJsonString(raw)
+    return error.takeIf { it.isNotBlank() }
+}
+
+/**
  * A real, meaningful outcome from generate-draft (failed review/mechanical
  * gate, or budget exhaustion) -- distinct from NetworkException so callers
  * never mistake a legitimate content-quality rejection for a connectivity
@@ -740,7 +794,7 @@ class NetworkException(message: String, val httpCode: Int? = null) : Exception(m
  * reviewers' full reasoning at once is a wall of text), not something to
  * dump on the owner by default.
  */
-class PartnershipDraftRejectedException(val shortReason: String, val details: String) : Exception(shortReason)
+class PartnershipDraftRejectedException(val shortReason: String, val details: String? = null) : Exception(shortReason)
 
 /** Small helpers since org.json's JSONArray predates Kotlin collections. */
 private fun <T> JSONArray.map(transform: (JSONObject) -> T): List<T> =

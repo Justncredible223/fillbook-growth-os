@@ -150,14 +150,29 @@ export async function recordRedditReadCostEvent(
   }
 }
 
-/** Real recorded X-search spend for the given month (created_at-based, not run_date -- x_search_read events have no separate "run date" concept), for Prospecting's budget gate. */
+/**
+ * Real recorded spend for the given month across BOTH of Prospecting's own
+ * cost sources -- its X search reads ("x_search_read") and its reply-writer
+ * LLM calls ("prospecting_llm_call", see draftProspectingCandidateReply).
+ *
+ * Previously this only summed "x_search_read", so the reply-writer's LLM
+ * cost was recorded under the generic "llm_call" event_type (shared with
+ * auto-draft/inbound/x-feed-post/run-campaign) and never counted against
+ * MONTHLY_PROSPECTING_BUDGET_USD at all -- the same bug class Partnerships
+ * had (see recordCostEvent's own docstring). Confirmed via
+ * cost_events.context->>'endpoint' = 'prospecting-draft': 39 historical rows
+ * ($0.3333) were cleanly attributable and reclassified to
+ * "prospecting_llm_call"; every other "llm_call" row had its own
+ * unambiguous endpoint (run-campaign/x-feed-post/inbound-draft/
+ * opportunity-reply-draft) and was left untouched.
+ */
 export async function getProspectingMonthSpendUsd(client: SupabaseClient, now: Date = new Date()): Promise<number> {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
   const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
   const { data, error } = await client
     .from("cost_events")
     .select("cost_usd")
-    .eq("event_type", "x_search_read")
+    .in("event_type", ["x_search_read", "prospecting_llm_call"])
     .gte("created_at", monthStart)
     .lt("created_at", nextMonthStart);
   if (error) throw new Error(`getProspectingMonthSpendUsd failed: ${error.message}`);

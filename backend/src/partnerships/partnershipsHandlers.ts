@@ -8,7 +8,7 @@ import { SupabaseCampaignRepository } from "../content/supabaseCampaignRepositor
 import { createLlmClient, type LlmUsage } from "../content/llmClient.js";
 import { runCampaignPipeline, type PipelineOpportunity } from "../content/campaignPipeline.js";
 import { estimateCostUsd, recordCostEvent } from "../cost/costTracking.js";
-import { evaluatePartnershipBudget, getPartnershipMonthSpendUsd } from "./budget.js";
+import { reservePartnershipBudget, releasePartnershipBudgetReservation } from "./budgetReservation.js";
 import { hasSufficientEvidenceForPitch } from "./discoveryScoring.js";
 import { canMarkContacted, isValidTransition } from "./stageTransitions.js";
 import { normalizeDomain, normalizeHandle, findExistingMatches, type ExistingMatch } from "./dedup.js";
@@ -73,6 +73,26 @@ export interface GenerateDraftResult {
 
 /** One initial attempt plus one bounded revision using the first attempt's own review-gate feedback -- never more, so a stubborn rejection can't loop indefinitely burning budget. Both attempts count against the same per-call cost/budget accounting. */
 const MAX_DRAFT_ATTEMPTS = 2;
+
+/**
+ * A conservative CEILING (never the real cost) reserved before EACH
+ * attempt, atomically against Partnerships' generation bucket AND its
+ * shared monthly cap (see budgetReservation.ts) -- this is what actually
+ * closes the cross-prospect budget race: two concurrent attempts for
+ * different prospects now serialize through this reservation instead of
+ * each independently reading a stale month-spend total.
+ *
+ * Derived from this pipeline's own hard structural limits, not from an
+ * average: one attempt is 1 writer + up to 9 reviewer calls (10 total),
+ * each capped at max_tokens=1024 output (llmClient.ts) -- worst-case
+ * output cost alone is 10 * 1024 * $15/1e6 = $0.1536. Input tokens aren't
+ * capped by the API, but this pipeline's real measured average input size
+ * (~2,000 tokens/call, from cost_events) puts a realistic input ceiling at
+ * roughly 10 * 2,000 * $3/1e6 = $0.06. $0.25 leaves real margin above
+ * that combined ~$0.21 estimate without being so loose it defeats the
+ * point of a ceiling.
+ */
+const GENERATION_ATTEMPT_RESERVATION_CEILING_USD = 0.25;
 
 /**
  * Generates and reviews a pitch draft for a qualified prospect, reusing
@@ -158,11 +178,6 @@ export async function generateDraftForPartnership(client: SupabaseClient, id: st
 async function runGenerationAttempts(client: SupabaseClient, repo: SupabasePartnershipRepository, prospect: PartnershipProspect): Promise<GenerateDraftResult> {
   const id = prospect.id;
   if (!prospect.proposedCollaboration) throw new Error("unreachable: proposedCollaboration was already validated by the caller");
-  const monthSpend = await getPartnershipMonthSpendUsd(client);
-  const budgetCheck = evaluatePartnershipBudget(monthSpend);
-  if (!budgetCheck.eligible) {
-    return { status: "skipped", skipReason: budgetCheck.reason, costUsd: 0, aiCalls: 0, attempts: 0 };
-  }
 
   const brandConstitution = new BrandConstitution(new SupabaseBrandConstitutionRepository(client));
   const activeRules = await brandConstitution.getActiveRules();
@@ -219,34 +234,47 @@ async function runGenerationAttempts(client: SupabaseClient, repo: SupabasePartn
   let attempts = 0;
   let priorFeedback: string | undefined;
   let evidenceGapStopped = false;
+  let budgetStopReason: string | undefined;
   let lastResult: Awaited<ReturnType<typeof runCampaignPipeline>> | null = null;
 
   while (attempts < MAX_DRAFT_ATTEMPTS) {
-    if (attempts > 0) {
-      // Re-check budget before a revision attempt -- the first attempt's
-      // own cost may have already used up what was left.
-      const spendSoFar = await getPartnershipMonthSpendUsd(client);
-      if (!evaluatePartnershipBudget(spendSoFar).eligible) break;
+    // Reserved BEFORE dispatching this attempt's paid calls, atomically
+    // against both the generation bucket and the shared cap -- a
+    // concurrent attempt for a DIFFERENT prospect (or a discovery run
+    // happening at the same time) is serialized through the same check,
+    // not just this one prospect's own mutex. Released in the finally
+    // below regardless of how the attempt turns out, so a real cost that
+    // was already recorded is never lost track of, and a failed/
+    // interrupted attempt never leaves budget silently held forever (see
+    // migration 0024's expiry).
+    const reservation = await reservePartnershipBudget(client, "generation", GENERATION_ATTEMPT_RESERVATION_CEILING_USD, id);
+    if (!reservation.eligible) {
+      budgetStopReason = reservation.reason;
+      break;
     }
-    attempts += 1;
-    lastResult = await runCampaignPipeline(
-      llmClient,
-      factory,
-      new SupabaseContentScoreRepository(client),
-      new SupabaseCampaignRepository(client),
-      opportunity,
-      {
-        brandRulesSummary,
-        verifiedKnowledgeSummary,
-        recentTextsForSameTopic,
-        assetTypeOverride: PARTNERSHIP_ASSET_TYPE,
-        contentFormat: "partnership_pitch",
-        pitchRecipientOrganization: prospect.organizationName,
-        pitchChannel,
-        pitchEvidenceExcerpts: prospect.evidenceExcerpts,
-        pitchPriorFeedback: priorFeedback,
-      },
-    );
+    try {
+      attempts += 1;
+      lastResult = await runCampaignPipeline(
+        llmClient,
+        factory,
+        new SupabaseContentScoreRepository(client),
+        new SupabaseCampaignRepository(client),
+        opportunity,
+        {
+          brandRulesSummary,
+          verifiedKnowledgeSummary,
+          recentTextsForSameTopic,
+          assetTypeOverride: PARTNERSHIP_ASSET_TYPE,
+          contentFormat: "partnership_pitch",
+          pitchRecipientOrganization: prospect.organizationName,
+          pitchChannel,
+          pitchEvidenceExcerpts: prospect.evidenceExcerpts,
+          pitchPriorFeedback: priorFeedback,
+        },
+      );
+    } finally {
+      await releasePartnershipBudgetReservation(client, reservation.reservationId);
+    }
     if (lastResult.finalStage === "ready_for_owner") break;
     priorFeedback =
       lastResult.mechanicalBlockReasons.length > 0
@@ -265,6 +293,12 @@ async function runGenerationAttempts(client: SupabaseClient, repo: SupabasePartn
     }
   }
 
+  if (attempts === 0) {
+    // Budget was exhausted before even the first attempt could be
+    // reserved -- no pipeline call was ever dispatched, no cost incurred.
+    return { status: "skipped", skipReason: budgetStopReason ?? "monthly_budget_reached", costUsd: 0, aiCalls: 0, attempts: 0 };
+  }
+
   const result = lastResult!;
   const costUsd = usages.reduce((sum, u) => sum + estimateCostUsd(u), 0);
 
@@ -279,7 +313,9 @@ async function runGenerationAttempts(client: SupabaseClient, repo: SupabasePartn
 
   const error = evidenceGapStopped
     ? `(after ${attempts} attempt${attempts === 1 ? "" : "s"} -- stopped early, a rewrite can't fix this) The available evidence isn't specific enough to personalize a pitch, and the reviewers said so directly: ${priorFeedback}. Add more real research on this recipient before trying again -- another attempt with the same evidence would very likely fail the same way.`
-    : `(after ${attempts} attempt${attempts === 1 ? "" : "s"}) ${priorFeedback ?? "unknown"}`;
+    : budgetStopReason
+      ? `(after ${attempts} attempt${attempts === 1 ? "" : "s"} -- a revision was needed but the budget ran out first: ${budgetStopReason}) ${priorFeedback ?? "unknown"}`
+      : `(after ${attempts} attempt${attempts === 1 ? "" : "s"}) ${priorFeedback ?? "unknown"}`;
   await repo.insertInteraction(id, "draft_generated", `Draft attempt failed: ${error}`);
   return { status: "failed", error, costUsd, aiCalls: usages.length, attempts };
 }

@@ -231,4 +231,109 @@ describe("runPartnershipDiscoveryStep", () => {
     expect(created[0]!.contacted_at).toBeNull();
     expect(created[0]!.approved_campaign_asset_id).toBeNull();
   });
+
+  function freshQualifiedRow(id: string) {
+    return {
+      id,
+      organization_name: `Existing ${id}`,
+      normalized_handle: `existing-${id}`,
+      normalized_domain: null,
+      stage: "qualified",
+      research_date: "2026-09-01", // 4 days before NOW -- fresh
+      evidence_excerpts: ["A real, specific sentence about this recipient's own actual work, long enough to personalize a pitch with."],
+    };
+  }
+
+  it("skips paid discovery entirely once 5+ fresh, qualified/draft_ready, evidence-sufficient prospects already exist -- owner-approved: daily paid discovery isn't needed when there's already a backlog to work through", async () => {
+    const client = new FakeSupabaseClient({
+      creators: [],
+      prospecting_candidates: [],
+      inbound_engagements: [],
+      partnership_prospects: [freshQualifiedRow("p1"), freshQualifiedRow("p2"), freshQualifiedRow("p3"), freshQualifiedRow("p4"), freshQualifiedRow("p5")],
+      cost_events: [],
+    });
+    const adapter = fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] });
+
+    const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "scheduled", now: NOW });
+
+    expect(result.status).toBe("skipped_backlog_sufficient");
+    expect(result.costUsd).toBe(0);
+    expect(client.tables.partnership_prospects).toHaveLength(5); // unchanged -- nothing searched, nothing created
+  });
+
+  it("the backlog gate is NOT bypassed by force:true -- owner-triggered discovery obeys the same eligibility as scheduled", async () => {
+    const client = new FakeSupabaseClient({
+      creators: [],
+      prospecting_candidates: [],
+      inbound_engagements: [],
+      partnership_prospects: [freshQualifiedRow("p1"), freshQualifiedRow("p2"), freshQualifiedRow("p3"), freshQualifiedRow("p4"), freshQualifiedRow("p5")],
+      cost_events: [],
+    });
+    const adapter = fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] });
+
+    const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW });
+
+    expect(result.status).toBe("skipped_backlog_sufficient");
+  });
+
+  it("does NOT skip discovery when the backlog exists but its evidence is stale (older than the freshness window) -- a stale backlog doesn't excuse discovery from checking for more/better candidates", async () => {
+    const staleRow = (id: string) => ({ ...freshQualifiedRow(id), research_date: "2026-01-01" }); // long past 90 days before NOW
+    const client = new FakeSupabaseClient({
+      creators: [],
+      prospecting_candidates: [],
+      inbound_engagements: [],
+      partnership_prospects: [staleRow("p1"), staleRow("p2"), staleRow("p3"), staleRow("p4"), staleRow("p5")],
+      cost_events: [],
+    });
+    const adapter = fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] });
+
+    const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW });
+
+    expect(result.status).not.toBe("skipped_backlog_sufficient");
+  });
+
+  it("does NOT skip discovery when fewer than 5 qualifying prospects remain", async () => {
+    const client = new FakeSupabaseClient({
+      creators: [],
+      prospecting_candidates: [],
+      inbound_engagements: [],
+      partnership_prospects: [freshQualifiedRow("p1"), freshQualifiedRow("p2")],
+      cost_events: [],
+    });
+    const adapter = fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] });
+
+    const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW });
+
+    expect(result.status).not.toBe("skipped_backlog_sufficient");
+  });
+
+  it("is blocked by its OWN $1 discovery bucket cap even while the shared $3 cap still has room -- the two allocations are enforced independently", async () => {
+    const client = new FakeSupabaseClient({
+      creators: [],
+      prospecting_candidates: [],
+      inbound_engagements: [],
+      partnership_prospects: [],
+      // $0.95 of real discovery spend -- $0.05 of headroom under the $1.00
+      // discovery cap, less than the $0.275 reservation ceiling for a full
+      // run, even though the SHARED $3 cap has $2.05 of headroom left.
+      cost_events: [{ event_type: "partnership_x_search_read", cost_usd: 0.95, created_at: NOW.toISOString() }],
+    });
+    const adapter = fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] });
+
+    const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW });
+
+    expect(result.status).toBe("budget_exhausted");
+    expect(result.skipReason).toMatch(/bucket_budget_reached \(discovery/);
+    expect(client.tables.partnership_prospects).toHaveLength(0);
+  });
+
+  it("releases its budget reservation once the run completes -- no leftover open reservation blocks a later run", async () => {
+    const client = new FakeSupabaseClient({ creators: [], prospecting_candidates: [], inbound_engagements: [], partnership_prospects: [], cost_events: [] });
+    const adapter = fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] });
+
+    await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW });
+
+    const openReservations = (client.tables.partnership_budget_reservations ?? []).filter((r: any) => r.released_at == null);
+    expect(openReservations).toHaveLength(0);
+  });
 });

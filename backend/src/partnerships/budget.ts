@@ -14,6 +14,24 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  */
 export const PARTNERSHIP_MONTHLY_BUDGET_USD = Number(process.env.PARTNERSHIP_MONTHLY_BUDGET_USD) || 3.0;
 
+/**
+ * Sub-allocations of the shared $3 cap, owner-approved (2026-09-05): daily
+ * paid discovery isn't needed (see discoveryEligibility.ts's backlog gate),
+ * so discovery/enrichment gets a deliberately small $1 slice, leaving $2
+ * reserved for pitch generation/review -- the actual product-value work.
+ * Both are enforced ATOMICALLY alongside the shared cap by
+ * reserve_partnership_budget (see budgetReservation.ts and migration 0024):
+ * a request must clear its own bucket's remaining allowance AND the shared
+ * cap, computed from real month-to-date spend plus any other in-flight
+ * reservation, before it's allowed to proceed. These two deliberately don't
+ * need to sum to exactly PARTNERSHIP_MONTHLY_BUDGET_USD to stay correct --
+ * they're each an independent, narrower ceiling layered under the one
+ * shared cap, not a partition of it -- but they do sum to it under today's
+ * defaults, and a test asserts that stays true.
+ */
+export const PARTNERSHIP_DISCOVERY_BUDGET_USD = Number(process.env.PARTNERSHIP_DISCOVERY_BUDGET_USD) || 1.0;
+export const PARTNERSHIP_GENERATION_BUDGET_USD = Number(process.env.PARTNERSHIP_GENERATION_BUDGET_USD) || 2.0;
+
 export interface EligibilityCheckResult {
   eligible: boolean;
   reason?: string;

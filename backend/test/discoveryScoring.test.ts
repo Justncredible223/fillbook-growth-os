@@ -114,6 +114,47 @@ describe("isQualifyingRecommendation / rankCandidates", () => {
     expect(isQualifyingRecommendation(rec)).toBe(false);
   });
 
+  it("FINDING (stored real production evidence, not a fresh live discovery run): a real prospect currently sitting in 'qualified' still qualifies today, and its evidence is genuinely about the RECIPIENT's own work, not just a keyword hit -- Dan Cheung (a real discovered_via='creators' row, retrieved 2026-09-05 via a read-only production query, org name and excerpt text unmodified from the stored row)", () => {
+    // This candidate's stored evidence: "Trading-journal/risk-management
+    // educator. Journaling / journal-review discussions -- directly the
+    // product's core format." -- genuinely describes the recipient's own
+    // work, not a bystander's unrelated post that happens to contain a
+    // matched keyword (see the next test for that failure mode).
+    const rec = scoreCandidate(
+      candidate({
+        organizationName: "Dan Cheung",
+        partnerCategory: "educator_coach",
+        handle: "wannabechamp",
+        matchedTopics: ["journaling"],
+        postsMatched: 1,
+        discoveredVia: "creators",
+        rawExcerpts: ["Trading-journal/risk-management educator. Journaling / journal-review discussions -- directly the product's core format."],
+      }),
+      NOW,
+    );
+    expect(isQualifyingRecommendation(rec)).toBe(true);
+    expect(rec.sufficientForPitch).toBe(true);
+  });
+
+  it("OPEN GAP (stored real production evidence, not a fresh live discovery run, flagged not fixed here): a candidate whose ONLY evidence is an individual retail trader's post ABOUT a prop firm they use -- not themselves a business, coach, or community Fillbook could realistically pitch a partnership to -- still qualifies today. 'pijat jogja', a real x_search-discovered row retrieved 2026-09-05 via a read-only production query (org name and excerpt text unmodified), whose entire stored evidence is one trader's satisfied-customer review of 'Trusteed Prop Firm'. isQualifyingRecommendation's existing matchedTopics/score/contactability/postsMatched gate (added for a prior crypto-spam finding, see the test above) does not catch this different failure mode: real topical evidence from a real, recent, contactable account that is nonetheless the WRONG KIND of account to pitch a partnership to. Reported as an open recommendation-quality gap, not fixed in this pass -- fixing it would mean scoring/filtering on what KIND of account this is (business/creator vs. individual retail customer), which is a real algorithm change outside this stabilization pass's scope.", () => {
+    const rec = scoreCandidate(
+      candidate({
+        organizationName: "pijat jogja",
+        partnerCategory: "prop_firm",
+        handle: "pijatjogja19cem",
+        matchedTopics: ["prop firm"],
+        postsMatched: 1,
+        discoveredVia: "x_search",
+        rawExcerpts: [
+          "Honestly, my experience with Trusteed Prop Firm, especially the Constant Funded program, has been really positive so far. The rules are clear, the process is straightforward, and everything feels transparent.\n\nAs a trader, I value more than just the opportunity to make profits.",
+        ],
+      }),
+      NOW,
+    );
+    expect(isQualifyingRecommendation(rec)).toBe(true); // confirms the gap is real, not a false alarm
+    expect(rec.sufficientForPitch).toBe(true); // has enough CHARACTERS to look pitch-ready, despite being the wrong kind of recipient entirely
+  });
+
   it("ranks qualifying candidates highest-score-first and drops non-qualifying ones", () => {
     const strong = candidate({ organizationName: "Strong", postsMatched: 4, matchedTopics: ["trading coach", "journaling", "trading mentor"] });
     const weak = candidate({ organizationName: "Weak", postsMatched: 1, matchedTopics: [] });

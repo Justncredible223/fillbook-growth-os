@@ -612,7 +612,16 @@ private fun PartnershipCard(
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, cursorColor = Accent, unfocusedBorderColor = Border),
                 )
             } else {
-                Text(draft, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
+                // BUG FOUND on-device while verifying this round's stabilization
+                // work: onMarkContacted below sends `editedText ?: draft` as the
+                // real finalText (the correct, actually-sent text -- also what
+                // gets durably recorded server-side in the interaction log), but
+                // this read-only "PITCH SENT" view was showing the server's
+                // ORIGINAL, unedited previewText -- silently reverting to a
+                // message that was never actually the one sent, right after an
+                // owner edit. Falls back to editedText (this session's own edit)
+                // first, same source of truth onMarkContacted already uses.
+                Text(editedText ?: draft, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
             }
         }
 

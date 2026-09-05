@@ -733,13 +733,25 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     override suspend fun qualifyPartnership(id: String, rationale: String): PartnershipProspect =
         updatePartnershipItem(id) { it.copy(stage = PartnershipStage.QUALIFIED, qualificationRationale = rationale) }
 
-    /** FIXTURE-ONLY: when set to "failed", "skipped", or "network_error", the next generatePartnershipDraft() call throws a real-shaped error instead of succeeding -- lets that error path be verified on-device without spending real LLM budget. Resets to null after one use. Never used by production code. */
+    /** FIXTURE-ONLY: when set to "failed", "skipped", "network_error", "evidence_insufficient", "evidence_gap_stop", or "already_generating", the next generatePartnershipDraft() call throws a real-shaped error (the EXACT message the real backend now sends for each of this round's new stabilization behaviors) instead of succeeding -- lets each error path be verified on-device without spending real LLM budget. Resets to null after one use. Never used by production code. */
     var debugNextGenerateDraftOutcome: String? = null
     /** FIXTURE-ONLY: counts every real invocation reaching this fake, including forced-error ones -- lets an on-device repeated-tap test confirm the UI's busy-state disable actually prevented a second concurrent call, not just that the visible result looked right. Never used by production code. */
     var debugGenerateDraftCallCount: Int = 0
 
     override suspend fun generatePartnershipDraft(id: String): PartnershipProspect {
         debugGenerateDraftCallCount += 1
+
+        // Mirrors the real backend's draft-reuse behavior: once a prospect
+        // already has an approved draft, generating again returns it
+        // instantly at zero cost instead of re-running the pipeline -- so
+        // an on-device pass calling this twice on the same prospect can
+        // observe the second call skip the 1500ms "spending" delay
+        // entirely, exactly like the real generateDraftForPartnership does.
+        val existing = partnershipItems.find { it.id == id }
+        if (existing?.stage == PartnershipStage.DRAFT_READY && existing.approvedCampaignAssetId != null) {
+            return existing
+        }
+
         kotlinx.coroutines.delay(1500) // FIXTURE-ONLY: widens the busy window so an on-device repeated-tap test has time to actually attempt a second tap.
         val forced = debugNextGenerateDraftOutcome
         debugNextGenerateDraftOutcome = null
@@ -750,9 +762,24 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             )
             "skipped" -> throw PartnershipDraftRejectedException(
                 shortReason = "Draft generation skipped -- this month's Partnerships budget is used up.",
-                details = "monthly_budget_reached (\$3.0000 spent, cap is \$3.00)",
+                details = "bucket_budget_reached (generation: actual \$2.0000 + in-flight \$0.0000 + requested \$0.2500 exceeds bucket cap \$2.00)",
             )
             "network_error" -> throw NetworkException("POST /api/approvals?resource=partnerships failed: HTTP 0 -- simulated network loss", null)
+            // The exact real message from hasSufficientEvidenceForPitch's
+            // guard in partnershipsHandlers.ts -- thrown BEFORE any spend.
+            "evidence_insufficient" -> throw PartnershipDraftRejectedException(
+                shortReason = "Not enough of this recipient's own words are on file to personalize a pitch confidently yet. Add real research (their actual posts, site copy, or notes in their own words) to evidenceExcerpts before generating -- a draft attempt here would very likely fail review and spend budget for nothing.",
+            )
+            // The exact real message when isUnresolvedEvidenceGap stops the
+            // revision loop after ONE attempt instead of two.
+            "evidence_gap_stop" -> throw PartnershipDraftRejectedException(
+                shortReason = "(after 1 attempt -- stopped early, a rewrite can't fix this) The available evidence isn't specific enough to personalize a pitch, and the reviewers said so directly: review gate: fact_checker: demonstrates zero real knowledge of the recipient; growth_strategist: this could be sent to literally any prop firm with only the name swapped. Add more real research on this recipient before trying again -- another attempt with the same evidence would very likely fail the same way.",
+            )
+            // The exact real message from the generation_claimed_at mutex
+            // when a duplicate/concurrent request reaches the same prospect.
+            "already_generating" -> throw PartnershipDraftRejectedException(
+                shortReason = "A draft is already being generated for this prospect -- please wait for it to finish before trying again.",
+            )
         }
         return updatePartnershipItem(id) {
             it.copy(

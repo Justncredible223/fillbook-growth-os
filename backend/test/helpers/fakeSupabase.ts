@@ -43,6 +43,22 @@ export class FakeSupabaseClient {
     return new FakeQueryBuilder(this, table);
   }
 
+  /**
+   * Models exactly two Postgres functions this project's fake client
+   * needs (reserve_partnership_budget / release_partnership_budget_reservation,
+   * see migration 0024) -- not a generic RPC dispatcher. Deliberately has
+   * NO internal `await`: a real Postgres function serializes concurrent
+   * callers via pg_advisory_xact_lock, so two "concurrent" test calls
+   * (raced via Promise.all) must see each other's effects in the order
+   * their own promise chains actually reach this call, never interleaved
+   * mid-computation. Since this method's body runs synchronously to
+   * completion within its own microtask turn, that serialization is
+   * preserved for free -- no lock object needed in the fake.
+   */
+  rpc(fnName: string, params: Record<string, any> = {}) {
+    return new FakeRpcCall(this, fnName, params);
+  }
+
   /** @internal */
   failureFor(table: string, op: FakeQueryLog["op"]): FakeError | undefined {
     return this.failures.get(`${table}:${op}`) ?? this.failures.get(table);
@@ -174,6 +190,103 @@ class FakeQueryBuilder implements PromiseLike<{ data: any; error: FakeError | nu
     onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2> {
     return this.execute().then(onfulfilled, onrejected);
+  }
+}
+
+const PARTNERSHIP_BUDGET_EVENT_TYPES: Record<string, string[]> = {
+  discovery: ["partnership_x_search_read"],
+  generation: ["partnership_llm_call"],
+};
+const PARTNERSHIP_SHARED_EVENT_TYPES = ["partnership_llm_call", "partnership_x_search_read"];
+
+class FakeRpcCall implements PromiseLike<{ data: any; error: FakeError | null }> {
+  constructor(
+    private client: FakeSupabaseClient,
+    private fnName: string,
+    private params: Record<string, any>,
+  ) {}
+
+  private execute(): { data: any; error: FakeError | null } {
+    if (this.fnName === "reserve_partnership_budget") return this.reserve();
+    if (this.fnName === "release_partnership_budget_reservation") return this.release();
+    throw new Error(`FakeSupabaseClient: unmodeled rpc "${this.fnName}"`);
+  }
+
+  private reserve(): { data: any; error: FakeError | null } {
+    const {
+      p_amount_usd,
+      p_bucket,
+      p_prospect_id = null,
+      p_bucket_budget_usd,
+      p_total_budget_usd,
+      p_expiry_seconds = 300,
+    } = this.params;
+    const now = new Date();
+    const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+    const monthEnd = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+    const inMonth = (r: FakeRow) => {
+      const t = new Date(r.created_at).getTime();
+      return t >= monthStart && t < monthEnd;
+    };
+
+    const costEvents: FakeRow[] = this.client.tables["cost_events"] ?? [];
+    const bucketTypes = PARTNERSHIP_BUDGET_EVENT_TYPES[p_bucket] ?? [];
+    const actualBucket = costEvents.filter((r) => bucketTypes.includes(r.event_type) && inMonth(r)).reduce((s, r) => s + Number(r.cost_usd ?? 0), 0);
+    const actualTotal = costEvents.filter((r) => PARTNERSHIP_SHARED_EVENT_TYPES.includes(r.event_type) && inMonth(r)).reduce((s, r) => s + Number(r.cost_usd ?? 0), 0);
+
+    const reservations: FakeRow[] = this.client.tables["partnership_budget_reservations"] ?? [];
+    const expiryMs = p_expiry_seconds * 1000;
+    const isActive = (r: FakeRow) => r.released_at == null && now.getTime() - new Date(r.created_at).getTime() <= expiryMs;
+    const reservedBucket = reservations.filter((r) => r.bucket === p_bucket && isActive(r)).reduce((s, r) => s + Number(r.amount_usd ?? 0), 0);
+    const reservedTotal = reservations.filter(isActive).reduce((s, r) => s + Number(r.amount_usd ?? 0), 0);
+
+    if (actualBucket + reservedBucket + p_amount_usd > p_bucket_budget_usd) {
+      return {
+        data: [
+          {
+            reservation_id: null,
+            eligible: false,
+            reason: `bucket_budget_reached (${p_bucket}: actual $${actualBucket.toFixed(4)} + in-flight $${reservedBucket.toFixed(4)} + requested $${p_amount_usd.toFixed(4)} exceeds bucket cap $${p_bucket_budget_usd.toFixed(2)})`,
+          },
+        ],
+        error: null,
+      };
+    }
+    if (actualTotal + reservedTotal + p_amount_usd > p_total_budget_usd) {
+      return {
+        data: [
+          {
+            reservation_id: null,
+            eligible: false,
+            reason: `shared_budget_reached (actual $${actualTotal.toFixed(4)} + in-flight $${reservedTotal.toFixed(4)} + requested $${p_amount_usd.toFixed(4)} exceeds shared cap $${p_total_budget_usd.toFixed(2)})`,
+          },
+        ],
+        error: null,
+      };
+    }
+
+    const id = `resv-${reservations.length + 1}`;
+    const row = { id, bucket: p_bucket, amount_usd: p_amount_usd, prospect_id: p_prospect_id, created_at: now.toISOString(), released_at: null };
+    this.client.tables["partnership_budget_reservations"] = [...reservations, row];
+    return { data: [{ reservation_id: id, eligible: true, reason: null }], error: null };
+  }
+
+  private release(): { data: any; error: FakeError | null } {
+    const { p_reservation_id } = this.params;
+    const reservations: FakeRow[] = this.client.tables["partnership_budget_reservations"] ?? [];
+    this.client.tables["partnership_budget_reservations"] = reservations.map((r) =>
+      r.id === p_reservation_id && r.released_at == null ? { ...r, released_at: new Date().toISOString() } : r,
+    );
+    return { data: null, error: null };
+  }
+
+  then<TResult1 = any, TResult2 = never>(
+    onfulfilled?: ((value: { data: any; error: FakeError | null }) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): PromiseLike<TResult1 | TResult2> {
+    return Promise.resolve()
+      .then(() => this.execute())
+      .then(onfulfilled, onrejected);
   }
 }
 

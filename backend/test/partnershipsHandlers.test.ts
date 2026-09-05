@@ -356,15 +356,15 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     });
   }
 
-  it("KNOWN LIMITATION (documented, not silently assumed away): two concurrent generate-draft calls near the budget cap can both pass the initial check before either's cost lands, overspending the cap by up to one extra attempt's cost -- the budget check reads spend once per call and isn't a hard atomic reservation. Acceptable for this app's single-owner usage model (a genuine double-network-race requires two near-simultaneous taps), but must never be reported as a hard cap.", async () => {
+  it("FIXED (was a known limitation, now closed): two concurrent generate-draft calls for DIFFERENT prospects near the generation budget cap no longer both spend -- an atomic, serialized reservation (not the per-prospect generation_claimed_at mutex, which never covered this) closes the cross-prospect race", async () => {
     global.fetch = contentAwareFetch() as unknown as typeof fetch;
 
-    // Seed spend just under the cap -- a single serial call is expected to
-    // slip slightly over (a known, accepted soft-cap property: the check
-    // happens BEFORE the call's own cost is known), but two CONCURRENT
-    // calls slipping through the SAME stale reading is the real race this
-    // test proves.
-    const client = buildClient({ cost_events: [{ event_type: "partnership_llm_call", cost_usd: 2.98, created_at: new Date().toISOString() }] });
+    // $1.70 of real generation-bucket spend leaves $0.30 of headroom under
+    // the $2.00 generation cap -- enough for ONE $0.25 reservation ceiling,
+    // not two. If the race were still open, both would read the same
+    // $1.70 and both would proceed; the atomic reservation must instead
+    // let exactly one through.
+    const client = buildClient({ cost_events: [{ event_type: "partnership_llm_call", cost_usd: 1.7, created_at: new Date().toISOString() }] });
     const p1 = await createPartnership(asSupabase(client), newProspect({ organizationName: "Coach A" }));
     const p2 = await createPartnership(asSupabase(client), newProspect({ organizationName: "Coach B", websiteUrl: "https://coachsiteb.com" }));
     await qualifyPartnership(asSupabase(client), p1.prospect.id, "ok");
@@ -375,14 +375,20 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
       generateDraftForPartnership(asSupabase(client), p2.prospect.id),
     ]);
 
-    // Both slip through on the stale $2.98 reading -- this IS the race,
-    // not a false alarm. If this assertion ever starts failing because
-    // BOTH now correctly can't both succeed, the race has been fixed;
-    // update this test to assert the improved behavior instead of
-    // loosening it.
-    expect([r1.status, r2.status].filter((s) => s === "ready")).toHaveLength(2);
-    const monthSpend = client.tables.cost_events!.filter((r) => r.event_type === "partnership_llm_call").reduce((sum, r) => sum + Number(r.cost_usd), 0);
-    expect(monthSpend).toBeGreaterThan(3.0); // confirms the cap was actually exceeded, not just narrowly hit
+    const statuses = [r1.status, r2.status];
+    expect(statuses.filter((s) => s === "ready")).toHaveLength(1);
+    expect(statuses.filter((s) => s === "skipped")).toHaveLength(1);
+    const skipped = r1.status === "skipped" ? r1 : r2;
+    expect(skipped.skipReason).toMatch(/bucket_budget_reached/);
+
+    // The generation bucket cap was never actually exceeded -- unlike the
+    // old behavior, real recorded spend stays inside it.
+    const bucketSpend = client.tables.cost_events!.filter((r) => r.event_type === "partnership_llm_call").reduce((sum, r) => sum + Number(r.cost_usd), 0);
+    expect(bucketSpend).toBeLessThanOrEqual(2.0);
+
+    // No leftover reservation from either call -- both released cleanly.
+    const openReservations = (client.tables.partnership_budget_reservations ?? []).filter((r: any) => r.released_at == null);
+    expect(openReservations).toHaveLength(0);
   });
 
   it("an interrupted request (one reviewer call fails mid-flight) still fails the whole attempt, but every OTHER call that already completed keeps its recorded cost -- nothing is silently lost, and the prospect is never left mid-transitioned", async () => {
@@ -420,6 +426,22 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     const updated = (await listPartnerships(asSupabase(client))).find((p) => p.id === prospect.id)!;
     expect(updated.stage).toBe("qualified");
     expect(updated.approvedCampaignAssetId).toBeNull();
+
+    // The budget reservation for this attempt must be released even
+    // though it failed mid-flight -- an interrupted request must never
+    // leave budget silently and permanently held (only the bounded
+    // migration-0024 expiry window would eventually reclaim a truly stuck
+    // one, and this path shouldn't need that safety net at all).
+    const openReservations = client.tables.partnership_budget_reservations!.filter((r) => r.released_at == null);
+    expect(openReservations).toHaveLength(0);
+
+    // The real incurred cost (the 8 completed calls) is recorded exactly
+    // once, in cost_events -- never duplicated by, or confused with, the
+    // now-released reservation, which lived in a wholly separate table
+    // and never itself represented real spend.
+    const recordedSpend = client.tables.cost_events!.filter((r) => r.event_type === "partnership_llm_call").reduce((sum, r) => sum + Number(r.cost_usd), 0);
+    expect(recordedSpend).toBeGreaterThan(0);
+    expect(recordedSpend).toBeLessThan(0.05); // ~9 tiny fixture calls -- sanity bound, not inflated by any phantom reservation amount
   });
 
   it("is skipped, spending nothing, once the independent partnership budget is exhausted -- never touches auto-draft/prospecting/x-feed-post's own budgets", async () => {
@@ -435,7 +457,7 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     const result = await generateDraftForPartnership(asSupabase(client), prospect.id);
 
     expect(result.status).toBe("skipped");
-    expect(result.skipReason).toMatch(/monthly_budget_reached/);
+    expect(result.skipReason).toMatch(/budget_reached/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

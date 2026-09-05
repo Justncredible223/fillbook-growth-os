@@ -99,7 +99,7 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
     deps.drafter ??
     ((context: ProspectingDraftContext, brandRules: string, knowledge: string) => {
       const llmClient = createLlmClient(process.env, (usage) => {
-        void recordCostEvent(client, usage, { prospectingCandidateId: id, endpoint: "prospecting-draft" });
+        void recordCostEvent(client, usage, { prospectingCandidateId: id, endpoint: "prospecting-draft" }, "prospecting_llm_call");
       });
       return draftProspectingReply(llmClient, context, brandRules, knowledge);
     });
