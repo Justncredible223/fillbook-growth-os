@@ -182,7 +182,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                 item {
                     Box20 {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            MetricTile("Today's spend", "$%.4f".format(s.analytics.totalCostUsd), Icons.Filled.Bolt, Modifier.weight(1f))
+                            MetricTile("Today's spend", "$%.4f".format(s.analytics.todaySpendUsd), Icons.Filled.Bolt, Modifier.weight(1f))
                             MetricTile(
                                 "System health",
                                 if (issueCount == 0) "All clear" else "$issueCount issue${if (issueCount == 1) "" else "s"}",
