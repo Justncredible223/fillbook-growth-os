@@ -46,6 +46,7 @@ function fromRow(row: Record<string, any>): PartnershipProspect {
     normalizedHandle: row.normalized_handle,
     discoveryScore: row.discovery_score === null || row.discovery_score === undefined ? null : Number(row.discovery_score),
     discoveryConfidence: row.discovery_confidence ?? null,
+    suppressedReason: row.suppressed_reason ?? null,
     discoveredVia: row.discovered_via ?? "manual",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -156,6 +157,14 @@ export class SupabasePartnershipRepository implements PartnershipRepository {
       .update({ approved_campaign_asset_id: campaignAssetId, updated_at: new Date().toISOString() })
       .eq("id", id);
     if (error) throw new Error(`setApprovedDraft failed: ${error.message}`);
+  }
+
+  async setSuppressedReason(id: string, reason: string | null): Promise<void> {
+    const { error } = await this.client
+      .from("partnership_prospects")
+      .update({ suppressed_reason: reason, suppressed_at: reason ? new Date().toISOString() : null, updated_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw new Error(`setSuppressedReason failed: ${error.message}`);
   }
 
   async recordContact(id: string, channel: string, contactedAt: string): Promise<void> {

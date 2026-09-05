@@ -37,14 +37,26 @@ export function estimateCostUsd(usage: LlmUsage): number {
  * opposite problem -- Partnerships' budget would then also count every
  * OTHER feature's LLM spend against its own $3 cap, and vice versa.
  */
+/**
+ * Returns whether the write actually succeeded (checking the insert's own
+ * `error` result, not just catching a thrown exception -- a Supabase
+ * insert normally FAILS by returning `{error}`, not by throwing, so the
+ * previous version of this function -- try/catch with no error check --
+ * could never actually detect a failed write). Partnerships' budget
+ * reservation settlement (see budgetReservation.ts / migration 0025)
+ * depends on this being accurate: a caller that can't tell "the cost was
+ * recorded" from "the LLM call merely returned a usage block" would risk
+ * reversing a conservative settled charge for an attempt whose real cost
+ * was never actually durably recorded, silently losing track of it.
+ */
 export async function recordCostEvent(
   client: SupabaseClient,
   usage: LlmUsage,
   context: Record<string, unknown> = {},
   eventType: string = "llm_call",
-): Promise<void> {
+): Promise<boolean> {
   try {
-    await client.from("cost_events").insert({
+    const { error } = await client.from("cost_events").insert({
       event_type: eventType,
       provider: "anthropic",
       model: usage.model,
@@ -53,8 +65,11 @@ export async function recordCostEvent(
       cost_usd: estimateCostUsd(usage),
       context,
     });
+    return !error;
   } catch {
-    // Deliberately swallowed -- see docstring above.
+    // Deliberately swallowed -- see docstring above; cost visibility must
+    // never block the actual work. Reported as a failed write, not thrown.
+    return false;
   }
 }
 
@@ -100,14 +115,22 @@ export async function recordXSearchCostEvent(
  * Phase 7 ("account for research/provider costs and model
  * generation/review costs ... together").
  */
+/**
+ * Returns both the (always-computed) cost and whether it was actually
+ * durably recorded -- see recordCostEvent's docstring on why checking the
+ * insert's own `error` result matters. Partnerships' discovery budget
+ * reservation (see discovery.ts / migration 0025) needs to know real
+ * recorded status, not just the theoretical cost, before it can safely
+ * reverse a conservative settled charge.
+ */
 export async function recordPartnershipXSearchCostEvent(
   client: SupabaseClient,
   resultsReturned: number,
   context: Record<string, unknown> = {},
-): Promise<number> {
+): Promise<{ costUsd: number; recorded: boolean }> {
   const costUsd = resultsReturned * X_SEARCH_COST_PER_READ_USD;
   try {
-    await client.from("cost_events").insert({
+    const { error } = await client.from("cost_events").insert({
       event_type: "partnership_x_search_read",
       provider: "x",
       model: "search/recent",
@@ -116,10 +139,11 @@ export async function recordPartnershipXSearchCostEvent(
       cost_usd: costUsd,
       context,
     });
+    return { costUsd, recorded: !error };
   } catch {
     // Deliberately swallowed -- see recordCostEvent's docstring above.
+    return { costUsd, recorded: false };
   }
-  return costUsd;
 }
 
 /**

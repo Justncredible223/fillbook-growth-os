@@ -5,7 +5,7 @@ import { reservePartnershipBudget, releasePartnershipBudgetReservation } from ".
 import { shouldSkipPaidDiscoveryForBacklog, countFreshQualifiedBacklog, MIN_BACKLOG_BEFORE_SKIPPING_DISCOVERY } from "./discoveryEligibility.js";
 import { normalizeDomain, normalizeHandle, findExistingMatches } from "./dedup.js";
 import { qualifyPartnership, createPartnership, listPartnerships } from "./partnershipsHandlers.js";
-import { DISCOVERY_TOPIC_KEYWORDS, rankCandidates, type DiscoveryCandidate } from "./discoveryScoring.js";
+import { DISCOVERY_TOPIC_KEYWORDS, rankCandidates, hasConcretePartnershipBasis, type DiscoveryCandidate } from "./discoveryScoring.js";
 import type { PartnerCategory } from "./types.js";
 
 /** Caps how much of the discovery run's budget any one run can spend -- see DISCOVERY_X_SEARCH_QUERIES below for what this actually buys (~$0.15-0.20/run at 3 queries x 10 results). */
@@ -196,12 +196,15 @@ async function discoverFromInbound(client: SupabaseClient): Promise<DiscoveryCan
 }
 
 /** The one genuinely NEW public-source discovery this adds -- reuses the same authorized X search integration Prospecting already has, under Partnerships' own cost event type (see recordPartnershipXSearchCostEvent). */
-async function discoverFromXSearch(adapter: XSignalAdapter, client: SupabaseClient, now: Date): Promise<{ candidates: DiscoveryCandidate[]; costUsd: number }> {
+async function discoverFromXSearch(adapter: XSignalAdapter, client: SupabaseClient, now: Date): Promise<{ candidates: DiscoveryCandidate[]; costUsd: number; recorded: boolean }> {
   const byHandle = new Map<string, { category: PartnerCategory; texts: string[]; urls: string[]; dates: string[]; authorName: string | null }>();
   let costUsd = 0;
+  let recorded = false;
   for (const { category, query } of DISCOVERY_X_SEARCH_QUERIES) {
     const results = await adapter.searchRecentPosts(query, RESULTS_PER_QUERY, now);
-    costUsd += await recordPartnershipXSearchCostEvent(client, results.length, { query, category });
+    const cost = await recordPartnershipXSearchCostEvent(client, results.length, { query, category });
+    costUsd += cost.costUsd;
+    if (cost.recorded && cost.costUsd > 0) recorded = true;
     for (const r of results) {
       const handle = normalizeHandle(r.authorHandle);
       if (!handle) continue;
@@ -229,7 +232,7 @@ async function discoverFromXSearch(adapter: XSignalAdapter, client: SupabaseClie
       rawExcerpts: entry.texts.slice(0, 3),
     });
   }
-  return { candidates, costUsd };
+  return { candidates, costUsd, recorded };
 }
 
 /**
@@ -247,17 +250,20 @@ async function enrichThinCandidates(
   client: SupabaseClient,
   candidates: DiscoveryCandidate[],
   now: Date,
-): Promise<{ enrichedCount: number; costUsd: number }> {
-  if (!adapter) return { enrichedCount: 0, costUsd: 0 };
+): Promise<{ enrichedCount: number; costUsd: number; recorded: boolean }> {
+  if (!adapter) return { enrichedCount: 0, costUsd: 0, recorded: false };
   let costUsd = 0;
   let enrichedCount = 0;
+  let recorded = false;
   for (const candidate of candidates) {
     if (enrichedCount >= MAX_ENRICHMENT_LOOKUPS) break;
     if (!candidate.handle) continue;
     if (candidate.rawExcerpts.join(" ").trim().length >= 30) continue; // already sufficient -- see MIN_PERSONALIZATION_CHARS
     try {
       const results = await adapter.searchRecentPosts(`from:${candidate.handle}`, ENRICHMENT_RESULTS_PER_HANDLE, now);
-      costUsd += await recordPartnershipXSearchCostEvent(client, results.length, { enrichment: true, handle: candidate.handle });
+      const cost = await recordPartnershipXSearchCostEvent(client, results.length, { enrichment: true, handle: candidate.handle });
+      costUsd += cost.costUsd;
+      if (cost.recorded && cost.costUsd > 0) recorded = true;
       enrichedCount += 1;
       for (const r of results) {
         candidate.rawExcerpts.push(r.text);
@@ -271,7 +277,7 @@ async function enrichThinCandidates(
       // same as if enrichment had never been attempted.
     }
   }
-  return { enrichedCount, costUsd };
+  return { enrichedCount, costUsd, recorded };
 }
 
 /**
@@ -349,10 +355,12 @@ export async function runPartnershipDiscoveryStep(deps: PartnershipDiscoveryDeps
         await recordRun(client, deps.triggeredBy, result);
         return result;
       }
+      let hasConfirmedRealCost = false;
       try {
-        const { candidates: fromXSearch, costUsd: xSearchCost } = await discoverFromXSearch(deps.adapter, client, now);
+        const { candidates: fromXSearch, costUsd: xSearchCost, recorded: xSearchRecorded } = await discoverFromXSearch(deps.adapter, client, now);
         allCandidates = [...allCandidates, ...fromXSearch];
         costUsd += xSearchCost;
+        if (xSearchRecorded) hasConfirmedRealCost = true;
         sourcesSearched.push("x_search");
 
         // First pass ranks on whatever evidence existing-records/x_search
@@ -363,11 +371,18 @@ export async function runPartnershipDiscoveryStep(deps: PartnershipDiscoveryDeps
         // demonstrating no real knowledge of the recipient (confirmed
         // happening in production before this existed).
         const firstPassRanked = rankCandidates(allCandidates, now);
-        const { enrichedCount, costUsd: enrichmentCost } = await enrichThinCandidates(deps.adapter, client, firstPassRanked.map((r) => r.candidate), now);
+        const { enrichedCount, costUsd: enrichmentCost, recorded: enrichmentRecorded } = await enrichThinCandidates(deps.adapter, client, firstPassRanked.map((r) => r.candidate), now);
         costUsd += enrichmentCost;
+        if (enrichmentRecorded) hasConfirmedRealCost = true;
         if (enrichedCount > 0) sourcesSearched.push("x_search_enrichment");
       } finally {
-        await releasePartnershipBudgetReservation(client, reservation.reservationId);
+        // Same confirmed-real-cost signal as generation's own reservation
+        // release (see partnershipsHandlers.ts) -- checks that the
+        // cost_events WRITE itself actually succeeded (not just that a
+        // search call returned results), so this only reverses an
+        // expired-and-settled conservative charge once real spend is
+        // positively known to be durably recorded, never just estimated.
+        await releasePartnershipBudgetReservation(client, reservation.reservationId, hasConfirmedRealCost);
       }
     }
   } catch (err) {
@@ -388,10 +403,21 @@ export async function runPartnershipDiscoveryStep(deps: PartnershipDiscoveryDeps
 
     // A candidate that qualifies (real topic match, decent score,
     // contactable) but still lacks enough of the recipient's own words
-    // after enrichment is surfaced as a plain 'prospect' -- visible for
-    // the owner to research further -- rather than 'qualified', which
-    // reads as "ready to pursue" and would send every such candidate
-    // straight into a doomed, budget-spending draft attempt.
+    // after enrichment, OR lacks any concrete partnership basis (an
+    // audience/community/business/educational-offering/complementary-
+    // product this could actually attach to -- see
+    // hasConcretePartnershipBasis, added after a real production find: a
+    // retail customer's satisfied review of a prop firm was auto-
+    // qualifying purely on a topic keyword match), is surfaced as a plain
+    // 'prospect' -- visible for the owner to research further -- rather
+    // than 'qualified', which reads as "ready to pursue" and would send
+    // every such candidate straight into a doomed, budget-spending draft
+    // attempt (or, worse, a real pitch to someone who isn't actually a
+    // partnership candidate at all).
+    const readyToQualify = rec.sufficientForPitch && hasConcretePartnershipBasis(rec.candidate);
+    const basisGapNote = !hasConcretePartnershipBasis(rec.candidate)
+      ? " No evidence this recipient runs or offers an audience, community, business, educational offering, or complementary product -- only topic-relevant text, not a concrete partnership basis."
+      : "";
     const { prospect } = await createPartnership(client, {
       organizationName: rec.candidate.organizationName,
       contactName: rec.candidate.contactName,
@@ -400,17 +426,17 @@ export async function runPartnershipDiscoveryStep(deps: PartnershipDiscoveryDeps
       contactRoute: rec.candidate.handle ? `X DM: @${rec.candidate.handle}` : null,
       contactRouteSource: rec.candidate.handle ? `Discovered via ${rec.candidate.discoveredVia}` : null,
       audienceFocus: rec.candidate.matchedTopics.length > 0 ? `Matched topics: ${rec.candidate.matchedTopics.join(", ")}` : null,
-      futuresRelevanceEvidence: rec.sufficientForPitch ? rec.whyThisPartner : `${rec.whyThisPartner} ${rec.evidenceGap}`,
+      futuresRelevanceEvidence: readyToQualify ? rec.whyThisPartner : `${rec.whyThisPartner} ${rec.evidenceGap ?? ""}${basisGapNote}`.trim(),
       sourceUrls: rec.candidate.sourceUrls,
       evidenceExcerpts: rec.candidate.rawExcerpts,
       researchDate: now.toISOString().slice(0, 10),
       proposedCollaboration: rec.suggestedCollaboration,
-      qualificationRationale: rec.sufficientForPitch ? rec.whyThisPartner : null,
+      qualificationRationale: readyToQualify ? rec.whyThisPartner : null,
       discoveryScore: rec.score,
       discoveryConfidence: rec.confidence,
       discoveredVia: rec.candidate.discoveredVia,
     });
-    if (rec.sufficientForPitch) {
+    if (readyToQualify) {
       await qualifyPartnership(client, prospect.id, rec.whyThisPartner);
     }
     created += 1;

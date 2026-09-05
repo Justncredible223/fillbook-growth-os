@@ -52,17 +52,38 @@ export async function reservePartnershipBudget(
 
 /**
  * Releases a reservation so it stops counting toward either cap. Always
- * call this in a finally block, success or failure -- it never touches
- * cost_events (the real cost, recorded separately, is the only permanent
- * record), so releasing never double-counts or under-counts real spend.
+ * call this in a finally block, success or failure.
+ *
+ * [hasConfirmedRealCost] must be true only when the caller positively
+ * knows real cost_events rows were recorded for the SAME attempt this
+ * reservation covered (e.g. `usages.length` grew during this specific
+ * attempt) -- see migration 0025. If this reservation had already expired
+ * and been conservatively settled into a charge (the owning request ran
+ * long, or is only now reaching its finally after a delay), passing true
+ * here reverses that conservative charge since the real recorded cost
+ * supersedes it; passing false (the default -- nothing succeeded, or the
+ * caller can't positively confirm real cost was recorded) leaves any such
+ * settled charge in place, favoring under-spending safety over precision
+ * for a call whose true cost is genuinely unknown. Never touches
+ * cost_events for a reservation that was NOT settled (the normal,
+ * fast-path case) -- release is then a pure no-op besides marking
+ * released_at, exactly as before migration 0025.
+ *
  * Best-effort: if this write itself fails, migration 0024's expiry window
- * (default 300s) reclaims the reservation automatically rather than
- * leaving it stuck forever.
+ * (default 300s) still reclaims -- conservatively, as a real charge, not
+ * silently -- the reservation on the next reserve call.
  */
-export async function releasePartnershipBudgetReservation(client: SupabaseClient, reservationId: string | null): Promise<void> {
+export async function releasePartnershipBudgetReservation(
+  client: SupabaseClient,
+  reservationId: string | null,
+  hasConfirmedRealCost: boolean = false,
+): Promise<void> {
   if (!reservationId) return;
   try {
-    await client.rpc("release_partnership_budget_reservation", { p_reservation_id: reservationId });
+    await client.rpc("release_partnership_budget_reservation", {
+      p_reservation_id: reservationId,
+      p_confirmed_real_cost_recorded: hasConfirmedRealCost,
+    });
   } catch {
     // Deliberately swallowed -- see docstring above.
   }

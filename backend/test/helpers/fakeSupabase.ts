@@ -229,14 +229,43 @@ class FakeRpcCall implements PromiseLike<{ data: any; error: FakeError | null }>
       return t >= monthStart && t < monthEnd;
     };
 
+    // Settle any reservation abandoned past its expiry into a real,
+    // conservative cost_events charge BEFORE computing totals below --
+    // mirrors migration 0025's reserve_partnership_budget exactly (see
+    // its own doc comment for why this must happen here, not just at
+    // release time).
+    const expiryMs = p_expiry_seconds * 1000;
+    const allReservations: FakeRow[] = this.client.tables["partnership_budget_reservations"] ?? [];
+    const isExpiredOpen = (r: FakeRow) => r.released_at == null && now.getTime() - new Date(r.created_at).getTime() > expiryMs;
+    const costEventsForSettlement: FakeRow[] = this.client.tables["cost_events"] ?? [];
+    const settledRows: FakeRow[] = [];
+    for (const r of allReservations) {
+      if (!isExpiredOpen(r)) continue;
+      settledRows.push({
+        event_type: r.bucket === "discovery" ? "partnership_x_search_read" : "partnership_llm_call",
+        provider: r.bucket === "discovery" ? "x" : "anthropic",
+        model: r.bucket === "discovery" ? "search/recent" : "reservation-settlement",
+        input_tokens: 0,
+        output_tokens: 0,
+        cost_usd: r.amount_usd,
+        context: { settledReservationId: r.id, reason: "expired_unreleased_reservation_conservatively_settled" },
+        created_at: now.toISOString(),
+      });
+    }
+    if (settledRows.length > 0) {
+      this.client.tables["cost_events"] = [...costEventsForSettlement, ...settledRows.map((r, i) => ({ id: `cost_events-settled-${i}`, ...r }))];
+      this.client.tables["partnership_budget_reservations"] = allReservations.map((r) => (isExpiredOpen(r) ? { ...r, released_at: now.toISOString(), settled_as_charge: true } : r));
+    }
+
     const costEvents: FakeRow[] = this.client.tables["cost_events"] ?? [];
     const bucketTypes = PARTNERSHIP_BUDGET_EVENT_TYPES[p_bucket] ?? [];
     const actualBucket = costEvents.filter((r) => bucketTypes.includes(r.event_type) && inMonth(r)).reduce((s, r) => s + Number(r.cost_usd ?? 0), 0);
     const actualTotal = costEvents.filter((r) => PARTNERSHIP_SHARED_EVENT_TYPES.includes(r.event_type) && inMonth(r)).reduce((s, r) => s + Number(r.cost_usd ?? 0), 0);
 
+    // Expiry is now fully handled by the settlement pass above -- nothing
+    // left with released_at == null can be stale.
     const reservations: FakeRow[] = this.client.tables["partnership_budget_reservations"] ?? [];
-    const expiryMs = p_expiry_seconds * 1000;
-    const isActive = (r: FakeRow) => r.released_at == null && now.getTime() - new Date(r.created_at).getTime() <= expiryMs;
+    const isActive = (r: FakeRow) => r.released_at == null;
     const reservedBucket = reservations.filter((r) => r.bucket === p_bucket && isActive(r)).reduce((s, r) => s + Number(r.amount_usd ?? 0), 0);
     const reservedTotal = reservations.filter(isActive).reduce((s, r) => s + Number(r.amount_usd ?? 0), 0);
 
@@ -266,14 +295,24 @@ class FakeRpcCall implements PromiseLike<{ data: any; error: FakeError | null }>
     }
 
     const id = `resv-${reservations.length + 1}`;
-    const row = { id, bucket: p_bucket, amount_usd: p_amount_usd, prospect_id: p_prospect_id, created_at: now.toISOString(), released_at: null };
+    const row = { id, bucket: p_bucket, amount_usd: p_amount_usd, prospect_id: p_prospect_id, created_at: now.toISOString(), released_at: null, settled_as_charge: false };
     this.client.tables["partnership_budget_reservations"] = [...reservations, row];
     return { data: [{ reservation_id: id, eligible: true, reason: null }], error: null };
   }
 
   private release(): { data: any; error: FakeError | null } {
-    const { p_reservation_id } = this.params;
+    const { p_reservation_id, p_confirmed_real_cost_recorded = false } = this.params;
     const reservations: FakeRow[] = this.client.tables["partnership_budget_reservations"] ?? [];
+    const target = reservations.find((r) => r.id === p_reservation_id);
+
+    if (target?.settled_as_charge && p_confirmed_real_cost_recorded) {
+      // Real cost_events rows now exist for this same attempt -- reverse
+      // the earlier conservative ceiling charge so it's never
+      // double-counted against the real recorded cost.
+      const costEvents: FakeRow[] = this.client.tables["cost_events"] ?? [];
+      this.client.tables["cost_events"] = costEvents.filter((r) => r.context?.settledReservationId !== p_reservation_id);
+    }
+
     this.client.tables["partnership_budget_reservations"] = reservations.map((r) =>
       r.id === p_reservation_id && r.released_at == null ? { ...r, released_at: new Date().toISOString() } : r,
     );

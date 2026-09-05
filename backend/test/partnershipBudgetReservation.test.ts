@@ -61,14 +61,95 @@ describe("reservePartnershipBudget / releasePartnershipBudgetReservation", () =>
     expect(second.reason).toMatch(/bucket_budget_reached/);
   });
 
-  it("an expired (stale) open reservation stops counting toward the cap -- a crashed request can't permanently block real spend", async () => {
-    const oldReservation = { id: "old-1", bucket: "generation", amount_usd: 0.25, prospect_id: null, created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), released_at: null }; // 10 minutes old, default expiry is 300s = 5min
+  it("FIXED (was a real gap): an expired open reservation is SETTLED into a real, conservative charge -- it must count as spend, not silently free up budget for a call whose true cost is unknown", async () => {
+    const oldReservation = { id: "old-1", bucket: "generation", amount_usd: 0.25, prospect_id: null, created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), released_at: null, settled_as_charge: false }; // 10 minutes old, default expiry is 300s = 5min
     const c = client({
       cost_events: [{ event_type: "partnership_llm_call", cost_usd: 1.8, created_at: new Date().toISOString() }],
       partnership_budget_reservations: [oldReservation],
     });
-    const result = await reservePartnershipBudget(asSupabase(c), "generation", 0.15); // 1.8+0.15=1.95 OK if the stale reservation is correctly ignored
-    expect(result.eligible).toBe(true);
+    const result = await reservePartnershipBudget(asSupabase(c), "generation", 0.15);
+
+    // Settlement inserted a real, conservative charge for the full ceiling
+    // amount -- 1.8 (real) + 0.25 (settled) + 0.15 (requested) = 2.20 >
+    // $2.00 generation cap, so this must now be DENIED, not approved.
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toMatch(/bucket_budget_reached/);
+
+    const settledCharge = c.tables.cost_events!.find((r) => r.context?.settledReservationId === "old-1");
+    expect(settledCharge).toBeDefined();
+    expect(settledCharge!.cost_usd).toBe(0.25);
+    expect(settledCharge!.event_type).toBe("partnership_llm_call");
+
+    const oldRow = c.tables.partnership_budget_reservations!.find((r) => r.id === "old-1")!;
+    expect(oldRow.released_at).not.toBeNull();
+    expect(oldRow.settled_as_charge).toBe(true);
+  });
+
+  it("an expired reservation in the discovery bucket settles under the partnership_x_search_read event type", async () => {
+    const oldReservation = { id: "old-2", bucket: "discovery", amount_usd: 0.275, prospect_id: null, created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), released_at: null, settled_as_charge: false };
+    const c = client({ partnership_budget_reservations: [oldReservation] });
+    await reservePartnershipBudget(asSupabase(c), "discovery", 0.01);
+    const settledCharge = c.tables.cost_events!.find((r) => r.context?.settledReservationId === "old-2");
+    expect(settledCharge).toBeDefined();
+    expect(settledCharge!.event_type).toBe("partnership_x_search_read");
+  });
+
+  it("release with hasConfirmedRealCost=true reverses an already-settled conservative charge -- the real recorded cost supersedes the estimate, never both", async () => {
+    const c = client();
+    const { reservationId } = await reservePartnershipBudget(asSupabase(c), "generation", 0.25, "prospect-1");
+    // Simulate this reservation aging past the expiry window without its
+    // owning request ever calling release (a timeout or a killed process).
+    c.tables.partnership_budget_reservations![0]!.created_at = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    // A later, unrelated reserve call settles it as a side effect (exactly
+    // as reserve_partnership_budget does in production).
+    await reservePartnershipBudget(asSupabase(c), "generation", 0.01, "prospect-2");
+    expect(c.tables.cost_events!.find((r) => r.context?.settledReservationId === reservationId)).toBeDefined();
+
+    // The original request eventually DOES finish and confirms real cost
+    // was recorded for its attempt.
+    c.tables.cost_events!.push({ id: "real-1", event_type: "partnership_llm_call", cost_usd: 0.09, created_at: new Date().toISOString(), context: { partnershipId: "prospect-1" } });
+    await releasePartnershipBudgetReservation(asSupabase(c), reservationId, true);
+
+    expect(c.tables.cost_events!.find((r) => r.context?.settledReservationId === reservationId)).toBeUndefined(); // conservative charge reversed
+    expect(c.tables.cost_events!.find((r) => r.id === "real-1")).toBeDefined(); // real recorded cost remains, uniquely counted
+  });
+
+  it("release WITHOUT a confirmed real cost leaves an already-settled conservative charge in place -- no positive evidence disproving a real charge occurred, so the conservative charge is kept", async () => {
+    const c = client();
+    const { reservationId } = await reservePartnershipBudget(asSupabase(c), "generation", 0.25, "prospect-1");
+    c.tables.partnership_budget_reservations![0]!.created_at = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    await reservePartnershipBudget(asSupabase(c), "generation", 0.01, "prospect-2");
+    expect(c.tables.cost_events!.find((r) => r.context?.settledReservationId === reservationId)).toBeDefined();
+
+    // The original request finishes having recorded NOTHING (total failure
+    // -- e.g. every reviewer call also failed) and calls release with the
+    // default (false).
+    await releasePartnershipBudgetReservation(asSupabase(c), reservationId);
+
+    expect(c.tables.cost_events!.find((r) => r.context?.settledReservationId === reservationId)).toBeDefined(); // conservative charge KEPT
+  });
+
+  it("release on a reservation that was NEVER settled (the normal fast path) never touches cost_events at all", async () => {
+    const c = client();
+    const { reservationId } = await reservePartnershipBudget(asSupabase(c), "generation", 0.25, "prospect-1");
+    c.tables.cost_events!.push({ id: "real-1", event_type: "partnership_llm_call", cost_usd: 0.09, created_at: new Date().toISOString() });
+    await releasePartnershipBudgetReservation(asSupabase(c), reservationId, true);
+    // Still exactly the one real row -- release() had nothing to reverse.
+    expect(c.tables.cost_events).toHaveLength(1);
+  });
+
+  it("CONCURRENCY: a second reservation attempt correctly accounts for a first reservation's settlement, even when the settlement only just happened", async () => {
+    const oldReservation = { id: "old-3", bucket: "generation", amount_usd: 0.25, prospect_id: null, created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), released_at: null, settled_as_charge: false };
+    // $1.76 real + $0.25 about-to-settle = $2.01, already over the $2.00
+    // cap -- a concurrent reserve attempt landing right after settlement
+    // must see the now-real charge and correctly deny.
+    const c = client({
+      cost_events: [{ event_type: "partnership_llm_call", cost_usd: 1.76, created_at: new Date().toISOString() }],
+      partnership_budget_reservations: [oldReservation],
+    });
+    const result = await reservePartnershipBudget(asSupabase(c), "generation", 0.01);
+    expect(result.eligible).toBe(false);
+    expect(result.reason).toMatch(/bucket_budget_reached/);
   });
 
   it("directly exercises the shared cap as an independent gate: denies a reservation that clears its own bucket cap but would exceed a (deliberately overridden-for-this-test) shared cap", async () => {

@@ -197,12 +197,116 @@ export function scoreCandidate(candidate: DiscoveryCandidate, now: Date = new Da
 }
 
 /**
+ * Real evidence this candidate actually RUNS or OFFERS something a
+ * partnership could attach to -- an audience, a community, a business, an
+ * educational offering, or a complementary product -- not just an
+ * individual who happens to have posted about a matched topic. This is
+ * what separates a real educator/coach/community-owner (who qualifies
+ * regardless of being a solo individual -- see the Dan Cheung finding)
+ * from a retail customer merely reviewing or discussing a prop firm/
+ * platform they use (who does not -- see the real "pijat jogja" finding
+ * this closes: a satisfied-customer review of a prop firm, matching the
+ * "prop firm" keyword and clearing every other check, with nothing
+ * showing they run or offer anything themselves).
+ *
+ * Deliberately a phrase-based heuristic, same house style as
+ * DISCOVERY_TOPIC_KEYWORDS -- not an LLM classification, so this stays at
+ * $0 additional cost and every match is traceable to an exact phrase
+ * rather than a model's judgment call. Errs toward EXCLUDING when
+ * genuinely unclear: a false negative here just means a real partner
+ * needs manual research/qualification by the owner (still possible --
+ * this gates auto-qualification, not visibility); a false positive would
+ * auto-qualify a non-partner as ready to pitch, the worse mistake per
+ * this task's own instruction.
+ */
+const PARTNERSHIP_BASIS_PHRASES = [
+  "my students",
+  "our students",
+  "my client",
+  "our client",
+  "my member",
+  "our member",
+  "my cohort",
+  "our cohort",
+  "cohort",
+  "my community",
+  "our community",
+  "my program",
+  "our program",
+  "my course",
+  "our course",
+  "i coach",
+  "we coach",
+  "i teach",
+  "we teach",
+  "i mentor",
+  "we mentor",
+  "mentorship",
+  "i run",
+  "we run",
+  "founder of",
+  "co-founder of",
+  "i offer",
+  "we offer",
+  "i help",
+  "we help",
+  "my audience",
+  "our audience",
+  "join our",
+  "sign up for my",
+  "sign up for our",
+  "educator",
+  "i built",
+  "we built",
+  "my platform",
+  "our platform",
+  "i host",
+  "we host",
+  "my newsletter",
+  "our newsletter",
+  "my podcast",
+  "our podcast",
+  "content creator",
+  "i create",
+  "we create",
+  "my channel",
+  "our channel",
+  "my page",
+  "our page",
+  "subscribers",
+  // Self-identification as a coach/mentor/educator (a role, not a
+  // product) IS itself real evidence of running an offering -- unlike a
+  // product/company name (e.g. "prop firm"), which a customer can just as
+  // easily mention, "trading coach" as a self-description is what
+  // DISCOVERY_TOPIC_KEYWORDS' educator_coach group is meant to surface.
+  "trading coach",
+  "trading mentor",
+  "trading educator",
+  "futures educator",
+];
+
+export function hasConcretePartnershipBasis(candidate: { rawExcerpts: string[] }): boolean {
+  const text = candidate.rawExcerpts.join(" ").toLowerCase();
+  return PARTNERSHIP_BASIS_PHRASES.some((phrase) => text.includes(phrase));
+}
+
+/**
  * A candidate is surfaceable at all only if it's actually contactable
  * (has a real handle or website -- otherwise there's no "open the
  * verified contact channel" step to offer) and has at least some real
  * evidence behind it (never a bare name with nothing to qualify it).
  * MIN_SCORE is deliberately modest (this is a brand-new pipeline over a
  * sparse initial dataset) but never zero -- a hard floor still exists.
+ *
+ * Deliberately does NOT also require hasConcretePartnershipBasis --
+ * that's a stricter, separate check gating whether a candidate gets
+ * auto-QUALIFIED (see discovery.ts's own qualify decision) and whether a
+ * pitch draft can be generated for it (see
+ * generateDraftForPartnership's own check). A candidate that merely
+ * mentions a matched topic without any partnership-basis evidence still
+ * belongs in the surfaced list as a plain 'prospect' for the owner to
+ * research further -- it just must never be auto-progressed further than
+ * that on the strength of the topic match alone.
  */
 const MIN_SCORE = 40;
 

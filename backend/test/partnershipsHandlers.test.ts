@@ -178,6 +178,27 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     expect(updated.stage).toBe("qualified"); // unchanged
   });
 
+  it("FIXED: blocks generation before spending anything when the evidence is long enough to personalize but shows no concrete partnership basis -- text LENGTH and partnership-basis KIND are separate checks", async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(
+      asSupabase(client),
+      newProspect({
+        evidenceExcerpts: [
+          "Honestly, my experience with this prop firm has been really positive so far. The rules are clear, the payouts are fast, and everything feels transparent.",
+        ],
+      }),
+    );
+    await qualifyPartnership(asSupabase(client), prospect.id, "ok");
+
+    await expect(generateDraftForPartnership(asSupabase(client), prospect.id)).rejects.toThrow(/doesn't show this recipient runs or offers/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const updated = (await listPartnerships(asSupabase(client))).find((p) => p.id === prospect.id)!;
+    expect(updated.stage).toBe("qualified"); // unchanged
+  });
+
   it("reuses an already-passing draft instead of regenerating -- a duplicate call on a prospect already at draft_ready costs and calls nothing", async () => {
     const fetchMock = sequenceFetch([draftResponse(GOOD_DRAFT), ...verdicts(true)]);
     global.fetch = fetchMock as unknown as typeof fetch;
@@ -442,6 +463,43 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     const recordedSpend = client.tables.cost_events!.filter((r) => r.event_type === "partnership_llm_call").reduce((sum, r) => sum + Number(r.cost_usd), 0);
     expect(recordedSpend).toBeGreaterThan(0);
     expect(recordedSpend).toBeLessThan(0.05); // ~9 tiny fixture calls -- sanity bound, not inflated by any phantom reservation amount
+  });
+
+  it("FIXED (was a real gap): when the LLM call succeeds but the cost_events WRITE itself silently fails, a later-settled reservation is NOT wrongly reversed -- 'the call returned usage' and 'the cost was durably recorded' are different facts", async () => {
+    // The draft call succeeds and returns real usage, but every cost_events
+    // INSERT for this attempt is made to fail (simulating an RLS/network
+    // blip on that one table, not a thrown exception -- exactly how a real
+    // Supabase failure surfaces: {error}, not a throw).
+    global.fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      const toolName = body.tool_choice?.name as string | undefined;
+      if (toolName === "submit_draft") return draftResponse(GOOD_DRAFT);
+      return verdictResponse(true);
+    }) as unknown as typeof fetch;
+
+    const client = buildClient();
+    client.failTable("cost_events", { message: "simulated transient write failure" }, "insert");
+    const { prospect } = await createPartnership(asSupabase(client), newProspect());
+    await qualifyPartnership(asSupabase(client), prospect.id, "ok");
+
+    // The pipeline itself still completes successfully (a cost-recording
+    // failure must never block the actual reviewed work) -- but zero real
+    // cost_events rows exist for it, since every insert was made to fail.
+    const result = await generateDraftForPartnership(asSupabase(client), prospect.id);
+    expect(result.status).toBe("ready");
+    expect(client.tables.cost_events!.filter((r) => r.event_type === "partnership_llm_call")).toHaveLength(0);
+
+    // The reservation was released (this attempt finished normally) --
+    // confirm it was released WITHOUT being told a real cost was
+    // confirmed, since no write actually succeeded. This is the exact
+    // signal migration 0025's settlement/reversal mechanism depends on
+    // (see partnershipBudgetReservation.test.ts's dedicated tests for the
+    // full reversal-safety proof): a genuinely-successful attempt whose
+    // cost-write failed must never be mistaken for a confirmed-real-cost
+    // attempt, or a settled conservative charge for this same work could
+    // later be wrongly reversed, silently losing track of real spend.
+    const openReservations = client.tables.partnership_budget_reservations!.filter((r) => r.released_at == null);
+    expect(openReservations).toHaveLength(0);
   });
 
   it("is skipped, spending nothing, once the independent partnership budget is exhausted -- never touches auto-draft/prospecting/x-feed-post's own budgets", async () => {

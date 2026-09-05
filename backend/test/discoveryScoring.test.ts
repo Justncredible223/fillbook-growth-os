@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scoreCandidate, rankCandidates, isQualifyingRecommendation, hasSufficientEvidenceForPitch, type DiscoveryCandidate } from "../src/partnerships/discoveryScoring";
+import { scoreCandidate, rankCandidates, isQualifyingRecommendation, hasSufficientEvidenceForPitch, hasConcretePartnershipBasis, type DiscoveryCandidate } from "../src/partnerships/discoveryScoring";
 
 const NOW = new Date("2026-09-05T00:00:00Z");
 
@@ -97,6 +97,40 @@ describe("scoreCandidate", () => {
   });
 });
 
+describe("hasConcretePartnershipBasis", () => {
+  it("passes a solo independent creator/newsletter writer -- individuals are NOT excluded just for being individuals", () => {
+    expect(hasConcretePartnershipBasis({ rawExcerpts: ["Every week I break down a real trading psychology mistake for my newsletter subscribers -- this week's was revenge trading after a stop-out."] })).toBe(true);
+  });
+
+  it("passes a solo educator describing their own teaching work", () => {
+    expect(hasConcretePartnershipBasis({ rawExcerpts: ["I teach futures traders how to build a real risk-management routine, one small habit at a time."] })).toBe(true);
+  });
+
+  it("passes a community/cohort owner", () => {
+    expect(hasConcretePartnershipBasis({ rawExcerpts: ["Our community just hit 500 members -- all funded futures traders sharing real trade reviews."] })).toBe(true);
+  });
+
+  it("fails a retail customer's review/experience of a product they don't run", () => {
+    expect(hasConcretePartnershipBasis({ rawExcerpts: ["My experience with this prop firm has been great so far, the payouts are fast and the rules are clear."] })).toBe(false);
+  });
+
+  it("fails bystander commentary that merely discusses a topic", () => {
+    expect(hasConcretePartnershipBasis({ rawExcerpts: ["The whole prop firm industry is a mess right now, so many firms changing their rules overnight."] })).toBe(false);
+  });
+
+  it("fails empty evidence", () => {
+    expect(hasConcretePartnershipBasis({ rawExcerpts: [] })).toBe(false);
+  });
+
+  it("having a contact channel alone is not evidence of a partnership basis -- this function only ever looks at excerpt text, never contactability", () => {
+    // Structural guarantee: the function's own signature takes only
+    // rawExcerpts, so a handle/website can never factor in here even by
+    // accident -- confirms "merely having a contact channel is
+    // insufficient" is enforced by construction, not just by convention.
+    expect(hasConcretePartnershipBasis({ rawExcerpts: ["ok"] })).toBe(false);
+  });
+});
+
 describe("isQualifyingRecommendation / rankCandidates", () => {
   it("excludes an uncontactable candidate even if its score would otherwise qualify", () => {
     const rec = scoreCandidate(candidate({ handle: null, websiteUrl: null, postsMatched: 5, matchedTopics: ["trading coach", "journaling", "trading mentor"] }), NOW);
@@ -134,9 +168,10 @@ describe("isQualifyingRecommendation / rankCandidates", () => {
     );
     expect(isQualifyingRecommendation(rec)).toBe(true);
     expect(rec.sufficientForPitch).toBe(true);
+    expect(hasConcretePartnershipBasis(rec.candidate)).toBe(true); // "educator" -- real evidence they run an educational offering
   });
 
-  it("OPEN GAP (stored real production evidence, not a fresh live discovery run, flagged not fixed here): a candidate whose ONLY evidence is an individual retail trader's post ABOUT a prop firm they use -- not themselves a business, coach, or community Fillbook could realistically pitch a partnership to -- still qualifies today. 'pijat jogja', a real x_search-discovered row retrieved 2026-09-05 via a read-only production query (org name and excerpt text unmodified), whose entire stored evidence is one trader's satisfied-customer review of 'Trusteed Prop Firm'. isQualifyingRecommendation's existing matchedTopics/score/contactability/postsMatched gate (added for a prior crypto-spam finding, see the test above) does not catch this different failure mode: real topical evidence from a real, recent, contactable account that is nonetheless the WRONG KIND of account to pitch a partnership to. Reported as an open recommendation-quality gap, not fixed in this pass -- fixing it would mean scoring/filtering on what KIND of account this is (business/creator vs. individual retail customer), which is a real algorithm change outside this stabilization pass's scope.", () => {
+  it("FIXED (was an open gap, now closed): a candidate whose ONLY evidence is an individual retail trader's post ABOUT a prop firm they use -- not themselves a business, coach, or community Fillbook could realistically pitch a partnership to -- no longer has a concrete partnership basis, even though it still clears every OTHER existing check. 'pijat jogja', a real x_search-discovered row retrieved 2026-09-05 via a read-only production query (org name and excerpt text unmodified), whose entire stored evidence is one trader's satisfied-customer review of 'Trusteed Prop Firm'. isQualifyingRecommendation's existing matchedTopics/score/contactability/postsMatched gate (added for a prior crypto-spam finding, see the test above) never caught this different failure mode -- real topical evidence from a real, recent, contactable account that is nonetheless the WRONG KIND of account. hasConcretePartnershipBasis is the new, separate gate that catches it: it governs whether discovery.ts auto-QUALIFIES a candidate (and whether generateDraftForPartnership will draft for it), NOT whether it's surfaced at all -- isQualifyingRecommendation itself is deliberately unchanged.", () => {
     const rec = scoreCandidate(
       candidate({
         organizationName: "pijat jogja",
@@ -151,8 +186,9 @@ describe("isQualifyingRecommendation / rankCandidates", () => {
       }),
       NOW,
     );
-    expect(isQualifyingRecommendation(rec)).toBe(true); // confirms the gap is real, not a false alarm
-    expect(rec.sufficientForPitch).toBe(true); // has enough CHARACTERS to look pitch-ready, despite being the wrong kind of recipient entirely
+    expect(isQualifyingRecommendation(rec)).toBe(true); // still surfaced, as a plain 'prospect' for manual research -- see discovery.ts
+    expect(rec.sufficientForPitch).toBe(true); // has enough CHARACTERS to look pitch-ready
+    expect(hasConcretePartnershipBasis(rec.candidate)).toBe(false); // but is NOT the right kind of recipient -- this is what now blocks auto-qualification and drafting
   });
 
   it("ranks qualifying candidates highest-score-first and drops non-qualifying ones", () => {

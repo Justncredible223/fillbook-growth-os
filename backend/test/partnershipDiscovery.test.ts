@@ -336,4 +336,43 @@ describe("runPartnershipDiscoveryStep", () => {
     const openReservations = (client.tables.partnership_budget_reservations ?? []).filter((r: any) => r.released_at == null);
     expect(openReservations).toHaveLength(0);
   });
+
+  it("FIXED: a candidate matching a topic keyword with real, sufficient evidence -- but no evidence of a concrete partnership basis -- is surfaced as a plain 'prospect', never auto-qualified", async () => {
+    const client = new FakeSupabaseClient({ creators: [], prospecting_candidates: [], inbound_engagements: [], partnership_prospects: [], cost_events: [] });
+    // Real production shape: a retail trader's satisfied-customer review of
+    // a prop firm -- long enough to look pitch-ready, matches "prop firm",
+    // but shows no evidence they run/offer anything themselves.
+    const adapter = fakeAdapter({
+      "prop firm mentorship OR funded trader program": [
+        xResult({
+          authorHandle: "customertrader",
+          text: "Honestly, my experience with this prop firm has been really positive so far. The rules are clear, the payouts are fast, and everything feels transparent. As a trader, I value more than just the profits.",
+        }),
+      ],
+    });
+
+    const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW });
+
+    expect(result.newCandidates).toBe(1);
+    const created = client.tables.partnership_prospects![0]!;
+    expect(created.stage).toBe("prospect"); // NOT 'qualified' -- no concrete partnership basis
+    expect(created.qualification_rationale).toBeNull();
+    expect(created.futures_relevance_evidence).toContain("No evidence this recipient runs or offers");
+  });
+
+  it("still auto-qualifies a real educator/coach candidate with a genuine partnership basis, unaffected by the new check", async () => {
+    const client = new FakeSupabaseClient({ creators: [], prospecting_candidates: [], inbound_engagements: [], partnership_prospects: [], cost_events: [] });
+    const adapter = fakeAdapter({
+      "futures trading coach OR trading mentor": [
+        xResult({ authorHandle: "realcoach", text: "I coach a small cohort of futures traders every week on risk management and journaling discipline -- real accountability, not just theory." }),
+      ],
+    });
+
+    const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW });
+
+    expect(result.newCandidates).toBe(1);
+    const created = client.tables.partnership_prospects![0]!;
+    expect(created.stage).toBe("qualified");
+    expect(created.qualification_rationale).not.toBeNull();
+  });
 });

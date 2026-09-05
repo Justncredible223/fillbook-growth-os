@@ -34,16 +34,24 @@ function isFresh(prospect: PartnershipProspect, now: Date): boolean {
  * pursuing before spending on more discovery -- 'qualified' and
  * 'draft_ready' are both uncontacted and still actionable; every other
  * stage is either not yet qualified (plain 'prospect'), already past
- * discovery's job (contacted onward), or explicitly suppressed (archived /
- * do_not_contact), so none of those count toward this backlog. Evidence
- * must still meet BOTH freshness (BACKLOG_FRESHNESS_DAYS) and the same
- * personalization-sufficiency bar generation itself enforces
- * (hasSufficientEvidenceForPitch) -- a stale or too-thin "qualified" row
- * doesn't actually reduce the real need for more/better discovery.
+ * discovery's job (contacted onward), or an owner-driven terminal state
+ * (archived / do_not_contact), so none of those count toward this
+ * backlog. A prospect with a non-null suppressedReason (see
+ * recommendationReassessment.ts) is also excluded -- it isn't real,
+ * workable backlog even while its stage still technically says
+ * 'qualified'. Evidence must still meet BOTH freshness
+ * (BACKLOG_FRESHNESS_DAYS) and the same personalization-sufficiency bar
+ * generation itself enforces (hasSufficientEvidenceForPitch) -- a stale
+ * or too-thin "qualified" row doesn't actually reduce the real need for
+ * more/better discovery.
  */
 export function countFreshQualifiedBacklog(prospects: PartnershipProspect[], now: Date = new Date()): number {
   return prospects.filter(
-    (p) => (p.stage === "qualified" || p.stage === "draft_ready") && isFresh(p, now) && hasSufficientEvidenceForPitch({ rawExcerpts: p.evidenceExcerpts }),
+    (p) =>
+      (p.stage === "qualified" || p.stage === "draft_ready") &&
+      !p.suppressedReason &&
+      isFresh(p, now) &&
+      hasSufficientEvidenceForPitch({ rawExcerpts: p.evidenceExcerpts }),
   ).length;
 }
 

@@ -9,7 +9,7 @@ import { createLlmClient, type LlmUsage } from "../content/llmClient.js";
 import { runCampaignPipeline, type PipelineOpportunity } from "../content/campaignPipeline.js";
 import { estimateCostUsd, recordCostEvent } from "../cost/costTracking.js";
 import { reservePartnershipBudget, releasePartnershipBudgetReservation } from "./budgetReservation.js";
-import { hasSufficientEvidenceForPitch } from "./discoveryScoring.js";
+import { hasSufficientEvidenceForPitch, hasConcretePartnershipBasis } from "./discoveryScoring.js";
 import { canMarkContacted, isValidTransition } from "./stageTransitions.js";
 import { normalizeDomain, normalizeHandle, findExistingMatches, type ExistingMatch } from "./dedup.js";
 import { SupabasePartnershipRepository } from "./supabasePartnershipRepository.js";
@@ -149,6 +149,21 @@ export async function generateDraftForPartnership(client: SupabaseClient, id: st
     );
   }
 
+  // Block before spending anything if there's no evidence this recipient
+  // actually runs or offers a partnership-worthy audience/community/
+  // business/educational-offering/complementary-product -- having enough
+  // TEXT to personalize a pitch (the check above) is a separate concern
+  // from being the RIGHT KIND of recipient at all. Real production finding
+  // this closes: a retail trader's satisfied-customer review of a prop
+  // firm easily cleared the evidence-length bar while being nothing a
+  // partnership pitch could realistically be sent to. Applies to every
+  // path here, including a prospect the owner manually qualified.
+  if (!hasConcretePartnershipBasis({ rawExcerpts: prospect.evidenceExcerpts })) {
+    throw new PartnershipActionError(
+      "The evidence on file doesn't show this recipient runs or offers an audience, community, business, educational offering, or complementary product -- only that they mentioned a relevant topic (e.g. reviewing or discussing a prop firm/platform as a customer). A partnership pitch needs a real partner to send it to. Add evidence of what they actually run or offer before generating, or reconsider whether this is a genuine partnership candidate.",
+    );
+  }
+
   // Atomic per-prospect mutex -- a duplicate tap or a concurrent retry
   // for THIS SAME prospect must never both reach the paid pipeline. Only
   // one caller's conditional update (WHERE generation_claimed_at IS
@@ -197,9 +212,15 @@ async function runGenerationAttempts(client: SupabaseClient, repo: SupabasePartn
   }
 
   const usages: LlmUsage[] = [];
+  // Tracked (not fire-and-forget) so the reservation release below can
+  // positively confirm a cost_events WRITE actually succeeded for THIS
+  // attempt -- not just that an LLM call returned a usage block, which
+  // says nothing about whether the DB insert itself succeeded (see
+  // recordCostEvent's own docstring on why that distinction matters here).
+  const costWritePromises: Promise<boolean>[] = [];
   const llmClient = createLlmClient(process.env, (usage) => {
     usages.push(usage);
-    void recordCostEvent(client, usage, { endpoint: "partnerships", partnershipId: id }, "partnership_llm_call");
+    costWritePromises.push(recordCostEvent(client, usage, { endpoint: "partnerships", partnershipId: id }, "partnership_llm_call"));
   });
 
   const { data: opportunityRow, error: opportunityError } = await client
@@ -252,6 +273,7 @@ async function runGenerationAttempts(client: SupabaseClient, repo: SupabasePartn
       budgetStopReason = reservation.reason;
       break;
     }
+    const writesBeforeAttempt = costWritePromises.length;
     try {
       attempts += 1;
       lastResult = await runCampaignPipeline(
@@ -273,7 +295,17 @@ async function runGenerationAttempts(client: SupabaseClient, repo: SupabasePartn
         },
       );
     } finally {
-      await releasePartnershipBudgetReservation(client, reservation.reservationId);
+      // If this reservation had already expired and been conservatively
+      // settled into a charge (this attempt ran long, or hit a genuine
+      // failure right before this finally), tell release whether we can
+      // positively confirm a real cost_events WRITE succeeded for THIS
+      // attempt -- awaited here (not just "did usages grow") so a write
+      // that's still in flight, or one that failed silently, is never
+      // mistaken for a confirmed real cost. Only a genuinely confirmed
+      // write reverses the conservative charge.
+      const attemptWriteResults = await Promise.all(costWritePromises.slice(writesBeforeAttempt));
+      const hasConfirmedRealCost = attemptWriteResults.some((wrote) => wrote);
+      await releasePartnershipBudgetReservation(client, reservation.reservationId, hasConfirmedRealCost);
     }
     if (lastResult.finalStage === "ready_for_owner") break;
     priorFeedback =
