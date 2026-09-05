@@ -121,7 +121,13 @@ function clamp01(n: number): number {
  */
 export const MIN_PERSONALIZATION_CHARS = 30;
 
-export function hasSufficientEvidenceForPitch(candidate: DiscoveryCandidate): boolean {
+/**
+ * Takes just the excerpts (not the full DiscoveryCandidate) so callers
+ * outside discovery -- generateDraftForPartnership checking a prospect
+ * that may have been created manually, not just discovered -- can use
+ * the exact same real bar without an awkward partial-object cast.
+ */
+export function hasSufficientEvidenceForPitch(candidate: { rawExcerpts: string[] }): boolean {
   return candidate.rawExcerpts.join(" ").trim().length >= MIN_PERSONALIZATION_CHARS;
 }
 

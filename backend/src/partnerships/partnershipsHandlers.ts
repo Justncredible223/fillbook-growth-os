@@ -9,6 +9,7 @@ import { createLlmClient, type LlmUsage } from "../content/llmClient.js";
 import { runCampaignPipeline, type PipelineOpportunity } from "../content/campaignPipeline.js";
 import { estimateCostUsd, recordCostEvent } from "../cost/costTracking.js";
 import { evaluatePartnershipBudget, getPartnershipMonthSpendUsd } from "./budget.js";
+import { hasSufficientEvidenceForPitch } from "./discoveryScoring.js";
 import { canMarkContacted, isValidTransition } from "./stageTransitions.js";
 import { normalizeDomain, normalizeHandle, findExistingMatches, type ExistingMatch } from "./dedup.js";
 import { SupabasePartnershipRepository } from "./supabasePartnershipRepository.js";
@@ -107,6 +108,56 @@ export async function generateDraftForPartnership(client: SupabaseClient, id: st
     throw new PartnershipActionError("proposedCollaboration must be set before generating a draft -- the pipeline needs a concrete offer to write about, not a blank ask.");
   }
 
+  // Reuse a valid, already-passing draft instead of burning another full
+  // attempt -- a duplicate/retried call (or a tap after the prospect
+  // already reached draft_ready) must never re-spend on work that's
+  // already done. Only meaningful once stage has actually advanced;
+  // does nothing for the normal first-time 'qualified' case.
+  if (prospect.stage === "draft_ready" && prospect.approvedCampaignAssetId) {
+    return { status: "ready", campaignAssetId: prospect.approvedCampaignAssetId, costUsd: 0, aiCalls: 0, attempts: 0 };
+  }
+
+  // Block before spending anything if the recipient's own real evidence
+  // is too thin to personalize against -- the exact gap that produced a
+  // guaranteed-to-fail (and guaranteed-to-cost) attempt for a recipient
+  // whose only "evidence" was a generic category summary. Applies to
+  // EVERY path here, not just auto-discovery's own pre-qualification
+  // gate -- a manually created-and-qualified prospect gets no free pass.
+  if (!hasSufficientEvidenceForPitch({ rawExcerpts: prospect.evidenceExcerpts })) {
+    throw new PartnershipActionError(
+      "Not enough of this recipient's own words are on file to personalize a pitch confidently yet. Add real research (their actual posts, site copy, or notes in their own words) to evidenceExcerpts before generating -- a draft attempt here would very likely fail review and spend budget for nothing.",
+    );
+  }
+
+  // Atomic per-prospect mutex -- a duplicate tap or a concurrent retry
+  // for THIS SAME prospect must never both reach the paid pipeline. Only
+  // one caller's conditional update (WHERE generation_claimed_at IS
+  // NULL) can ever match a row; a second concurrent caller's update
+  // matches zero rows and is turned away immediately, before any budget
+  // check or LLM call. Always released in the finally below, success or
+  // failure, so a genuine retry after this call finishes can proceed.
+  const { data: claimedRows, error: claimError } = await client
+    .from("partnership_prospects")
+    .update({ generation_claimed_at: new Date().toISOString() })
+    .eq("id", id)
+    .is("generation_claimed_at", null)
+    .select("id");
+  if (claimError) throw new Error(`claiming generation slot failed: ${claimError.message}`);
+  if (!claimedRows || claimedRows.length === 0) {
+    throw new PartnershipActionError("A draft is already being generated for this prospect -- please wait for it to finish before trying again.");
+  }
+
+  try {
+    return await runGenerationAttempts(client, repo, prospect);
+  } finally {
+    await client.from("partnership_prospects").update({ generation_claimed_at: null }).eq("id", id);
+  }
+}
+
+/** The actual paid pipeline, factored out so the claim/release above always wraps it regardless of which return path fires. */
+async function runGenerationAttempts(client: SupabaseClient, repo: SupabasePartnershipRepository, prospect: PartnershipProspect): Promise<GenerateDraftResult> {
+  const id = prospect.id;
+  if (!prospect.proposedCollaboration) throw new Error("unreachable: proposedCollaboration was already validated by the caller");
   const monthSpend = await getPartnershipMonthSpendUsd(client);
   const budgetCheck = evaluatePartnershipBudget(monthSpend);
   if (!budgetCheck.eligible) {
@@ -167,6 +218,7 @@ export async function generateDraftForPartnership(client: SupabaseClient, id: st
 
   let attempts = 0;
   let priorFeedback: string | undefined;
+  let evidenceGapStopped = false;
   let lastResult: Awaited<ReturnType<typeof runCampaignPipeline>> | null = null;
 
   while (attempts < MAX_DRAFT_ATTEMPTS) {
@@ -200,6 +252,17 @@ export async function generateDraftForPartnership(client: SupabaseClient, id: st
       lastResult.mechanicalBlockReasons.length > 0
         ? `quality gate: ${lastResult.mechanicalBlockReasons.join("; ")}`
         : `review gate: ${lastResult.deepReview?.blockReasons.join("; ") ?? "unknown"}`;
+    // A rewrite can only fix what the SAME evidence lets it fix. If the
+    // rejection itself says there's no real knowledge of the recipient to
+    // draw on, a second attempt with the identical evidence is spending
+    // another full attempt (up to 10 more AI calls) on a gap a rewrite
+    // cannot close -- confirmed in production (Dan Cheung failed
+    // attempt 2 for the same underlying reason as attempt 1). Stop here
+    // and tell the owner what's actually needed instead.
+    if (isUnresolvedEvidenceGap(priorFeedback)) {
+      evidenceGapStopped = true;
+      break;
+    }
   }
 
   const result = lastResult!;
@@ -214,9 +277,39 @@ export async function generateDraftForPartnership(client: SupabaseClient, id: st
     return { status: "ready", campaignAssetId: result.campaignAssetId, costUsd, aiCalls: usages.length, attempts };
   }
 
-  const error = `(after ${attempts} attempt${attempts === 1 ? "" : "s"}) ${priorFeedback ?? "unknown"}`;
+  const error = evidenceGapStopped
+    ? `(after ${attempts} attempt${attempts === 1 ? "" : "s"} -- stopped early, a rewrite can't fix this) The available evidence isn't specific enough to personalize a pitch, and the reviewers said so directly: ${priorFeedback}. Add more real research on this recipient before trying again -- another attempt with the same evidence would very likely fail the same way.`
+    : `(after ${attempts} attempt${attempts === 1 ? "" : "s"}) ${priorFeedback ?? "unknown"}`;
   await repo.insertInteraction(id, "draft_generated", `Draft attempt failed: ${error}`);
   return { status: "failed", error, costUsd, aiCalls: usages.length, attempts };
+}
+
+/**
+ * A pattern-based, best-effort signal that a rejection is fundamentally
+ * about the RECIPIENT EVIDENCE being too thin/generic -- not a style,
+ * tone, or claim-wording issue a rewrite could fix with the same
+ * material. Deliberately conservative (only stops early on a clear,
+ * repeated signal) -- a false negative here just costs one extra
+ * attempt (the previous behavior for every case); a false positive
+ * would wrongly deny a fixable rewrite, which is the worse mistake.
+ */
+function isUnresolvedEvidenceGap(feedback: string): boolean {
+  const lower = feedback.toLowerCase();
+  const evidenceGapPhrases = [
+    "zero evidence",
+    "no evidence",
+    "no specific knowledge",
+    "no real knowledge",
+    "generic cold outreach",
+    "could be sent to any",
+    "could be sent to literally any",
+    "with only the name",
+    "name swapped",
+    "demonstrates zero",
+    "cannot be traced to any",
+  ];
+  const matches = evidenceGapPhrases.filter((phrase) => lower.includes(phrase)).length;
+  return matches >= 2; // more than one reviewer independently pointing at the same root cause, not just one agent's phrasing choice
 }
 
 /**

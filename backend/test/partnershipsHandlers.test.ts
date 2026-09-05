@@ -50,6 +50,10 @@ function newProspect(overrides: Partial<NewPartnershipProspect> = {}): NewPartne
     partnerCategory: "educator_coach",
     websiteUrl: "https://coachsite.com",
     proposedCollaboration: "A guided journaling pilot for a small cohort of the coach's students.",
+    // Sufficient by default so every test not specifically about the
+    // evidence-sufficiency gate exercises the real pipeline, same as
+    // before that gate existed -- tests for the gate itself override this.
+    evidenceExcerpts: ["We run a weekly journaling session for our funded-account students, focused on catching revenge-trading patterns before they cost an eval."],
     ...overrides,
   };
 }
@@ -160,6 +164,60 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     expect(costRows.some((r) => r.event_type === "llm_call")).toBe(false);
   });
 
+  it("blocks generation before spending anything when the recipient's evidence is too thin -- a manually created-and-qualified prospect gets no free pass just because discovery's own gate wasn't the path that created it", async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect({ evidenceExcerpts: [] }));
+    await qualifyPartnership(asSupabase(client), prospect.id, "ok");
+
+    await expect(generateDraftForPartnership(asSupabase(client), prospect.id)).rejects.toThrow(/Not enough of this recipient's own words/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    const updated = (await listPartnerships(asSupabase(client))).find((p) => p.id === prospect.id)!;
+    expect(updated.stage).toBe("qualified"); // unchanged
+  });
+
+  it("reuses an already-passing draft instead of regenerating -- a duplicate call on a prospect already at draft_ready costs and calls nothing", async () => {
+    const fetchMock = sequenceFetch([draftResponse(GOOD_DRAFT), ...verdicts(true)]);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect());
+    await qualifyPartnership(asSupabase(client), prospect.id, "ok");
+    const first = await generateDraftForPartnership(asSupabase(client), prospect.id);
+    expect(first.status).toBe("ready");
+    const callsAfterFirst = fetchMock.mock.calls.length;
+
+    const second = await generateDraftForPartnership(asSupabase(client), prospect.id);
+
+    expect(second.status).toBe("ready");
+    expect(second.campaignAssetId).toBe(first.campaignAssetId);
+    expect(second.costUsd).toBe(0);
+    expect(second.attempts).toBe(0);
+    expect(fetchMock.mock.calls.length).toBe(callsAfterFirst); // zero new calls
+  });
+
+  it("stops after ONE attempt (not the usual 2) when the rejection itself says the recipient evidence is too generic -- a same-evidence rewrite can't fix that, so a second attempt would just spend more for the same predictable outcome", async () => {
+    const fetchMock = sequenceFetch([
+      draftResponse("Hi -- interested in a pilot?"),
+      // All 9 reviewers independently flag the same root cause in a way isUnresolvedEvidenceGap should catch.
+      ...Array.from({ length: 9 }, () => verdictResponse(false, "This pitch demonstrates zero evidence the sender has any specific knowledge of the recipient -- it could be sent to any prop firm with only the name swapped.")),
+    ]);
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect());
+    await qualifyPartnership(asSupabase(client), prospect.id, "ok");
+
+    const result = await generateDraftForPartnership(asSupabase(client), prospect.id);
+
+    expect(result.status).toBe("failed");
+    expect(result.attempts).toBe(1); // stopped early, never tried a second time
+    expect(result.error).toContain("a rewrite can't fix this");
+    expect(fetchMock).toHaveBeenCalledTimes(10); // exactly 1 attempt's worth of calls
+  });
+
   it("refuses to generate a draft before proposedCollaboration is set -- no blank-ask pitches", async () => {
     const client = buildClient();
     const { prospect } = await createPartnership(asSupabase(client), newProspect({ proposedCollaboration: undefined }));
@@ -237,6 +295,39 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     expect(result.status).toBe("failed");
     expect(result.attempts).toBe(2);
     expect(fetchMock).toHaveBeenCalledTimes(20); // exactly 2 attempts, never a 3rd
+  });
+
+  it("blocks a genuinely concurrent SECOND call on the SAME prospect -- a duplicate tap/retry can't double-spend on identical work, and the slot is released afterward so a later, real retry can still proceed", async () => {
+    let resolveFirstDraft!: () => void;
+    const firstDraftGate = new Promise<void>((resolve) => {
+      resolveFirstDraft = resolve;
+    });
+    let fetchCallCount = 0;
+    global.fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      fetchCallCount += 1;
+      if (fetchCallCount === 1) await firstDraftGate; // hold the first call's very first fetch open
+      const body = JSON.parse(init.body as string);
+      const toolName = body.tool_choice?.name as string | undefined;
+      return toolName === "submit_draft" ? draftResponse(GOOD_DRAFT) : verdictResponse(true);
+    }) as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect());
+    await qualifyPartnership(asSupabase(client), prospect.id, "ok");
+
+    const firstCall = generateDraftForPartnership(asSupabase(client), prospect.id);
+    // Let the first call actually reach (and hold open) its first fetch before firing the second.
+    await new Promise((resolve) => setImmediate(resolve));
+    await expect(generateDraftForPartnership(asSupabase(client), prospect.id)).rejects.toThrow(/already being generated/);
+
+    resolveFirstDraft();
+    const firstResult = await firstCall;
+    expect(firstResult.status).toBe("ready");
+
+    // The slot must be released after the first call finishes -- a real, later retry works fine.
+    const laterRetry = await generateDraftForPartnership(asSupabase(client), prospect.id);
+    expect(laterRetry.status).toBe("ready"); // reuses the now-existing passing draft, per the reuse test above
+    expect(laterRetry.costUsd).toBe(0);
   });
 
   it("threads the recipient's real evidence excerpts to every reviewer, not just the recipient name", async () => {
