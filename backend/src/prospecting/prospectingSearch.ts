@@ -7,8 +7,10 @@ import {
   QUEUE_FULL_THRESHOLD,
   RESULTS_PER_QUERY,
   TOPICS_PER_SEARCH_RUN,
+  currentRunSlot,
   evaluateMonthlyBudget,
   evaluateQueueCapacity,
+  runSlotsPerDay,
   selectTopicsForRun,
 } from "./prospectingEligibility.js";
 import type { ProspectingRepository } from "./types.js";
@@ -58,8 +60,15 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     return { skipped: true, skipReason: queueCheck.reason, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, costUsd: 0 };
   }
 
+  // Combines the calendar day with which of the daily run slots (see
+  // backend/src/config/scheduleConfig.ts's X prospecting schedule -- 08:00/
+  // 13:00/18:00 America/Phoenix by default) this invocation is so the
+  // rotation advances once per run instead of once per day -- same
+  // topic-list cycling behavior as before the 3x/day split, just
+  // finer-grained.
   const dayIndex = Math.floor(now.getTime() / (24 * 60 * 60 * 1000));
-  const topics: ProspectingTopic[] = selectTopicsForRun(PROSPECTING_TOPICS, dayIndex, TOPICS_PER_SEARCH_RUN);
+  const runIndex = dayIndex * runSlotsPerDay() + currentRunSlot(now);
+  const topics: ProspectingTopic[] = selectTopicsForRun(PROSPECTING_TOPICS, runIndex, TOPICS_PER_SEARCH_RUN);
 
   let postsRead = 0;
   let newCandidates = 0;

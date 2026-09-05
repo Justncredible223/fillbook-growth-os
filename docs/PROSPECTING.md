@@ -163,6 +163,29 @@ visibility beyond the aggregate. `MONTHLY_PROSPECTING_BUDGET_USD = $8`
 hard-stops searching for the rest of the month once real recorded spend
 (not just the theoretical daily estimate) reaches it.
 
+## Update 2026-09-04 -- 3x/day cadence + Reddit prospecting added
+
+The data flow above (step 1) described a 1x/day search via
+`daily-pipeline.ts`. That step has since moved to `api/growth-pulse.ts`
+(called 3x/day -- 08:00/13:00/18:00 America/Phoenix by default, see
+`backend/src/config/scheduleConfig.ts` -- by
+`.github/workflows/growth-pulse.yml`, a free external scheduler, since
+Vercel Hobby's Cron feature is capped at 2 jobs/once-per-day each and
+can't run anything 3x/day itself). `TOPICS_PER_SEARCH_RUN` dropped from 6
+to 1 and `runIndex` now combines the calendar day with which of the 3
+daily slots this run is (`currentRunSlot()`), so total daily topic
+coverage/read volume is unchanged from the prior once/day design -- see
+`prospectingEligibility.ts`'s own doc comments for the exact numbers.
+
+Reddit prospecting was added as a second, independent discovery source
+(`docs/REDDIT_INTEGRATION.md`) -- same `prospecting_candidates` table
+(`platform='reddit'`), its own topic list (`redditTopics.ts`), its own
+smaller queue threshold (`redditEligibility.ts`), 1x/day (09:00 America/
+Phoenix by default). It reuses `scoreProspectingCandidate()` unchanged.
+Reddit having no results, being rate-limited, or lacking credentials
+never blocks X's prospecting or vice versa -- each step in
+`growth-pulse.ts` is independently try/caught.
+
 ## Known limitations
 
 - Per-reply link attribution isn't real yet (see Attribution above) --

@@ -110,6 +110,7 @@ class NetworkGrowthOsRepository(
                 opportunitiesByStatus = analytics.getJSONObject("opportunitiesByStatus").toIntMap(),
                 campaignAssetsByStage = analytics.getJSONObject("campaignAssetsByStage").toIntMap(),
                 totalCostUsd = analytics.getDouble("totalCostUsd"),
+                todaySpendUsd = analytics.getDouble("todaySpendUsd"),
                 autoDraft = analytics.getJSONObject("autoDraft").let { ad ->
                     AutoDraftStatus(
                         lastRunDate = ad.optStringOrNull("lastRunDate"),
@@ -244,7 +245,10 @@ class NetworkGrowthOsRepository(
     }
 
     override suspend fun getCostSummary(): CostSummary {
-        val json = get("/api/cost-summary")
+        // Folded into /api/summary (?view=cost) to free a serverless-function
+        // slot for /api/growth-pulse -- see backend/api/summary.ts's doc
+        // comment. Response shape is unchanged, only the URL moved.
+        val json = get("/api/summary?view=cost")
         return CostSummary(
             totalCostUsd = json.getDouble("totalCostUsd"),
             last24hCostUsd = json.getDouble("last24hCostUsd"),

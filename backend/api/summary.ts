@@ -10,6 +10,7 @@ import { interpretExperiment } from "../src/experiments/experimentEngine.js";
 import { SupabaseExperimentRepository, measureExperiment } from "../src/experiments/supabaseExperimentRepository.js";
 import type { NewExperiment } from "../src/experiments/types.js";
 import { SupabaseNotificationRepository } from "../src/notifications/supabaseNotificationRepository.js";
+import { getTodaySpendUsd } from "../src/cost/costTracking.js";
 
 /**
  * `?resource=strategy` handles Strategy Evolution -- a read of the latest
@@ -274,6 +275,55 @@ async function handleEveningReport(req: VercelRequest, res: VercelResponse): Pro
  * dep and run-campaign.ts's own check -- both real money-spending paths
  * stop when this is true.
  */
+/**
+ * Folded in from the former api/cost-summary.ts (`GET /api/summary?view=cost`)
+ * to free a serverless-function slot for api/reddit-pulse.ts -- this
+ * project was discovered to be already AT Vercel Hobby's 12-function cap
+ * (see this file's own doc comment below), and the in-progress
+ * prospecting-pulse.ts split had silently pushed it to 13 (a real,
+ * previously-uncaught deploy-breaking bug, same failure mode documented in
+ * docs/PROGRESS_LEDGER.md Phase 15 -- a successful build that then fails
+ * silently at the "Deploying outputs..." step). Response shape is
+ * byte-for-byte identical to the old endpoint; only the URL changed
+ * (Android's NetworkGrowthOsRepository.getCostSummary() updated to match).
+ */
+async function handleCostSummary(res: VercelResponse): Promise<void> {
+  try {
+    const client = getServiceClient();
+    const { data, error } = await client
+      .from("cost_events")
+      .select("cost_usd, input_tokens, output_tokens, model, created_at");
+    if (error) throw error;
+
+    const rows = (data ?? []) as Array<{
+      cost_usd: number;
+      input_tokens: number;
+      output_tokens: number;
+      model: string;
+      created_at: string;
+    }>;
+
+    const totalCostUsd = rows.reduce((sum, r) => sum + Number(r.cost_usd), 0);
+    const totalInputTokens = rows.reduce((sum, r) => sum + r.input_tokens, 0);
+    const totalOutputTokens = rows.reduce((sum, r) => sum + r.output_tokens, 0);
+
+    const last24hCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const last24hCostUsd = rows
+      .filter((r) => r.created_at >= last24hCutoff)
+      .reduce((sum, r) => sum + Number(r.cost_usd), 0);
+
+    res.status(200).json({
+      totalCostUsd: Number(totalCostUsd.toFixed(6)),
+      last24hCostUsd: Number(last24hCostUsd.toFixed(6)),
+      totalCalls: rows.length,
+      totalInputTokens,
+      totalOutputTokens,
+    });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res)) return;
 
@@ -295,6 +345,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.query.resource === "evening-report") {
     await handleEveningReport(req, res);
+    return;
+  }
+  if (req.method === "GET" && req.query.view === "cost") {
+    await handleCostSummary(res);
     return;
   }
 
@@ -331,7 +385,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const autoDraftRunRepo = new SupabaseAutoDraftRunRepository(client);
 
-    const [signalsToday, openOpportunities, readyAssetsAwaitingDecision, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftSpendUsd, xAssetsToday] =
+    const [signalsToday, openOpportunities, readyAssetsAwaitingDecision, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftSpendUsd, xAssetsToday, todaySpendUsd] =
       await Promise.all([
         client.from("signals").select("id", { count: "exact", head: true }).gte("observed_at", startOfToday.toISOString()),
         client.from("opportunities").select("id", { count: "exact", head: true }).eq("status", "open"),
@@ -365,6 +419,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .gte("created_at", startOfToday.toISOString())
           .in("stage", ["ready_for_owner", "handed_off"])
           .order("created_at", { ascending: false }),
+        getTodaySpendUsd(client),
       ]);
 
     const countBy = (rows: Array<Record<string, string>> | null, key: string): Record<string, number> => {
@@ -417,6 +472,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         opportunitiesByStatus: countBy(opportunitiesByStatus.data as Array<Record<string, string>>, "status"),
         campaignAssetsByStage: countBy(assetsByStage.data as Array<Record<string, string>>, "stage"),
         totalCostUsd: Number(totalCostUsd.toFixed(6)),
+        // Properly date-scoped (today, UTC calendar day, all providers) --
+        // see getTodaySpendUsd's doc comment. totalCostUsd above is
+        // lifetime and deliberately left as-is for the screens that
+        // already correctly label it "Total"/"LLM spend" (AnalyticsScreen,
+        // SystemScreen) -- only Home's "Today's spend" tile was wired to
+        // the wrong field, and now reads todaySpendUsd instead.
+        todaySpendUsd: Number(todaySpendUsd.toFixed(6)),
         autoDraft: {
           lastRunDate: lastAutoDraftRun?.runDate ?? null,
           lastRunStatus: lastAutoDraftRun?.status ?? null,

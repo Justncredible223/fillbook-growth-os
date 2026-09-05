@@ -4,6 +4,7 @@
   ],
   "functions": {
     "api/run-campaign.ts": { "maxDuration": 60 },
-    "api/daily-pipeline.ts": { "maxDuration": 60 }
+    "api/daily-pipeline.ts": { "maxDuration": 60 },
+    "api/growth-pulse.ts": { "maxDuration": 60 }
   }
 }

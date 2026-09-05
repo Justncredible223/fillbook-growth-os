@@ -143,6 +143,54 @@ async function checkProspectingSync(client: SupabaseClient): Promise<HealthItem>
   }
 }
 
+/** Same real attempt/success/error evidence as checkInboundSync, keyed to Reddit inbound's own integration_health row (platform="reddit_inbound", written by api/growth-pulse.ts). Independent of X's "Inbound Engagement" row -- a Reddit-specific failure (e.g. missing/expired REDDIT_* credentials) must show here on its own, not be masked by X's row staying healthy. */
+async function checkRedditInboundSync(client: SupabaseClient): Promise<HealthItem> {
+  try {
+    const { data } = await client
+      .from("integration_health")
+      .select("last_attempted_at, last_success_at, last_error")
+      .eq("platform", "reddit_inbound")
+      .maybeSingle();
+    if (!data) {
+      return { label: "Reddit Inbound", status: "NOT_CONNECTED", detail: "Never synced yet -- runs 3x/day via /api/growth-pulse (needs REDDIT_* credentials, see docs/REDDIT_INTEGRATION.md)" };
+    }
+    const row = data as { last_attempted_at: string | null; last_success_at: string | null; last_error: string | null };
+    if (row.last_error) {
+      return { label: "Reddit Inbound", status: "DOWN", detail: `Last attempt failed (${row.last_attempted_at}): ${row.last_error}` };
+    }
+    if (!row.last_success_at) {
+      return { label: "Reddit Inbound", status: "DEGRADED", detail: `Attempted at ${row.last_attempted_at}, no confirmed success yet` };
+    }
+    return { label: "Reddit Inbound", status: "HEALTHY", detail: `Verified live -- last synced ${row.last_success_at}` };
+  } catch (err) {
+    return { label: "Reddit Inbound", status: "DOWN", detail: errorMessage(err) };
+  }
+}
+
+/** Same shape as checkRedditInboundSync, for Reddit's own 1x/day prospecting step (platform="reddit_prospecting"). */
+async function checkRedditProspectingSync(client: SupabaseClient): Promise<HealthItem> {
+  try {
+    const { data } = await client
+      .from("integration_health")
+      .select("last_attempted_at, last_success_at, last_error")
+      .eq("platform", "reddit_prospecting")
+      .maybeSingle();
+    if (!data) {
+      return { label: "Reddit Prospecting", status: "NOT_CONNECTED", detail: "Never synced yet -- runs 1x/day via /api/growth-pulse (needs REDDIT_* credentials, see docs/REDDIT_INTEGRATION.md)" };
+    }
+    const row = data as { last_attempted_at: string | null; last_success_at: string | null; last_error: string | null };
+    if (row.last_error) {
+      return { label: "Reddit Prospecting", status: "DOWN", detail: `Last attempt failed (${row.last_attempted_at}): ${row.last_error}` };
+    }
+    if (!row.last_success_at) {
+      return { label: "Reddit Prospecting", status: "DEGRADED", detail: `Attempted at ${row.last_attempted_at}, no confirmed success yet` };
+    }
+    return { label: "Reddit Prospecting", status: "HEALTHY", detail: `Verified live -- last synced ${row.last_success_at}` };
+  } catch (err) {
+    return { label: "Reddit Prospecting", status: "DOWN", detail: errorMessage(err) };
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res)) return;
   if (req.method !== "GET") {
@@ -202,6 +250,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   health.push(await checkInboundSync(client));
   health.push(await checkProspectingSync(client));
+  health.push(await checkRedditInboundSync(client));
+  health.push(await checkRedditProspectingSync(client));
 
   res.status(200).json({ health });
 }

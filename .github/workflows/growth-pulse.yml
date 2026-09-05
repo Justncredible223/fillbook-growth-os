@@ -1,0 +1,127 @@
+name: Growth OS pulse (X + Reddit, higher-than-daily)
+
+# Free external scheduler for the workflows that need to run more than
+# once/day -- X prospecting/inbound (3x/day) and Reddit inbound (3x/day),
+# plus Reddit prospecting on its own once/day slot. Exists because Vercel
+# Hobby's Cron feature is capped at 2 jobs total, each at most once/day
+# (confirmed live in the Vercel dashboard, not upgradeable without the
+# account owner's approval) -- the existing "/api/daily-pipeline" cron
+# entry in backend/vercel.json already uses one of those 2 slots for the
+# once/day steps (search console ingest, opportunity generation, the
+# auto-draft step, cost-event retention). GitHub Actions' scheduled
+# workflows are free for a repo already hosted on GitHub and have no such
+# cap, so they cover everything above once/day instead.
+#
+# Approved schedule (backend/src/config/scheduleConfig.ts is the source of
+# truth for the *local* times below -- 08:00/13:00/18:00 and 09:00
+# America/Phoenix by default): the four `cron:` lines below are those same
+# local times expressed as fixed UTC crons, which is safe specifically
+# because America/Phoenix does not observe DST (confirmed via
+# Intl.DateTimeFormat, see scheduleConfig.ts's doc comment) -- the UTC
+# offset never drifts across the year, so a fixed UTC cron here stays
+# correct year-round without a seasonal adjustment. If SCHEDULE_TIMEZONE is
+# ever changed to a zone that DOES observe DST, these cron lines would need
+# two seasonal variants (or a small script step that computes the offset at
+# run time) -- not needed today, called out here so a future change to the
+# timezone doesn't silently go stale here.
+#
+#   America/Phoenix   UTC (fixed, no DST)   Workflow(s) triggered
+#   08:00             15:00                 X prospecting+inbound, Reddit inbound
+#   13:00             20:00                 X prospecting+inbound, Reddit inbound
+#   18:00             01:00 (next day)      X prospecting+inbound, Reddit inbound
+#   09:00             16:00                 Reddit prospecting (its own slot, 1x/day)
+#
+# Each trigger calls POST /api/growth-pulse with explicit query flags
+# (`x`, `redditInbound`, `redditProspecting`) rather than letting the
+# endpoint guess which schedule window "now" is nearest to -- see
+# backend/api/growth-pulse.ts's doc comment for why. This also means the
+# schedule actually enforced here is exactly these four fixed UTC times,
+# not a live re-derivation of whatever scheduleConfig.ts says today -- if
+# the approved local run times or timezone ever change, this file's cron
+# lines must be updated by hand to match (documented here so that's not a
+# silent trap).
+#
+# Manual "run now" support: use the "Run workflow" button (workflow_dispatch)
+# to trigger any subset of steps on demand, e.g. after a credential change.
+
+on:
+  schedule:
+    - cron: "0 15 * * *"
+    - cron: "0 20 * * *"
+    - cron: "0 1 * * *"
+    - cron: "0 16 * * *"
+  workflow_dispatch:
+    inputs:
+      x:
+        description: "Run X prospecting + X inbound + X mentions"
+        type: boolean
+        default: true
+      redditInbound:
+        description: "Run Reddit inbound"
+        type: boolean
+        default: true
+      redditProspecting:
+        description: "Run Reddit prospecting"
+        type: boolean
+        default: true
+
+concurrency:
+  # Prevents two invocations from overlapping (a slow run plus the next
+  # scheduled tick, or a manual run stacking on top of a scheduled one) --
+  # growth-pulse.ts's own steps are additionally idempotent (dedup-on-
+  # external-id, cursor-based since_id/before) so even a near-simultaneous
+  # double call couldn't double-insert, but avoiding the overlap entirely
+  # is simpler and cheaper than relying on that as the only guard.
+  group: growth-pulse
+  cancel-in-progress: false
+
+jobs:
+  pulse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine which step-groups this trigger covers
+        id: which
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "x=${{ inputs.x }}" >> "$GITHUB_OUTPUT"
+            echo "redditInbound=${{ inputs.redditInbound }}" >> "$GITHUB_OUTPUT"
+            echo "redditProspecting=${{ inputs.redditProspecting }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 16 * * *" ]; then
+            # The dedicated 09:00 America/Phoenix Reddit-prospecting slot --
+            # deliberately does NOT also run X's steps, so X stays at
+            # exactly 3 windows/day, never 4.
+            echo "x=false" >> "$GITHUB_OUTPUT"
+            echo "redditInbound=false" >> "$GITHUB_OUTPUT"
+            echo "redditProspecting=true" >> "$GITHUB_OUTPUT"
+          else
+            # 08:00 / 13:00 / 18:00 America/Phoenix -- X's 3x/day slots,
+            # which also cover Reddit's 3x/day inbound cadence.
+            echo "x=true" >> "$GITHUB_OUTPUT"
+            echo "redditInbound=true" >> "$GITHUB_OUTPUT"
+            echo "redditProspecting=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Call /api/growth-pulse
+        env:
+          BACKEND_BASE_URL: ${{ secrets.BACKEND_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$BACKEND_BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "::error::BACKEND_BASE_URL and/or CRON_SECRET repo secrets are not set -- see docs/PROGRESS_LEDGER.md / this workflow's own comment for setup steps. Refusing to call an unauthenticated/unknown endpoint."
+            exit 1
+          fi
+          url="${BACKEND_BASE_URL%/}/api/growth-pulse?x=${{ steps.which.outputs.x }}&redditInbound=${{ steps.which.outputs.redditInbound }}&redditProspecting=${{ steps.which.outputs.redditProspecting }}"
+          http_status=$(curl -sS -o response.json -w "%{http_code}" -X POST "$url" \
+            -H "Authorization: Bearer $CRON_SECRET")
+          echo "HTTP status: $http_status"
+          cat response.json
+          # 200 = every requested step succeeded, 207 = at least one step
+          # failed but others still ran (growth-pulse.ts's own
+          # one-source-failing-never-blocks-another contract) -- treat 207
+          # as a workflow failure so a real failure is visible in GitHub
+          # Actions' own run history/notifications, not just buried in the
+          # JSON body.
+          if [ "$http_status" != "200" ]; then
+            echo "::error::growth-pulse returned HTTP $http_status -- see response body above."
+            exit 1
+          fi

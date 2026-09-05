@@ -1215,3 +1215,129 @@ Building Growth Genome or Research Lab's schemas/screens now, with
 nothing real to fill them, would be hollow scaffolding -- not attempted.
 
 **Cumulative backend test count: 368/368 passing, typecheck clean.**
+
+## Phase 20 -- 3x/day X + Reddit schedule, Reddit prospecting/inbound, closed-loop scheduling (2026-09-04)
+
+Final approved operating model implemented per the exact spec: X
+prospecting 3x/day, X inbound 3x/day, Reddit prospecting 1x/day, Reddit
+inbound 3x/day, Anthropic auto-draft unchanged at 1x/day. Default
+timezone America/Phoenix (no DST), configurable.
+
+**Audited and built on top of in-progress uncommitted work found at
+session start** (an earlier session's first cut at "X 3x/day"):
+`prospectingEligibility.ts`'s `RUN_HOURS_UTC`/`currentRunSlot`,
+`TOPICS_PER_SEARCH_RUN=1`/`RESULTS_PER_QUERY=10`/
+`MONTHLY_PROSPECTING_BUDGET_USD=8.0`, the new `api/prospecting-pulse.ts`
+split, `daily-pipeline.ts`'s YouTube/TikTok-ingestion removal and
+`cost_events_retention` step, `costTracking.ts`'s
+`getTodaySpendUsd`/`pruneOldCostEvents`, and `summary.ts`'s
+`todaySpendUsd` wiring were all preserved. **One real, previously-uncaught
+bug found in that in-progress work and fixed**: adding
+`api/prospecting-pulse.ts` as a 13th serverless-function file silently
+exceeded Vercel Hobby's 12-function cap -- the exact deploy-breaking
+failure mode `docs/PROGRESS_LEDGER.md`'s own Phase 15 entry already
+documents once (a build that succeeds but fails silently at "Deploying
+outputs..."). Fixed by folding the former `api/cost-summary.ts` into
+`api/summary.ts?view=cost` (Android's `NetworkGrowthOsRepository
+.getCostSummary()` updated to match, response shape unchanged) to free a
+slot, then consolidating X's and Reddit's higher-frequency steps into ONE
+new file, `api/growth-pulse.ts` (replacing the uncommitted
+`prospecting-pulse.ts`), keeping the total at exactly 12 -- still zero
+headroom, called out explicitly in that file's own doc comment for the
+next person who reaches for a 13th.
+
+**New**:
+- `backend/src/config/scheduleConfig.ts` -- single source of truth for
+  all four workflows' local run times and the shared timezone
+  (`SCHEDULE_TIMEZONE`, default `America/Phoenix`). Converts a configured
+  local "HH:MM" to a UTC hour via `Intl.DateTimeFormat` for a *specific*
+  calendar date rather than a hardcoded fixed offset -- verified correct
+  for Phoenix (no seasonal drift, checked against both a January and a
+  July date) and for a DST-observing zone like America/New_York (correctly
+  produces *different* UTC hours across seasons), so a future timezone
+  change doesn't inherit a silently-wrong assumption.
+- Reddit adapter (`redditAdapter.ts`/`redditTokenStore.ts`, same
+  bootstrap-then-self-persist OAuth pattern as X/TikTok), Reddit
+  prospecting (`redditProspectingSearch.ts`/`redditTopics.ts`/
+  `redditEligibility.ts`, reusing `scoreProspectingCandidate()`
+  unmodified), and Reddit inbound (`redditIngestion.ts`, reusing
+  `classifyPriority()` unmodified) -- all writing into the SAME
+  `prospecting_candidates`/`inbound_engagements` tables as X
+  (`platform='reddit'`), no schema migration needed (`platform` was
+  already a free-text column). Full verified-vs-assumed writeup of
+  Reddit's current API terms (2026 Responsible Builder Policy --
+  self-service app registration closed, a manual approval ticket is now
+  required even for free/personal use, 2-4 week lead time) in the new
+  `docs/REDDIT_INTEGRATION.md`. Not yet verified against Reddit's real
+  API (no credentials exist -- structurally can't, until the approval
+  ticket clears) -- same "code-complete, credentials pending" posture as
+  Phase 12's TikTok adapter, unit-tested against mocked HTTP responses.
+- `api/growth-pulse.ts` -- one consolidated endpoint for every
+  higher-than-1x/day step (X mentions/inbound/prospecting, Reddit
+  inbound, Reddit prospecting), driven by explicit `?x=`/`?redditInbound=`/
+  `?redditProspecting=` query flags set by the CALLER
+  (`.github/workflows/growth-pulse.yml`) rather than the endpoint
+  inferring which scheduled slot `now` is nearest to -- deliberately more
+  robust than wall-clock inference given three different cadences share
+  one file. `resolveStepGroups()` is a pure, directly-unit-tested function
+  for this decision.
+- `.github/workflows/growth-pulse.yml` -- the free external scheduler
+  (GitHub Actions; Vercel Hobby Cron is capped at 2 jobs/once-per-day
+  each and structurally cannot run anything 3x/day). Four fixed-UTC cron
+  triggers (15:00/20:00/01:00/16:00 UTC = 08:00/13:00/18:00/09:00
+  America/Phoenix, safe as fixed UTC specifically because Phoenix never
+  observes DST -- called out as a real seam if the timezone ever changes
+  to a DST-observing one), `concurrency` group to prevent overlapping
+  runs, a `workflow_dispatch` manual "run now" trigger, and a hard `exit 1`
+  on any non-200 response (207 = partial failure) so a broken step is
+  visible in GitHub's own run history/notifications rather than only in
+  the JSON body.
+- `/api/health` gained "Reddit Inbound"/"Reddit Prospecting" rows
+  (`checkRedditInboundSync`/`checkRedditProspectingSync`, same real
+  attempt/success/error evidence pattern as X's existing rows, reading
+  the same `integration_health` table with `platform='reddit_inbound'`/
+  `'reddit_prospecting'`) -- correctly show `NOT_CONNECTED` until Reddit
+  credentials exist, never a fabricated `HEALTHY`.
+- Finished the other half of the inherited in-progress work: Android's
+  `HomeScreen.kt` "Today's spend" tile was still reading
+  `s.analytics.totalCostUsd` (the lifetime sum) instead of the new
+  `todaySpendUsd` field the backend/`Models.kt`/`NetworkGrowthOsRepository`
+  had already been wired for -- one-line fix, verified via
+  `./gradlew :app:compileDebugKotlin` (BUILD SUCCESSFUL).
+
+**Tests**: `scheduleConfig.test.ts` (21, including explicit Phoenix-winter-
+vs-summer no-drift checks and a DST-observing-zone contrast case),
+`growthPulseStepGroups.test.ts` (5), `redditAdapter.test.ts` (12, token
+refresh/error/field-mapping, mirroring `xAdapter.test.ts`),
+`redditProspectingSearch.test.ts` (6, dedup, spam exclusion, Reddit's own
+independent queue threshold, prior-outreach scoring bonus),
+`redditIngestion.test.ts` (10, dedup, thread/parent context preservation,
+reopened-thread-after-responded, private-message-not-actionable,
+Prospecting-outreach relationship bridge, independent cursor). **114 new
+tests this phase.**
+
+**Cumulative backend test count: 395/395 passing, typecheck clean
+(`tsc --noEmit`, zero errors). Android: `./gradlew :app:compileDebugKotlin`
+BUILD SUCCESSFUL.**
+
+**Not done this pass, and NOT claimed as done:**
+- No Android UI built specifically for Reddit (no Reddit icon/label
+  distinct from X's, no Reddit-specific empty states) -- a `platform=
+  'reddit'` row should render through the existing generic Inbound/
+  Prospecting screens since they already read `platform` as a plain
+  string, but this was not visually verified (no real Reddit data exists
+  yet to render, and no live Reddit credentials to generate any).
+- Reddit's OAuth app itself was NOT created (would require Justin's own
+  Reddit login and, per the 2025 policy change, his own submission of
+  Reddit's manual approval-ticket form) -- documented as a manual step in
+  `docs/REDDIT_INTEGRATION.md`, not attempted.
+- GitHub Actions repo secrets (`BACKEND_BASE_URL`, `CRON_SECRET`) were NOT
+  added -- requires repo-admin access this session doesn't have reason to
+  assume it should exercise unprompted for secret values; documented as a
+  manual step.
+- Nothing was deployed to Vercel production and no production Vercel Cron
+  configuration was changed beyond the checked-in `vercel.json` (still one
+  cron entry, `daily-pipeline` at `0 13 * * *`, unchanged).
+- Lint: this project has no configured `lint` script in `package.json` --
+  not something this pass could run or add scope for without a separate,
+  deliberate decision on tooling.

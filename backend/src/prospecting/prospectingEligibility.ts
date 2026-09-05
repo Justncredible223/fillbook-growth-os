@@ -7,11 +7,46 @@
  * docs/PROGRESS_LEDGER.md Phase 4.
  */
 
-/** How many of PROSPECTING_TOPICS get searched per daily-pipeline run -- rotates through the full list over several days rather than querying everything at once. */
-export const TOPICS_PER_SEARCH_RUN = 6;
+import { currentScheduleSlot, getScheduleTimezone, getXProspectingSchedule } from "../config/scheduleConfig.js";
 
-/** X's own minimum for max_results on this endpoint; going lower wastes a call for no benefit. */
-export const RESULTS_PER_QUERY = 15;
+/**
+ * How many of PROSPECTING_TOPICS get searched per growth-pulse run --
+ * rotates through the full list over time rather than querying everything
+ * at once. Deliberately small: the owner replies to a strict 8-15
+ * candidates/day (shadowban-risk discipline), and QUEUE_FULL_THRESHOLD
+ * below already stops search entirely once 2 days' worth of backlog is
+ * queued -- fetching more raw reads than that ceiling allows through
+ * doesn't produce more usable replies, it just spends more on results
+ * that sit unactioned. At 1 topic/run * 3 runs/day (RUN_HOURS_UTC), that's
+ * 3 topics/day covered, cycling PROSPECTING_TOPICS's full list every
+ * ~14 days.
+ */
+export const TOPICS_PER_SEARCH_RUN = 1;
+
+/** X's own minimum for max_results on this endpoint; going lower wastes a call for no benefit. Lowered from 15 -- 10 is still X's floor, and cuts read volume ~33% per query with no coverage loss that matters for a rotating discovery feed. */
+export const RESULTS_PER_QUERY = 10;
+
+/**
+ * The three daily X-prospecting-and-inbound growth-pulse invocations -- approved final
+ * schedule is 08:00/13:00/18:00 America/Phoenix (configurable via
+ * X_PROSPECTING_TIMES/SCHEDULE_TIMEZONE, see
+ * backend/src/config/scheduleConfig.ts, the single source of truth this
+ * now reads from instead of a locally-hardcoded UTC array). Must be kept
+ * in sync with .github/workflows/growth-pulse.yml's cron schedule, which
+ * calls /api/growth-pulse at the equivalent fixed UTC times (safe to
+ * fix in UTC because America/Phoenix never observes DST -- see
+ * scheduleConfig.ts's doc comment). currentRunSlot() below maps whatever
+ * time a run actually fires at back to the nearest configured slot, so a
+ * few minutes of scheduler jitter never miscounts which slot this is.
+ */
+export function currentRunSlot(now: Date): number {
+  return currentScheduleSlot(getXProspectingSchedule(), getScheduleTimezone(), now);
+}
+
+/** Number of X-prospecting run slots/day -- used to size the topic-rotation index. Derived from config, not a separate literal. */
+export function runSlotsPerDay(): number {
+  return getXProspectingSchedule().length;
+}
 
 /**
  * If this many non-terminal candidates (new/shown/drafting/ready -- the
@@ -36,11 +71,12 @@ export const STALE_EXPIRY_DAYS = 14;
 
 /**
  * Conservative monthly ceiling, leaving real headroom under the $10
- * deposited credit shared with mentions ingestion (which costs
- * fractions of a cent per run). At TOPICS_PER_SEARCH_RUN=6 *
- * RESULTS_PER_QUERY=15 * $0.005 = $0.45/day, ~30 days would be $13.50
- * uncapped -- this cap stops real spend before that, using actual
- * recorded cost_events rows, not just the theoretical estimate.
+ * deposited credit shared with mentions ingestion (which costs fractions
+ * of a cent per run). At TOPICS_PER_SEARCH_RUN=1 * RESULTS_PER_QUERY=10 *
+ * $0.005 = $0.05/run, 3 runs/day * 30 days = $4.50/month uncapped -- this
+ * cap leaves headroom for a heavier month while still stopping real spend
+ * well short of the shared $10 credit pool, using actual recorded
+ * cost_events rows, not just the theoretical estimate.
  */
 export const MONTHLY_PROSPECTING_BUDGET_USD = 8.0;
 

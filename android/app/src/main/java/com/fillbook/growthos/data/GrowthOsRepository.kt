@@ -108,6 +108,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             opportunitiesByStatus = mapOf("open" to 12, "actioned" to 1),
             campaignAssetsByStage = mapOf("draft" to 1, "final_draft" to 1, "ready_for_owner" to 1),
             totalCostUsd = 0.09,
+            todaySpendUsd = 0.0035,
             autoDraft = AutoDraftStatus(
                 lastRunDate = "2026-09-08",
                 lastRunStatus = "drafted",

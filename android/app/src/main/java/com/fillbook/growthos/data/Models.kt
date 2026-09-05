@@ -75,6 +75,8 @@ data class AnalyticsBreakdown(
     val opportunitiesByStatus: Map<String, Int>,
     val campaignAssetsByStage: Map<String, Int>,
     val totalCostUsd: Double,
+    /** Properly date-scoped (today, all providers) -- see backend's getTodaySpendUsd. Use this for any "today" spend display; totalCostUsd is lifetime. */
+    val todaySpendUsd: Double,
     val autoDraft: AutoDraftStatus,
 )
 
