@@ -733,14 +733,24 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     override suspend fun qualifyPartnership(id: String, rationale: String): PartnershipProspect =
         updatePartnershipItem(id) { it.copy(stage = PartnershipStage.QUALIFIED, qualificationRationale = rationale) }
 
-    override suspend fun generatePartnershipDraft(id: String): PartnershipProspect =
-        updatePartnershipItem(id) {
+    /** FIXTURE-ONLY: when set to "failed" or "skipped", the next generatePartnershipDraft() call throws a PartnershipDraftRejectedException carrying a real-shaped reason instead of succeeding -- lets that error path be verified on-device without spending real LLM budget. Resets to null after one use. Never used by production code. */
+    var debugNextGenerateDraftOutcome: String? = null
+
+    override suspend fun generatePartnershipDraft(id: String): PartnershipProspect {
+        val forced = debugNextGenerateDraftOutcome
+        debugNextGenerateDraftOutcome = null
+        when (forced) {
+            "failed" -> throw PartnershipDraftRejectedException("Draft didn't pass review: hook_specialist: generic opener; growth_strategist: no recipient-specific evidence.")
+            "skipped" -> throw PartnershipDraftRejectedException("Draft generation skipped: monthly_budget_reached (\$3.0000 spent, cap is \$3.00)")
+        }
+        return updatePartnershipItem(id) {
             it.copy(
                 stage = PartnershipStage.DRAFT_READY,
                 approvedCampaignAssetId = "asset-fake-partnership-${id}",
                 previewText = "Hi ${it.contactName ?: "there"} -- I've been following ${it.organizationName}'s work with futures traders on risk management. Fillbook is a broker-agnostic trading journal built around session review and visible account-rule tracking. ${it.proposedCollaboration.orEmpty()} Would you be open to a quick call?",
             )
         }
+    }
 
     override suspend fun markPartnershipContacted(id: String, channel: String, finalText: String): PartnershipProspect =
         updatePartnershipItem(id) { it.copy(stage = PartnershipStage.CONTACTED, contactedChannel = channel, contactedAt = "2026-09-05T20:00:00Z") }

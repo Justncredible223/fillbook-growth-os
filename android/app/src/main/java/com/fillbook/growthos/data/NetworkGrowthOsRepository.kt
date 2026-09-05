@@ -514,7 +514,16 @@ class NetworkGrowthOsRepository(
         post("/api/approvals?resource=partnerships", JSONObject().put("action", "qualify").put("id", id).put("rationale", rationale)).toPartnershipProspect()
 
     override suspend fun generatePartnershipDraft(id: String): PartnershipProspect {
-        post("/api/approvals?resource=partnerships", JSONObject().put("action", "generate-draft").put("id", id))
+        val result = post("/api/approvals?resource=partnerships", JSONObject().put("action", "generate-draft").put("id", id))
+        // "failed" (didn't pass the mechanical/review gates) and "skipped" (budget
+        // exhausted) are real, meaningful outcomes the owner needs to actually see
+        // -- not a connection problem, and not something to silently discard.
+        // Thrown here (rather than swallowed) so PartnershipsScreen's existing
+        // error-display path shows the real reason instead of a generic message.
+        when (result.optString("status")) {
+            "failed" -> throw PartnershipDraftRejectedException(result.optString("error", "the draft didn't pass review").let { "Draft didn't pass review: $it" })
+            "skipped" -> throw PartnershipDraftRejectedException(result.optString("skipReason", "budget exhausted").let { "Draft generation skipped: $it" })
+        }
         // The generate-draft response is a lightweight result (status/cost), not the full prospect shape --
         // re-fetch this one prospect's real current state (including the new previewText) from the list.
         return getPartnerships().items.first { it.id == id }
@@ -710,6 +719,9 @@ class NetworkGrowthOsRepository(
 
 /** [httpCode] lets callers tell an auth/config problem (401/500) apart from an unrelated server/network failure -- both used to surface as the same generic message before this existed. */
 class NetworkException(message: String, val httpCode: Int? = null) : Exception(message)
+
+/** A real, meaningful outcome from generate-draft (failed review/mechanical gate, or budget exhaustion) -- distinct from NetworkException so callers never mistake a legitimate content-quality rejection for a connectivity problem. */
+class PartnershipDraftRejectedException(message: String) : Exception(message)
 
 /** Small helpers since org.json's JSONArray predates Kotlin collections. */
 private fun <T> JSONArray.map(transform: (JSONObject) -> T): List<T> =

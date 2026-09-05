@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.PartnerCategory
 import com.fillbook.growthos.data.PartnershipDiscoveryRunResult
+import com.fillbook.growthos.data.PartnershipDraftRejectedException
 import com.fillbook.growthos.data.PartnershipProspect
 import com.fillbook.growthos.data.PartnershipStage
 import com.fillbook.growthos.ui.components.ExpandableText
@@ -135,6 +136,11 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                 action()
                 refresh()
                 actionError = null
+            } catch (e: PartnershipDraftRejectedException) {
+                // A real, meaningful outcome (failed review gate, budget exhausted)
+                // -- never a "check your connection" problem, so show it verbatim
+                // rather than the generic network message below.
+                actionError = e.message
             } catch (e: Exception) {
                 actionError = "Couldn't complete that action. Check your connection and try again."
             }
