@@ -733,10 +733,14 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     override suspend fun qualifyPartnership(id: String, rationale: String): PartnershipProspect =
         updatePartnershipItem(id) { it.copy(stage = PartnershipStage.QUALIFIED, qualificationRationale = rationale) }
 
-    /** FIXTURE-ONLY: when set to "failed" or "skipped", the next generatePartnershipDraft() call throws a PartnershipDraftRejectedException carrying a real-shaped reason instead of succeeding -- lets that error path be verified on-device without spending real LLM budget. Resets to null after one use. Never used by production code. */
+    /** FIXTURE-ONLY: when set to "failed", "skipped", or "network_error", the next generatePartnershipDraft() call throws a real-shaped error instead of succeeding -- lets that error path be verified on-device without spending real LLM budget. Resets to null after one use. Never used by production code. */
     var debugNextGenerateDraftOutcome: String? = null
+    /** FIXTURE-ONLY: counts every real invocation reaching this fake, including forced-error ones -- lets an on-device repeated-tap test confirm the UI's busy-state disable actually prevented a second concurrent call, not just that the visible result looked right. Never used by production code. */
+    var debugGenerateDraftCallCount: Int = 0
 
     override suspend fun generatePartnershipDraft(id: String): PartnershipProspect {
+        debugGenerateDraftCallCount += 1
+        kotlinx.coroutines.delay(1500) // FIXTURE-ONLY: widens the busy window so an on-device repeated-tap test has time to actually attempt a second tap.
         val forced = debugNextGenerateDraftOutcome
         debugNextGenerateDraftOutcome = null
         when (forced) {
@@ -748,6 +752,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
                 shortReason = "Draft generation skipped -- this month's Partnerships budget is used up.",
                 details = "monthly_budget_reached (\$3.0000 spent, cap is \$3.00)",
             )
+            "network_error" -> throw NetworkException("POST /api/approvals?resource=partnerships failed: HTTP 0 -- simulated network loss", null)
         }
         return updatePartnershipItem(id) {
             it.copy(

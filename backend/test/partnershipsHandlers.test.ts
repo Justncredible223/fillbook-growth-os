@@ -254,6 +254,83 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     expect(reviewerUserMessage).toContain("6-week risk-management cohort");
   });
 
+  /** Routes by the REAL request shape (tool_choice.name) instead of call order -- required for true concurrency tests, since two overlapping generate-draft calls interleave their fetch calls unpredictably against a shared mock. */
+  function contentAwareFetch(): ReturnType<typeof vi.fn> {
+    return vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      const toolName = body.tool_choice?.name as string | undefined;
+      if (toolName === "submit_draft") return draftResponse(GOOD_DRAFT);
+      if (toolName === "submit_verdict") return verdictResponse(true);
+      throw new Error(`unexpected tool_choice in test fetch mock: ${toolName}`);
+    });
+  }
+
+  it("KNOWN LIMITATION (documented, not silently assumed away): two concurrent generate-draft calls near the budget cap can both pass the initial check before either's cost lands, overspending the cap by up to one extra attempt's cost -- the budget check reads spend once per call and isn't a hard atomic reservation. Acceptable for this app's single-owner usage model (a genuine double-network-race requires two near-simultaneous taps), but must never be reported as a hard cap.", async () => {
+    global.fetch = contentAwareFetch() as unknown as typeof fetch;
+
+    // Seed spend just under the cap -- a single serial call is expected to
+    // slip slightly over (a known, accepted soft-cap property: the check
+    // happens BEFORE the call's own cost is known), but two CONCURRENT
+    // calls slipping through the SAME stale reading is the real race this
+    // test proves.
+    const client = buildClient({ cost_events: [{ event_type: "partnership_llm_call", cost_usd: 2.98, created_at: new Date().toISOString() }] });
+    const p1 = await createPartnership(asSupabase(client), newProspect({ organizationName: "Coach A" }));
+    const p2 = await createPartnership(asSupabase(client), newProspect({ organizationName: "Coach B", websiteUrl: "https://coachsiteb.com" }));
+    await qualifyPartnership(asSupabase(client), p1.prospect.id, "ok");
+    await qualifyPartnership(asSupabase(client), p2.prospect.id, "ok");
+
+    const [r1, r2] = await Promise.all([
+      generateDraftForPartnership(asSupabase(client), p1.prospect.id),
+      generateDraftForPartnership(asSupabase(client), p2.prospect.id),
+    ]);
+
+    // Both slip through on the stale $2.98 reading -- this IS the race,
+    // not a false alarm. If this assertion ever starts failing because
+    // BOTH now correctly can't both succeed, the race has been fixed;
+    // update this test to assert the improved behavior instead of
+    // loosening it.
+    expect([r1.status, r2.status].filter((s) => s === "ready")).toHaveLength(2);
+    const monthSpend = client.tables.cost_events!.filter((r) => r.event_type === "partnership_llm_call").reduce((sum, r) => sum + Number(r.cost_usd), 0);
+    expect(monthSpend).toBeGreaterThan(3.0); // confirms the cap was actually exceeded, not just narrowly hit
+  });
+
+  it("an interrupted request (one reviewer call fails mid-flight) still fails the whole attempt, but every OTHER call that already completed keeps its recorded cost -- nothing is silently lost, and the prospect is never left mid-transitioned", async () => {
+    // The 9 reviewers run via Promise.all (genuinely concurrent, not
+    // sequential) -- one failing rejects the whole batch, but the other 8
+    // (plus the earlier draft call) still completed and were billed before
+    // that rejection surfaced. That's the real, correct invariant to test
+    // here: failure never means "we don't know what we spent."
+    let reviewerCalls = 0;
+    global.fetch = vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      const toolName = body.tool_choice?.name as string | undefined;
+      if (toolName === "submit_draft") return draftResponse(GOOD_DRAFT);
+      reviewerCalls += 1;
+      if (reviewerCalls === 3) throw new Error("simulated network interruption");
+      return verdictResponse(true);
+    }) as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect());
+    await qualifyPartnership(asSupabase(client), prospect.id, "ok");
+
+    await expect(generateDraftForPartnership(asSupabase(client), prospect.id)).rejects.toThrow(/simulated network interruption/);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // At least the draft call, and most of the 8 reviewers that didn't hit
+    // the simulated failure, must still be costed -- failure must never
+    // silently erase already-incurred spend.
+    const costRows = client.tables.cost_events!.filter((r) => r.event_type === "partnership_llm_call");
+    expect(costRows.length).toBeGreaterThanOrEqual(8); // 1 draft + at least 7 of 9 reviewers (one throws, others may not all finish before the reject wins the race)
+
+    // The prospect itself must be untouched -- still 'qualified', no
+    // approved draft, no interaction log claiming a real outcome that
+    // never actually happened.
+    const updated = (await listPartnerships(asSupabase(client))).find((p) => p.id === prospect.id)!;
+    expect(updated.stage).toBe("qualified");
+    expect(updated.approvedCampaignAssetId).toBeNull();
+  });
+
   it("is skipped, spending nothing, once the independent partnership budget is exhausted -- never touches auto-draft/prospecting/x-feed-post's own budgets", async () => {
     const client = buildClient({
       cost_events: [{ event_type: "partnership_llm_call", cost_usd: 999, created_at: new Date().toISOString() }],
