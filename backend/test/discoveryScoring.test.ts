@@ -86,6 +86,12 @@ describe("isQualifyingRecommendation / rankCandidates", () => {
     expect(isQualifyingRecommendation(rec)).toBe(false);
   });
 
+  it("excludes a candidate with real posts but ZERO matched keywords, even with high recency/category/contactability -- regression test for a real production find (a crypto-yield-farming spam account scored 59 and qualified before this gate existed)", () => {
+    const rec = scoreCandidate(candidate({ postsMatched: 2, matchedTopics: [], mostRecentMatchAt: NOW.toISOString(), partnerCategory: "creator_community" }), NOW);
+    expect(rec.score).toBeGreaterThanOrEqual(40); // the score alone would have qualified -- confirms the gate, not the score, is what's protecting against this
+    expect(isQualifyingRecommendation(rec)).toBe(false);
+  });
+
   it("ranks qualifying candidates highest-score-first and drops non-qualifying ones", () => {
     const strong = candidate({ organizationName: "Strong", postsMatched: 4, matchedTopics: ["trading coach", "journaling", "trading mentor"] });
     const weak = candidate({ organizationName: "Weak", postsMatched: 1, matchedTopics: [] });

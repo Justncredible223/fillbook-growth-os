@@ -145,7 +145,21 @@ export function scoreCandidate(candidate: DiscoveryCandidate, now: Date = new Da
 const MIN_SCORE = 40;
 
 export function isQualifyingRecommendation(rec: RankedRecommendation): boolean {
-  return rec.scoreBreakdown.contactability > 0 && rec.candidate.postsMatched >= 1 && rec.score >= MIN_SCORE;
+  // matchedTopics.length > 0 is load-bearing, not redundant with
+  // postsMatched >= 1: a candidate found via an X search query still
+  // carries that query's OWN category label even when the candidate's
+  // actual text matched none of DISCOVERY_TOPIC_KEYWORDS (X's full-text
+  // relevance is looser than this project's own keyword check) -- without
+  // this, a real production run surfaced a crypto-yield-farming spam
+  // account with "topics: none matched" purely on recency+category+
+  // contactability. Zero real keyword evidence must never qualify,
+  // regardless of how many posts were merely returned by the search.
+  return (
+    rec.scoreBreakdown.contactability > 0 &&
+    rec.candidate.postsMatched >= 1 &&
+    rec.candidate.matchedTopics.length > 0 &&
+    rec.score >= MIN_SCORE
+  );
 }
 
 /** Ranks and filters to only qualifying recommendations, highest score first. */
