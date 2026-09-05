@@ -76,6 +76,34 @@ export async function recordXSearchCostEvent(
   return costUsd;
 }
 
+/**
+ * Reddit's free tier has no documented per-call dollar cost (see
+ * docs/REDDIT_INTEGRATION.md), so this records a $0 cost_events row purely
+ * for the same per-source/run observability every other adapter gets
+ * (System screen counters, /api/health) -- not a budget gate. If Reddit's
+ * terms change to a paid tier, this is the one place a real per-read cost
+ * would be plugged in, mirroring recordXSearchCostEvent.
+ */
+export async function recordRedditReadCostEvent(
+  client: SupabaseClient,
+  resultsReturned: number,
+  context: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    await client.from("cost_events").insert({
+      event_type: "reddit_read",
+      provider: "reddit",
+      model: "oauth/read",
+      input_tokens: 0,
+      output_tokens: resultsReturned,
+      cost_usd: 0,
+      context,
+    });
+  } catch {
+    // Deliberately swallowed -- see recordCostEvent's docstring above.
+  }
+}
+
 /** Real recorded X-search spend for the given month (created_at-based, not run_date -- x_search_read events have no separate "run date" concept), for Prospecting's budget gate. */
 export async function getProspectingMonthSpendUsd(client: SupabaseClient, now: Date = new Date()): Promise<number> {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
@@ -88,4 +116,33 @@ export async function getProspectingMonthSpendUsd(client: SupabaseClient, now: D
     .lt("created_at", nextMonthStart);
   if (error) throw new Error(`getProspectingMonthSpendUsd failed: ${error.message}`);
   return ((data ?? []) as Array<{ cost_usd: number | null }>).reduce((sum, r) => sum + Number(r.cost_usd ?? 0), 0);
+}
+
+/** Real recorded spend today (any provider/event_type), created_at-based, UTC calendar day. Distinct from getProspectingMonthSpendUsd (that one is a budget gate scoped to one event_type over a month) -- this is what a "today's spend" display should actually query instead of an unfiltered lifetime sum. */
+export async function getTodaySpendUsd(client: SupabaseClient, now: Date = new Date()): Promise<number> {
+  const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+  const { data, error } = await client.from("cost_events").select("cost_usd").gte("created_at", startOfToday);
+  if (error) throw new Error(`getTodaySpendUsd failed: ${error.message}`);
+  return ((data ?? []) as Array<{ cost_usd: number | null }>).reduce((sum, r) => sum + Number(r.cost_usd ?? 0), 0);
+}
+
+/**
+ * cost_events has no retention policy and grows forever -- one row per LLM
+ * call and per X search read, indefinitely. Deletes rows older than
+ * RETENTION_DAYS so a free-tier (500MB) Supabase project doesn't slowly
+ * fill up with cost-ledger history nobody needs after the fact: the real
+ * budget gates (getProspectingMonthSpendUsd, autoDraftRunRepository's
+ * getMonthSpendUsd) only ever look at the current calendar month, and the
+ * "Today's spend" tile only looks at today, so nothing operational reads
+ * data this old. Called once/day from daily-pipeline.ts -- deliberately
+ * NOT from the 3x/day growth-pulse, since running a delete sweep 3x
+ * as often buys nothing.
+ */
+const RETENTION_DAYS = 180;
+
+export async function pruneOldCostEvents(client: SupabaseClient, now: Date = new Date()): Promise<string> {
+  const cutoff = new Date(now.getTime() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const { error, count } = await client.from("cost_events").delete({ count: "exact" }).lt("created_at", cutoff);
+  if (error) throw new Error(`pruneOldCostEvents failed: ${error.message}`);
+  return `deleted ${count ?? 0} cost_events rows older than ${RETENTION_DAYS}d`;
 }
