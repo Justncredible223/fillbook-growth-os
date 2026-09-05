@@ -132,13 +132,16 @@ private sealed class Destination(val route: String, val label: String, val icon:
  * with no inbound traffic yet, proactive daily outreach is the primary
  * growth system, not a periodic check (see docs/PROSPECTING.md) --
  * Analytics is still one tap away in More, just no longer competing for
- * the habitual daily slot.
+ * the habitual daily slot. Inbound later replaced Approvals for the same
+ * reason: real engagement replies are now a daily habit, while Approvals
+ * is a periodic review that doesn't need a permanent slot -- it's still
+ * one tap away in More.
  */
-private val primaryDestinations = listOf(Destination.Home, Destination.Radar, Destination.Prospecting, Destination.Approvals)
+private val primaryDestinations = listOf(Destination.Home, Destination.Radar, Destination.Prospecting, Destination.Inbound)
 
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
-    Destination.Inbound,
+    Destination.Approvals,
     Destination.Analytics,
     Destination.Campaigns,
     Destination.ContentLibrary,
