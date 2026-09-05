@@ -176,11 +176,30 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                 val address = route.substringAfter(":").trim()
                 openExternalUrl(context, "mailto:$address")
             }
-            route.contains("x", ignoreCase = true) -> openExternalUrl(context, "https://x.com/compose/post")
+            route.contains("x", ignoreCase = true) -> {
+                // A partnership pitch is a DM to a specific recipient, never a
+                // public post -- "https://x.com/compose/post" (this screen's
+                // old behavior, copied from Home's Today's X Post, which IS a
+                // public post) opened the generic "What's happening?" composer
+                // instead of anything aimed at the recipient, confirmed on a
+                // real device. X has no reliable handle-based DM-compose deep
+                // link (only a numeric recipient_id, which discovery never
+                // collects), so the honest, correct destination is the
+                // recipient's own profile -- the owner taps Message from there.
+                val handle = extractXHandle(route)
+                if (handle != null) openExternalUrl(context, "https://x.com/$handle") else openExternalUrl(context, "https://x.com/compose/post")
+            }
             else -> false
         }
+        val isXDm = route?.contains("x", ignoreCase = true) == true
         scope.launch {
-            snackbarHostState.showSnackbar(if (opened) "Copied -- ${channelForRoute(route)} opened, contacting is still up to you" else "Copied, but couldn't open ${channelForRoute(route)} automatically")
+            snackbarHostState.showSnackbar(
+                when {
+                    opened && isXDm -> "Copied -- their X profile opened, tap Message to paste and send"
+                    opened -> "Copied -- ${channelForRoute(route)} opened, contacting is still up to you"
+                    else -> "Copied, but couldn't open ${channelForRoute(route)} automatically"
+                },
+            )
         }
         contactingId = prospect.id
     }
@@ -476,6 +495,21 @@ private fun stageLabel(stage: PartnershipStage): String = when (stage) {
  */
 fun isPitchStillEditable(stage: PartnershipStage): Boolean =
     stage == PartnershipStage.QUALIFIED || stage == PartnershipStage.DRAFT_READY
+
+/**
+ * Pulls the bare handle out of a contactRoute like "X DM: @phinloco" so
+ * Copy + Open can send the owner to that specific recipient's profile
+ * instead of X's generic public-post composer -- confirmed wrong on a
+ * real device (a partnership pitch is a DM, never a public post, and
+ * "https://x.com/compose/post" opens the "What's happening?" screen
+ * with no connection to the recipient at all). Null when no handle can
+ * be parsed, so the caller can fall back rather than open a broken URL.
+ */
+fun extractXHandle(contactRoute: String?): String? =
+    // Negative lookbehind excludes an "@" embedded mid-word (e.g. the
+    // "@example" inside "dana@example.com") -- only a real handle mention
+    // (preceded by whitespace, a colon, or the string start) counts.
+    contactRoute?.let { Regex("(?<![\\w.])@([A-Za-z0-9_]+)").find(it)?.groupValues?.get(1) }
 
 private fun stageTone(stage: PartnershipStage): StatusTone = when (stage) {
     PartnershipStage.PROSPECT -> StatusTone.NEUTRAL

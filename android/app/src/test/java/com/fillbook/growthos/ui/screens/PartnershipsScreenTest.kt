@@ -1,7 +1,9 @@
 package com.fillbook.growthos.ui.screens
 
 import com.fillbook.growthos.data.PartnershipStage
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -26,5 +28,18 @@ class PartnershipsScreenTest {
     @Test
     fun `a brand-new prospect with no draft yet is also not editable`() {
         assertFalse(isPitchStillEditable(PartnershipStage.PROSPECT))
+    }
+
+    @Test
+    fun `extracts the bare handle from a real contactRoute string`() {
+        assertEquals("phinloco", extractXHandle("X DM: @phinloco"))
+        assertEquals("wannabechamp", extractXHandle("X DM: @wannabechamp"))
+    }
+
+    @Test
+    fun `returns null when no handle can be parsed, so the caller can fall back instead of opening a broken URL`() {
+        assertNull(extractXHandle(null))
+        assertNull(extractXHandle("email: dana@example.com")) // an email route, not an X route
+        assertNull(extractXHandle("X DM: unknown"))
     }
 }
