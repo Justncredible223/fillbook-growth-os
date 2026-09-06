@@ -70,7 +70,7 @@ export async function draftOpportunityReply(
   // whenever X's API resolved it); null, never guessed, otherwise.
   const authorHandle = typeof signalRow.evidence?.authorHandle === "string" ? (signalRow.evidence.authorHandle as string) : null;
 
-  return draftInboundResponse(
+  const draft = await draftInboundResponse(
     llmClient,
     {
       platform: "x", // guaranteed by the x_mention source check above
@@ -83,4 +83,5 @@ export async function draftOpportunityReply(
     brandRulesSummary,
     verifiedKnowledgeSummary,
   );
+  return draft.reply;
 }

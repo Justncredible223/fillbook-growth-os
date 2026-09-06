@@ -18,6 +18,7 @@ function item(overrides: Partial<InboundEngagement>): InboundEngagement {
     priority: "p3_comment",
     status: "needs_response",
     draftResponse: null,
+    draftUsesLink: null,
     respondedAt: null,
     respondedNote: null,
     isRepeatEngager: false,

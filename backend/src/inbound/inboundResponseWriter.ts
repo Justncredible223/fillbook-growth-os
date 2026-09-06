@@ -4,9 +4,27 @@ const DRAFT_SCHEMA = {
   type: "object",
   properties: {
     reply: { type: "string", description: "The exact reply text, ready to post as-is." },
+    usesLink: {
+      type: "boolean",
+      description:
+        "True only if the reply includes the approved Fillbook contact link given in the link policy below, and only because the person's own message clearly asked for contact info or a link.",
+    },
   },
-  required: ["reply"],
+  required: ["reply", "usesLink"],
 };
+
+/**
+ * The one link Inbound is ever allowed to hand out, mirroring
+ * prospectingReplyWriter.ts's PROSPECTING_TRACKABLE_LINK pattern -- a
+ * single hardcoded, trackable link, never left to the model to invent.
+ * Its own path (/go/contact) keeps it distinguishable from Prospecting's
+ * outreach link in analytics. checkReplyGuardrails' domain check (see
+ * xReplyGuardrails.ts) enforces this mechanically -- a model claiming
+ * usesLink=true while actually writing some other domain still gets
+ * rejected.
+ */
+export const INBOUND_TRACKABLE_LINK = "fillbookhq.com/go/contact";
+export const INBOUND_APPROVED_LINK_DOMAINS = ["fillbookhq.com"];
 
 /**
  * What differs between platforms for an inbound reply: how the person
@@ -24,6 +42,19 @@ interface InboundPlatformProfile {
   /** How aggressively (or not) a Fillbook mention is ever appropriate -- see the same-named field/rationale in prospectingReplyWriter.ts. X gets the 2026-09-05 structured refresh; any other platform falls back to the conservative default. */
   noPitchGuidance: string;
 }
+
+/**
+ * Shared across every Inbound platform profile (unlike Prospecting, which
+ * varies its link policy per platform) -- Inbound's link is never earned
+ * by the conversation's topic, only by an explicit ask for contact info,
+ * so the rule doesn't actually change per platform.
+ */
+const INBOUND_LINK_POLICY =
+  `Do NOT include a link by default. Only if -- and only if -- this specific person's message clearly asks how to ` +
+  `contact/reach/find Fillbook, or explicitly asks for a link or website, you may include exactly this link once, ` +
+  `at the end of the reply, and set usesLink=true: ${INBOUND_TRACKABLE_LINK}. Never use any other link or domain. ` +
+  `If they didn't clearly ask for contact info or a link, set usesLink=false and do not include a link at all, ` +
+  `even if it feels helpful.`;
 
 /**
  * X-specific (2026-09-05): a mention is earned only after the reply has
@@ -92,7 +123,10 @@ This is a real one-on-one reply on ${profile.displayName}, not a broadcast post:
 - ${profile.noPitchGuidance}
 - Ground any product claim ONLY in the verified knowledge given -- never invent a feature.
 
-Submit your result via the submit_reply tool.`;
+Link policy: ${INBOUND_LINK_POLICY}
+
+Submit your result via the submit_reply tool, and set usesLink accurately based on what you actually
+wrote -- it is checked, not just descriptive.`;
 }
 
 export interface InboundDraftContext {
@@ -113,12 +147,17 @@ export interface InboundDraftContext {
  * 'draft_ready' -- a status distinct from 'responded', which only a human
  * action ever sets. See docs/INBOUND_ENGAGEMENT.md.
  */
+export interface InboundDraftResult {
+  reply: string;
+  usesLink: boolean;
+}
+
 export async function draftInboundResponse(
   client: LlmClient,
   context: InboundDraftContext,
   brandRulesSummary: string,
   verifiedKnowledgeSummary: string,
-): Promise<string> {
+): Promise<InboundDraftResult> {
   const profile = inboundPlatformProfile(context.platform);
   const relationshipNote = context.isRepeatEngager
     ? `This person has engaged with Fillbook on ${profile.displayName} ${context.priorInteractionCount} time(s) before -- an existing relationship, not a stranger.`
@@ -141,6 +180,5 @@ export async function draftInboundResponse(
     verifiedKnowledgeSummary,
   ].join("\n");
 
-  const result = await client.callTool<{ reply: string }>(buildInboundSystemPrompt(context.platform), userMessage, "submit_reply", DRAFT_SCHEMA);
-  return result.reply;
+  return client.callTool<InboundDraftResult>(buildInboundSystemPrompt(context.platform), userMessage, "submit_reply", DRAFT_SCHEMA);
 }

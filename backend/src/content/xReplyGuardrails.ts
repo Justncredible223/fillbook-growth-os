@@ -28,10 +28,45 @@ export function containsBannedGenericPhrase(reply: string): GuardrailViolation |
 
 /** Matches a real URL, or a bare-domain mention (e.g. "fillbookhq.com") -- a link doesn't need "http://" to read as a link/CTA in a tweet. */
 const LINK_PATTERN = /https?:\/\/\S+|\b[a-z0-9-]+\.(com|io|co|app|net)\b/i;
+/** Same pattern, global -- used to enumerate every link-shaped match (not just the first) so each one's domain can be checked. */
+const LINK_PATTERN_GLOBAL = /https?:\/\/\S+|\b[a-z0-9-]+\.(?:com|io|co|app|net)\b/gi;
 
 /** True if the reply text contains anything link-shaped. Callers decide whether that's expected (usesLink=true, on a platform/context where a link is allowed) or a violation (a link slipped in by default). */
 export function containsLink(reply: string): boolean {
   return LINK_PATTERN.test(reply);
+}
+
+/** Strips a matched link down to its bare host (no protocol, path, query, or trailing punctuation), lowercased, so it can be compared against an approved-domain allowlist. */
+function extractLinkDomains(reply: string): string[] {
+  const matches = reply.match(LINK_PATTERN_GLOBAL) ?? [];
+  return matches.map((match) => {
+    const withoutProtocol = match.replace(/^https?:\/\//i, "");
+    const host = withoutProtocol.split(/[/?#]/)[0] ?? withoutProtocol;
+    return host.toLowerCase().replace(/[.,!?;:)]+$/, "");
+  });
+}
+
+/** True if `domain` is (or is a subdomain of) one of `approvedDomains`. */
+function isApprovedDomain(domain: string, approvedDomains: string[]): boolean {
+  return approvedDomains.some((approved) => domain === approved || domain.endsWith(`.${approved}`));
+}
+
+/**
+ * Phrase-based, deterministic detector for "this message is clearly asking
+ * us for contact info or a link" -- e.g. "how do I contact you", "what's
+ * your website", "where can I sign up". Deliberately narrow (same
+ * house-style tradeoff as the rest of this file): a false negative here
+ * just means a legitimate contact reply can't include a link this time
+ * (safe -- Inbound already defaults to no link), while a false positive
+ * would let an arbitrary reply attach a link it was never actually asked
+ * for, which is the exact hole this function exists to close.
+ */
+const CONTACT_OR_LINK_REQUEST_PATTERN =
+  /\bhow (?:do|can|would) i (?:contact|reach|get in touch with|find|follow) you\b|\bwhere can i (?:contact|reach|find) you\b|\bwhat(?:'s| is) your (?:website|site|link|url)\b|\bhow do i (?:sign up|get started|join)\b|\bwhere do i (?:sign up|get started|join)\b|\bdo you have a (?:link|website|site)\b|\bcan (?:you|i get) (?:a|the) link\b|\bsend me a link\b/i;
+
+/** True if the original inbound message clearly requests contact info or a link -- see the pattern's own docstring for why this stays deliberately narrow. */
+export function impliesContactOrLinkRequest(messageText: string): boolean {
+  return CONTACT_OR_LINK_REQUEST_PATTERN.test(messageText);
 }
 
 /**
@@ -55,6 +90,19 @@ export function containsUnverifiedClaim(reply: string): GuardrailViolation | nul
   return match ? { reason: match.reason } : null;
 }
 
+export interface ReplyGuardrailOptions {
+  /**
+   * When given, a link is only accepted if EVERY link-shaped match in the
+   * reply resolves to one of these domains (or a subdomain of one) --
+   * closes the gap where `expectsLink=true` alone would let any arbitrary
+   * or promotional domain through unchecked. Omitted entirely (as
+   * Prospecting's existing call site does) preserves the original,
+   * unchanged behavior: `expectsLink=true` trusts the caller's own
+   * declaration with no domain check.
+   */
+  approvedLinkDomains?: string[];
+}
+
 /**
  * Runs every mechanical check and returns the first violation found, or
  * null for a clean reply. `expectsLink` should be true only when the
@@ -63,7 +111,7 @@ export function containsUnverifiedClaim(reply: string): GuardrailViolation | nul
  * link-shaped text is treated as a violation of "never include a link by
  * default".
  */
-export function checkReplyGuardrails(reply: string, expectsLink: boolean): GuardrailViolation | null {
+export function checkReplyGuardrails(reply: string, expectsLink: boolean, options?: ReplyGuardrailOptions): GuardrailViolation | null {
   const genericPhrase = containsBannedGenericPhrase(reply);
   if (genericPhrase) return genericPhrase;
 
@@ -72,6 +120,13 @@ export function checkReplyGuardrails(reply: string, expectsLink: boolean): Guard
 
   if (!expectsLink && containsLink(reply)) {
     return { reason: "includes a link that wasn't declared as intentional (usesLink was false or absent)" };
+  }
+
+  if (expectsLink && options?.approvedLinkDomains) {
+    const disallowed = extractLinkDomains(reply).find((domain) => !isApprovedDomain(domain, options.approvedLinkDomains!));
+    if (disallowed) {
+      return { reason: `includes a link on a domain that isn't an approved Fillbook link ("${disallowed}")` };
+    }
   }
 
   return null;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { checkReplyGuardrails, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim } from "../src/content/xReplyGuardrails";
+import { checkReplyGuardrails, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
 
 describe("checkReplyGuardrails", () => {
   it("passes a purely helpful reply where promotion would be inappropriate -- no Fillbook mention at all", () => {
@@ -46,6 +46,53 @@ describe("checkReplyGuardrails", () => {
 
   it("rejects a guarantee-style claim", () => {
     expect(checkReplyGuardrails("This is guaranteed to fix your drawdown problem.", false)).not.toBeNull();
+  });
+
+  describe("approvedLinkDomains (Inbound's stricter domain check)", () => {
+    it("preserves prospecting's exact old behavior when no allowlist is given -- any link passes once expectsLink=true", () => {
+      expect(checkReplyGuardrails("Reach us at some-random-domain.com/anything", true)).toBeNull();
+    });
+
+    it("passes a link on an approved domain", () => {
+      const reply = "Happy to help directly -- fillbookhq.com/go/contact";
+      expect(checkReplyGuardrails(reply, true, { approvedLinkDomains: ["fillbookhq.com"] })).toBeNull();
+    });
+
+    it("rejects a link on an arbitrary domain even with expectsLink=true", () => {
+      const reply = "Reach us at some-random-domain.com/contact";
+      const violation = checkReplyGuardrails(reply, true, { approvedLinkDomains: ["fillbookhq.com"] });
+      expect(violation).not.toBeNull();
+      expect(violation!.reason).toContain("isn't an approved Fillbook link");
+      expect(violation!.reason).toContain("some-random-domain.com");
+    });
+
+    it("a subdomain of an approved domain is still approved", () => {
+      const reply = "See https://help.fillbookhq.com/contact for details.";
+      expect(checkReplyGuardrails(reply, true, { approvedLinkDomains: ["fillbookhq.com"] })).toBeNull();
+    });
+
+    it("the domain check never runs when expectsLink is false -- the existing undeclared-link rejection still fires first", () => {
+      const reply = "Worth trying fillbookhq.com for this, honestly.";
+      const violation = checkReplyGuardrails(reply, false, { approvedLinkDomains: ["fillbookhq.com"] });
+      expect(violation!.reason).toContain("wasn't declared as intentional");
+    });
+  });
+});
+
+describe("impliesContactOrLinkRequest", () => {
+  it("recognizes a direct 'how do I contact you' question", () => {
+    expect(impliesContactOrLinkRequest("Interesting how do I contact you though")).toBe(true);
+  });
+
+  it("recognizes other real phrasings of the same ask", () => {
+    expect(impliesContactOrLinkRequest("what's your website?")).toBe(true);
+    expect(impliesContactOrLinkRequest("where do I sign up for this")).toBe(true);
+    expect(impliesContactOrLinkRequest("do you have a link for that")).toBe(true);
+  });
+
+  it("does not flag an ordinary, unrelated message", () => {
+    expect(impliesContactOrLinkRequest("how does trailing drawdown work?")).toBe(false);
+    expect(impliesContactOrLinkRequest("Fillbook actually tracks that automatically")).toBe(false);
   });
 });
 

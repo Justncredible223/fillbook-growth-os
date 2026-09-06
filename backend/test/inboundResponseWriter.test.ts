@@ -6,8 +6,8 @@ function jsonResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
 }
 
-function replyResponse(reply: string) {
-  return jsonResponse({ content: [{ type: "tool_use", name: "submit_reply", input: { reply } }] });
+function replyResponse(reply: string, usesLink = false) {
+  return jsonResponse({ content: [{ type: "tool_use", name: "submit_reply", input: { reply, usesLink } }] });
 }
 
 async function capture(context: Parameters<typeof draftInboundResponse>[1]) {
@@ -24,14 +24,37 @@ describe("draftInboundResponse", () => {
     const fetchMock = vi.fn().mockResolvedValue(replyResponse("Trailing drawdown resets daily on most prop firms -- worth checking your specific rules."));
     const client = new LlmClient("test-key", fetchMock);
 
-    const reply = await draftInboundResponse(
+    const draft = await draftInboundResponse(
       client,
       { platform: "x", authorHandle: "someTrader", messageText: "how does trailing drawdown work?", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 },
       "voice: concise",
       "Fillbook tracks prop-firm drawdown rules.",
     );
 
-    expect(reply).toBe("Trailing drawdown resets daily on most prop firms -- worth checking your specific rules.");
+    expect(draft.reply).toBe("Trailing drawdown resets daily on most prop firms -- worth checking your specific rules.");
+    expect(draft.usesLink).toBe(false);
+  });
+
+  it("passes through the model's own usesLink declaration rather than inferring it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(replyResponse("You can reach us at fillbookhq.com/go/contact.", true));
+    const client = new LlmClient("test-key", fetchMock);
+
+    const draft = await draftInboundResponse(
+      client,
+      { platform: "x", authorHandle: "curious", messageText: "how do I contact you though", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 },
+      "voice: concise",
+      "",
+    );
+
+    expect(draft.usesLink).toBe(true);
+  });
+
+  it("the system prompt gives the link policy: no link by default, the one approved link only when contact is asked for", async () => {
+    const { system } = await capture({ platform: "x", authorHandle: "someone", messageText: "hi", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 });
+
+    expect(system).toContain("Do NOT include a link by default");
+    expect(system).toContain("fillbookhq.com/go/contact");
+    expect(system).toContain("set usesLink=true");
   });
 
   it("includes relationship context in the prompt for a repeat engager", async () => {
