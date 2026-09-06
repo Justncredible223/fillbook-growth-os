@@ -64,6 +64,7 @@ import com.fillbook.growthos.ui.components.inboundPriorityColor
 import com.fillbook.growthos.ui.components.inboundPriorityLabel
 import com.fillbook.growthos.ui.components.inboundStatusLabel
 import com.fillbook.growthos.ui.components.inboundStatusTone
+import com.fillbook.growthos.ui.components.InboundReplyLink
 import com.fillbook.growthos.ui.components.openExternalUrl
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
@@ -138,7 +139,18 @@ fun InboundScreen(repo: GrowthOsRepository) {
         val draft = item.draftResponse
         if (draft != null) copyToClipboard(context, "Reply to ${item.authorHandle ?: "unknown"}", draft)
         val sourceReference = item.sourceReference
-        val opened = sourceReference != null && openExternalUrl(context, sourceReference)
+        // For a real X item, opens X's reply-intent URL (pre-fills
+        // "Replying to @..." in the actual reply composer) built from the
+        // exact tweet ID in sourceReference, instead of the tweet's plain
+        // URL -- opening the plain URL landed on X's generic composer,
+        // which risked the owner's reply posting as a new standalone post
+        // instead of a real reply. Falls back to sourceReference itself
+        // unchanged for any other platform or an unrecognized URL shape.
+        // This never changes status -- opening the platform must never
+        // imply a reply was sent; "Mark responded" stays its own explicit
+        // action, untouched here.
+        val urlToOpen = InboundReplyLink.buildInboundReplyUrl(item.platform, sourceReference)
+        val opened = urlToOpen != null && openExternalUrl(context, urlToOpen)
         val message = PlatformActions.copyAndOpenMessage(
             platform = item.platform,
             copied = draft != null,
