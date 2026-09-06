@@ -107,4 +107,24 @@ class InboundReplyLinkTest {
         val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", "DefiDelilah", "   ")
         assertEquals("https://x.com/intent/post?in_reply_to=501&text=%40DefiDelilah", url)
     }
+
+    /**
+     * Regression coverage for a real incident: x.com/intent/post reserves
+     * an extra blank editable line above pre-filled text, purely cosmetic.
+     * Switching to twitter.com/intent/tweet (same in_reply_to/text params)
+     * was tried live to remove that line, but verified via the account's
+     * own Chrome session that it silently drops in_reply_to entirely: the
+     * resulting post had no "Replying to @handle" context, never appeared
+     * on the account's Replies tab, and was a brand-new standalone tweet
+     * merely mentioning the person -- a real, incorrectly-posted tweet on
+     * the live account, not a cosmetic issue. MUST stay on
+     * x.com/intent/post permanently -- do not swap this again without
+     * live, on-account re-verification via the Replies tab specifically
+     * (the composer's own visual state looked identical either way).
+     */
+    @Test
+    fun `stays on x-com's intent-post endpoint -- twitter-com's intent-tweet was confirmed to drop in_reply_to entirely`() {
+        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501")
+        assertEquals("https://x.com/intent/post?in_reply_to=501", url)
+    }
 }

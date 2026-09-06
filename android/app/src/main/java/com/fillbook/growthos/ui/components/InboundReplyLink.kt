@@ -45,6 +45,17 @@ object InboundReplyLink {
      * Building the complete "@handle <reply>" text ourselves, in the
      * correct order, sidesteps that cursor position entirely -- there is
      * nothing left to paste for a plain no-link reply, only to review.
+     *
+     * MUST stay on x.com/intent/post -- twitter.com/intent/tweet was tried
+     * live (with the exact same in_reply_to/text params) specifically to
+     * remove a reserved blank line the native X app puts above pre-filled
+     * text, but verified live via the account's own Chrome session that it
+     * silently drops in_reply_to entirely: the resulting post has no
+     * "Replying to @handle" context, doesn't appear on the account's
+     * Replies tab, and is a brand-new standalone tweet that merely mentions
+     * the person by name -- worse than the cosmetic blank line it was
+     * meant to fix. Reverted; the blank line stays as a one-keystroke
+     * backspace the owner has to do, in exchange for a REAL threaded reply.
      */
     fun buildInboundReplyUrl(platform: String, sourceReference: String?, authorHandle: String? = null, draftReply: String? = null): String? {
         if (sourceReference == null) return null
