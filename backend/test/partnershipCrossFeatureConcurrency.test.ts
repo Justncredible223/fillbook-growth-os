@@ -131,7 +131,7 @@ describe("discovery and generation running CONCURRENTLY share one atomic budget 
 
     const client = buildClient({
       // Discovery bucket is essentially exhausted; generation bucket is untouched.
-      cost_events: [{ event_type: "partnership_x_search_read", cost_usd: 0.99, created_at: NOW.toISOString() }],
+      cost_events: [{ event_type: "partnership_x_search_read", cost_usd: 1.99, created_at: NOW.toISOString() }],
     });
     const { prospect } = await createPartnership(asSupabase(client), newProspect());
     await qualifyPartnership(asSupabase(client), prospect.id, "ok");

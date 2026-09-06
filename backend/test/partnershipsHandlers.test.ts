@@ -380,12 +380,12 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
   it("FIXED (was a known limitation, now closed): two concurrent generate-draft calls for DIFFERENT prospects near the generation budget cap no longer both spend -- an atomic, serialized reservation (not the per-prospect generation_claimed_at mutex, which never covered this) closes the cross-prospect race", async () => {
     global.fetch = contentAwareFetch() as unknown as typeof fetch;
 
-    // $1.70 of real generation-bucket spend leaves $0.30 of headroom under
-    // the $2.00 generation cap -- enough for ONE $0.25 reservation ceiling,
+    // $9.70 of real generation-bucket spend leaves $0.30 of headroom under
+    // the $10.00 generation cap -- enough for ONE $0.25 reservation ceiling,
     // not two. If the race were still open, both would read the same
-    // $1.70 and both would proceed; the atomic reservation must instead
+    // $9.70 and both would proceed; the atomic reservation must instead
     // let exactly one through.
-    const client = buildClient({ cost_events: [{ event_type: "partnership_llm_call", cost_usd: 1.7, created_at: new Date().toISOString() }] });
+    const client = buildClient({ cost_events: [{ event_type: "partnership_llm_call", cost_usd: 9.7, created_at: new Date().toISOString() }] });
     const p1 = await createPartnership(asSupabase(client), newProspect({ organizationName: "Coach A" }));
     const p2 = await createPartnership(asSupabase(client), newProspect({ organizationName: "Coach B", websiteUrl: "https://coachsiteb.com" }));
     await qualifyPartnership(asSupabase(client), p1.prospect.id, "ok");
@@ -405,7 +405,7 @@ describe("generateDraftForPartnership -- reuses the real pipeline, full rigor", 
     // The generation bucket cap was never actually exceeded -- unlike the
     // old behavior, real recorded spend stays inside it.
     const bucketSpend = client.tables.cost_events!.filter((r) => r.event_type === "partnership_llm_call").reduce((sum, r) => sum + Number(r.cost_usd), 0);
-    expect(bucketSpend).toBeLessThanOrEqual(2.0);
+    expect(bucketSpend).toBeLessThanOrEqual(10.0);
 
     // No leftover reservation from either call -- both released cleanly.
     const openReservations = (client.tables.partnership_budget_reservations ?? []).filter((r: any) => r.released_at == null);

@@ -6,18 +6,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  * spend must never compete with or be silently starved by auto-draft's,
  * prospecting's, or x-feed-post's own budgets.
  *
- * $3.00 default explicitly approved by the owner (2026-09-05) -- covers
- * ~35 full-quality drafts/month (1 draft + all 9 reviewers, no cut
- * corners) against a realistic first-phase volume of a handful of real
- * prospects. Overridable via PARTNERSHIP_MONTHLY_BUDGET_USD without a
- * code change if the owner wants a different number later.
+ * $12.00 default explicitly approved by the owner (2026-09-05, raised
+ * from the original $3.00 the same day after that cap was hit on day one
+ * with only 8 real prospects loaded). At the measured ~$0.06-0.21 cost
+ * per draft attempt (1 writer + up to 9 reviewers, see
+ * GENERATION_ATTEMPT_RESERVATION_CEILING_USD in partnershipsHandlers.ts),
+ * this comfortably covers dozens of draft attempts a month even at the
+ * worst-case per-attempt cost. Overridable via PARTNERSHIP_MONTHLY_BUDGET_USD
+ * without a code change if the owner wants a different number later.
  */
-export const PARTNERSHIP_MONTHLY_BUDGET_USD = Number(process.env.PARTNERSHIP_MONTHLY_BUDGET_USD) || 3.0;
+export const PARTNERSHIP_MONTHLY_BUDGET_USD = Number(process.env.PARTNERSHIP_MONTHLY_BUDGET_USD) || 12.0;
 
 /**
- * Sub-allocations of the shared $3 cap, owner-approved (2026-09-05): daily
+ * Sub-allocations of the shared $12 cap, owner-approved (2026-09-05): daily
  * paid discovery isn't needed (see discoveryEligibility.ts's backlog gate),
- * so discovery/enrichment gets a deliberately small $1 slice, leaving $2
+ * so discovery/enrichment gets a deliberately small $2 slice, leaving $10
  * reserved for pitch generation/review -- the actual product-value work.
  * Both are enforced ATOMICALLY alongside the shared cap by
  * reserve_partnership_budget (see budgetReservation.ts and migration 0024):
@@ -29,8 +32,8 @@ export const PARTNERSHIP_MONTHLY_BUDGET_USD = Number(process.env.PARTNERSHIP_MON
  * shared cap, not a partition of it -- but they do sum to it under today's
  * defaults, and a test asserts that stays true.
  */
-export const PARTNERSHIP_DISCOVERY_BUDGET_USD = Number(process.env.PARTNERSHIP_DISCOVERY_BUDGET_USD) || 1.0;
-export const PARTNERSHIP_GENERATION_BUDGET_USD = Number(process.env.PARTNERSHIP_GENERATION_BUDGET_USD) || 2.0;
+export const PARTNERSHIP_DISCOVERY_BUDGET_USD = Number(process.env.PARTNERSHIP_DISCOVERY_BUDGET_USD) || 2.0;
+export const PARTNERSHIP_GENERATION_BUDGET_USD = Number(process.env.PARTNERSHIP_GENERATION_BUDGET_USD) || 10.0;
 
 export interface EligibilityCheckResult {
   eligible: boolean;

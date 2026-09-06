@@ -128,7 +128,7 @@ describe("runPartnershipDiscoveryStep", () => {
       prospecting_candidates: [],
       inbound_engagements: [],
       partnership_prospects: [],
-      cost_events: [{ event_type: "partnership_llm_call", cost_usd: 3.5, created_at: NOW.toISOString() }],
+      cost_events: [{ event_type: "partnership_llm_call", cost_usd: 12.5, created_at: NOW.toISOString() }],
     });
     const adapter = fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] });
 
@@ -307,16 +307,16 @@ describe("runPartnershipDiscoveryStep", () => {
     expect(result.status).not.toBe("skipped_backlog_sufficient");
   });
 
-  it("is blocked by its OWN $1 discovery bucket cap even while the shared $3 cap still has room -- the two allocations are enforced independently", async () => {
+  it("is blocked by its OWN $2 discovery bucket cap even while the shared $12 cap still has room -- the two allocations are enforced independently", async () => {
     const client = new FakeSupabaseClient({
       creators: [],
       prospecting_candidates: [],
       inbound_engagements: [],
       partnership_prospects: [],
-      // $0.95 of real discovery spend -- $0.05 of headroom under the $1.00
+      // $1.95 of real discovery spend -- $0.05 of headroom under the $2.00
       // discovery cap, less than the $0.275 reservation ceiling for a full
-      // run, even though the SHARED $3 cap has $2.05 of headroom left.
-      cost_events: [{ event_type: "partnership_x_search_read", cost_usd: 0.95, created_at: NOW.toISOString() }],
+      // run, even though the SHARED $12 cap has $10.05 of headroom left.
+      cost_events: [{ event_type: "partnership_x_search_read", cost_usd: 1.95, created_at: NOW.toISOString() }],
     });
     const adapter = fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] });
 

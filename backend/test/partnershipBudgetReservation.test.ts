@@ -39,8 +39,8 @@ describe("reservePartnershipBudget / releasePartnershipBudgetReservation", () =>
   });
 
   it("denies a reservation that would push its OWN bucket over the bucket cap, even with room left in the shared cap", async () => {
-    const c = client({ cost_events: [{ event_type: "partnership_llm_call", cost_usd: 1.9, created_at: new Date().toISOString() }] });
-    const result = await reservePartnershipBudget(asSupabase(c), "generation", 0.25); // 1.9 + 0.25 = 2.15 > $2.00 generation cap
+    const c = client({ cost_events: [{ event_type: "partnership_llm_call", cost_usd: 9.9, created_at: new Date().toISOString() }] });
+    const result = await reservePartnershipBudget(asSupabase(c), "generation", 0.25); // 9.9 + 0.25 = 10.15 > $10.00 generation cap
     expect(result.eligible).toBe(false);
     expect(result.reason).toMatch(/bucket_budget_reached \(generation/);
     expect(c.tables.partnership_budget_reservations).toHaveLength(0); // denied reservations are never inserted
@@ -53,10 +53,10 @@ describe("reservePartnershipBudget / releasePartnershipBudgetReservation", () =>
   });
 
   it("two back-to-back reservations in the SAME bucket correctly stack against each other -- the second sees the first's still-open hold", async () => {
-    const c = client({ cost_events: [{ event_type: "partnership_llm_call", cost_usd: 1.6, created_at: new Date().toISOString() }] }); // $0.40 headroom
-    const first = await reservePartnershipBudget(asSupabase(c), "generation", 0.25); // 1.6+0.25=1.85 OK
+    const c = client({ cost_events: [{ event_type: "partnership_llm_call", cost_usd: 9.6, created_at: new Date().toISOString() }] }); // $0.40 headroom
+    const first = await reservePartnershipBudget(asSupabase(c), "generation", 0.25); // 9.6+0.25=9.85 OK
     expect(first.eligible).toBe(true);
-    const second = await reservePartnershipBudget(asSupabase(c), "generation", 0.25); // 1.6+0.25(open)+0.25=2.10 > 2.00
+    const second = await reservePartnershipBudget(asSupabase(c), "generation", 0.25); // 9.6+0.25(open)+0.25=10.10 > 10.00
     expect(second.eligible).toBe(false);
     expect(second.reason).toMatch(/bucket_budget_reached/);
   });
@@ -64,14 +64,14 @@ describe("reservePartnershipBudget / releasePartnershipBudgetReservation", () =>
   it("FIXED (was a real gap): an expired open reservation is SETTLED into a real, conservative charge -- it must count as spend, not silently free up budget for a call whose true cost is unknown", async () => {
     const oldReservation = { id: "old-1", bucket: "generation", amount_usd: 0.25, prospect_id: null, created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), released_at: null, settled_as_charge: false }; // 10 minutes old, default expiry is 300s = 5min
     const c = client({
-      cost_events: [{ event_type: "partnership_llm_call", cost_usd: 1.8, created_at: new Date().toISOString() }],
+      cost_events: [{ event_type: "partnership_llm_call", cost_usd: 9.6, created_at: new Date().toISOString() }],
       partnership_budget_reservations: [oldReservation],
     });
-    const result = await reservePartnershipBudget(asSupabase(c), "generation", 0.15);
+    const result = await reservePartnershipBudget(asSupabase(c), "generation", 0.2);
 
     // Settlement inserted a real, conservative charge for the full ceiling
-    // amount -- 1.8 (real) + 0.25 (settled) + 0.15 (requested) = 2.20 >
-    // $2.00 generation cap, so this must now be DENIED, not approved.
+    // amount -- 9.6 (real) + 0.25 (settled) + 0.2 (requested) = 10.05 >
+    // $10.00 generation cap, so this must now be DENIED, not approved.
     expect(result.eligible).toBe(false);
     expect(result.reason).toMatch(/bucket_budget_reached/);
 
@@ -140,11 +140,11 @@ describe("reservePartnershipBudget / releasePartnershipBudgetReservation", () =>
 
   it("CONCURRENCY: a second reservation attempt correctly accounts for a first reservation's settlement, even when the settlement only just happened", async () => {
     const oldReservation = { id: "old-3", bucket: "generation", amount_usd: 0.25, prospect_id: null, created_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), released_at: null, settled_as_charge: false };
-    // $1.76 real + $0.25 about-to-settle = $2.01, already over the $2.00
+    // $9.76 real + $0.25 about-to-settle = $10.01, already over the $10.00
     // cap -- a concurrent reserve attempt landing right after settlement
     // must see the now-real charge and correctly deny.
     const c = client({
-      cost_events: [{ event_type: "partnership_llm_call", cost_usd: 1.76, created_at: new Date().toISOString() }],
+      cost_events: [{ event_type: "partnership_llm_call", cost_usd: 9.76, created_at: new Date().toISOString() }],
       partnership_budget_reservations: [oldReservation],
     });
     const result = await reservePartnershipBudget(asSupabase(c), "generation", 0.01);
