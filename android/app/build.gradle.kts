@@ -5,6 +5,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.gms.google-services")
 }
 
 /**
@@ -106,6 +107,14 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.biometric:biometric:1.1.0")
+
+    val firebaseBom = platform("com.google.firebase:firebase-bom:34.17.0")
+    implementation(firebaseBom)
+    implementation("com.google.firebase:firebase-messaging")
+    // Gives Task<T>.await() -- used once, to register this device's FCM
+    // token from a plain suspend function (MainActivity's startup
+    // registration) instead of a callback listener.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

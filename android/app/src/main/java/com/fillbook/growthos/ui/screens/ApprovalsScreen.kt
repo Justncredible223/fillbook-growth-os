@@ -97,6 +97,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
     var actionError by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     var pendingReject by remember { mutableStateOf<ApprovalAsset?>(null) }
+    var pendingRenderConfirm by remember { mutableStateOf<ApprovalAsset?>(null) }
     var query by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -191,7 +192,15 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                         items(filtered, key = { it.id }) { asset ->
                             ApprovalCard(
                                 asset = asset,
-                                onApprove = { decide(asset, approve = true) },
+                                onApprove = {
+                                    // Approving a video_script asset triggers a REAL server-side
+                                    // render (see enqueue_video_render in approvals.ts) -- unlike
+                                    // every other asset type, this isn't reversible from here once
+                                    // it starts, so it gets its own explicit confirmation instead
+                                    // of firing immediately like a plain text-post approval does.
+                                    if (asset.assetType == "video_script") pendingRenderConfirm = asset
+                                    else decide(asset, approve = true)
+                                },
                                 onReject = { pendingReject = asset },
                                 onCopyAndShare = { copyAndShare(asset) },
                             )
@@ -213,6 +222,26 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             },
             dismissButton = {
                 TextButton(onClick = { pendingReject = null }) { Text("Cancel") }
+            },
+        )
+    }
+
+    pendingRenderConfirm?.let { asset ->
+        AlertDialog(
+            onDismissRequest = { pendingRenderConfirm = null },
+            title = { Text("Render this video?") },
+            text = {
+                Text(
+                    "\"${asset.campaignTitle}\" will queue on the render server now. It renders automatically -- " +
+                        "you'll get a notification and can download it from Video Status once it's ready. " +
+                        "This never posts anywhere on its own; you still choose to share it yourself.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { decide(asset, approve = true); pendingRenderConfirm = null }) { Text("Render video") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRenderConfirm = null }) { Text("Cancel") }
             },
         )
     }

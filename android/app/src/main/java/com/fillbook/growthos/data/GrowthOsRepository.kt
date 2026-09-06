@@ -131,6 +131,27 @@ interface GrowthOsRepository {
 
     suspend fun getMorningBrief(): MorningBrief
     suspend fun getEveningReport(): EveningReport
+
+    /**
+     * Registers (or re-activates) this device's current FCM token for
+     * video-render push delivery. Safe to call repeatedly with the same
+     * token -- the backend upserts on the token's own uniqueness. Never
+     * throws upward from a fire-and-forget caller's perspective is NOT
+     * guaranteed here -- callers (MainActivity's startup registration,
+     * FillbookMessagingService's onNewToken) are responsible for catching
+     * their own failures, since a transient registration failure must
+     * never crash or block anything else.
+     */
+    suspend fun registerDeviceToken(fcmToken: String)
+
+    /**
+     * Every video render the owner has ever approved, most recent first --
+     * the durable source of truth for render state (queued/rendering/
+     * ready/failed/canceled), independent of whether any push notification
+     * about it was ever actually delivered. See migration 0027 and the
+     * Video Status screen.
+     */
+    suspend fun getVideoRenderStatuses(): List<VideoRenderStatus>
 }
 
 /**
@@ -1061,4 +1082,43 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         inboundResolvedToday = 3,
         topOpportunity = OpportunitySummary("opp-1", "Trailing drawdown confusion", 80.0),
     )
+
+    override suspend fun registerDeviceToken(fcmToken: String) {
+        // No backend to call in fake mode -- no-op.
+    }
+
+    private val fakeVideoRenders = listOf(
+        VideoRenderStatus(
+            id = "video-fake-1",
+            campaignAssetId = "asset-fake-video-1",
+            status = "ready",
+            downloadUrl = "https://example.supabase.co/storage/v1/object/sign/rendered-videos/video-fake-1.mp4?token=fake",
+            durationSeconds = 48.7,
+            error = null,
+            createdAt = "2026-09-05T18:00:00Z",
+            updatedAt = "2026-09-05T18:02:00Z",
+        ),
+        VideoRenderStatus(
+            id = "video-fake-2",
+            campaignAssetId = "asset-fake-video-2",
+            status = "rendering",
+            downloadUrl = null,
+            durationSeconds = null,
+            error = null,
+            createdAt = "2026-09-06T09:00:00Z",
+            updatedAt = "2026-09-06T09:00:30Z",
+        ),
+        VideoRenderStatus(
+            id = "video-fake-3",
+            campaignAssetId = "asset-fake-video-3",
+            status = "failed",
+            downloadUrl = null,
+            durationSeconds = null,
+            error = "storage_cap_reached (committed 480000000 + reserved 0 + requested 1100000 exceeds cap 500000000)",
+            createdAt = "2026-09-04T12:00:00Z",
+            updatedAt = "2026-09-04T12:01:00Z",
+        ),
+    )
+
+    override suspend fun getVideoRenderStatuses(): List<VideoRenderStatus> = fakeVideoRenders
 }

@@ -753,6 +753,29 @@ class NetworkGrowthOsRepository(
         )
     }
 
+    private fun JSONObject.toVideoRenderStatus() = VideoRenderStatus(
+        id = getString("id"),
+        campaignAssetId = getString("campaignAssetId"),
+        status = getString("status"),
+        downloadUrl = optStringOrNull("downloadUrl"),
+        durationSeconds = if (isNull("durationSeconds")) null else getDouble("durationSeconds"),
+        error = optStringOrNull("error"),
+        createdAt = getString("createdAt"),
+        updatedAt = getString("updatedAt"),
+    )
+
+    // Folded into /api/approvals (?resource=video-status) -- same
+    // Vercel Hobby 12-function-cap reasoning as inbound/prospecting/
+    // partnerships above.
+    override suspend fun getVideoRenderStatuses(): List<VideoRenderStatus> {
+        val json = get("/api/approvals?resource=video-status")
+        return json.getJSONArray("items").map { it.toVideoRenderStatus() }
+    }
+
+    override suspend fun registerDeviceToken(fcmToken: String) {
+        post("/api/approvals?resource=video-status", JSONObject().put("action", "register-device").put("fcmToken", fcmToken))
+    }
+
     override suspend fun getEveningReport(): EveningReport {
         val json = get("/api/summary?resource=evening-report")
         return EveningReport(

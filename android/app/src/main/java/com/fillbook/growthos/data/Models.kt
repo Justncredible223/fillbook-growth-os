@@ -422,3 +422,29 @@ data class PartnershipsSummary(
     val items: List<PartnershipProspect>,
     val lastDiscoveryRun: PartnershipDiscoveryRunResult?,
 )
+
+/**
+ * Raw status string kept as-is (mirrors InboundEngagement.status's own
+ * rationale) rather than an enum -- the server owns this state machine
+ * (queued -> rendering -> ready|failed|canceled, see migration 0027).
+ */
+data class VideoRenderStatus(
+    val id: String,
+    val campaignAssetId: String,
+    val status: String,
+    /**
+     * A short-lived signed URL into the private rendered-videos bucket --
+     * present only when [status] is "ready" and the backend's signing call
+     * succeeded for THIS particular fetch. Never cached/reused past this
+     * screen session: a stale one simply 404s/expires, and the fix is
+     * pulling to refresh for a fresh one, never re-deriving a URL
+     * client-side (this app never holds Supabase Storage credentials of
+     * any kind).
+     */
+    val downloadUrl: String?,
+    val durationSeconds: Double?,
+    val error: String?,
+    val createdAt: String,
+    val updatedAt: String,
+)
+
