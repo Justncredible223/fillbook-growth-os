@@ -22,7 +22,8 @@ export type AssetStage =
   | "conversion_review"
   | "final_draft"
   | "ready_for_owner"
-  | "handed_off";
+  | "handed_off"
+  | "retired";
 
 export const STAGE_ORDER: AssetStage[] = [
   "idea",
@@ -42,6 +43,7 @@ export const STAGE_ORDER: AssetStage[] = [
   "final_draft",
   "ready_for_owner",
   "handed_off",
+  "retired",
 ];
 
 export interface SubmitDraftResult {
@@ -140,4 +142,48 @@ export class CampaignFactory {
     );
     return "handed_off";
   }
+}
+
+/**
+ * The transition an Approve/Reject decision applies to a 'ready_for_owner'
+ * asset -- a real, confirmed bug this closes: the Approvals screen's
+ * decide() previously only ever updated campaigns.status (approved/
+ * retired), never this asset's own stage, so the asset stayed at
+ * 'ready_for_owner' forever afterward -- invisible in the Approvals list
+ * (which correctly requires campaigns.status='in_review' to show up) but
+ * still permanently counted by any backlog check keyed on stage alone.
+ *
+ * Deliberately NOT a CampaignFactory method and deliberately NOT routed
+ * through handOffToOwner: that method specifically models "opened the
+ * platform's own composer" and is audited as an EXTERNAL_DRAFT action --
+ * tapping Approve is a decision, not yet an open-composer action (the
+ * owner's actual copy/share tap is a separate, unaudited client-side
+ * action). This reuses 'handed_off' as Approve's terminal value anyway
+ * (the owner has decided to use this content -- there is no other
+ * "resolved positively" stage in this state machine to reuse), and adds
+ * 'retired' as Reject's terminal value, mirroring campaigns.status's own
+ * 'retired' outcome. Neither branch performs or audits an external
+ * action -- deciding is not publishing.
+ */
+export function resolveOwnerDecisionStage(currentStage: AssetStage, decision: "approved" | "rejected"): AssetStage {
+  if (currentStage !== "ready_for_owner") {
+    throw new Error(`Cannot resolve an owner decision from stage "${currentStage}" -- must be ready_for_owner first.`);
+  }
+  return decision === "approved" ? "handed_off" : "retired";
+}
+
+/**
+ * The safe, idempotent form of resolveOwnerDecisionStage for the live
+ * Approve/Reject call site -- returns null (no stage change needed,
+ * never throws) when the asset isn't currently 'ready_for_owner', rather
+ * than erroring. This is what makes a repeated Approve/Reject call (a
+ * double-tap, a retry, or one that races an already-processed decision)
+ * a safe no-op instead of a 500 -- and, combined with the fact that every
+ * real Approve/Reject call now runs this, means a reviewable asset can no
+ * longer be left permanently stuck at 'ready_for_owner' the way the
+ * original bug allowed.
+ */
+export function applyOwnerDecisionIfPending(currentStage: AssetStage, decision: "approved" | "rejected"): AssetStage | null {
+  if (currentStage !== "ready_for_owner") return null;
+  return resolveOwnerDecisionStage(currentStage, decision);
 }

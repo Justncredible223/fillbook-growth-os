@@ -10,6 +10,7 @@ import { runGenerateOpportunities } from "../src/opportunities/runGenerateOpport
 import { SupabaseOpportunityRepository } from "../src/opportunities/supabaseOpportunityRepository.js";
 import { SupabaseAutoDraftRunRepository } from "../src/opportunities/autoDraftRunRepository.js";
 import { runAutoDraftStep } from "../src/opportunities/autoDraftStep.js";
+import { countReviewableBacklog } from "../src/content/campaignBacklog.js";
 import { buildSupabaseRunCampaignDeps } from "../src/content/runCampaignForOpportunity.js";
 import { runDailyXFeedPostStep } from "../src/content/dailyXFeedPost.js";
 import { buildXFeedPostStepDeps } from "../src/content/buildXFeedPostStepDeps.js";
@@ -182,13 +183,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             usageLog: usage.usages,
             opportunityRepo: new SupabaseOpportunityRepository(client),
             runRepo: new SupabaseAutoDraftRunRepository(client),
+            // Counts only genuinely reviewable rows (stage='ready_for_owner'
+            // AND campaigns.status='in_review') -- a real bug this fixes:
+            // approving/rejecting via the Approvals screen previously only
+            // updated campaigns.status, never this asset's own stage, so an
+            // already-decided asset (or a Partnership pitch's campaign,
+            // which stays 'draft' by design) kept counting toward this cap
+            // forever. See campaignBacklog.ts's own kdoc.
             countReadyForOwnerAssets: async () => {
-              const { count, error } = await client
+              const { data, error } = await client
                 .from("campaign_assets")
-                .select("id", { count: "exact", head: true })
+                .select("stage, campaigns(status)")
                 .eq("stage", "ready_for_owner");
               if (error) throw error;
-              return count ?? 0;
+              return countReviewableBacklog(
+                (data ?? []).map((r: any) => ({
+                  stage: r.stage as string,
+                  campaignStatus: r.campaigns?.status,
+                })),
+              );
             },
             listOpportunityIdsWithCampaigns: async () => {
               const { data, error } = await client.from("campaigns").select("opportunity_id");

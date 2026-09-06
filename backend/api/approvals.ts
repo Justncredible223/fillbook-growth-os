@@ -14,7 +14,8 @@ import {
   runBacklogRecovery,
   summarizeInbound,
 } from "../src/inbound/inboundHandlers.js";
-import { CampaignFactory, type AssetStage } from "../src/content/campaignFactory.js";
+import { CampaignFactory, applyOwnerDecisionIfPending, type AssetStage } from "../src/content/campaignFactory.js";
+import { isReviewableBacklogAsset } from "../src/content/campaignBacklog.js";
 import { ContentQualityGate } from "../src/content/contentQualityGate.js";
 import { BrandConstitution } from "../src/knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../src/knowledge/supabaseRepositories.js";
@@ -465,11 +466,18 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
  * wait for. Body: { campaignAssetId, action: "approve" | "reject" }.
  * 'approve' sets campaigns.status = 'approved' -- the only code path
  * anywhere that ever sets this value; auto-draft/run-campaign only ever
- * reach 'in_review'. 'reject' sets campaigns.status = 'retired'. Neither
- * action publishes, posts, or contacts any external platform -- approving
- * here only changes what this app displays; the owner still does the
- * actual posting themselves, same as every other path into
- * CampaignFactory (see docs/EXTERNAL_WRITE_FIREWALL.md).
+ * reach 'in_review'. 'reject' sets campaigns.status = 'retired'. Also
+ * transitions the asset's OWN stage off 'ready_for_owner' (to
+ * 'handed_off'/'retired' via resolveOwnerDecisionStage) whenever it's
+ * still there -- closes a real, confirmed bug where an already-decided
+ * asset stayed at 'ready_for_owner' forever, invisible here (this GET
+ * requires 'in_review') but still permanently counted by the backlog cap
+ * (see campaignBacklog.ts, and migration 0030's one-time repair for rows
+ * that got stuck before this fix). Neither action publishes, posts, or
+ * contacts any external platform -- approving here only changes what
+ * this app displays; the owner still does the actual posting themselves,
+ * same as every other path into CampaignFactory (see
+ * docs/EXTERNAL_WRITE_FIREWALL.md).
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res)) return;
@@ -514,7 +522,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const { data: asset, error: assetError } = await client
         .from("campaign_assets")
-        .select("campaign_id, asset_type")
+        .select("campaign_id, asset_type, stage")
         .eq("id", campaignAssetId)
         .single();
       if (assetError) throw assetError;
@@ -531,6 +539,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
         .eq("id", asset.campaign_id);
       if (updateError) throw updateError;
+
+      // Closes a real, confirmed bug: approving/rejecting previously only
+      // ever updated campaigns.status above -- this asset's own stage
+      // stayed at 'ready_for_owner' forever afterward, invisible in the
+      // Approvals list (which requires campaigns.status='in_review') but
+      // still permanently counted by the backlog cap. Returns null (a
+      // safe no-op) for a repeated call or one that races an
+      // already-processed decision, instead of throwing. See
+      // campaignFactory.ts's own kdoc for why this reuses 'handed_off'/
+      // 'retired' rather than a new stage, and why it's not routed through
+      // handOffToOwner (deciding is not the same action as opening the
+      // platform's own composer).
+      const newAssetStage = applyOwnerDecisionIfPending(asset.stage as AssetStage, action === "approve" ? "approved" : "rejected");
+      if (newAssetStage) {
+        const { error: stageError } = await client.from("campaign_assets").update({ stage: newAssetStage }).eq("id", campaignAssetId);
+        if (stageError) throw stageError;
+      }
 
       // Video rendering isolation: approving a video_script draft queues
       // exactly one render via the single atomic enqueue_video_render RPC
@@ -574,7 +599,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq("stage", "ready_for_owner");
     if (assetsError) throw assetsError;
 
-    const awaitingDecision = (assets ?? []).filter((asset: any) => asset.campaigns?.status === "in_review");
+    const awaitingDecision = (assets ?? []).filter((asset: any) => isReviewableBacklogAsset({ stage: "ready_for_owner", campaignStatus: asset.campaigns?.status }));
 
     const { data: autoDraftRuns, error: autoDraftError } = await client
       .from("auto_draft_runs")
