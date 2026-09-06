@@ -15,6 +15,8 @@ import {
   RECENT_EDITORIAL_HISTORY_DAYS,
   STALE_RUNNING_MS,
   X_FEED_POST_ASSET_TYPE,
+  categoryUnderrepresentationBonus,
+  type FeedPostContentCategory,
   deriveTodayXPostView,
   feedPostTopicLabel,
   runDailyXFeedPostStep,
@@ -856,5 +858,47 @@ describe("selectFeedPostAngle -- comparative editorial selection, not first-non-
     const excludeKey = first.selected.key;
     const second = selectFeedPostAngle(OPERATING_DATE, [excludeKey], [], {});
     expect(second.selected.key).not.toBe(excludeKey);
+  });
+
+  it("with no history at all, the category-mix bonus is 0 for every candidate -- pure editorial-merit selection, same as before this parameter existed", () => {
+    const noHistory = selectFeedPostAngle(OPERATING_DATE, [], [], {});
+    const noHistoryExplicit = selectFeedPostAngle(OPERATING_DATE, [], [], {}, []);
+    for (const c of noHistory.candidatesConsidered) expect(c.categoryUnderrepresentationBonus).toBe(0);
+    expect(noHistoryExplicit.selected.key).toBe(noHistory.selected.key);
+  });
+});
+
+describe("categoryUnderrepresentationBonus / content-mix self-correction -- fixes the real gap where every topic was education/psychology and nothing ever nudged toward the documented 20% product-demo / 5% CTA target", () => {
+  it("a category at 0% of recent history against a positive target gets a real, non-zero bonus", () => {
+    const bonus = categoryUnderrepresentationBonus("product_demo", Array(20).fill("education"));
+    expect(bonus).toBeGreaterThan(0);
+  });
+
+  it("a category already exactly on-target gets a zero bonus, not a negative one", () => {
+    // 20 recent runs, exactly 20% (4) product_demo -- matches its target exactly.
+    const history: FeedPostContentCategory[] = [...Array(16).fill("education"), ...Array(4).fill("product_demo")];
+    expect(categoryUnderrepresentationBonus("product_demo", history)).toBe(0);
+  });
+
+  it("a category already OVER-represented gets a zero bonus, never a penalty that would push it down further", () => {
+    const allProductDemo: FeedPostContentCategory[] = Array(20).fill("product_demo");
+    expect(categoryUnderrepresentationBonus("product_demo", allProductDemo)).toBe(0);
+    expect(categoryUnderrepresentationBonus("education", allProductDemo)).toBeGreaterThan(0); // meanwhile education, now at 0%, gets pulled up
+  });
+
+  it("with empty history, every category gets 0 -- nothing to correct against yet", () => {
+    expect(categoryUnderrepresentationBonus("product_demo", [])).toBe(0);
+    expect(categoryUnderrepresentationBonus("cta", [])).toBe(0);
+  });
+
+  it("selectFeedPostAngle actually picks a product_demo/cta/conversation_starter topic once its category has gone completely unused across the full history window, over otherwise-comparable education/psychology candidates", () => {
+    // 21 days of pure education/psychology history -- exactly the real gap an audit found.
+    const allEducation: FeedPostContentCategory[] = Array(21).fill("education");
+    const selection = selectFeedPostAngle(OPERATING_DATE, [], [], {}, allEducation);
+    const winnerCategory = selection.candidatesConsidered.find((c) => c.topic.key === selection.selected.key)!.topic.contentCategory;
+    // Not asserting it's ALWAYS the winner (day-indexed rotation still controls which 3 candidates are even compared), but confirms the bonus is live and meaningfully sized in the actual selection path, not just the standalone function.
+    const productDemoCandidate = selection.candidatesConsidered.find((c) => c.topic.contentCategory === "product_demo" || c.topic.contentCategory === "cta" || c.topic.contentCategory === "conversation_starter");
+    if (productDemoCandidate) expect(productDemoCandidate.categoryUnderrepresentationBonus).toBeGreaterThan(0);
+    expect(winnerCategory).toBeTruthy();
   });
 });

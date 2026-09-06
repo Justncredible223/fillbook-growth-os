@@ -57,10 +57,33 @@ export function evaluateXFeedPostBudget(monthSpendUsd: number): EligibilityCheck
  * what actually reaches the LLM as the opportunity's rationale, giving it
  * a specific point to make rather than an open-ended topic name.
  */
+/**
+ * Which slice of docs/SEED_DATA_SOURCES.md's content-mix guideline (40%
+ * education / 25% psychology / 20% product demo / 10% conversation
+ * starter / 5% direct promo-CTA) a topic belongs to. Added because an
+ * audit found every original topic landed in education/psychology --
+ * structurally guaranteeing 0% product mentions regardless of the
+ * documented target, since nothing tracked or nudged the realized mix.
+ * See categoryUnderrepresentationBonus for how this now actually pulls
+ * selection toward the target over time, not just in a doc comment.
+ */
+export type FeedPostContentCategory = "education" | "psychology" | "product_demo" | "conversation_starter" | "cta";
+
+/** The guideline itself, machine-readable -- mirrors docs/SEED_DATA_SOURCES.md's "Content mix guideline" line exactly. A target, not a hard cap. */
+export const FEED_POST_CATEGORY_TARGETS: Record<FeedPostContentCategory, number> = {
+  education: 0.4,
+  psychology: 0.25,
+  product_demo: 0.2,
+  conversation_starter: 0.1,
+  cta: 0.05,
+};
+
 export interface FeedPostTopic {
   key: string;
   label: string;
   rationale: string;
+  /** See FeedPostContentCategory's kdoc. */
+  contentCategory: FeedPostContentCategory;
   /**
    * The underlying lesson/hook/conclusion category this topic actually
    * teaches, independent of its `key` -- two different topics (different
@@ -83,6 +106,7 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
   {
     key: "trailing_drawdown_mechanics",
     label: "Trailing drawdown mechanics",
+    contentCategory: "education",
     rationale:
       "Explain a concrete, commonly misunderstood mechanic of trailing drawdown (e.g. whether it locks at end-of-day balance " +
       "or trails intraday, and why that distinction changes how a trader should size into a good day) -- something a funded " +
@@ -96,6 +120,7 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
   {
     key: "journaling_habit_that_sticks",
     label: "The journaling habit that actually sticks",
+    contentCategory: "psychology",
     rationale:
       "Make one specific, non-obvious point about why most trade journals get abandoned within weeks (not \"lack of " +
       "discipline\" -- a concrete mechanical reason, e.g. journaling only wins/losses instead of process, or journaling after " +
@@ -109,6 +134,7 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
   {
     key: "revenge_trading_pattern",
     label: "The mechanics of a revenge-trading spiral",
+    contentCategory: "psychology",
     rationale:
       "Describe the specific behavioral/mechanical sequence that turns one bad trade into an account-blowing string of them " +
       "(e.g. the exact moment sizing quietly increases, or the exact rationalization that shows up right before the next " +
@@ -122,6 +148,7 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
   {
     key: "consistency_rule_reality",
     label: "What a prop-firm consistency rule actually enforces",
+    contentCategory: "education",
     rationale:
       "Clarify a specific, frequently-misunderstood mechanic of prop-firm consistency rules (e.g. what counts toward the " +
       "cap, and a realistic way a genuinely good trading day can still trip it) -- the kind of detail that only becomes " +
@@ -135,6 +162,7 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
   {
     key: "trade_review_vs_pnl_check",
     label: "Trade review is not the same thing as checking P&L",
+    contentCategory: "education",
     rationale:
       "Make a specific, concrete distinction between glancing at daily P&L and actually reviewing a trade (e.g. what " +
       "information P&L alone can never tell you about whether the process was good), grounded in a real mechanical example, " +
@@ -148,6 +176,7 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
   {
     key: "position_sizing_after_a_loss",
     label: "Position sizing in the hour after a loss",
+    contentCategory: "psychology",
     rationale:
       "Make one concrete, specific point about how sizing decisions right after a loss differ from sizing decisions on a " +
       "clean slate, and what a trader could mechanically check about their own sizing pattern to catch it happening.",
@@ -160,6 +189,7 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
   {
     key: "funded_account_breach_reality",
     label: "What actually breaches a funded account, mechanically",
+    contentCategory: "education",
     rationale:
       "Explain one specific, concrete mechanical way funded accounts get breached that isn't the obvious \"traded too big\" " +
       "story (e.g. an overnight/weekend rule interaction, or a max-loss calculation that resets differently than a trader " +
@@ -173,6 +203,7 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
   {
     key: "same_setup_different_context",
     label: "The same setup, in a different market context",
+    contentCategory: "education",
     rationale:
       "Make a specific, concrete point about how a genuinely identical chart setup can be a good trade in one market context " +
       "and a bad one in another (e.g. session, volatility regime, or news proximity), the kind of distinction that only " +
@@ -186,6 +217,7 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
   {
     key: "discipline_is_a_system_not_willpower",
     label: "Discipline as a system, not a willpower problem",
+    contentCategory: "psychology",
     rationale:
       "Make a concrete, specific point about ONE mechanical guardrail (not a vague call to \"have more discipline\") that " +
       "removes a real decision point in the moment it's hardest to make well -- grounded in an actual trading scenario, not " +
@@ -199,6 +231,7 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
   {
     key: "reading_your_own_equity_curve",
     label: "What your own equity curve is actually telling you",
+    contentCategory: "education",
     rationale:
       "Make one specific, concrete point about a pattern in an equity curve that's easy to misread (e.g. a flat stretch that " +
       "looks like stagnation but is actually a controlled drawdown, or a spike that looks like skill but is actually " +
@@ -206,6 +239,80 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
     editorialTags: ["process-over-outcome", "context-dependence"],
     audienceRelevance: 3,
     specificity: 4,
+    practicalUsefulness: 3,
+    evidenceStrength: 2,
+  },
+  {
+    key: "drawdown_rule_tracking_in_practice",
+    label: "What Fillbook's drawdown/rule tracking actually catches",
+    contentCategory: "product_demo",
+    rationale:
+      "Walk through ONE concrete, specific moment where Fillbook's prop-firm drawdown/rule tracking would flag a real rule " +
+      "interaction as it happens (e.g. an overnight hold that changes a max-loss calculation) -- the product must read as " +
+      "evidence of the mechanism just explained, never a feature list or generic pitch. Ground every claim about Fillbook " +
+      "ONLY in the verified knowledge you're given; if it doesn't support a specific enough claim, make the mechanic's point " +
+      "without naming the product rather than vaguely gesturing at a feature.",
+    editorialTags: ["rule-literacy", "prop-firm-mechanics"],
+    audienceRelevance: 5,
+    specificity: 4,
+    practicalUsefulness: 4,
+    evidenceStrength: 3,
+  },
+  {
+    key: "broker_agnostic_import_in_practice",
+    label: "What broker-agnostic import actually solves",
+    contentCategory: "product_demo",
+    rationale:
+      "Walk through ONE concrete, specific annoyance that broker/platform-agnostic import solves for a futures trader running " +
+      "more than one funded account (e.g. reconciling P&L across platforms after switching or adding a firm) -- the product " +
+      "must read as evidence of that specific mechanism, never a feature list. Ground every claim ONLY in verified knowledge.",
+    editorialTags: ["prop-firm-mechanics"],
+    audienceRelevance: 4,
+    specificity: 4,
+    practicalUsefulness: 4,
+    evidenceStrength: 3,
+  },
+  {
+    key: "ai_coach_in_practice",
+    label: "What Fillbook's AI coach would actually flag",
+    contentCategory: "product_demo",
+    rationale:
+      "Walk through ONE concrete, specific example of what Fillbook's AI coach would flag in a real trade-review scenario, " +
+      "tied to a genuine behavioral pattern (e.g. sizing creep after a loss, or a revenge-trade sequence) -- a specific " +
+      "worked example, not a generic \"get an AI coach\" pitch. Ground every claim about the coach ONLY in verified " +
+      "knowledge; if it can't support a specific enough example, make the behavioral point without the product claim.",
+    editorialTags: ["loss-triggered-behavior", "sizing-discipline"],
+    audienceRelevance: 4,
+    specificity: 3,
+    practicalUsefulness: 4,
+    evidenceStrength: 2,
+  },
+  {
+    key: "ask_your_closest_rule_call",
+    label: "A real question inviting traders to share their closest rule call",
+    contentCategory: "conversation_starter",
+    rationale:
+      "Ask one genuine, narrow, specific question inviting real funded-account traders to share their own closest call with " +
+      "a drawdown or consistency rule (e.g. \"what's the closest you've come to tripping a rule you didn't fully " +
+      "understand?\") -- a real conversation starter meant to surface replies worth reading, not generic engagement bait " +
+      "(\"thoughts?\", \"agree or disagree?\").",
+    editorialTags: ["rule-literacy"],
+    audienceRelevance: 4,
+    specificity: 3,
+    practicalUsefulness: 2,
+    evidenceStrength: 1,
+  },
+  {
+    key: "direct_cta_funded_traders",
+    label: "A direct, earned invitation for funded-account traders to try Fillbook",
+    contentCategory: "cta",
+    rationale:
+      "Write a short, direct, proportionate call-to-action inviting a futures day trader or prop-firm funded trader to try " +
+      "Fillbook, naming ONE specific, verified capability as the reason (not a feature list) -- this must read as an earned " +
+      "next step, never a bare advertisement; keep it concrete and short, one clear action, no urgency/hype language.",
+    editorialTags: [],
+    audienceRelevance: 4,
+    specificity: 3,
     practicalUsefulness: 3,
     evidenceStrength: 2,
   },
@@ -224,7 +331,43 @@ export interface CandidateAngleScore {
   freshnessSignalCount: number;
   /** 0-1: fraction of this topic's editorialTags that appeared in the last RECENT_EDITORIAL_HISTORY_DAYS days of runs (including owner-posted text where available). Higher = more likely to repeat a recent lesson/hook/conclusion even with different wording. */
   recentTagOverlapPenalty: number;
+  /** How far this topic's contentCategory is BELOW its FEED_POST_CATEGORY_TARGETS share of recent history -- see categoryUnderrepresentationBonus. 0 when on-target or over-represented. */
+  categoryUnderrepresentationBonus: number;
   totalScore: number;
+}
+
+/**
+ * How much this topic's category is currently under-represented relative
+ * to its documented target share (FEED_POST_CATEGORY_TARGETS), scaled
+ * into the same rough points range as the static editorial scores above
+ * so it can actually move the winner, not just exist as a footnote.
+ *
+ * This is the fix for the real gap an audit found: every original topic
+ * was "education"/"psychology", the writer is explicitly allowed to skip
+ * a product mention entirely, and nothing tracked or nudged the realized
+ * mix toward the documented 20% product-demo / 5% CTA target -- so it
+ * structurally never happened. This makes the target self-correcting:
+ * the longer product_demo/cta/conversation_starter topics go unpicked,
+ * the more their score rises, until they win a rotation slot on their
+ * own editorial merits plus this pull. An already-on-target or
+ * over-represented category gets a bonus of 0, never a penalty --
+ * this only ever pulls up underrepresented categories, it never pushes
+ * education/psychology down below their own considerable merits.
+ */
+export function categoryUnderrepresentationBonus(
+  category: FeedPostContentCategory,
+  recentCategories: readonly FeedPostContentCategory[],
+): number {
+  if (recentCategories.length === 0) return 0; // no history yet -- nothing to correct against.
+  const target = FEED_POST_CATEGORY_TARGETS[category];
+  const actual = recentCategories.filter((c) => c === category).length / recentCategories.length;
+  const shortfall = Math.max(0, target - actual);
+  // Scaled so a category sitting at 0% actual against a 20% target (the
+  // product_demo case an audit actually found) contributes a bonus on
+  // the same order as the static editorial scores (which run roughly
+  // 1-5 each, summing ~15-20) -- strong enough to win close comparisons,
+  // not so strong it overrides a genuinely weak candidate every time.
+  return shortfall * 20;
 }
 
 export interface AngleSelection {
@@ -233,7 +376,7 @@ export interface AngleSelection {
   reason: string;
 }
 
-/** How many distinct candidate angles to assemble and compare before drafting -- a small, bounded set, not all 10 topics and never multiple full drafts. */
+/** How many distinct candidate angles to assemble and compare before drafting -- a small, bounded set, not every FEED_POST_TOPICS entry and never multiple full drafts. */
 const CANDIDATE_SET_SIZE = 3;
 
 /**
@@ -256,6 +399,8 @@ export function selectFeedPostAngle(
   excludeKeys: readonly string[],
   recentEditorialTags: string[][],
   freshnessSignalCountByTopicKey: Record<string, number>,
+  /** contentCategory of each recent run (most recent RECENT_EDITORIAL_HISTORY_DAYS), used ONLY to compute categoryUnderrepresentationBonus. Optional/defaulted so every existing call site (and every existing test) keeps working unchanged -- an empty history just means the bonus is 0 for everything, i.e. today's pure editorial-merit selection, same as before this parameter existed. */
+  recentCategories: readonly FeedPostContentCategory[] = [],
 ): AngleSelection {
   const baseIndex = ((dayIndex(operatingDate) % FEED_POST_TOPICS.length) + FEED_POST_TOPICS.length) % FEED_POST_TOPICS.length;
   const excluded = new Set(excludeKeys);
@@ -273,14 +418,26 @@ export function selectFeedPostAngle(
     const overlapping = topic.editorialTags.filter((t) => recentTagCounts.has(t)).length;
     const recentTagOverlapPenalty = topic.editorialTags.length === 0 ? 0 : overlapping / topic.editorialTags.length;
     const freshnessSignalCount = freshnessSignalCountByTopicKey[topic.key] ?? 0;
+    const categoryBonus = categoryUnderrepresentationBonus(topic.contentCategory, recentCategories);
     const totalScore =
       topic.audienceRelevance +
       topic.specificity +
       topic.practicalUsefulness +
       topic.evidenceStrength +
       Math.min(freshnessSignalCount, 3) * 0.5 -
-      recentTagOverlapPenalty * 4;
-    return { topic, audienceRelevance: topic.audienceRelevance, specificity: topic.specificity, practicalUsefulness: topic.practicalUsefulness, evidenceStrength: topic.evidenceStrength, freshnessSignalCount, recentTagOverlapPenalty, totalScore };
+      recentTagOverlapPenalty * 4 +
+      categoryBonus;
+    return {
+      topic,
+      audienceRelevance: topic.audienceRelevance,
+      specificity: topic.specificity,
+      practicalUsefulness: topic.practicalUsefulness,
+      evidenceStrength: topic.evidenceStrength,
+      freshnessSignalCount,
+      recentTagOverlapPenalty,
+      categoryUnderrepresentationBonus: categoryBonus,
+      totalScore,
+    };
   });
   scored.sort((a, b) => b.totalScore - a.totalScore);
 
@@ -288,11 +445,13 @@ export function selectFeedPostAngle(
   const runnerUp = scored[1];
   const reason = runnerUp
     ? `Selected "${winner.topic.label}" (score ${winner.totalScore.toFixed(1)}) over ${scored.length - 1} other candidate${scored.length > 2 ? "s" : ""} considered, incl. "${runnerUp.topic.label}" (${runnerUp.totalScore.toFixed(1)}): ` +
-      (winner.recentTagOverlapPenalty < runnerUp.recentTagOverlapPenalty
-        ? "less overlap with recently used lessons/conclusions."
-        : winner.freshnessSignalCount > runnerUp.freshnessSignalCount
-          ? "a live already-collected signal the other candidate lacked."
-          : "a stronger relevance/specificity/usefulness/evidence profile among comparable recency.") +
+      (winner.categoryUnderrepresentationBonus > runnerUp.categoryUnderrepresentationBonus
+        ? `its "${winner.topic.contentCategory}" category is under-represented in recent history relative to its target share.`
+        : winner.recentTagOverlapPenalty < runnerUp.recentTagOverlapPenalty
+          ? "less overlap with recently used lessons/conclusions."
+          : winner.freshnessSignalCount > runnerUp.freshnessSignalCount
+            ? "a live already-collected signal the other candidate lacked."
+            : "a stronger relevance/specificity/usefulness/evidence profile among comparable recency.") +
       " This is the strongest of the candidates actually compared here, not a claim that no better post exists."
     : `Only one eligible candidate ("${winner.topic.label}") remained after excluding today's already-tried topics.`;
 
@@ -733,6 +892,14 @@ export async function runDailyXFeedPostStep(
   const recentRuns = await deps.runRepo.listRecentRuns(historySince);
   const recentEditorialTags = recentRuns.filter((r) => r.operatingDate < operatingDate).map((r) => r.editorialTags);
   const freshnessSignalCountByTopicKey = await deps.getTopicFreshnessSignals(FEED_POST_TOPICS);
+  // Resolves each recent run's topicKey back to its contentCategory (a
+  // run whose topic was later removed from FEED_POST_TOPICS, or that
+  // never got a topicKey at all, is simply excluded rather than guessed
+  // at) -- feeds categoryUnderrepresentationBonus above.
+  const recentCategories = recentRuns
+    .filter((r) => r.operatingDate < operatingDate && r.topicKey)
+    .map((r) => FEED_POST_TOPICS.find((t) => t.key === r.topicKey)?.contentCategory)
+    .filter((c): c is FeedPostContentCategory => c !== undefined);
 
   for (let i = 0; i < attemptBudget; i++) {
     // Re-checked before every attempt AFTER the first -- the upfront gate
@@ -759,7 +926,7 @@ export async function runDailyXFeedPostStep(
       break;
     }
 
-    const { selected: topic, reason: selectionReason } = selectFeedPostAngle(operatingDate, triedTopicKeys, recentEditorialTags, freshnessSignalCountByTopicKey);
+    const { selected: topic, reason: selectionReason } = selectFeedPostAngle(operatingDate, triedTopicKeys, recentEditorialTags, freshnessSignalCountByTopicKey, recentCategories);
     attempts++;
     triedTopicKeys = [...triedTopicKeys, topic.key];
 
