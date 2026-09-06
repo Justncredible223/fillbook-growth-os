@@ -1,6 +1,5 @@
 package com.fillbook.growthos.ui.screens
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,6 +49,7 @@ import com.fillbook.growthos.ui.components.GhostButton
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.InsetRow
+import com.fillbook.growthos.ui.components.openExternalUrl
 import com.fillbook.growthos.ui.components.PrimaryButton
 import com.fillbook.growthos.ui.components.assetStageDisplayName
 import com.fillbook.growthos.ui.components.Pill
@@ -143,12 +143,14 @@ fun RadarScreen(repo: GrowthOsRepository) {
 
     fun copyAndOpenReply(opp: Opportunity, draft: String) {
         copyToClipboard(context, "Reply to ${opp.title}", draft)
-        opp.sourceUrl?.let { url ->
-            context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
-        }
+        // openExternalUrl (not a bare startActivity) -- fails safely instead
+        // of crashing with ActivityNotFoundException on a device/profile
+        // with nothing able to handle the intent.
+        val opened = opp.sourceUrl?.let { url -> openExternalUrl(context, url) } ?: false
         pendingReply = null
         replyDraft = null
-        scope.launch { snackbarHostState.showSnackbar("Copied — paste in X") }
+        val message = if (opp.sourceUrl != null && !opened) "Copied, but no app could open the link" else "Copied — paste in X"
+        scope.launch { snackbarHostState.showSnackbar(message) }
     }
 
     val hasEngagement = opportunities.any { it.isEngagementOpportunity }
@@ -295,7 +297,10 @@ fun RadarScreen(repo: GrowthOsRepository) {
                         creatorProfileUrl("x", handle)?.let { profileUrl ->
                             Spacer(Modifier.height(10.dp))
                             TextButton(
-                                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(profileUrl))) },
+                                // openExternalUrl, not a bare startActivity --
+                                // fails safely instead of crashing with
+                                // ActivityNotFoundException.
+                                onClick = { openExternalUrl(context, profileUrl) },
                                 contentPadding = PaddingValues(0.dp),
                             ) { Text("View @$handle's profile", style = MaterialTheme.typography.labelMedium, color = Accent) }
                         }

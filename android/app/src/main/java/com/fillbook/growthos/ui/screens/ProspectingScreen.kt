@@ -321,11 +321,15 @@ private fun ProspectingCard(
         }
 
         Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-            TextButton(onClick = onReplied, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Replied", maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            TextButton(onClick = onSkip, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Skip", maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            TextButton(onClick = onNotRelevant, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Irrelevant", maxLines = 1, overflow = TextOverflow.Ellipsis) }
-            TextButton(onClick = onAlreadyHandled, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Handled", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        // FlowRow, not a fixed 4-column Row: "Irrelevant" cramped/near-
+        // ellipsis against 3 siblings sharing equal weight on a 360dp
+        // phone -- wraps to a second line instead, same fix already used
+        // for this card's own platform/class/follower chips above.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(0.dp), modifier = Modifier.fillMaxWidth()) {
+            TextButton(onClick = onReplied, enabled = !busy) { Text("Replied", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            TextButton(onClick = onSkip, enabled = !busy) { Text("Skip", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            TextButton(onClick = onNotRelevant, enabled = !busy) { Text("Irrelevant", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            TextButton(onClick = onAlreadyHandled, enabled = !busy) { Text("Handled", maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
     }
 }

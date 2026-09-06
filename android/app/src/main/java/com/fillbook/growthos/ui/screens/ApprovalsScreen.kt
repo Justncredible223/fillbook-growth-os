@@ -99,6 +99,13 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
     var pendingReject by remember { mutableStateOf<ApprovalAsset?>(null) }
     var pendingRenderConfirm by remember { mutableStateOf<ApprovalAsset?>(null) }
     var query by remember { mutableStateOf("") }
+    // Guards against a fast double-tap firing decideApproval twice for the
+    // same asset before the first call's refresh() completes -- every other
+    // screen with an in-flight mutating action (Inbound, Prospecting,
+    // Notifications, Partnerships) already disables its action buttons this
+    // same way; this screen had been the one exception, including for the
+    // video-render-triggering approve path specifically.
+    var busyId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -121,7 +128,9 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
     }
 
     fun decide(asset: ApprovalAsset, approve: Boolean) {
+        if (busyId == asset.id) return
         scope.launch {
+            busyId = asset.id
             try {
                 repo.decideApproval(asset.id, approve)
                 actionError = null
@@ -129,6 +138,8 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                 snackbarHostState.showSnackbar(if (approve) "Approved" else "Rejected")
             } catch (e: Exception) {
                 actionError = "Couldn't record that decision. Check your connection and try again."
+            } finally {
+                busyId = null
             }
         }
     }
@@ -192,6 +203,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                         items(filtered, key = { it.id }) { asset ->
                             ApprovalCard(
                                 asset = asset,
+                                busy = busyId == asset.id,
                                 onApprove = {
                                     // Approving a video_script asset triggers a REAL server-side
                                     // render (see enqueue_video_render in approvals.ts) -- unlike
@@ -251,6 +263,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
 @Composable
 private fun ApprovalCard(
     asset: ApprovalAsset,
+    busy: Boolean,
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onCopyAndShare: () -> Unit,
@@ -320,10 +333,10 @@ private fun ApprovalCard(
         }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PrimaryButton(text = "Approve", onClick = onApprove, modifier = Modifier.weight(1f))
-            SecondaryButton(text = "Reject", onClick = onReject, contentColor = Danger)
+            PrimaryButton(text = "Approve", onClick = onApprove, enabled = !busy, busy = busy, modifier = Modifier.weight(1f))
+            SecondaryButton(text = "Reject", onClick = onReject, enabled = !busy, contentColor = Danger)
         }
         Spacer(Modifier.height(2.dp))
-        GhostButton(text = "Copy & Share", onClick = onCopyAndShare, modifier = Modifier.fillMaxWidth())
+        GhostButton(text = "Copy & Share", onClick = onCopyAndShare, enabled = !busy, modifier = Modifier.fillMaxWidth())
     }
 }

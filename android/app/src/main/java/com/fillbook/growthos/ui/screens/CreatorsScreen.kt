@@ -1,6 +1,5 @@
 package com.fillbook.growthos.ui.screens
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -53,6 +52,7 @@ import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.StatusChip
 import com.fillbook.growthos.ui.components.StatusTone
 import com.fillbook.growthos.ui.components.creatorProfileUrl
+import com.fillbook.growthos.ui.components.openExternalUrl
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
@@ -216,7 +216,12 @@ private fun CreatorCard(creator: Creator) {
             Spacer(Modifier.height(12.dp))
             SecondaryButton(
                 text = "Open profile",
-                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) },
+                // Was a bare startActivity(ACTION_VIEW) -- crashed with
+                // ActivityNotFoundException on a device/profile with nothing
+                // able to handle the intent (e.g. a work profile with no
+                // browser). openExternalUrl (already used by every other
+                // screen's own external links) fails safely instead.
+                onClick = { openExternalUrl(context, url) },
                 modifier = Modifier.fillMaxWidth(),
             )
         }

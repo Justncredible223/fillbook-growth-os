@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
+import { constantTimeEquals } from "../src/lib/requireAppAuth.js";
 import { SignalGraph } from "../src/signals/signalGraph.js";
 import { SupabaseSignalRepository } from "../src/signals/supabaseSignalRepository.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
@@ -115,7 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(500).json({ error: "CRON_SECRET is not configured on the server" });
     return;
   }
-  if (req.headers.authorization !== `Bearer ${cronSecret}`) {
+  if (!req.headers.authorization || !constantTimeEquals(req.headers.authorization, `Bearer ${cronSecret}`)) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
