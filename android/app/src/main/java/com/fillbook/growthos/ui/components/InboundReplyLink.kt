@@ -33,24 +33,28 @@ object InboundReplyLink {
      * an unrecognized URL shape, or a null reference -- never silently
      * drops a real link the owner could still open.
      *
-     * Also appends a `text=@handle ` param when [authorHandle] is known.
-     * Confirmed on a real device: opening `in_reply_to` alone in the
-     * native X app puts you in the right reply composer but does NOT
-     * insert "@handle " as actual text the way x.com's own web intent
-     * page does -- the owner ended up with a blank box and no @-mention
-     * to reply under. Setting `text` ourselves guarantees the @-mention is
-     * there regardless of whether the app's own in_reply_to autofill ever
-     * kicks in. The owner still pastes their drafted reply (copied to the
-     * clipboard separately) after this pre-filled mention.
+     * Also pre-fills the composer's `text` param with "@handle " followed
+     * by [draftReply] (when either is known). Two real bugs found live,
+     * fixed by the same change: (1) the native X app's in_reply_to autofill
+     * does NOT insert "@handle " as actual text the way x.com's own web
+     * intent page does -- the owner got a blank box with no @-mention at
+     * all; (2) once we started pre-filling just "@handle ", pasting the
+     * drafted reply (still copied to the clipboard separately) landed
+     * BEFORE that mention rather than after it -- the composer's cursor
+     * doesn't sit at the end of pre-filled text, it sits at the start.
+     * Building the complete "@handle <reply>" text ourselves, in the
+     * correct order, sidesteps that cursor position entirely -- there is
+     * nothing left to paste for a plain no-link reply, only to review.
      */
-    fun buildInboundReplyUrl(platform: String, sourceReference: String?, authorHandle: String? = null): String? {
+    fun buildInboundReplyUrl(platform: String, sourceReference: String?, authorHandle: String? = null, draftReply: String? = null): String? {
         if (sourceReference == null) return null
         if (platform.lowercase() != "x") return sourceReference
         val tweetId = extractTweetId(sourceReference) ?: return sourceReference
         val encodedId = URLEncoder.encode(tweetId, "UTF-8")
         val base = "https://x.com/intent/post?in_reply_to=$encodedId"
-        if (authorHandle.isNullOrBlank()) return base
-        val encodedText = URLEncoder.encode("@$authorHandle ", "UTF-8")
-        return "$base&text=$encodedText"
+        val mention = if (authorHandle.isNullOrBlank()) null else "@$authorHandle"
+        val reply = draftReply?.trim()?.takeIf { it.isNotEmpty() }
+        val text = listOfNotNull(mention, reply).joinToString(" ").takeIf { it.isNotEmpty() } ?: return base
+        return "$base&text=${URLEncoder.encode(text, "UTF-8")}"
     }
 }

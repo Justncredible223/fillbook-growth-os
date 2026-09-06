@@ -64,13 +64,13 @@ class InboundReplyLinkTest {
      * building that text ourselves via the intent's own `text` param.
      */
     @Test
-    fun `appends the @handle as a text param when the author handle is known`() {
+    fun `appends just the @handle as a text param when only the author handle is known`() {
         val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", "DefiDelilah")
-        assertEquals("https://x.com/intent/post?in_reply_to=501&text=%40DefiDelilah+", url)
+        assertEquals("https://x.com/intent/post?in_reply_to=501&text=%40DefiDelilah", url)
     }
 
     @Test
-    fun `omits the text param when the author handle is blank`() {
+    fun `omits the text param when the author handle is blank and no draft reply is given`() {
         val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", "  ")
         assertEquals("https://x.com/intent/post?in_reply_to=501", url)
     }
@@ -79,5 +79,32 @@ class InboundReplyLinkTest {
     fun `does not append a handle to the fallback URL for a non-X platform`() {
         val original = "https://youtube.com/watch?v=abc123"
         assertEquals(original, InboundReplyLink.buildInboundReplyUrl("youtube", original, "DefiDelilah"))
+    }
+
+    /**
+     * Regression coverage for a third real bug, found live immediately
+     * after the second fix above shipped: once the composer pre-filled
+     * "@handle ", pasting the clipboard draft on top of it landed BEFORE
+     * the mention, not after -- the composer's cursor sits at the start of
+     * pre-filled text, not the end. Fixed by building the complete
+     * "@handle <reply>" text ourselves, in the correct order, so there is
+     * nothing left to paste into the wrong position for a plain reply.
+     */
+    @Test
+    fun `puts the @handle mention BEFORE the drafted reply, in one pre-filled text param`() {
+        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", "DefiDelilah", "Happy to help!")
+        assertEquals("https://x.com/intent/post?in_reply_to=501&text=%40DefiDelilah+Happy+to+help%21", url)
+    }
+
+    @Test
+    fun `uses just the drafted reply when no author handle is known`() {
+        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", null, "Happy to help!")
+        assertEquals("https://x.com/intent/post?in_reply_to=501&text=Happy+to+help%21", url)
+    }
+
+    @Test
+    fun `trims the drafted reply and ignores a blank one`() {
+        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", "DefiDelilah", "   ")
+        assertEquals("https://x.com/intent/post?in_reply_to=501&text=%40DefiDelilah", url)
     }
 }

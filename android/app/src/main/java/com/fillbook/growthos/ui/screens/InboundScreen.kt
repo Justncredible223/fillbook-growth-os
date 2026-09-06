@@ -139,18 +139,22 @@ fun InboundScreen(repo: GrowthOsRepository) {
         val draft = item.draftResponse
         if (draft != null) copyToClipboard(context, "Reply to ${item.authorHandle ?: "unknown"}", draft)
         val sourceReference = item.sourceReference
-        // For a real X item, opens X's reply-intent URL (pre-fills the
-        // "@handle " mention as real composer text, since the native app's
-        // own in_reply_to autofill was confirmed on-device NOT to do this)
-        // built from the exact tweet ID in sourceReference, instead of the
-        // tweet's plain URL -- opening the plain URL landed on X's generic
-        // composer, which risked the owner's reply posting as a new
-        // standalone post instead of a real reply. Falls back to
-        // sourceReference itself unchanged for any other platform or an
-        // unrecognized URL shape. This never changes status -- opening the
-        // platform must never imply a reply was sent; "Mark responded"
-        // stays its own explicit action, untouched here.
-        val urlToOpen = InboundReplyLink.buildInboundReplyUrl(item.platform, sourceReference, item.authorHandle)
+        // For a real X item, opens X's reply-intent URL pre-filled with
+        // "@handle <the drafted reply>" as real composer text, in that
+        // order -- since the native app's own in_reply_to autofill was
+        // confirmed on-device NOT to insert the mention at all, and a
+        // separate paste-after-prefill was confirmed to land BEFORE the
+        // mention (the composer's cursor sits at the start of pre-filled
+        // text, not the end). Built from the exact tweet ID in
+        // sourceReference, instead of the tweet's plain URL -- opening the
+        // plain URL landed on X's generic composer, which risked the
+        // owner's reply posting as a new standalone post instead of a real
+        // reply. Falls back to sourceReference itself unchanged for any
+        // other platform or an unrecognized URL shape. This never changes
+        // status -- opening the platform must never imply a reply was
+        // sent; "Mark responded" stays its own explicit action, untouched
+        // here.
+        val urlToOpen = InboundReplyLink.buildInboundReplyUrl(item.platform, sourceReference, item.authorHandle, draft)
         val opened = urlToOpen != null && openExternalUrl(context, urlToOpen)
         val message = PlatformActions.copyAndOpenMessage(
             platform = item.platform,
