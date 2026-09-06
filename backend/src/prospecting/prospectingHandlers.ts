@@ -5,6 +5,7 @@ import { loadGroundingContext } from "../inbound/inboundHandlers.js";
 import { selectDailyWorkingSet } from "./prospectingDailySelection.js";
 import { STALE_EXPIRY_DAYS } from "./prospectingEligibility.js";
 import { draftProspectingReply, type ProspectingDraftContext, type ProspectingDraftResult } from "./prospectingReplyWriter.js";
+import { checkReplyGuardrails } from "../content/xReplyGuardrails.js";
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
 import type { ProspectingCandidate, ProspectingRepository } from "./types.js";
@@ -115,6 +116,15 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
     brandRulesSummary,
     verifiedKnowledgeSummary,
   );
+
+  // Mechanical, $0 safety net -- catches banned generic phrases, an
+  // unexplained link, and unverified performance/customer claims
+  // regardless of what the model's own mentionsFillbook/usesLink flags
+  // say. A violating draft is never persisted or shown to the owner.
+  const violation = checkReplyGuardrails(draft.reply, draft.usesLink);
+  if (violation) {
+    throw new ProspectingActionError(`Draft rejected -- ${violation.reason}. Try drafting again.`);
+  }
 
   await repo.updateStatus(id, "ready", {
     draftReply: draft.reply,

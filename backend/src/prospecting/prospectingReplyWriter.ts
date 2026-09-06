@@ -29,7 +29,66 @@ export interface ProspectingPlatformProfile {
   styleRules: string;
   /** Platform-specific link etiquette -- when (if ever) a link is acceptable and how it must be presented. */
   linkPolicy: string;
+  /**
+   * How aggressively (or not) a mention of Fillbook is ever appropriate --
+   * genuinely different per platform, not just a style tweak. X's version
+   * (2026-09-05 refresh) replaces a purely "almost never mention it"
+   * default with a structure for when a mention is actually earned, per
+   * owner direction that replies read as pure advice with no path to
+   * awareness. Reddit's stays the original, more conservative "90%+ no
+   * mention" rule verbatim -- Reddit's own anti-self-promotion culture and
+   * moderation risk are real and this round deliberately leaves that
+   * platform untouched.
+   */
+  noPitchGuidance: string;
 }
+
+/**
+ * X-specific (2026-09-05): genuinely useful first, sounds human, and can
+ * naturally create awareness of Fillbook when the conversation is
+ * actually relevant -- a thoughtful trader/builder joining the
+ * conversation, never a salesperson using advice as a pretext to pitch.
+ * Replaces the old blanket "90%+ mention NOT AT ALL" default with a
+ * structure for recognizing when a mention is earned, while keeping every
+ * hard boundary (no link by default, no generic marketing phrases, no
+ * unverified claims, no impersonation/concealment) at least as strict as
+ * before.
+ */
+const X_REPLY_NO_PITCH_GUIDANCE = `Sound like a thoughtful trader or builder joining the conversation -- genuinely useful first, human,
+and something that can naturally create awareness of Fillbook when the conversation is actually
+relevant. Never a salesperson using advice as a pretext to pitch.
+
+When the conversation is genuinely relevant to trade journaling, rule tracking, consistency,
+drawdown discipline, or reviewing trades, use this shape where it fits -- skip steps that don't
+apply; this is not a rigid template to fill in mechanically:
+1. Respond specifically to what they actually said, not a generic reaction anyone could have posted.
+2. Add one concrete insight, example, or a real practical question.
+3. Only if it fits naturally, connect their problem to journaling/rule-tracking/consistency/drawdown
+   discipline/reviewing trades -- never force this connection where it doesn't belong.
+4. Only once steps 1-3 already made a real, earned connection to that problem, you MAY optionally
+   note that Fillbook is built around it.
+5. A soft invitation is fine when it's earned -- for example: "That's one of the things we're trying to make easier with Fillbook." Never a link, never a call to action, never "check it out."
+
+Hard rules, no exceptions:
+- Never add a Fillbook mention when it doesn't logically fit the conversation -- when genuinely
+  unsure, leave it out; silence is always the safe default, not a missed opportunity.
+- Never include a link by default -- see the link policy below for the rare exception.
+- Never use generic marketing phrases or close variants of them: "check out our platform", "learn
+  more", "DM me", "sign up today", "click here", "link in bio".
+- Never claim a personal trading result, a customer/user result, or a product capability that isn't
+  in the verified knowledge given to you.
+- Never impersonate an individual trader or conceal that this is the Fillbook account replying --
+  the VOICE sounds like a real person, but the affiliation is never hidden or denied.`;
+
+/** Reddit's original, unchanged guidance -- see this constant's own docstring above on why this stays conservative while X gets more structure. */
+const CONSERVATIVE_NO_PITCH_GUIDANCE = `90%+ of good replies here mention Fillbook NOT AT ALL. Your default assumption should be
+mentionsFillbook=false and usesLink=false. Only set them true when the conversation is
+SPECIFICALLY about trade journaling/tracking/analytics tools and a mention would feel earned, not
+forced. Never write "we built Fillbook for this, check it out" or any variant -- that pattern is
+explicitly banned. If you're unsure, leave Fillbook out entirely.
+
+Before finalizing, apply this test: "Would this still be worth saying if Fillbook had nothing to
+sell?" If the answer is no, the reply needs a genuine value component added, not a softer sales pitch.`;
 
 /**
  * Both platforms currently share one redirect (fillbookhq.com/go/
@@ -51,6 +110,7 @@ export const PROSPECTING_PLATFORM_PROFILES: Record<string, ProspectingPlatformPr
     linkPolicy:
       "If -- and only if -- a link genuinely belongs, use exactly this trackable link and no other: " +
       `${PROSPECTING_TRACKABLE_LINK}. Put it at the end of the reply, never as the reply's main point.`,
+    noPitchGuidance: X_REPLY_NO_PITCH_GUIDANCE,
   },
   reddit: {
     displayName: "Reddit",
@@ -68,6 +128,7 @@ export const PROSPECTING_PLATFORM_PROFILES: Record<string, ProspectingPlatformPr
       "poster explicitly asked for a tool recommendation; when that is the case, name what the link is in plain " +
       "words, use exactly this trackable link and no other: " +
       `${PROSPECTING_TRACKABLE_LINK}, and keep the rest of the comment useful on its own without it.`,
+    noPitchGuidance: CONSERVATIVE_NO_PITCH_GUIDANCE,
   },
 };
 
@@ -80,6 +141,11 @@ function genericProfile(platform: string): ProspectingPlatformProfile {
     linkPolicy:
       "If -- and only if -- a link genuinely belongs, use exactly this trackable link and no other: " +
       `${PROSPECTING_TRACKABLE_LINK}.`,
+    // An unrecognized platform gets Reddit's conservative default, not X's
+    // more structured one -- "maintain separate behavior for Reddit and
+    // other platforms" means an unknown platform should never accidentally
+    // inherit X's more permissive mention guidance.
+    noPitchGuidance: CONSERVATIVE_NO_PITCH_GUIDANCE,
   };
 }
 
@@ -109,11 +175,7 @@ person did NOT mention or reply to us -- we are joining their conversation becau
 genuinely relevant to futures/prop-firm trading. Fillbook is a trading journal/analytics platform for
 futures day traders and prop-firm funded accounts.
 
-THE RULE THAT MATTERS MOST: 90%+ of good replies here mention Fillbook NOT AT ALL. Your default
-assumption should be mentionsFillbook=false and usesLink=false. Only set them true when the
-conversation is SPECIFICALLY about trade journaling/tracking/analytics tools and a mention would feel
-earned, not forced. Never write "we built Fillbook for this, check it out" or any variant -- that
-pattern is explicitly banned. If you're unsure, leave Fillbook out entirely.
+${profile.noPitchGuidance}
 
 Link policy for ${profile.displayName}: ${profile.linkPolicy}
 
@@ -135,9 +197,6 @@ Fact-check discipline: classify any factual claim you're relying on internally a
 EVIDENCE-SUPPORTED OBSERVATION, REASONABLE HYPOTHESIS, or OPINION -- never state a hypothesis or
 opinion as if it were a verified fact. Ground any Fillbook product claim ONLY in the verified knowledge
 given below -- never invent a feature.
-
-Before finalizing, apply this test: "Would this still be worth saying if Fillbook had nothing to
-sell?" If the answer is no, the reply needs a genuine value component added, not a softer sales pitch.
 
 Submit your result via the submit_reply tool, and set mentionsFillbook/usesLink accurately based on
 what you actually wrote -- these are checked, not just descriptive.`;

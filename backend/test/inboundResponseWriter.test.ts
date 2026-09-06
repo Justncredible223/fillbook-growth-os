@@ -64,4 +64,21 @@ describe("draftInboundResponse", () => {
     expect(user).toContain("Platform: Reddit");
     expect(user).toContain("From: u/someone");
   });
+
+  it("REFINED (2026-09-05): X's prompt gives the same earned-mention structure as Prospecting's X refresh, not the old blanket 'unless specifically about journaling tools' rule", async () => {
+    const { system } = await capture({ platform: "x", authorHandle: "someone", messageText: "hi", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 });
+
+    expect(system).toContain("only earned once the reply has already added a concrete insight");
+    expect(system).toContain("That's one of the things we're trying to make easier with Fillbook");
+    expect(system).toContain("Never conceal that this is the Fillbook account replying");
+    expect(system).toContain("check out our platform");
+  });
+
+  it("Reddit's prompt keeps its original conservative pitch guidance, unchanged by X's refresh", async () => {
+    const { system } = await capture({ platform: "reddit", authorHandle: "someone", messageText: "hi", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 });
+
+    expect(system).toContain("unless the conversation itself is");
+    expect(system).toContain("specifically about trade journaling/tracking tools");
+    expect(system).not.toContain("only earned once the reply has already added a concrete insight");
+  });
 });

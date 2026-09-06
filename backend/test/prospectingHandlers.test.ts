@@ -173,6 +173,50 @@ describe("draftProspectingCandidateReply -- the candidate's platform reaches the
 
     expect(drafter.mock.calls[0]![0]).toMatchObject({ platform: "x", communityLabel: null });
   });
+
+  it("REFINED: rejects and never persists a draft that trips the mechanical reply guardrail -- an overly promotional banned phrase -- even though the model's own flags say mentionsFillbook=false", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-2", platform: "x", status: "shown", draftReply: null }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({
+      reply: "Struggling with this? Check out our platform, it solves exactly this!",
+      mentionsFillbook: false,
+      usesLink: false,
+    }));
+
+    await expect(draftProspectingCandidateReply(fakeClient, "x-2", { repo, drafter, loadGrounding })).rejects.toThrow(/banned generic phrase/);
+
+    const row = await repo.getById("x-2");
+    expect(row!.status).toBe("shown"); // never advanced to 'ready' -- the rejected draft was never persisted
+    expect(row!.draftReply).toBeNull();
+  });
+
+  it("REFINED: rejects a draft with an unsupported customer-result claim", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-3", platform: "x", status: "shown", draftReply: null }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({
+      reply: "Our traders saved 30% on drawdown violations after switching.",
+      mentionsFillbook: true,
+      usesLink: false,
+    }));
+
+    await expect(draftProspectingCandidateReply(fakeClient, "x-3", { repo, drafter, loadGrounding })).rejects.toThrow(ProspectingActionError);
+  });
+
+  it("REFINED: the guardrail applies to Reddit too, not just X -- a banned generic phrase is rejected regardless of platform", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "reddit-2", platform: "reddit", status: "shown", draftReply: null, postUrl: "https://www.reddit.com/r/FuturesTrading/comments/abc/x/" }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({
+      reply: "Learn more about how Fillbook handles this in our docs.",
+      mentionsFillbook: true,
+      usesLink: false,
+    }));
+
+    await expect(draftProspectingCandidateReply(fakeClient, "reddit-2", { repo, drafter, loadGrounding })).rejects.toThrow(/banned generic phrase/);
+
+    const row = await repo.getById("reddit-2");
+    expect(row!.status).toBe("shown");
+    expect(row!.draftReply).toBeNull();
+  });
 });
 
 describe("communityLabelFor", () => {

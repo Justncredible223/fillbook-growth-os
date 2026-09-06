@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fillbook.growthos.data.DraftRejectedException
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.InboundEngagement
 import com.fillbook.growthos.data.InboundSummary
@@ -154,6 +155,12 @@ fun InboundScreen(repo: GrowthOsRepository) {
                 action()
                 actionError = null
                 refresh()
+            } catch (e: DraftRejectedException) {
+                // A real, meaningful rejection (the reply guardrail catching a
+                // banned phrase, an unverified claim, or an undeclared link) --
+                // never a connectivity problem. Shown directly, not swallowed
+                // into the generic failureMessage below.
+                actionError = e.shortReason
             } catch (e: Exception) {
                 actionError = failureMessage
             } finally {

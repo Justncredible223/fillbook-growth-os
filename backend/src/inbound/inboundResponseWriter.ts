@@ -21,7 +21,33 @@ interface InboundPlatformProfile {
   styleRules: string;
   /** Handle prefix for the "From:" line. */
   handlePrefix: string;
+  /** How aggressively (or not) a Fillbook mention is ever appropriate -- see the same-named field/rationale in prospectingReplyWriter.ts. X gets the 2026-09-05 structured refresh; Reddit keeps the original conservative bullet verbatim. */
+  noPitchGuidance: string;
 }
+
+/**
+ * X-specific (2026-09-05): a mention is earned only after the reply has
+ * already added real value and made a genuine connection to journaling/
+ * rule-tracking/consistency/drawdown/trade-review -- never a pretext.
+ * Mirrors prospectingReplyWriter.ts's X_REPLY_NO_PITCH_GUIDANCE; kept as
+ * its own copy here (not imported) since inbound's reply has no
+ * mentionsFillbook/usesLink flags to check against and the two callers
+ * shouldn't be coupled just to save a few lines.
+ */
+const X_INBOUND_NO_PITCH_GUIDANCE =
+  "Do NOT pitch Fillbook, mention pricing, or drop a link by default. A mention is only earned once the reply " +
+  "has already added a concrete insight and made a genuine connection to journaling/rule-tracking/consistency/" +
+  "drawdown discipline/reviewing trades -- never as a pretext for advice. When it's earned, a soft, specific " +
+  "invitation is fine (e.g. \"That's one of the things we're trying to make easier with Fillbook\") -- never a " +
+  "link, never \"check it out\", never a call to action. Never use generic marketing phrases (\"check out our " +
+  "platform\", \"learn more\", \"DM me\"). Never claim a personal trading result, a customer result, or a " +
+  "capability that isn't in the verified knowledge given. Never conceal that this is the Fillbook account " +
+  "replying. When genuinely unsure whether a mention fits, leave it out.";
+
+const CONSERVATIVE_INBOUND_NO_PITCH_GUIDANCE =
+  "Do NOT pitch Fillbook, mention pricing, or drop a link unless the conversation itself is " +
+  "specifically about trade journaling/tracking tools and a mention would feel earned, not forced -- " +
+  "when genuinely unsure, leave it out.";
 
 const INBOUND_PLATFORM_PROFILES: Record<string, InboundPlatformProfile> = {
   x: {
@@ -29,6 +55,7 @@ const INBOUND_PLATFORM_PROFILES: Record<string, InboundPlatformProfile> = {
     engagementNoun: "replied to, mentioned, or quoted one of our posts on X",
     styleRules: "Do not over-explain. A real X reply is usually one or two sentences. No hashtags.",
     handlePrefix: "@",
+    noPitchGuidance: X_INBOUND_NO_PITCH_GUIDANCE,
   },
   reddit: {
     displayName: "Reddit",
@@ -38,6 +65,7 @@ const INBOUND_PLATFORM_PROFILES: Record<string, InboundPlatformProfile> = {
       "sentences is normal when the question deserves it; Reddit readers value substance over brevity and " +
       "downvote anything that reads like brand copy.",
     handlePrefix: "u/",
+    noPitchGuidance: CONSERVATIVE_INBOUND_NO_PITCH_GUIDANCE,
   },
 };
 
@@ -48,6 +76,9 @@ function inboundPlatformProfile(platform: string): InboundPlatformProfile {
       engagementNoun: `replied to or mentioned us on ${platform}`,
       styleRules: "Do not over-explain. Keep the reply short and specific to what they said.",
       handlePrefix: "@",
+      // Unknown platform -- conservative default, same reasoning as
+      // prospectingReplyWriter.ts's genericProfile().
+      noPitchGuidance: CONSERVATIVE_INBOUND_NO_PITCH_GUIDANCE,
     }
   );
 }
@@ -68,9 +99,7 @@ This is a real one-on-one reply on ${profile.displayName}, not a broadcast post:
 - If they've engaged with us before (noted below), it's fine to acknowledge that lightly and
   naturally -- never in a canned "thanks for being a loyal follower!" way.
 - ${profile.styleRules}
-- Do NOT pitch Fillbook, mention pricing, or drop a link unless the conversation itself is
-  specifically about trade journaling/tracking tools and a mention would feel earned, not forced --
-  when genuinely unsure, leave it out.
+- ${profile.noPitchGuidance}
 - Ground any product claim ONLY in the verified knowledge given -- never invent a feature.
 
 Submit your result via the submit_reply tool.`;

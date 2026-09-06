@@ -59,12 +59,34 @@ describe("draftProspectingReply", () => {
     expect(body.messages[0].content).toContain("From: @unknown");
   });
 
-  it("the system prompt instructs a value-first, mostly-no-mention default", async () => {
+  it("REFINED (2026-09-05): X's system prompt gives a structure for an earned mention instead of a blanket 90%+ no-mention default -- still value-first, still silence-by-default when unsure, but no longer reads as pure advice with no path to awareness", async () => {
     const { system } = await capturePrompt("x");
+
+    // The old blanket rule is gone for X specifically.
+    expect(system).not.toMatch(/90%\+/);
+    expect(system).not.toContain("mentionsFillbook=false");
+    // The new structure and its hard rules are present.
+    expect(system).toContain("thoughtful trader or builder joining the conversation");
+    expect(system).toMatch(/respond specifically to what they actually said/i);
+    expect(system).toContain("connect their problem to journaling");
+    expect(system).toContain("That's one of the things we're trying to make easier with Fillbook");
+    expect(system).toContain("Never include a link by default");
+    expect(system).toContain("check out our platform");
+    expect(system).toContain("Never impersonate an individual trader or conceal");
+  });
+
+  it("Reddit's system prompt keeps the ORIGINAL conservative 90%+ no-mention default, unchanged by X's refresh", async () => {
+    const { system } = await capturePrompt("reddit", { communityLabel: "r/FuturesTrading" });
 
     expect(system).toMatch(/90%\+/);
     expect(system).toContain("mentionsFillbook=false");
     expect(system).toContain("we built Fillbook for this, check it out");
+    expect(system).toContain('Would this still be worth saying if Fillbook had nothing to');
+  });
+
+  it("an unrecognized platform also keeps the conservative default, never X's more structured one", async () => {
+    const { system } = await capturePrompt("mastodon");
+    expect(system).toMatch(/90%\+/);
   });
 
   it("passes through the model's own mentionsFillbook/usesLink flags rather than inferring them", async () => {

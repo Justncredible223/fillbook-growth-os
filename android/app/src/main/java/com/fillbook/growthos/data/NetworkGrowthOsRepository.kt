@@ -95,6 +95,28 @@ class NetworkGrowthOsRepository(
         }
     }
 
+    /**
+     * Same fix as generatePartnershipDraft's own 404-body parsing (see
+     * extractPartnershipActionErrorMessage's docstring) -- confirmed on
+     * inspection that draftProspectingReply/draftInboundResponse had never
+     * received it: a thrown ProspectingActionError/InboundActionError
+     * (e.g. the reply guardrail rejecting a banned phrase or unverified
+     * claim) converts into an HTTP 404 with a real, actionable
+     * `{error: message}` body, but without this, it fell through as a bare
+     * NetworkException -- ProspectingScreen/InboundScreen's generic
+     * `catch (e: Exception)` has no specific handler for that, so it
+     * silently became "Couldn't draft a reply. Check your connection and
+     * try again.", hiding the real reason the owner needed to see.
+     */
+    private suspend fun postExpectingDraftRejection(path: String, jsonBody: JSONObject): JSONObject =
+        try {
+            post(path, jsonBody)
+        } catch (e: NetworkException) {
+            val parsedError = extractPartnershipActionErrorMessage(e.httpCode, e.message)
+            if (parsedError != null) throw DraftRejectedException(parsedError)
+            throw e
+        }
+
     override suspend fun getHomeSummary(): HomeSummary {
         val json = get("/api/summary")
         val analytics = json.getJSONObject("analytics")
@@ -343,7 +365,7 @@ class NetworkGrowthOsRepository(
     }
 
     override suspend fun draftInboundResponse(id: String): InboundEngagement {
-        val json = post("/api/approvals?resource=inbound", JSONObject().put("action", "draft").put("id", id))
+        val json = postExpectingDraftRejection("/api/approvals?resource=inbound", JSONObject().put("action", "draft").put("id", id))
         return json.toInboundEngagement()
     }
 
@@ -395,7 +417,7 @@ class NetworkGrowthOsRepository(
     }
 
     override suspend fun draftProspectingReply(id: String): ProspectingCandidate {
-        val json = post("/api/approvals?resource=prospecting", JSONObject().put("action", "draft").put("id", id))
+        val json = postExpectingDraftRejection("/api/approvals?resource=prospecting", JSONObject().put("action", "draft").put("id", id))
         return json.toProspectingCandidate()
     }
 
@@ -796,6 +818,16 @@ fun extractPartnershipActionErrorMessage(httpCode: Int?, networkExceptionMessage
  * dump on the owner by default.
  */
 class PartnershipDraftRejectedException(val shortReason: String, val details: String? = null) : Exception(shortReason)
+
+/**
+ * Same real-outcome-not-a-connectivity-problem distinction as
+ * PartnershipDraftRejectedException above, for Prospecting's and Inbound's
+ * draft-reply actions -- e.g. the mechanical reply guardrail (banned
+ * generic phrase, an unverified claim, an undeclared link) rejecting a
+ * draft before it's ever persisted. Kept as its own, more generically
+ * named type rather than reusing the Partnership-named one.
+ */
+class DraftRejectedException(val shortReason: String) : Exception(shortReason)
 
 /** Small helpers since org.json's JSONArray predates Kotlin collections. */
 private fun <T> JSONArray.map(transform: (JSONObject) -> T): List<T> =

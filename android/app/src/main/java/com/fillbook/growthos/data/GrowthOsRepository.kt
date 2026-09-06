@@ -406,9 +406,23 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         overdue = 0,
     )
 
+    /** FIXTURE-ONLY: when set to "banned_phrase" or "unverified_claim", the next draftInboundResponse() call throws DraftRejectedException with the EXACT real message the backend's reply guardrail sends for that violation -- lets the rejection path be verified on-device without a paid call. "with_mention" returns a clean draft that includes an earned, soft Fillbook mention instead of the default no-mention draft. Resets to null after one use. Never used by production code. */
+    var debugNextInboundOutcome: String? = null
+
     override suspend fun draftInboundResponse(id: String): InboundEngagement {
+        val forced = debugNextInboundOutcome
+        debugNextInboundOutcome = null
+        when (forced) {
+            "banned_phrase" -> throw DraftRejectedException("Draft rejected -- uses the banned generic phrase \"check out our platform\". Try drafting again.")
+            "unverified_claim" -> throw DraftRejectedException("Draft rejected -- speaks in first person about personally trading, which Fillbook (a product) must never do. Try drafting again.")
+        }
         val index = inboundItems.indexOfFirst { it.id == id }
-        val updated = inboundItems[index].copy(status = "draft_ready", draftResponse = "Trailing drawdown typically resets at end-of-day on most prop firms -- worth double-checking your specific firm's rule since a few use a static floor instead.")
+        val draft = if (forced == "with_mention") {
+            "That's the classic problem with spreadsheet journaling -- you catch the pattern two weeks too late. That's one of the things we're trying to make easier with Fillbook: flagging the repeat mistake while it's still happening."
+        } else {
+            "Trailing drawdown typically resets at end-of-day on most prop firms -- worth double-checking your specific firm's rule since a few use a static floor instead."
+        }
+        val updated = inboundItems[index].copy(status = "draft_ready", draftResponse = draft)
         inboundItems[index] = updated
         return updated
     }
@@ -485,7 +499,35 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             replyMentionsFillbook = null,
             replyUsedLink = null,
         ),
+        // Reddit fixture -- confirms Reddit's own conservative reply
+        // behavior is exercised on-device unchanged by X's 2026-09-05
+        // refresh (the fake doesn't distinguish drafting logic by
+        // platform, but this row lets the SCREEN's own platform-specific
+        // rendering/copy-target be checked against a real Reddit shape).
+        ProspectingCandidate(
+            id = "prospect-fake-reddit-1",
+            platform = "reddit",
+            discoveryQuery = "trailing_drawdown",
+            discoveryLabel = "Trailing drawdown",
+            replyClass = "A",
+            authorHandle = "redditFuturesTrader",
+            authorFollowerCount = null,
+            authorVerified = null,
+            postText = "Does trailing drawdown lock at EOD balance or trail live intraday? Every firm's FAQ explains it differently.",
+            postUrl = "https://www.reddit.com/r/FuturesTrading/comments/abc123/trailing_drawdown_question/",
+            postCreatedAt = "2026-09-03T18:00:00Z",
+            opportunityScore = 74.0,
+            scoreBreakdown = mapOf("topicRelevance" to "\"Trailing drawdown\" (risk_management) -> +16"),
+            creatorCandidate = false,
+            status = "shown",
+            draftReply = null,
+            replyMentionsFillbook = null,
+            replyUsedLink = null,
+        ),
     )
+
+    /** FIXTURE-ONLY: same contract as debugNextInboundOutcome above, for Prospecting's draft-reply action. Never used by production code. */
+    var debugNextProspectingOutcome: String? = null
 
     override suspend fun getProspectingQueue(): List<ProspectingCandidate> {
         for (i in prospectingItems.indices) {
@@ -495,11 +537,22 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     }
 
     override suspend fun draftProspectingReply(id: String): ProspectingCandidate {
+        val forced = debugNextProspectingOutcome
+        debugNextProspectingOutcome = null
+        when (forced) {
+            "banned_phrase" -> throw DraftRejectedException("Draft rejected -- uses the banned generic phrase \"check out our platform\". Try drafting again.")
+            "unverified_claim" -> throw DraftRejectedException("Draft rejected -- cites an unverified performance statistic. Try drafting again.")
+        }
         val index = prospectingItems.indexOfFirst { it.id == id }
+        val (draft, mentions) = if (forced == "with_mention") {
+            "That's the classic problem with spreadsheet journaling -- you catch the pattern two weeks too late. That's one of the things we're trying to make easier with Fillbook." to true
+        } else {
+            "Most firms lock it in at the daily close, but a few (Apex included) still trail live intraday -- worth checking your specific firm's rulebook since this trips people up constantly." to false
+        }
         val updated = prospectingItems[index].copy(
             status = "ready",
-            draftReply = "Most firms lock it in at the daily close, but a few (Apex included) still trail live intraday -- worth checking your specific firm's rulebook since this trips people up constantly.",
-            replyMentionsFillbook = false,
+            draftReply = draft,
+            replyMentionsFillbook = mentions,
             replyUsedLink = false,
         )
         prospectingItems[index] = updated

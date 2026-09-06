@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fillbook.growthos.data.DraftRejectedException
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.ProspectingCandidate
 import com.fillbook.growthos.ui.components.ExpandableText
@@ -123,6 +124,12 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                 items = items.map { if (it.id == updated.id) updated else it }
                 editedDrafts[updated.id] = updated.draftReply.orEmpty()
                 actionError = null
+            } catch (e: DraftRejectedException) {
+                // A real, meaningful rejection (the reply guardrail catching a
+                // banned phrase, an unverified claim, or an undeclared link) --
+                // never a connectivity problem. Shown directly, not swallowed
+                // into the generic message below.
+                actionError = e.shortReason
             } catch (e: Exception) {
                 actionError = "Couldn't draft a reply. Check your connection and try again."
             }

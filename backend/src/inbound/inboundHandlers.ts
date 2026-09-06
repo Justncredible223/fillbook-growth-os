@@ -4,6 +4,7 @@ import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseReposi
 import { createLlmClient } from "../content/llmClient.js";
 import { recordCostEvent, estimateCostUsd } from "../cost/costTracking.js";
 import { draftInboundResponse } from "./inboundResponseWriter.js";
+import { checkReplyGuardrails } from "../content/xReplyGuardrails.js";
 import { SupabaseInboundRepository } from "./supabaseInboundRepository.js";
 import { ingestInboundMentions } from "./inboundIngestion.js";
 import { createXSignalAdapter } from "../signals/adapters/xAdapter.js";
@@ -151,6 +152,14 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
     brandRulesSummary,
     verifiedKnowledgeSummary,
   );
+
+  // Mechanical, $0 safety net -- see xReplyGuardrails.ts. Inbound never
+  // expects a link at all (no usesLink concept in its schema), so any
+  // link-shaped text here is always a violation.
+  const violation = checkReplyGuardrails(draft, false);
+  if (violation) {
+    throw new InboundActionError(`Draft rejected -- ${violation.reason}. Try drafting again.`);
+  }
 
   await repo.updateStatus(id, "draft_ready", { draftResponse: draft });
   return { ...row, status: "draft_ready", draftResponse: draft };
