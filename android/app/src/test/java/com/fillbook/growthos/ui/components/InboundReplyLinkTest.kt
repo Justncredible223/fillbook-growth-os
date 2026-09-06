@@ -28,7 +28,7 @@ class InboundReplyLinkTest {
     }
 
     @Test
-    fun `builds the exact reply-intent URL for a real X item, URL-encoding the id`() {
+    fun `builds the reply-intent URL with no text param when no handle is known, URL-encoding the id`() {
         val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/1948273645102938475")
         assertEquals("https://x.com/intent/post?in_reply_to=1948273645102938475", url)
     }
@@ -54,5 +54,30 @@ class InboundReplyLinkTest {
     @Test
     fun `returns null when there is no source reference at all, never fabricating a link`() {
         assertNull(InboundReplyLink.buildInboundReplyUrl("x", null))
+    }
+
+    /**
+     * Regression coverage for a second real bug, found on-device after the
+     * first fix above shipped: the native X app's in_reply_to autofill does
+     * NOT insert "@handle " as actual composer text (confirmed live), so
+     * the owner saw a blank reply box with no @-mention at all. Fixed by
+     * building that text ourselves via the intent's own `text` param.
+     */
+    @Test
+    fun `appends the @handle as a text param when the author handle is known`() {
+        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", "DefiDelilah")
+        assertEquals("https://x.com/intent/post?in_reply_to=501&text=%40DefiDelilah+", url)
+    }
+
+    @Test
+    fun `omits the text param when the author handle is blank`() {
+        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", "  ")
+        assertEquals("https://x.com/intent/post?in_reply_to=501", url)
+    }
+
+    @Test
+    fun `does not append a handle to the fallback URL for a non-X platform`() {
+        val original = "https://youtube.com/watch?v=abc123"
+        assertEquals(original, InboundReplyLink.buildInboundReplyUrl("youtube", original, "DefiDelilah"))
     }
 }

@@ -32,12 +32,25 @@ object InboundReplyLink {
      * to the original [sourceReference] unchanged for any other platform,
      * an unrecognized URL shape, or a null reference -- never silently
      * drops a real link the owner could still open.
+     *
+     * Also appends a `text=@handle ` param when [authorHandle] is known.
+     * Confirmed on a real device: opening `in_reply_to` alone in the
+     * native X app puts you in the right reply composer but does NOT
+     * insert "@handle " as actual text the way x.com's own web intent
+     * page does -- the owner ended up with a blank box and no @-mention
+     * to reply under. Setting `text` ourselves guarantees the @-mention is
+     * there regardless of whether the app's own in_reply_to autofill ever
+     * kicks in. The owner still pastes their drafted reply (copied to the
+     * clipboard separately) after this pre-filled mention.
      */
-    fun buildInboundReplyUrl(platform: String, sourceReference: String?): String? {
+    fun buildInboundReplyUrl(platform: String, sourceReference: String?, authorHandle: String? = null): String? {
         if (sourceReference == null) return null
         if (platform.lowercase() != "x") return sourceReference
         val tweetId = extractTweetId(sourceReference) ?: return sourceReference
         val encodedId = URLEncoder.encode(tweetId, "UTF-8")
-        return "https://x.com/intent/post?in_reply_to=$encodedId"
+        val base = "https://x.com/intent/post?in_reply_to=$encodedId"
+        if (authorHandle.isNullOrBlank()) return base
+        val encodedText = URLEncoder.encode("@$authorHandle ", "UTF-8")
+        return "$base&text=$encodedText"
     }
 }
