@@ -107,6 +107,17 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     implementation("androidx.biometric:biometric:1.1.0")
+    // Forces a modern androidx.fragment resolution (transitively pulled in
+    // at 1.2.5 by biometric:1.1.0/activity-compose otherwise) -- 1.2.5
+    // predates the 1.3.6 fix that made FragmentActivity's own permission-
+    // request-code validation tolerate the larger codes the Activity Result
+    // API's rememberLauncherForActivityResult generates. Without this,
+    // FragmentActivity.validateRequestPermissionsRequestCode throws
+    // "Can only use lower 16 bits for requestCode" the first time any
+    // ActivityResultContracts.RequestPermission() launcher is used on this
+    // FragmentActivity (required here for BiometricPrompt) -- confirmed via
+    // a real on-device crash log, not a hypothetical.
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
 
     val firebaseBom = platform("com.google.firebase:firebase-bom:34.17.0")
     implementation(firebaseBom)
