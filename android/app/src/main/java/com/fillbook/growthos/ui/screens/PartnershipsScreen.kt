@@ -252,11 +252,11 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                 TextButton(onClick = { showCreateDialog = true }) { Text("+ Add prospect") }
             }
         } else {
-            // Recommendations = not yet contacted (the shortlist the owner reviews and acts on);
-            // In progress = already contacted or further along (existing pipeline tracking).
-            val recommendations = items
-                .filter { it.stage == PartnershipStage.PROSPECT || it.stage == PartnershipStage.QUALIFIED || it.stage == PartnershipStage.DRAFT_READY }
-                .sortedByDescending { it.discoveryScore ?: -1 }
+            // Recommendations = not yet contacted (the shortlist the owner reviews and acts on),
+            // minus anything suppressed; Suppressed = its own separate section (see
+            // suppressedPartnerships); In progress = already contacted or further along.
+            val recommendations = recommendedPartnerships(items)
+            val suppressed = suppressedPartnerships(items)
             val inProgress = items.filter {
                 it.stage == PartnershipStage.CONTACTED || it.stage == PartnershipStage.REPLIED || it.stage == PartnershipStage.PILOT || it.stage == PartnershipStage.ACTIVE_PARTNER
             }
@@ -306,6 +306,38 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                     item {
                         Row(modifier = Modifier.padding(top = 4.dp)) {
                             TextButton(onClick = { showCreateDialog = true }) { Text("+ Add prospect") }
+                        }
+                    }
+
+                    if (suppressed.isNotEmpty()) {
+                        item {
+                            Column(modifier = Modifier.padding(top = 8.dp)) {
+                                Text("Suppressed", style = MaterialTheme.typography.titleMedium, color = TextPrimary)
+                                Text(
+                                    "Automatically re-checked -- the evidence on file no longer shows a real partnership basis. Still on record; never deleted.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = TextTertiary,
+                                )
+                            }
+                        }
+                        items(suppressed, key = { it.id }) { prospect ->
+                            PartnershipCard(
+                                prospect = prospect,
+                                editedText = editedDrafts[prospect.id],
+                                onEditedTextChange = { editedDrafts[prospect.id] = it },
+                                busy = busyId == prospect.id,
+                                onQualify = { runAction(prospect) { repo.qualifyPartnership(prospect.id, "Owner-reviewed: futures-relevant audience, no competing journal found.") } },
+                                onGenerateDraft = { runAction(prospect) { repo.generatePartnershipDraft(prospect.id) } },
+                                onCopyAndOpen = { copyAndOpen(prospect) },
+                                onMarkContacted = {
+                                    val finalText = editedDrafts[prospect.id] ?: prospect.previewText.orEmpty()
+                                    runAction(prospect) { repo.markPartnershipContacted(prospect.id, channelForRoute(prospect.contactRoute), finalText) }
+                                },
+                                onRecordReply = { runAction(prospect) { repo.recordPartnershipReply(prospect.id, "Owner recorded a reply.") } },
+                                onStartPilot = { pilotDialogProspect = prospect },
+                                onArchive = { runAction(prospect) { repo.archivePartnership(prospect.id, "Not pursuing further.") } },
+                                onDoNotContact = { runAction(prospect) { repo.markPartnershipDoNotContact(prospect.id, "Owner marked do-not-contact.") } },
+                            )
                         }
                     }
 
@@ -497,6 +529,37 @@ fun isPitchStillEditable(stage: PartnershipStage): Boolean =
     stage == PartnershipStage.QUALIFIED || stage == PartnershipStage.DRAFT_READY
 
 /**
+ * A suppressed recommendation (see suppressedReason -- set only by
+ * automated backend reassessment when stored evidence no longer shows a
+ * concrete partnership basis) must never look indistinguishable from a
+ * real, still-actionable recommendation, and must never offer a pursuit
+ * action (Generate draft, Copy + Open, Mark contacted) regardless of what
+ * its stage literally still says. Suppression always wins over stage.
+ */
+fun canShowPursuitActions(prospect: PartnershipProspect): Boolean = prospect.suppressedReason == null
+
+/**
+ * The primary recommended queue -- PROSPECT/QUALIFIED/DRAFT_READY, minus
+ * anything suppressed. Extracted as a pure function (same
+ * PlatformActionsTest.kt-style convention as isPitchStillEditable) so the
+ * filtering itself is unit-testable without a Compose harness.
+ */
+fun recommendedPartnerships(items: List<PartnershipProspect>): List<PartnershipProspect> =
+    items
+        .filter { (it.stage == PartnershipStage.PROSPECT || it.stage == PartnershipStage.QUALIFIED || it.stage == PartnershipStage.DRAFT_READY) && it.suppressedReason == null }
+        .sortedByDescending { it.discoveryScore ?: -1 }
+
+/**
+ * A separate section, never merged into the recommended queue -- a
+ * suppressed recommendation is still a real record (never deleted, stage
+ * and history untouched) that the owner may want to review the reason
+ * for, but it must not sit alongside genuinely actionable recommendations
+ * looking the same.
+ */
+fun suppressedPartnerships(items: List<PartnershipProspect>): List<PartnershipProspect> =
+    items.filter { it.suppressedReason != null }.sortedByDescending { it.discoveryScore ?: -1 }
+
+/**
  * Pulls the bare handle out of a contactRoute like "X DM: @phinloco" so
  * Copy + Open can send the owner to that specific recipient's profile
  * instead of X's generic public-post composer -- confirmed wrong on a
@@ -540,13 +603,27 @@ private fun PartnershipCard(
     onArchive: () -> Unit,
     onDoNotContact: () -> Unit,
 ) {
-    GrowthCard(accentBar = if (prospect.stage == PartnershipStage.DRAFT_READY) Accent else null) {
+    val suppressed = prospect.suppressedReason != null
+    GrowthCard(accentBar = if (prospect.stage == PartnershipStage.DRAFT_READY && !suppressed) Accent else null) {
         Row(verticalAlignment = Alignment.Top) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(prospect.organizationName, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 prospect.contactName?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = TextSecondary) }
             }
-            QuietStatusLabel(stageLabel(prospect.stage), stageTone(prospect.stage))
+            // Suppression always wins over the stage label -- a suppressed
+            // prospect must never look like a normal "Qualified" recommendation.
+            if (suppressed) {
+                QuietStatusLabel("Suppressed", StatusTone.SKIPPED)
+            } else {
+                QuietStatusLabel(stageLabel(prospect.stage), stageTone(prospect.stage))
+            }
+        }
+
+        if (suppressed) {
+            Spacer(Modifier.height(8.dp))
+            Text("WHY SUPPRESSED", style = MaterialTheme.typography.labelMedium, color = Warning)
+            Spacer(Modifier.height(2.dp))
+            ExpandableText(prospect.suppressedReason!!, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, collapsedMaxLines = 3)
         }
 
         Spacer(Modifier.height(6.dp))
@@ -599,7 +676,8 @@ private fun PartnershipCard(
         // plain, non-editable text instead (see the fixture-validation
         // finding this fixed).
         val isStillEditable = isPitchStillEditable(prospect.stage)
-        if (draft != null) {
+        val showPursuitActions = canShowPursuitActions(prospect)
+        if (draft != null && showPursuitActions) {
             Spacer(Modifier.height(8.dp))
             Text(if (isStillEditable) "PITCH DRAFT" else "PITCH SENT", style = MaterialTheme.typography.labelMedium, color = Accent)
             Spacer(Modifier.height(4.dp))
@@ -626,7 +704,13 @@ private fun PartnershipCard(
         }
 
         Spacer(Modifier.height(12.dp))
-        when (prospect.stage) {
+        if (!showPursuitActions) {
+            // Suppressed -- never Generate draft, Copy + Open, or Mark
+            // contacted, regardless of what the stage still literally says.
+            // Archive/Do not contact remain available below (a real, final
+            // owner decision is always allowed).
+            Text("No pursuit action available -- see reason above.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+        } else when (prospect.stage) {
             PartnershipStage.PROSPECT -> PrimaryButton(text = "Qualify", onClick = onQualify, enabled = !busy, busy = busy, modifier = Modifier.fillMaxWidth())
             PartnershipStage.QUALIFIED -> PrimaryButton(text = if (busy) "Generating & reviewing (up to 2 attempts)..." else "Generate draft", onClick = onGenerateDraft, enabled = !busy, busy = busy, modifier = Modifier.fillMaxWidth())
             PartnershipStage.DRAFT_READY -> {

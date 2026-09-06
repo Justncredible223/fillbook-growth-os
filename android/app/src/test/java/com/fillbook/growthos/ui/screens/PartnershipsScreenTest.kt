@@ -1,11 +1,57 @@
 package com.fillbook.growthos.ui.screens
 
+import com.fillbook.growthos.data.PartnerCategory
+import com.fillbook.growthos.data.PartnershipProspect
 import com.fillbook.growthos.data.PartnershipStage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+
+private fun prospect(
+    id: String = "p1",
+    organizationName: String = "Example",
+    stage: PartnershipStage = PartnershipStage.QUALIFIED,
+    suppressedReason: String? = null,
+    discoveryScore: Int? = 70,
+    approvedCampaignAssetId: String? = null,
+    previewText: String? = null,
+): PartnershipProspect = PartnershipProspect(
+    id = id,
+    organizationName = organizationName,
+    contactName = null,
+    partnerCategory = PartnerCategory.EDUCATOR_COACH,
+    stage = stage,
+    websiteUrl = null,
+    socialLinks = emptyMap(),
+    contactRoute = "X DM: @example",
+    contactRouteSource = null,
+    audienceFocus = null,
+    futuresRelevanceEvidence = null,
+    sourceUrls = emptyList(),
+    researchDate = null,
+    competingJournalRelationships = null,
+    competingJournalEvidence = null,
+    proposedCollaboration = "A pilot.",
+    qualificationRationale = "Real evidence they run a coaching program.",
+    ownerNotes = null,
+    nextAction = null,
+    nextActionDueDate = null,
+    pilotTermsProposed = null,
+    pilotTermsAgreed = null,
+    pilotStartDate = null,
+    pilotEndDate = null,
+    followUpCount = 0,
+    approvedCampaignAssetId = approvedCampaignAssetId,
+    previewText = previewText,
+    contactedAt = null,
+    contactedChannel = null,
+    discoveryScore = discoveryScore,
+    discoveryConfidence = "medium",
+    discoveredVia = "x_search",
+    suppressedReason = suppressedReason,
+)
 
 class PartnershipsScreenTest {
     @Test
@@ -41,5 +87,69 @@ class PartnershipsScreenTest {
         assertNull(extractXHandle(null))
         assertNull(extractXHandle("email: dana@example.com")) // an email route, not an X route
         assertNull(extractXHandle("X DM: unknown"))
+    }
+
+    // -- Suppressed-recommendations UI gap --------------------------------
+
+    @Test
+    fun `a suppressed prospect is excluded from the primary recommended queue`() {
+        val qualified = prospect(id = "q1", stage = PartnershipStage.QUALIFIED)
+        val suppressedOne = prospect(id = "s1", stage = PartnershipStage.QUALIFIED, suppressedReason = "No evidence this recipient runs or offers...")
+        val recommendations = recommendedPartnerships(listOf(qualified, suppressedOne))
+        assertEquals(listOf("q1"), recommendations.map { it.id })
+    }
+
+    @Test
+    fun `a suppressed prospect appears in its own separate suppressed list, never merged into recommendations`() {
+        val qualified = prospect(id = "q1", stage = PartnershipStage.QUALIFIED)
+        val suppressedOne = prospect(id = "s1", stage = PartnershipStage.QUALIFIED, suppressedReason = "No evidence this recipient runs or offers...")
+        val suppressedTwo = prospect(id = "s2", stage = PartnershipStage.DRAFT_READY, suppressedReason = "No evidence this recipient runs or offers...")
+        val suppressed = suppressedPartnerships(listOf(qualified, suppressedOne, suppressedTwo))
+        assertEquals(setOf("s1", "s2"), suppressed.map { it.id }.toSet())
+    }
+
+    @Test
+    fun `the suppression reason itself is preserved and retrievable, not just a boolean flag`() {
+        val reason = "No evidence this recipient runs or offers an audience, community, business, educational offering, or complementary product."
+        val suppressedOne = prospect(id = "s1", suppressedReason = reason)
+        assertEquals(reason, suppressedPartnerships(listOf(suppressedOne)).single().suppressedReason)
+    }
+
+    @Test
+    fun `do-not-contact remains excluded from both the recommended queue and the suppressed section`() {
+        val doNotContact = prospect(id = "d1", stage = PartnershipStage.DO_NOT_CONTACT)
+        assertTrue(recommendedPartnerships(listOf(doNotContact)).isEmpty())
+        assertTrue(suppressedPartnerships(listOf(doNotContact)).isEmpty())
+    }
+
+    @Test
+    fun `a qualified, evidence-sufficient, NOT suppressed prospect remains fully actionable`() {
+        val qualified = prospect(id = "q1", stage = PartnershipStage.QUALIFIED, suppressedReason = null)
+        assertEquals(listOf("q1"), recommendedPartnerships(listOf(qualified)).map { it.id })
+        assertTrue(canShowPursuitActions(qualified))
+    }
+
+    @Test
+    fun `canShowPursuitActions is false for a suppressed prospect regardless of its stage`() {
+        assertFalse(canShowPursuitActions(prospect(stage = PartnershipStage.QUALIFIED, suppressedReason = "x")))
+        assertFalse(canShowPursuitActions(prospect(stage = PartnershipStage.DRAFT_READY, suppressedReason = "x")))
+    }
+
+    @Test
+    fun `canShowPursuitActions is true for a normal, non-suppressed prospect`() {
+        assertTrue(canShowPursuitActions(prospect(stage = PartnershipStage.QUALIFIED, suppressedReason = null)))
+        assertTrue(canShowPursuitActions(prospect(stage = PartnershipStage.DRAFT_READY, suppressedReason = null)))
+    }
+
+    @Test
+    fun `filtering is stable across repeated calls with the same input -- refresh or restart must never flip a record's section`() {
+        val items = listOf(
+            prospect(id = "q1", stage = PartnershipStage.QUALIFIED),
+            prospect(id = "s1", stage = PartnershipStage.QUALIFIED, suppressedReason = "x"),
+        )
+        repeat(3) {
+            assertEquals(listOf("q1"), recommendedPartnerships(items).map { it.id })
+            assertEquals(listOf("s1"), suppressedPartnerships(items).map { it.id })
+        }
     }
 }

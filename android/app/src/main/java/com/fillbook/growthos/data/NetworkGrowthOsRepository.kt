@@ -463,6 +463,7 @@ class NetworkGrowthOsRepository(
             discoveryScore = if (isNull("discoveryScore")) null else optDouble("discoveryScore").toInt(),
             discoveryConfidence = optStringOrNull("discoveryConfidence"),
             discoveredVia = optString("discoveredVia", "manual"),
+            suppressedReason = optStringOrNull("suppressedReason"),
         )
     }
 

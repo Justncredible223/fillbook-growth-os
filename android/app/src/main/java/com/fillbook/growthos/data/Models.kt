@@ -403,6 +403,8 @@ data class PartnershipProspect(
     val discoveryConfidence: String?,
     /** "manual" for owner-entered prospects; otherwise which automated source found this one. */
     val discoveredVia: String,
+    /** Set only by automated backend reassessment when stored evidence no longer shows a concrete partnership basis (an audience/community/business/educational-offering/complementary-product) -- null means not suppressed. Never set by this app, never implies the record was deleted or its stage changed -- see PartnershipsScreen's own suppressed section. */
+    val suppressedReason: String? = null,
 )
 
 /** The result of one discovery run (scheduled or owner-triggered "Refresh") -- see backend/src/partnerships/discovery.ts's DiscoveryRunResult. */
