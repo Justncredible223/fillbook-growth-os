@@ -64,6 +64,10 @@ on:
         description: "Run Partnerships discovery"
         type: boolean
         default: true
+      videoReconciliation:
+        description: "Run video-render approval/enqueue reconciliation sweep"
+        type: boolean
+        default: true
 
 concurrency:
   # Prevents two invocations from overlapping (a slow run plus the next
@@ -85,11 +89,14 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "x=${{ inputs.x }}" >> "$GITHUB_OUTPUT"
             echo "partnerships=${{ inputs.partnerships }}" >> "$GITHUB_OUTPUT"
+            echo "videoReconciliation=${{ inputs.videoReconciliation }}" >> "$GITHUB_OUTPUT"
           else
             # 08:00 / 13:00 / 18:00 America/Phoenix -- X's 3x/day slots,
-            # with Partnerships discovery riding along on the same slots.
+            # with Partnerships discovery and the video-render
+            # reconciliation sweep riding along on the same slots.
             echo "x=true" >> "$GITHUB_OUTPUT"
             echo "partnerships=true" >> "$GITHUB_OUTPUT"
+            echo "videoReconciliation=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Call /api/growth-pulse
@@ -101,7 +108,7 @@ jobs:
             echo "::error::BACKEND_BASE_URL and/or CRON_SECRET repo secrets are not set -- see docs/PROGRESS_LEDGER.md / this workflow's own comment for setup steps. Refusing to call an unauthenticated/unknown endpoint."
             exit 1
           fi
-          url="${BACKEND_BASE_URL%/}/api/growth-pulse?x=${{ steps.which.outputs.x }}&partnerships=${{ steps.which.outputs.partnerships }}"
+          url="${BACKEND_BASE_URL%/}/api/growth-pulse?x=${{ steps.which.outputs.x }}&partnerships=${{ steps.which.outputs.partnerships }}&videoReconciliation=${{ steps.which.outputs.videoReconciliation }}"
           http_status=$(curl -sS -o response.json -w "%{http_code}" -X POST "$url" \
             -H "Authorization: Bearer $CRON_SECRET")
           echo "HTTP status: $http_status"

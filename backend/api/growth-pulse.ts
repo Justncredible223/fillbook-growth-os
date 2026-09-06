@@ -14,6 +14,7 @@ import { runProspectingSearch } from "../src/prospecting/prospectingSearch.js";
 import { SupabaseProspectingRepository } from "../src/prospecting/supabaseProspectingRepository.js";
 import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
+import { reconcileVideoRenders } from "../src/video/videoRenderReconciliation.js";
 
 interface StepResult {
   step: string;
@@ -32,6 +33,7 @@ async function runStep(step: string, fn: () => Promise<string>): Promise<StepRes
 export interface StepGroups {
   x: boolean;
   partnerships: boolean;
+  videoReconciliation: boolean;
 }
 
 /**
@@ -46,7 +48,7 @@ export interface StepGroups {
  */
 export function resolveStepGroups(query: Record<string, unknown>): StepGroups {
   const isTrue = (v: unknown) => v === "1" || v === "true";
-  const anyFlagPresent = ["x", "partnerships"].some((k) => k in query);
+  const anyFlagPresent = ["x", "partnerships", "videoReconciliation"].some((k) => k in query);
   return {
     x: !anyFlagPresent || isTrue(query.x),
     // discovery.ts's own SCHEDULED_CADENCE_DAYS=7 gate means most of these
@@ -54,6 +56,11 @@ export function resolveStepGroups(query: Record<string, unknown>): StepGroups {
     // comment), so it's fine to fire on the same 3x/day slots as X rather
     // than needing a schedule slot of its own.
     partnerships: !anyFlagPresent || isTrue(query.partnerships),
+    // Own flag, own step, own try/catch -- shares this endpoint's 3x/day
+    // schedule with X purely for cron-slot economy (see the implementation
+    // plan's isolation section); a bug here can never throw into
+    // x_mentions/x_inbound/x_prospecting or vice versa.
+    videoReconciliation: !anyFlagPresent || isTrue(query.videoReconciliation),
   };
 }
 
@@ -113,7 +120,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { x: runX, partnerships: runPartnerships } = resolveStepGroups(req.query as Record<string, unknown>);
+  const {
+    x: runX,
+    partnerships: runPartnerships,
+    videoReconciliation: runVideoReconciliation,
+  } = resolveStepGroups(req.query as Record<string, unknown>);
 
   const client = getServiceClient();
   const now = new Date();
@@ -202,9 +213,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
   }
 
+  if (runVideoReconciliation) {
+    results.push(await runStep("video_render_reconciliation", () => reconcileVideoRenders(client)));
+  }
+
   const allOk = results.every((r) => r.ok);
   res.status(allOk ? 200 : 207).json({
     results,
-    ranGroups: { x: runX, partnerships: runPartnerships },
+    ranGroups: { x: runX, partnerships: runPartnerships, videoReconciliation: runVideoReconciliation },
   });
 }

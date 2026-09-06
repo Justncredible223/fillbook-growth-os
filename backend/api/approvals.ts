@@ -50,6 +50,8 @@ import {
 import type { NewPartnershipProspect, PartnershipOutcomeMetric, PartnershipOutcomeSource } from "../src/partnerships/types.js";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
+import { listVideoRenderStatuses, registerDevicePushToken } from "../src/video/videoStatusHandlers.js";
+import { MAX_VIDEO_RENDERS_PER_MONTH } from "../src/video/videoRenderEligibility.js";
 
 /**
  * `?resource=inbound` handles the Inbound Engagement Queue -- a
@@ -407,6 +409,50 @@ async function handOffAsset(client: SupabaseClient, campaignAssetId: string): Pr
 }
 
 /**
+ * `?resource=video-status` -- the Android Video Status screen's polling
+ * endpoint (GET) and device push-token registration (POST). Folded into
+ * this file for the same Vercel Hobby 12-function-cap reason as
+ * inbound/prospecting/partnerships above. GET is the durable source of
+ * truth for render state (see the implementation plan's "Honest limit on
+ * exactly-once" note: this never depends on a push notification actually
+ * arriving). POST registers the FCM token asserted by the phone's own
+ * app -- since every request here already passed requireAppAuth, the
+ * caller is trusted to be the one owner's device.
+ */
+async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const client = getServiceClient();
+
+  if (req.method === "GET") {
+    try {
+      const items = await listVideoRenderStatuses(client);
+      res.status(200).json({ items });
+    } catch (err) {
+      res.status(500).json({ error: errorMessage(err) });
+    }
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const body = req.body as { action?: string; fcmToken?: string } | undefined;
+    if (body?.action !== "register-device" || !body.fcmToken) {
+      res.status(400).json({ error: "Body must be { action: 'register-device', fcmToken: string }" });
+      return;
+    }
+    // requireAppAuth already validated this header against APP_API_TOKEN.
+    const appApiToken = process.env.APP_API_TOKEN as string;
+    await registerDevicePushToken(client, body.fcmToken, appApiToken);
+    res.status(200).json({ registered: true });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+/**
  * GET: assembles ApprovalAsset-shaped rows (matching the Android app's
  * data model) from campaign_assets at 'ready_for_owner' whose campaign is
  * still 'in_review' -- i.e. AI-reviewed and genuinely still awaiting a
@@ -439,6 +485,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await handlePartnerships(req, res);
     return;
   }
+  if (req.query.resource === "video-status") {
+    await handleVideoStatus(req, res);
+    return;
+  }
   const client = getServiceClient();
 
   if (req.method === "POST") {
@@ -464,7 +514,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const { data: asset, error: assetError } = await client
         .from("campaign_assets")
-        .select("campaign_id")
+        .select("campaign_id, asset_type")
         .eq("id", campaignAssetId)
         .single();
       if (assetError) throw assetError;
@@ -482,7 +532,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq("id", asset.campaign_id);
       if (updateError) throw updateError;
 
-      res.status(200).json({ campaignId: asset.campaign_id, status: newStatus });
+      // Video rendering isolation: approving a video_script draft queues
+      // exactly one render via the single atomic enqueue_video_render RPC
+      // (migration 0027) -- see the implementation plan's "Approval/
+      // enqueue reliability" section. This never blocks approving the
+      // content itself; a monthly-cap denial still returns 200 with the
+      // reason surfaced to the app, not an error.
+      let videoRender: { queued: boolean; alreadyExisted: boolean; reason: string | null } | undefined;
+      if (action === "approve" && asset.asset_type === "video_script") {
+        const { data: enqueueData, error: enqueueError } = await client.rpc("enqueue_video_render", {
+          p_campaign_asset_id: campaignAssetId,
+          p_monthly_cap: MAX_VIDEO_RENDERS_PER_MONTH,
+        });
+        if (enqueueError) throw enqueueError;
+        const row = (Array.isArray(enqueueData) ? enqueueData[0] : enqueueData) as
+          | { already_existed: boolean; eligible: boolean; reason: string | null }
+          | undefined;
+        videoRender = {
+          queued: Boolean(row?.eligible),
+          alreadyExisted: Boolean(row?.already_existed),
+          reason: row?.reason ?? null,
+        };
+      }
+
+      res.status(200).json({ campaignId: asset.campaign_id, status: newStatus, videoRender });
     } catch (err) {
       res.status(500).json({ error: errorMessage(err) });
     }

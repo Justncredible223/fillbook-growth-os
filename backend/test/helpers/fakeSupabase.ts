@@ -209,7 +209,69 @@ class FakeRpcCall implements PromiseLike<{ data: any; error: FakeError | null }>
   private execute(): { data: any; error: FakeError | null } {
     if (this.fnName === "reserve_partnership_budget") return this.reserve();
     if (this.fnName === "release_partnership_budget_reservation") return this.release();
+    if (this.fnName === "reserve_video_storage_bytes") return this.reserveVideoStorage();
+    if (this.fnName === "commit_video_storage_reservation") return this.commitVideoStorage();
+    if (this.fnName === "release_video_storage_reservation") return this.releaseVideoStorage();
     throw new Error(`FakeSupabaseClient: unmodeled rpc "${this.fnName}"`);
+  }
+
+  /**
+   * Models migration 0027's reserve_video_storage_bytes exactly: sweeps
+   * any 'reserved' row past its expires_at to 'released' first (the
+   * crash-recovery self-heal), then sums 'committed' + still-open
+   * 'reserved' rows only -- never a mere reservation as permanent usage.
+   */
+  private reserveVideoStorage(): { data: any; error: FakeError | null } {
+    const { p_video_render_id, p_bytes, p_cap } = this.params;
+    const now = new Date();
+    const rows: FakeRow[] = this.client.tables["video_storage_reservations"] ?? [];
+
+    const swept = rows.map((r) =>
+      r.status === "reserved" && new Date(r.expires_at).getTime() < now.getTime()
+        ? { ...r, status: "released", released_at: now.toISOString() }
+        : r,
+    );
+    this.client.tables["video_storage_reservations"] = swept;
+
+    const committed = swept.filter((r) => r.status === "committed").reduce((s, r) => s + Number(r.reserved_bytes ?? 0), 0);
+    const reserved = swept.filter((r) => r.status === "reserved").reduce((s, r) => s + Number(r.reserved_bytes ?? 0), 0);
+
+    if (committed + reserved + p_bytes > p_cap) {
+      return {
+        data: [
+          {
+            reservation_id: null,
+            eligible: false,
+            reason: `storage_cap_reached (committed ${committed} + reserved ${reserved} + requested ${p_bytes} exceeds cap ${p_cap})`,
+          },
+        ],
+        error: null,
+      };
+    }
+
+    const id = `vres-${swept.length + 1}`;
+    const expiresAt = new Date(now.getTime() + 10 * 60 * 1000).toISOString();
+    const row = { id, video_render_id: p_video_render_id, reserved_bytes: p_bytes, status: "reserved", reserved_at: now.toISOString(), expires_at: expiresAt, committed_at: null, released_at: null, deleted_at: null };
+    this.client.tables["video_storage_reservations"] = [...swept, row];
+    return { data: [{ reservation_id: id, eligible: true, reason: null }], error: null };
+  }
+
+  private commitVideoStorage(): { data: any; error: FakeError | null } {
+    const { p_reservation_id } = this.params;
+    const rows: FakeRow[] = this.client.tables["video_storage_reservations"] ?? [];
+    this.client.tables["video_storage_reservations"] = rows.map((r) =>
+      r.id === p_reservation_id && r.status === "reserved" ? { ...r, status: "committed", committed_at: new Date().toISOString() } : r,
+    );
+    return { data: null, error: null };
+  }
+
+  private releaseVideoStorage(): { data: any; error: FakeError | null } {
+    const { p_reservation_id } = this.params;
+    const rows: FakeRow[] = this.client.tables["video_storage_reservations"] ?? [];
+    this.client.tables["video_storage_reservations"] = rows.map((r) =>
+      r.id === p_reservation_id && r.status === "reserved" ? { ...r, status: "released", released_at: new Date().toISOString() } : r,
+    );
+    return { data: null, error: null };
   }
 
   private reserve(): { data: any; error: FakeError | null } {

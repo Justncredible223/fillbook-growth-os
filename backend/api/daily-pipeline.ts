@@ -14,6 +14,7 @@ import { runDailyXFeedPostStep } from "../src/content/dailyXFeedPost.js";
 import { buildXFeedPostStepDeps } from "../src/content/buildXFeedPostStepDeps.js";
 import { getOperatingDate, getScheduleTimezone } from "../src/config/scheduleConfig.js";
 import { pruneOldCostEvents } from "../src/cost/costTracking.js";
+import { pruneOldVideoRenders } from "../src/video/videoRenderRetention.js";
 import { generateStrategy } from "../src/strategy/strategyEngine.js";
 import { SupabaseStrategyRepository, collectStrategyEngineInputs } from "../src/strategy/supabaseStrategyRepository.js";
 import { decideNotifications } from "../src/notifications/notificationEngine.js";
@@ -140,6 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (groups.core) {
     results.push(
       await runStep("cost_events_retention", async () => pruneOldCostEvents(client)),
+      await runStep("video_render_retention", async () => pruneOldVideoRenders(client)),
       await runStep("search_console", async () => {
         const adapter = createSearchConsoleAdapter(client);
         const siteUrl = await adapter.resolveSiteUrl();
