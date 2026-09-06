@@ -10,7 +10,7 @@ import { estimateCostUsd } from "../cost/costTracking.js";
  * reply/opportunity-reply campaigns that also happen to land on
  * campaign_assets, platform "x"). Filtering on this value, not just
  * platform="x", is what keeps Home's Today's X Post genuinely separate
- * from replies, Reddit content, and video scripts -- see
+ * from replies and video scripts -- see
  * docs/PROGRESS_LEDGER.md's "Today's X Post" root-cause writeup for why
  * platform-only filtering wasn't enough.
  */
@@ -476,8 +476,8 @@ export interface XFeedPostStepDeps {
   /**
    * Freshness signal count (last 7 days, by editorialTags) for each given
    * topic, keyed by topic.key -- built ONLY from signals already
-   * collected by existing adapters (X search, Reddit, Search Console),
-   * never a new paid lookup. Advisory only: a lookup failure or empty
+   * collected by existing adapters (X search, Search Console), never a
+   * new paid lookup. Advisory only: a lookup failure or empty
    * result must resolve to 0 for that topic, never block or fail
    * selection. See buildXFeedPostStepDeps's implementation.
    */

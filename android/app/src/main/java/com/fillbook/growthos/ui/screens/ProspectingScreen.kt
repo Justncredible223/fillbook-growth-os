@@ -70,8 +70,8 @@ import kotlinx.coroutines.launch
 /**
  * Prospecting -- the proactive-outreach half of growth, distinct from
  * Radar/Inbound (which only ever surface people already talking TO
- * Fillbook). This queue surfaces OTHER traders' public posts on X and
- * Reddit worth joining. Same non-negotiable guarantee as everywhere else
+ * Fillbook). This queue surfaces OTHER traders' public posts on X worth
+ * joining. Same non-negotiable guarantee as everywhere else
  * in this app: nothing here ever posts anything. The furthest any action
  * here reaches is "opened the candidate's own platform with a draft copied
  * to the clipboard" -- the owner reviews, edits, and posts every reply
@@ -138,8 +138,8 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     }
 
     // Copies the (possibly edited) draft and opens the post in the
-    // candidate's OWN platform app -- Reddit for a Reddit thread, X for an
-    // X post -- with the confirmation worded to match. A failed launch
+    // candidate's OWN platform app -- X for an X post -- with the
+    // confirmation worded to match. A failed launch
     // (no handler on the device) is reported, not swallowed; the timestamp
     // call is best-effort and never blocks the owner.
     fun copyAndOpen(candidate: ProspectingCandidate) {

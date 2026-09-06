@@ -84,11 +84,11 @@ describe("draftResponseForInbound", () => {
     expect(row.status).toBe("draft_ready");
   });
 
-  it("REFINED: the guardrail applies to Reddit too, not just X", async () => {
+  it("REFINED: the guardrail applies regardless of platform, not just X", async () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
     global.fetch = vi.fn().mockResolvedValue(replyResponse("DM me and I'll walk you through exactly how Fillbook does this.")) as unknown as typeof fetch;
 
-    const client = buildClient({}, "reddit");
+    const client = buildClient({}, "youtube");
     await expect(draftResponseForInbound(asSupabase(client), "eng-1")).rejects.toThrow(/banned generic phrase/);
 
     const row = client.tables.inbound_engagements!.find((r) => r.id === "eng-1")!;

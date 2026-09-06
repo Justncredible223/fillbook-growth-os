@@ -1,8 +1,7 @@
-name: Growth OS pulse (X + Reddit, higher-than-daily)
+name: Growth OS pulse (X, higher-than-daily)
 
 # Free external scheduler for the workflows that need to run more than
-# once/day -- X prospecting/inbound (3x/day) and Reddit inbound (3x/day),
-# plus Reddit prospecting on its own once/day slot. Exists because Vercel
+# once/day -- X prospecting/inbound (3x/day). Exists because Vercel
 # Hobby's Cron feature is capped at 2 jobs total, each at most once/day
 # (confirmed live in the Vercel dashboard, not upgradeable without the
 # account owner's approval) -- the existing "/api/daily-pipeline" cron
@@ -12,11 +11,19 @@ name: Growth OS pulse (X + Reddit, higher-than-daily)
 # workflows are free for a repo already hosted on GitHub and have no such
 # cap, so they cover everything above once/day instead.
 #
+# Reddit inbound/prospecting used to run from this same workflow but were
+# removed (2026-09-06): Reddit closed self-service app registration and no
+# credentials were ever obtained (see docs/CODE_REVIEW_HANDOFF.md's
+# history). Partnerships discovery, which used to piggyback on Reddit
+# prospecting's dedicated once/day slot, now just rides along on X's own
+# 3x/day slots instead -- discovery.ts's own SCHEDULED_CADENCE_DAYS=7 gate
+# means most of those calls are a cheap no-op anyway.
+#
 # Approved schedule (backend/src/config/scheduleConfig.ts is the source of
-# truth for the *local* times below -- 08:00/13:00/18:00 and 09:00
-# America/Phoenix by default): the four `cron:` lines below are those same
-# local times expressed as fixed UTC crons, which is safe specifically
-# because America/Phoenix does not observe DST (confirmed via
+# truth for the *local* times below -- 08:00/13:00/18:00 America/Phoenix
+# by default): the three `cron:` lines below are those same local times
+# expressed as fixed UTC crons, which is safe specifically because
+# America/Phoenix does not observe DST (confirmed via
 # Intl.DateTimeFormat, see scheduleConfig.ts's doc comment) -- the UTC
 # offset never drifts across the year, so a fixed UTC cron here stays
 # correct year-round without a seasonal adjustment. If SCHEDULE_TIMEZONE is
@@ -26,20 +33,18 @@ name: Growth OS pulse (X + Reddit, higher-than-daily)
 # timezone doesn't silently go stale here.
 #
 #   America/Phoenix   UTC (fixed, no DST)   Workflow(s) triggered
-#   08:00             15:00                 X prospecting+inbound, Reddit inbound
-#   13:00             20:00                 X prospecting+inbound, Reddit inbound
-#   18:00             01:00 (next day)      X prospecting+inbound, Reddit inbound
-#   09:00             16:00                 Reddit prospecting + Partnerships discovery (their own slot, 1x/day)
+#   08:00             15:00                 X prospecting+inbound, Partnerships discovery
+#   13:00             20:00                 X prospecting+inbound, Partnerships discovery
+#   18:00             01:00 (next day)      X prospecting+inbound, Partnerships discovery
 #
 # Each trigger calls POST /api/growth-pulse with explicit query flags
-# (`x`, `redditInbound`, `redditProspecting`) rather than letting the
-# endpoint guess which schedule window "now" is nearest to -- see
-# backend/api/growth-pulse.ts's doc comment for why. This also means the
-# schedule actually enforced here is exactly these four fixed UTC times,
-# not a live re-derivation of whatever scheduleConfig.ts says today -- if
-# the approved local run times or timezone ever change, this file's cron
-# lines must be updated by hand to match (documented here so that's not a
-# silent trap).
+# (`x`, `partnerships`) rather than letting the endpoint guess which
+# schedule window "now" is nearest to -- see backend/api/growth-pulse.ts's
+# doc comment for why. This also means the schedule actually enforced here
+# is exactly these three fixed UTC times, not a live re-derivation of
+# whatever scheduleConfig.ts says today -- if the approved local run times
+# or timezone ever change, this file's cron lines must be updated by hand
+# to match (documented here so that's not a silent trap).
 #
 # Manual "run now" support: use the "Run workflow" button (workflow_dispatch)
 # to trigger any subset of steps on demand, e.g. after a credential change.
@@ -49,19 +54,10 @@ on:
     - cron: "0 15 * * *"
     - cron: "0 20 * * *"
     - cron: "0 1 * * *"
-    - cron: "0 16 * * *"
   workflow_dispatch:
     inputs:
       x:
         description: "Run X prospecting + X inbound + X mentions"
-        type: boolean
-        default: true
-      redditInbound:
-        description: "Run Reddit inbound"
-        type: boolean
-        default: true
-      redditProspecting:
-        description: "Run Reddit prospecting"
         type: boolean
         default: true
       partnerships:
@@ -88,27 +84,12 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "x=${{ inputs.x }}" >> "$GITHUB_OUTPUT"
-            echo "redditInbound=${{ inputs.redditInbound }}" >> "$GITHUB_OUTPUT"
-            echo "redditProspecting=${{ inputs.redditProspecting }}" >> "$GITHUB_OUTPUT"
             echo "partnerships=${{ inputs.partnerships }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "0 16 * * *" ]; then
-            # The dedicated 09:00 America/Phoenix Reddit-prospecting slot --
-            # deliberately does NOT also run X's steps, so X stays at
-            # exactly 3 windows/day, never 4. Partnerships discovery
-            # piggybacks on this same once/day slot (its own internal
-            # SCHEDULED_CADENCE_DAYS=7 gate in discovery.ts means most of
-            # these daily calls are a cheap no-op -- see that file).
-            echo "x=false" >> "$GITHUB_OUTPUT"
-            echo "redditInbound=false" >> "$GITHUB_OUTPUT"
-            echo "redditProspecting=true" >> "$GITHUB_OUTPUT"
-            echo "partnerships=true" >> "$GITHUB_OUTPUT"
           else
             # 08:00 / 13:00 / 18:00 America/Phoenix -- X's 3x/day slots,
-            # which also cover Reddit's 3x/day inbound cadence.
+            # with Partnerships discovery riding along on the same slots.
             echo "x=true" >> "$GITHUB_OUTPUT"
-            echo "redditInbound=true" >> "$GITHUB_OUTPUT"
-            echo "redditProspecting=false" >> "$GITHUB_OUTPUT"
-            echo "partnerships=false" >> "$GITHUB_OUTPUT"
+            echo "partnerships=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Call /api/growth-pulse
@@ -120,7 +101,7 @@ jobs:
             echo "::error::BACKEND_BASE_URL and/or CRON_SECRET repo secrets are not set -- see docs/PROGRESS_LEDGER.md / this workflow's own comment for setup steps. Refusing to call an unauthenticated/unknown endpoint."
             exit 1
           fi
-          url="${BACKEND_BASE_URL%/}/api/growth-pulse?x=${{ steps.which.outputs.x }}&redditInbound=${{ steps.which.outputs.redditInbound }}&redditProspecting=${{ steps.which.outputs.redditProspecting }}&partnerships=${{ steps.which.outputs.partnerships }}"
+          url="${BACKEND_BASE_URL%/}/api/growth-pulse?x=${{ steps.which.outputs.x }}&partnerships=${{ steps.which.outputs.partnerships }}"
           http_status=$(curl -sS -o response.json -w "%{http_code}" -X POST "$url" \
             -H "Authorization: Bearer $CRON_SECRET")
           echo "HTTP status: $http_status"

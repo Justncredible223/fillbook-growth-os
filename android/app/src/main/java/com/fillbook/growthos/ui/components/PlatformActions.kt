@@ -2,9 +2,9 @@ package com.fillbook.growthos.ui.components
 
 /**
  * The exact wording of the "Copy + Open" affordance, computed from the
- * item's real platform so a Reddit thread never says "paste in X." Pure
- * functions (no Compose, no Android) so they are unit-testable on the
- * JVM; the screens only render what these return.
+ * item's real platform so it never names the wrong app. Pure functions
+ * (no Compose, no Android) so they are unit-testable on the JVM; the
+ * screens only render what these return.
  *
  * None of this changes the human-only posting boundary: the most any of
  * these actions does is put text on the clipboard and open the platform

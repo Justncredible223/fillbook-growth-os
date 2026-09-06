@@ -41,18 +41,6 @@ export function toProspectingJson(candidate: ProspectingCandidate) {
 const NON_TERMINAL_STATUSES = ["new", "shown", "drafting", "ready"] as const;
 
 /**
- * Derives a "where this lives" label the drafter can use: the subreddit
- * for a Reddit permalink, nothing for X (an X post has no community).
- * Parsed from the stored postUrl rather than a separate column so no
- * schema change is needed; a URL that doesn't match simply yields null.
- */
-export function communityLabelFor(candidate: Pick<ProspectingCandidate, "platform" | "postUrl">): string | null {
-  if (candidate.platform.toLowerCase() !== "reddit") return null;
-  const match = /\/r\/([A-Za-z0-9_]+)\//.exec(candidate.postUrl);
-  return match ? `r/${match[1]}` : null;
-}
-
-/**
  * DISCOVER -> FILTER -> RANK already happened upstream (prospectingSearch.ts
  * / prospectingScoring.ts). This is SELECT DAILY WORKING SET: expires
  * anything that's sat unactioned past STALE_EXPIRY_DAYS, re-ranks the
@@ -87,8 +75,7 @@ export async function listProspectingHistory(client: SupabaseClient, limit = 100
  * and the model's own mentionsFillbook/usesLink flags (checked, not
  * assumed) so the app can show "this reply mentions Fillbook" honestly
  * before the owner even reads it. The candidate's own platform selects
- * the prompt profile, so a Reddit thread is drafted as a Reddit comment
- * (and gets Reddit's stricter link policy), never as an X reply.
+ * the prompt profile.
  */
 export async function draftProspectingCandidateReply(client: SupabaseClient, id: string, deps: ProspectingHandlerDeps = {}): Promise<ProspectingCandidate> {
   const repo = repoFor(client, deps);
@@ -111,7 +98,6 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
       authorHandle: row.authorHandle,
       postText: row.postText,
       discoveryQuery: row.discoveryQuery,
-      communityLabel: communityLabelFor(row),
     },
     brandRulesSummary,
     verifiedKnowledgeSummary,
@@ -148,14 +134,11 @@ export async function markProspectingOpened(client: SupabaseClient, id: string, 
 /**
  * The one status a human, not this code, ever sets after actually posting
  * on the platform themselves -- mirrors markInboundResponded's contract
- * exactly (nothing here calls any X or Reddit write endpoint;
- * ExternalWriteFirewall would reject it regardless). Also records outreach
- * against the author IN THE CANDIDATE'S OWN PLATFORM NAMESPACE so
- * Inbound's hasExistingRelationship check recognizes them if they reply
- * back later (see inboundIngestion.ts / redditIngestion.ts, which each
- * look up outreach by their own platform). A Reddit reply recorded under
- * "x" would be invisible to the Reddit inbound bridge and would pollute
- * X's relationship data with a Reddit username.
+ * exactly (nothing here calls any X write endpoint; ExternalWriteFirewall
+ * would reject it regardless). Also records outreach against the author IN
+ * THE CANDIDATE'S OWN PLATFORM NAMESPACE so Inbound's
+ * hasExistingRelationship check recognizes them if they reply back later
+ * (see inboundIngestion.ts, which looks up outreach by platform).
  */
 export async function markProspectingReplied(
   client: SupabaseClient,

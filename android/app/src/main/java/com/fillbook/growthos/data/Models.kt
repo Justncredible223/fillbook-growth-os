@@ -215,14 +215,14 @@ data class InboundSummary(
 )
 
 /**
- * Someone else's public post found by Prospecting on X or Reddit -- NOT a
- * person who mentioned/replied to Fillbook (that's InboundEngagement).
- * Raw status string kept as-is, same rationale as InboundEngagement.status:
+ * Someone else's public post found by Prospecting on X -- NOT a person
+ * who mentioned/replied to Fillbook (that's InboundEngagement). Raw
+ * status string kept as-is, same rationale as InboundEngagement.status:
  * the server owns the state machine.
  */
 data class ProspectingCandidate(
     val id: String,
-    /** Lowercase platform key from the server ("x", "reddit") -- drives which app "Copy + Open" launches and how the confirmation reads. */
+    /** Lowercase platform key from the server ("x") -- drives which app "Copy + Open" launches and how the confirmation reads. */
     val platform: String,
     val discoveryQuery: String,
     val discoveryLabel: String,

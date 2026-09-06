@@ -21,7 +21,7 @@ interface InboundPlatformProfile {
   styleRules: string;
   /** Handle prefix for the "From:" line. */
   handlePrefix: string;
-  /** How aggressively (or not) a Fillbook mention is ever appropriate -- see the same-named field/rationale in prospectingReplyWriter.ts. X gets the 2026-09-05 structured refresh; Reddit keeps the original conservative bullet verbatim. */
+  /** How aggressively (or not) a Fillbook mention is ever appropriate -- see the same-named field/rationale in prospectingReplyWriter.ts. X gets the 2026-09-05 structured refresh; any other platform falls back to the conservative default. */
   noPitchGuidance: string;
 }
 
@@ -56,16 +56,6 @@ const INBOUND_PLATFORM_PROFILES: Record<string, InboundPlatformProfile> = {
     styleRules: "Do not over-explain. A real X reply is usually one or two sentences. No hashtags.",
     handlePrefix: "@",
     noPitchGuidance: X_INBOUND_NO_PITCH_GUIDANCE,
-  },
-  reddit: {
-    displayName: "Reddit",
-    engagementNoun: "replied to one of our comments or mentioned us in a thread on Reddit",
-    styleRules:
-      "This is a Reddit comment reply: plain text, no hashtags, no @-handles, no emoji padding. Two to four " +
-      "sentences is normal when the question deserves it; Reddit readers value substance over brevity and " +
-      "downvote anything that reads like brand copy.",
-    handlePrefix: "u/",
-    noPitchGuidance: CONSERVATIVE_INBOUND_NO_PITCH_GUIDANCE,
   },
 };
 
@@ -106,7 +96,7 @@ Submit your result via the submit_reply tool.`;
 }
 
 export interface InboundDraftContext {
-  /** The engagement's platform as stored on the row ("x", "reddit") -- selects the prompt profile. */
+  /** The engagement's platform as stored on the row ("x") -- selects the prompt profile. */
   platform: string;
   authorHandle: string | null;
   messageText: string;
@@ -118,8 +108,7 @@ export interface InboundDraftContext {
 /**
  * Drafts exactly one reply for a human to review and send themselves --
  * this module has no send capability and never will (ExternalWriteFirewall
- * classifies x.post_tweet/x.reply and every reddit.* write as
- * EXTERNAL_WRITE regardless). The draft lands in
+ * classifies x.post_tweet/x.reply as EXTERNAL_WRITE regardless). The draft lands in
  * inbound_engagements.draft_response and the row's status moves to
  * 'draft_ready' -- a status distinct from 'responded', which only a human
  * action ever sets. See docs/INBOUND_ENGAGEMENT.md.

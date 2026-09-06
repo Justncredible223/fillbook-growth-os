@@ -499,31 +499,6 @@ class FakeGrowthOsRepository : GrowthOsRepository {
             replyMentionsFillbook = null,
             replyUsedLink = null,
         ),
-        // Reddit fixture -- confirms Reddit's own conservative reply
-        // behavior is exercised on-device unchanged by X's 2026-09-05
-        // refresh (the fake doesn't distinguish drafting logic by
-        // platform, but this row lets the SCREEN's own platform-specific
-        // rendering/copy-target be checked against a real Reddit shape).
-        ProspectingCandidate(
-            id = "prospect-fake-reddit-1",
-            platform = "reddit",
-            discoveryQuery = "trailing_drawdown",
-            discoveryLabel = "Trailing drawdown",
-            replyClass = "A",
-            authorHandle = "redditFuturesTrader",
-            authorFollowerCount = null,
-            authorVerified = null,
-            postText = "Does trailing drawdown lock at EOD balance or trail live intraday? Every firm's FAQ explains it differently.",
-            postUrl = "https://www.reddit.com/r/FuturesTrading/comments/abc123/trailing_drawdown_question/",
-            postCreatedAt = "2026-09-03T18:00:00Z",
-            opportunityScore = 74.0,
-            scoreBreakdown = mapOf("topicRelevance" to "\"Trailing drawdown\" (risk_management) -> +16"),
-            creatorCandidate = false,
-            status = "shown",
-            draftReply = null,
-            replyMentionsFillbook = null,
-            replyUsedLink = null,
-        ),
     )
 
     /** FIXTURE-ONLY: same contract as debugNextInboundOutcome above, for Prospecting's draft-reply action. Never used by production code. */

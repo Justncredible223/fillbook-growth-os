@@ -19,7 +19,7 @@ const DRAFT_SCHEMA = {
  * fillbookhq/docs/social/MASTER_SOCIAL_STRATEGY.md.
  */
 export interface ProspectingPlatformProfile {
-  /** Human name used in the prompt ("X", "Reddit"). */
+  /** Human name used in the prompt ("X"). */
   displayName: string;
   /** What we are replying to, in the platform's own vocabulary. */
   postNoun: string;
@@ -35,10 +35,8 @@ export interface ProspectingPlatformProfile {
    * (2026-09-05 refresh) replaces a purely "almost never mention it"
    * default with a structure for when a mention is actually earned, per
    * owner direction that replies read as pure advice with no path to
-   * awareness. Reddit's stays the original, more conservative "90%+ no
-   * mention" rule verbatim -- Reddit's own anti-self-promotion culture and
-   * moderation risk are real and this round deliberately leaves that
-   * platform untouched.
+   * awareness. Any other/unrecognized platform falls back to the original,
+   * more conservative "90%+ no mention" rule verbatim.
    */
   noPitchGuidance: string;
 }
@@ -80,7 +78,7 @@ Hard rules, no exceptions:
 - Never impersonate an individual trader or conceal that this is the Fillbook account replying --
   the VOICE sounds like a real person, but the affiliation is never hidden or denied.`;
 
-/** Reddit's original, unchanged guidance -- see this constant's own docstring above on why this stays conservative while X gets more structure. */
+/** The original, unchanged conservative guidance -- see this constant's own docstring above on why this stays conservative while X gets more structure. Used as the fallback for any platform other than X. */
 const CONSERVATIVE_NO_PITCH_GUIDANCE = `90%+ of good replies here mention Fillbook NOT AT ALL. Your default assumption should be
 mentionsFillbook=false and usesLink=false. Only set them true when the conversation is
 SPECIFICALLY about trade journaling/tracking/analytics tools and a mention would feel earned, not
@@ -90,13 +88,6 @@ explicitly banned. If you're unsure, leave Fillbook out entirely.
 Before finalizing, apply this test: "Would this still be worth saying if Fillbook had nothing to
 sell?" If the answer is no, the reply needs a genuine value component added, not a softer sales pitch.`;
 
-/**
- * Both platforms currently share one redirect (fillbookhq.com/go/
- * prospecting). A Reddit-specific redirect would let attribution split by
- * platform, but it has to exist on fillbookhq.com first -- inventing a
- * URL here would ship a dead link, so the same known-good one is used
- * until the owner creates a second redirect.
- */
 export const PROSPECTING_TRACKABLE_LINK = "fillbookhq.com/go/prospecting";
 
 export const PROSPECTING_PLATFORM_PROFILES: Record<string, ProspectingPlatformProfile> = {
@@ -112,24 +103,6 @@ export const PROSPECTING_PLATFORM_PROFILES: Record<string, ProspectingPlatformPr
       `${PROSPECTING_TRACKABLE_LINK}. Put it at the end of the reply, never as the reply's main point.`,
     noPitchGuidance: X_REPLY_NO_PITCH_GUIDANCE,
   },
-  reddit: {
-    displayName: "Reddit",
-    postNoun: "public Reddit post (a thread in a trading subreddit)",
-    trackableLink: PROSPECTING_TRACKABLE_LINK,
-    styleRules:
-      "This is a Reddit comment, not a tweet: plain text, no hashtags, no @-handles, no emoji padding. A useful " +
-      "comment can run a short paragraph (two to five sentences) when the question deserves it -- Reddit rewards " +
-      "substance and punishes anything that reads like marketing copy. Match the subreddit's register: explain " +
-      "the mechanics, show the working, and be willing to say 'it depends on the firm' when that is the honest " +
-      "answer. Never open with a compliment or restate their post back to them.",
-    linkPolicy:
-      "Most trading subreddits ban or heavily downvote self-promotion, and a brand account dropping a link reads " +
-      "as spam even when the link is relevant. Default to usesLink=false. A link is acceptable ONLY when the " +
-      "poster explicitly asked for a tool recommendation; when that is the case, name what the link is in plain " +
-      "words, use exactly this trackable link and no other: " +
-      `${PROSPECTING_TRACKABLE_LINK}, and keep the rest of the comment useful on its own without it.`,
-    noPitchGuidance: CONSERVATIVE_NO_PITCH_GUIDANCE,
-  },
 };
 
 function genericProfile(platform: string): ProspectingPlatformProfile {
@@ -141,9 +114,8 @@ function genericProfile(platform: string): ProspectingPlatformProfile {
     linkPolicy:
       "If -- and only if -- a link genuinely belongs, use exactly this trackable link and no other: " +
       `${PROSPECTING_TRACKABLE_LINK}.`,
-    // An unrecognized platform gets Reddit's conservative default, not X's
-    // more structured one -- "maintain separate behavior for Reddit and
-    // other platforms" means an unknown platform should never accidentally
+    // An unrecognized platform gets the conservative default, not X's more
+    // structured one -- an unknown platform should never accidentally
     // inherit X's more permissive mention guidance.
     noPitchGuidance: CONSERVATIVE_NO_PITCH_GUIDANCE,
   };
@@ -166,8 +138,7 @@ export function prospectingPlatformProfile(platform: string): ProspectingPlatfor
  * "Fillbook voice" sections) rather than invented here -- that's the
  * standing, human-authored growth policy this feature implements. The
  * platform-specific parts (what a reply looks like, when a link is ever
- * acceptable) come from the profile above so a Reddit candidate never
- * receives X framing or vice versa.
+ * acceptable) come from the profile above.
  */
 export function buildProspectingSystemPrompt(profile: ProspectingPlatformProfile): string {
   return `You are drafting ONE reply from the Fillbook account to someone else's ${profile.postNoun} on ${profile.displayName}. This
@@ -203,13 +174,11 @@ what you actually wrote -- these are checked, not just descriptive.`;
 }
 
 export interface ProspectingDraftContext {
-  /** The candidate's platform as stored on the row ("x", "reddit") -- selects the prompt profile. */
+  /** The candidate's platform as stored on the row ("x") -- selects the prompt profile. */
   platform: string;
   authorHandle: string | null;
   postText: string;
   discoveryQuery: string;
-  /** Where the post lives, when the platform has such a thing (e.g. "r/FuturesTrading"). Null for X. */
-  communityLabel?: string | null;
 }
 
 export interface ProspectingDraftResult {
@@ -222,10 +191,10 @@ export interface ProspectingDraftResult {
  * Drafts exactly one reply for a human to review, edit, and post themselves
  * -- same no-send guarantee as inboundResponseWriter.ts (this module only
  * ever calls the LLM; ExternalWriteFirewall blocks any x.reply/x.post_tweet
- * or reddit.* write action class unconditionally as a second, independent
- * guarantee). The draft is returned to the caller, not auto-persisted --
- * the API route decides whether/how to store it against the
- * prospecting_candidates row.
+ * write action class unconditionally as a second, independent guarantee).
+ * The draft is returned to the caller, not auto-persisted -- the API
+ * route decides whether/how to store it against the prospecting_candidates
+ * row.
  */
 export async function draftProspectingReply(
   client: LlmClient,
@@ -234,9 +203,9 @@ export async function draftProspectingReply(
   verifiedKnowledgeSummary: string,
 ): Promise<ProspectingDraftResult> {
   const profile = prospectingPlatformProfile(context.platform);
-  const authorPrefix = profile.displayName === "Reddit" ? "u/" : "@";
+  const authorPrefix = "@";
   const userMessage = [
-    `Platform: ${profile.displayName}${context.communityLabel ? ` (${context.communityLabel})` : ""}`,
+    `Platform: ${profile.displayName}`,
     `From: ${authorPrefix}${context.authorHandle ?? "unknown"}`,
     `Why this post surfaced: matched the "${context.discoveryQuery}" topic.`,
     "",

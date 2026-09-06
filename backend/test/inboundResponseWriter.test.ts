@@ -55,16 +55,6 @@ describe("draftInboundResponse", () => {
     expect(user).toContain("From: @someone");
   });
 
-  it("a Reddit engagement is framed as a Reddit comment reply with u/ handles, never as an X reply", async () => {
-    const { system, user } = await capture({ platform: "reddit", authorHandle: "someone", messageText: "hi", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 });
-
-    expect(system).toContain("on Reddit");
-    expect(system).toContain("Reddit comment reply");
-    expect(system).not.toContain("on X");
-    expect(user).toContain("Platform: Reddit");
-    expect(user).toContain("From: u/someone");
-  });
-
   it("REFINED (2026-09-05): X's prompt gives the same earned-mention structure as Prospecting's X refresh, not the old blanket 'unless specifically about journaling tools' rule", async () => {
     const { system } = await capture({ platform: "x", authorHandle: "someone", messageText: "hi", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 });
 
@@ -74,8 +64,8 @@ describe("draftInboundResponse", () => {
     expect(system).toContain("check out our platform");
   });
 
-  it("Reddit's prompt keeps its original conservative pitch guidance, unchanged by X's refresh", async () => {
-    const { system } = await capture({ platform: "reddit", authorHandle: "someone", messageText: "hi", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 });
+  it("an unrecognized platform keeps the original conservative pitch guidance, unchanged by X's refresh", async () => {
+    const { system } = await capture({ platform: "youtube", authorHandle: "someone", messageText: "hi", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 });
 
     expect(system).toContain("unless the conversation itself is");
     expect(system).toContain("specifically about trade journaling/tracking tools");

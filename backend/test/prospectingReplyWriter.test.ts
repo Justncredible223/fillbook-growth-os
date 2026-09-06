@@ -75,15 +75,6 @@ describe("draftProspectingReply", () => {
     expect(system).toContain("Never impersonate an individual trader or conceal");
   });
 
-  it("Reddit's system prompt keeps the ORIGINAL conservative 90%+ no-mention default, unchanged by X's refresh", async () => {
-    const { system } = await capturePrompt("reddit", { communityLabel: "r/FuturesTrading" });
-
-    expect(system).toMatch(/90%\+/);
-    expect(system).toContain("mentionsFillbook=false");
-    expect(system).toContain("we built Fillbook for this, check it out");
-    expect(system).toContain('Would this still be worth saying if Fillbook had nothing to');
-  });
-
   it("an unrecognized platform also keeps the conservative default, never X's more structured one", async () => {
     const { system } = await capturePrompt("mastodon");
     expect(system).toMatch(/90%\+/);
@@ -119,21 +110,6 @@ describe("draftProspectingReply", () => {
       expect(user).toContain("From: @someone");
     });
 
-    it("a Reddit candidate is framed as a Reddit comment, never as an X post, with Reddit's stricter link policy and u/ handles", async () => {
-      const { system, user } = await capturePrompt("reddit", { communityLabel: "r/FuturesTrading" });
-
-      expect(system).toContain("on Reddit");
-      expect(system).toContain("Reddit comment, not a tweet");
-      expect(system).toContain("Link policy for Reddit");
-      expect(system).toContain("ban or heavily downvote self-promotion");
-      expect(system).toContain("explicitly asked for a tool recommendation");
-      expect(system).toContain(PROSPECTING_TRACKABLE_LINK);
-      expect(system).not.toContain("X post");
-      expect(system).not.toContain("on X");
-      expect(user).toContain("Platform: Reddit (r/FuturesTrading)");
-      expect(user).toContain("From: u/someone");
-    });
-
     it("an unknown platform gets a neutral profile instead of X language or a crash", async () => {
       const { system, user } = await capturePrompt("mastodon");
 
@@ -143,9 +119,8 @@ describe("draftProspectingReply", () => {
     });
 
     it("platform lookup is case-insensitive and every profile pins the single allowed link", () => {
-      expect(prospectingPlatformProfile("Reddit").displayName).toBe("Reddit");
       expect(prospectingPlatformProfile("X").displayName).toBe("X");
-      for (const platform of ["x", "reddit", "unknown"]) {
+      for (const platform of ["x", "unknown"]) {
         const profile = prospectingPlatformProfile(platform);
         expect(profile.trackableLink).toBe(PROSPECTING_TRACKABLE_LINK);
         expect(buildProspectingSystemPrompt(profile)).toContain(PROSPECTING_TRACKABLE_LINK);

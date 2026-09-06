@@ -147,34 +147,6 @@ export async function recordPartnershipXSearchCostEvent(
 }
 
 /**
- * Reddit's free tier has no documented per-call dollar cost (see
- * docs/REDDIT_INTEGRATION.md), so this records a $0 cost_events row purely
- * for the same per-source/run observability every other adapter gets
- * (System screen counters, /api/health) -- not a budget gate. If Reddit's
- * terms change to a paid tier, this is the one place a real per-read cost
- * would be plugged in, mirroring recordXSearchCostEvent.
- */
-export async function recordRedditReadCostEvent(
-  client: SupabaseClient,
-  resultsReturned: number,
-  context: Record<string, unknown> = {},
-): Promise<void> {
-  try {
-    await client.from("cost_events").insert({
-      event_type: "reddit_read",
-      provider: "reddit",
-      model: "oauth/read",
-      input_tokens: 0,
-      output_tokens: resultsReturned,
-      cost_usd: 0,
-      context,
-    });
-  } catch {
-    // Deliberately swallowed -- see recordCostEvent's docstring above.
-  }
-}
-
-/**
  * Real recorded spend for the given month across BOTH of Prospecting's own
  * cost sources -- its X search reads ("x_search_read") and its reply-writer
  * LLM calls ("prospecting_llm_call", see draftProspectingCandidateReply).

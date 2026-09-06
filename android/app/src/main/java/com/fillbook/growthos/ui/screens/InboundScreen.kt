@@ -79,8 +79,8 @@ import kotlinx.coroutines.launch
 
 /**
  * The Inbound Engagement Queue -- surfaces every person who replied to,
- * mentioned, or quoted Fillbook on X or Reddit so a meaningful reply is
- * never missed. Never sends anything: "Draft response" only generates
+ * mentioned, or quoted Fillbook on X so a meaningful reply is never
+ * missed. Never sends anything: "Draft response" only generates
  * text for the owner to review, and "Mark responded" is the one explicit
  * action that records a reply actually went out (this app cannot verify
  * that via either platform's API, so it's a human confirmation, not an
@@ -131,9 +131,9 @@ fun InboundScreen(repo: GrowthOsRepository) {
     // icon -- the owner still does the actual posting, this just removes
     // a redundant tap. Never touches status: opening the platform must
     // never imply a reply was sent, so "Mark responded" stays its own
-    // explicit action. Opens the item's OWN platform (Reddit for a Reddit
-    // reply) and words the confirmation to match; a device with nothing
-    // able to open the link gets told so instead of a silent no-op.
+    // explicit action. Opens the item's OWN platform and words the
+    // confirmation to match; a device with nothing able to open the link
+    // gets told so instead of a silent no-op.
     fun copyAndOpen(item: InboundEngagement) {
         val draft = item.draftResponse
         if (draft != null) copyToClipboard(context, "Reply to ${item.authorHandle ?: "unknown"}", draft)
@@ -188,7 +188,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScreenHeader(
             "Inbound",
-            "People who engaged with Fillbook on X and Reddit -- nothing here ever sends itself.",
+            "People who engaged with Fillbook on X -- nothing here ever sends itself.",
             kicker = summary?.takeIf { it.needsResponse > 0 }?.let { "${it.needsResponse} need${if (it.needsResponse == 1) "s" else ""} a response" },
         )
 
@@ -252,7 +252,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
                 PolishedEmptyState(
                     icon = Icons.Filled.Forum,
                     headline = "Nothing waiting on you",
-                    subtitle = "New replies, mentions, and follow-ups from Fillbook's audience on X and Reddit show up here.",
+                    subtitle = "New replies, mentions, and follow-ups from Fillbook's audience on X show up here.",
                 )
             } else {
                 val availableStatuses = remember(items) { items.map { it.status }.distinct() }

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import {
-  communityLabelFor,
   draftProspectingCandidateReply,
   markProspectingReplied,
   ProspectingActionError,
@@ -96,18 +95,6 @@ function candidate(overrides: Partial<ProspectingCandidate>): ProspectingCandida
 const fakeClient = {} as any;
 
 describe("markProspectingReplied -- outreach is recorded in the candidate's own platform namespace", () => {
-  it("a Reddit reply records Reddit outreach keyed by the Reddit username, never under 'x'", async () => {
-    const repo = new InMemoryProspectingRepository();
-    repo.seed(candidate({ id: "reddit-1", platform: "reddit", authorHandle: "redditTrader", authorExternalId: "redditTrader", postUrl: "https://www.reddit.com/r/FuturesTrading/comments/abc/x/" }));
-
-    const updated = await markProspectingReplied(fakeClient, "reddit-1", undefined, undefined, undefined, { repo });
-
-    expect(updated.status).toBe("replied");
-    expect(repo.outreach).toEqual([{ platform: "reddit", authorExternalId: "redditTrader", authorHandle: "redditTrader" }]);
-    expect(await repo.hasPriorOutreach("reddit", "redditTrader")).toBe(true);
-    expect(await repo.hasPriorOutreach("x", "redditTrader")).toBe(false);
-  });
-
   it("an X reply still records X outreach keyed by the X author id", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(candidate({ id: "x-1", platform: "x", authorHandle: "xTrader", authorExternalId: "9001" }));
@@ -116,7 +103,7 @@ describe("markProspectingReplied -- outreach is recorded in the candidate's own 
 
     expect(repo.outreach).toEqual([{ platform: "x", authorExternalId: "9001", authorHandle: "xTrader" }]);
     expect(await repo.hasPriorOutreach("x", "9001")).toBe(true);
-    expect(await repo.hasPriorOutreach("reddit", "9001")).toBe(false);
+    expect(await repo.hasPriorOutreach("youtube", "9001")).toBe(false);
   });
 
   it("stores an edited final reply only when it differs from the draft, and keeps the model's flags when the caller passes none", async () => {
@@ -150,28 +137,18 @@ describe("markProspectingReplied -- outreach is recorded in the candidate's own 
 describe("draftProspectingCandidateReply -- the candidate's platform reaches the drafter", () => {
   const loadGrounding = async () => ({ brandRulesSummary: "rules", verifiedKnowledgeSummary: "facts" });
 
-  it("a Reddit candidate is drafted with platform=reddit and its subreddit label, and the draft is persisted", async () => {
-    const repo = new InMemoryProspectingRepository();
-    repo.seed(candidate({ id: "reddit-1", platform: "reddit", status: "shown", draftReply: null, authorHandle: "redditTrader", postUrl: "https://www.reddit.com/r/FuturesTrading/comments/abc/some_title/" }));
-    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ reply: "Depends on the firm -- most use EOD balance.", mentionsFillbook: false, usesLink: false }));
-
-    const updated = await draftProspectingCandidateReply(fakeClient, "reddit-1", { repo, drafter, loadGrounding });
-
-    expect(drafter).toHaveBeenCalledTimes(1);
-    expect(drafter.mock.calls[0]![0]).toMatchObject({ platform: "reddit", communityLabel: "r/FuturesTrading", authorHandle: "redditTrader" });
-    expect(updated.status).toBe("ready");
-    expect(updated.draftReply).toBe("Depends on the firm -- most use EOD balance.");
-    expect(updated.replyMentionsFillbook).toBe(false);
-  });
-
-  it("an X candidate is drafted with platform=x and no community label", async () => {
+  it("an X candidate is drafted with platform=x", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(candidate({ id: "x-1", platform: "x", status: "shown", draftReply: null }));
     const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ reply: "EOD for most firms.", mentionsFillbook: false, usesLink: false }));
 
-    await draftProspectingCandidateReply(fakeClient, "x-1", { repo, drafter, loadGrounding });
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-1", { repo, drafter, loadGrounding });
 
-    expect(drafter.mock.calls[0]![0]).toMatchObject({ platform: "x", communityLabel: null });
+    expect(drafter).toHaveBeenCalledTimes(1);
+    expect(drafter.mock.calls[0]![0]).toMatchObject({ platform: "x" });
+    expect(updated.status).toBe("ready");
+    expect(updated.draftReply).toBe("EOD for most firms.");
+    expect(updated.replyMentionsFillbook).toBe(false);
   });
 
   it("REFINED: rejects and never persists a draft that trips the mechanical reply guardrail -- an overly promotional banned phrase -- even though the model's own flags say mentionsFillbook=false", async () => {
@@ -200,32 +177,5 @@ describe("draftProspectingCandidateReply -- the candidate's platform reaches the
     }));
 
     await expect(draftProspectingCandidateReply(fakeClient, "x-3", { repo, drafter, loadGrounding })).rejects.toThrow(ProspectingActionError);
-  });
-
-  it("REFINED: the guardrail applies to Reddit too, not just X -- a banned generic phrase is rejected regardless of platform", async () => {
-    const repo = new InMemoryProspectingRepository();
-    repo.seed(candidate({ id: "reddit-2", platform: "reddit", status: "shown", draftReply: null, postUrl: "https://www.reddit.com/r/FuturesTrading/comments/abc/x/" }));
-    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({
-      reply: "Learn more about how Fillbook handles this in our docs.",
-      mentionsFillbook: true,
-      usesLink: false,
-    }));
-
-    await expect(draftProspectingCandidateReply(fakeClient, "reddit-2", { repo, drafter, loadGrounding })).rejects.toThrow(/banned generic phrase/);
-
-    const row = await repo.getById("reddit-2");
-    expect(row!.status).toBe("shown");
-    expect(row!.draftReply).toBeNull();
-  });
-});
-
-describe("communityLabelFor", () => {
-  it("extracts the subreddit from a Reddit permalink", () => {
-    expect(communityLabelFor({ platform: "reddit", postUrl: "https://www.reddit.com/r/FuturesTrading/comments/abc/x/" })).toBe("r/FuturesTrading");
-  });
-
-  it("returns null for X and for a Reddit URL without a recognizable subreddit", () => {
-    expect(communityLabelFor({ platform: "x", postUrl: "https://x.com/i/web/status/1" })).toBeNull();
-    expect(communityLabelFor({ platform: "reddit", postUrl: "https://www.reddit.com/user/someone/" })).toBeNull();
   });
 });

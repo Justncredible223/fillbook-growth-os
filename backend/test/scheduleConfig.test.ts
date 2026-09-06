@@ -3,8 +3,6 @@ import {
   DEFAULT_SCHEDULE_TIMEZONE,
   currentScheduleSlot,
   getOperatingDate,
-  getRedditInboundSchedule,
-  getRedditProspectingSchedule,
   getScheduleTimezone,
   getXInboundSchedule,
   getXProspectingSchedule,
@@ -34,19 +32,12 @@ describe("default workflow schedules -- approved cadence", () => {
   it("X inbound is 3x/day at 08:00/13:00/18:00", () => {
     expect(getXInboundSchedule({})).toEqual(["08:00", "13:00", "18:00"]);
   });
-  it("Reddit prospecting is 1x/day at 09:00", () => {
-    expect(getRedditProspectingSchedule({})).toEqual(["09:00"]);
-  });
-  it("Reddit inbound is 3x/day at 08:00/13:00/18:00", () => {
-    expect(getRedditInboundSchedule({})).toEqual(["08:00", "13:00", "18:00"]);
-  });
-
   it("rejects a malformed override instead of silently ignoring it", () => {
     expect(() => getXProspectingSchedule({ X_PROSPECTING_TIMES: "8am,13:00" })).toThrow(/invalid time/);
   });
 
   it("honors a valid comma-separated override", () => {
-    expect(getRedditProspectingSchedule({ REDDIT_PROSPECTING_TIMES: "07:30,19:15" })).toEqual(["07:30", "19:15"]);
+    expect(getXProspectingSchedule({ X_PROSPECTING_TIMES: "07:30,19:15" })).toEqual(["07:30", "19:15"]);
   });
 });
 
@@ -95,7 +86,7 @@ describe("currentScheduleSlot", () => {
 });
 
 describe("isWithinScheduleWindow", () => {
-  const schedule = ["09:00"]; // Reddit prospecting default
+  const schedule = ["09:00"]; // an arbitrary once/day slot
   const tz = "America/Phoenix"; // 09:00 Phoenix == 16:00 UTC
 
   it("is true exactly at the configured UTC hour", () => {

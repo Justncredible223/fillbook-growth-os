@@ -125,7 +125,6 @@ fun IconPill(text: String, icon: ImageVector, color: Color, modifier: Modifier =
  */
 fun platformIcon(platform: String): ImageVector = when (platform.lowercase()) {
     "x" -> Icons.Filled.Tag
-    "reddit" -> Icons.Filled.Forum
     "youtube" -> Icons.Filled.SmartDisplay
     "tiktok" -> Icons.Filled.MusicNote
     "blog" -> Icons.Filled.Article
@@ -133,7 +132,7 @@ fun platformIcon(platform: String): ImageVector = when (platform.lowercase()) {
 }
 
 /**
- * Opens a URL in whatever app handles it (X, Reddit, a browser). Returns
+ * Opens a URL in whatever app handles it (X, a browser). Returns
  * false instead of throwing when nothing on the device can handle the
  * intent (no browser, a restricted profile) or the system refuses it --
  * callers show a visible error rather than letting the tap silently do
@@ -157,7 +156,6 @@ fun assetTypeIcon(assetType: String): ImageVector = when (assetType) {
 
 fun platformDisplayName(platform: String): String = when (platform.lowercase()) {
     "x" -> "X"
-    "reddit" -> "Reddit"
     "youtube" -> "YouTube"
     "tiktok" -> "TikTok"
     else -> platform.replaceFirstChar { it.uppercase() }
