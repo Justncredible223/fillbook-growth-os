@@ -3,11 +3,19 @@ import type { LlmClient } from "../content/llmClient.js";
 const DRAFT_SCHEMA = {
   type: "object",
   properties: {
-    reply: { type: "string", description: "The exact reply text, ready to post as-is." },
+    isRelevant: {
+      type: "boolean",
+      description:
+        "True only if their post is genuinely about futures/markets trading, prop-firm trading, or trader psychology/discipline/journaling -- false if it only superficially matched the search (e.g. it's a story, meme, unrelated news, or uses a search word in a non-trading sense). Judge this FIRST, honestly, before writing anything.",
+    },
+    reply: {
+      type: "string",
+      description: "The exact reply text, ready to post as-is. Leave this an empty string when isRelevant is false -- it will never be shown or used.",
+    },
     mentionsFillbook: { type: "boolean", description: "True only if the reply actually names Fillbook." },
     usesLink: { type: "boolean", description: "True only if the reply includes a Fillbook link placeholder." },
   },
-  required: ["reply", "mentionsFillbook", "usesLink"],
+  required: ["isRelevant", "reply", "mentionsFillbook", "usesLink"],
 };
 
 /**
@@ -141,10 +149,18 @@ export function prospectingPlatformProfile(platform: string): ProspectingPlatfor
  * acceptable) come from the profile above.
  */
 export function buildProspectingSystemPrompt(profile: ProspectingPlatformProfile): string {
-  return `You are drafting ONE reply from the Fillbook account to someone else's ${profile.postNoun} on ${profile.displayName}. This
-person did NOT mention or reply to us -- we are joining their conversation because the topic is
-genuinely relevant to futures/prop-firm trading. Fillbook is a trading journal/analytics platform for
+  return `You are considering ONE reply from the Fillbook account to someone else's ${profile.postNoun} on ${profile.displayName}. This
+person did NOT mention or reply to us -- their post matched an automated search for a trading-related
+topic, but that match can be imprecise (a search word used in an unrelated sense, a post that only
+superficially resembles trading content, etc.). Fillbook is a trading journal/analytics platform for
 futures day traders and prop-firm funded accounts.
+
+FIRST, judge isRelevant honestly: is their post genuinely about futures/markets trading, prop-firm
+trading, or trader psychology/discipline/journaling? If it is NOT -- e.g. it's a story, a meme, unrelated
+news, or a generic self-help/life post that just happens to use a word like the search topic in a
+different sense -- set isRelevant=false, leave reply as an empty string, and do not attempt to force a
+connection to trading. A confident "this isn't relevant" is the correct, expected outcome for many
+candidates; it is never a failure. Only if isRelevant is true, continue below.
 
 ${profile.noPitchGuidance}
 
@@ -169,8 +185,9 @@ EVIDENCE-SUPPORTED OBSERVATION, REASONABLE HYPOTHESIS, or OPINION -- never state
 opinion as if it were a verified fact. Ground any Fillbook product claim ONLY in the verified knowledge
 given below -- never invent a feature.
 
-Submit your result via the submit_reply tool, and set mentionsFillbook/usesLink accurately based on
-what you actually wrote -- these are checked, not just descriptive.`;
+Submit your result via the submit_reply tool, and set isRelevant/mentionsFillbook/usesLink accurately
+based on your own honest judgment and what you actually wrote -- these are checked, not just
+descriptive.`;
 }
 
 export interface ProspectingDraftContext {
@@ -182,6 +199,7 @@ export interface ProspectingDraftContext {
 }
 
 export interface ProspectingDraftResult {
+  isRelevant: boolean;
   reply: string;
   mentionsFillbook: boolean;
   usesLink: boolean;
@@ -195,6 +213,17 @@ export interface ProspectingDraftResult {
  * The draft is returned to the caller, not auto-persisted -- the API
  * route decides whether/how to store it against the prospecting_candidates
  * row.
+ *
+ * A real, confirmed bug this also closes: the model previously had no way
+ * to say "this doesn't actually fit" except by writing that admission
+ * into the reply text itself (e.g. "this event isn't futures related"),
+ * which then got shown to the owner as if it were a usable draft.
+ * isRelevant is the model's own structured escape hatch -- the caller
+ * (prospectingHandlers.ts's draftProspectingCandidateReply) checks it and
+ * never persists/returns a draft when it's false. This is a SECOND,
+ * independent layer behind prospectingRelevance.ts's mechanical
+ * pre-filter (which runs before this function is ever called) -- content
+ * that slips past the keyword-based filter can still be caught here.
  */
 export async function draftProspectingReply(
   client: LlmClient,

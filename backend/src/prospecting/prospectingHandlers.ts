@@ -6,6 +6,7 @@ import { selectDailyWorkingSet } from "./prospectingDailySelection.js";
 import { STALE_EXPIRY_DAYS } from "./prospectingEligibility.js";
 import { draftProspectingReply, type ProspectingDraftContext, type ProspectingDraftResult } from "./prospectingReplyWriter.js";
 import { checkReplyGuardrails } from "../content/xReplyGuardrails.js";
+import { isPlausiblyTradingRelated } from "./prospectingRelevance.js";
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
 import type { ProspectingCandidate, ProspectingRepository } from "./types.js";
@@ -76,11 +77,30 @@ export async function listProspectingHistory(client: SupabaseClient, limit = 100
  * assumed) so the app can show "this reply mentions Fillbook" honestly
  * before the owner even reads it. The candidate's own platform selects
  * the prompt profile.
+ *
+ * Two independent relevance gates close a real, confirmed bug (Prospecting
+ * surfacing content with zero connection to futures/trading, and drafts
+ * that admitted as much in their own reply text instead of refusing):
+ * (1) prospectingRelevance.ts's mechanical, $0 pre-filter runs first --
+ * an obviously irrelevant candidate never reaches the LLM at all; (2) the
+ * model's own isRelevant flag (prospectingReplyWriter.ts) catches content
+ * that slips past the keyword filter. Either gate failing moves the
+ * candidate to 'not_relevant' (the same terminal status the owner's own
+ * "Irrelevant" button sets) and throws before any draft is persisted or
+ * returned -- the owner never sees a draft that says the post is
+ * unrelated.
  */
 export async function draftProspectingCandidateReply(client: SupabaseClient, id: string, deps: ProspectingHandlerDeps = {}): Promise<ProspectingCandidate> {
   const repo = repoFor(client, deps);
   const row = await repo.getById(id);
   if (!row) throw new ProspectingActionError(`No prospecting_candidates row with id "${id}"`);
+
+  if (!isPlausiblyTradingRelated(row.postText)) {
+    await repo.updateStatus(id, "not_relevant");
+    throw new ProspectingActionError(
+      "Not eligible for drafting -- this post doesn't appear to be about futures trading, prop-firm trading, or trading discipline.",
+    );
+  }
 
   const { brandRulesSummary, verifiedKnowledgeSummary } = await (deps.loadGrounding ?? loadGroundingContext)(client);
   const drafter =
@@ -102,6 +122,16 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
     brandRulesSummary,
     verifiedKnowledgeSummary,
   );
+
+  // Second, independent relevance gate -- the model's own honest judgment,
+  // for content that slipped past the mechanical pre-filter above (e.g. a
+  // post that uses real trading vocabulary but in a fundamentally
+  // different, still-irrelevant context). Same terminal status and no
+  // persisted draft as the pre-filter case.
+  if (!draft.isRelevant) {
+    await repo.updateStatus(id, "not_relevant");
+    throw new ProspectingActionError("Not eligible for drafting -- the model judged this post isn't genuinely relevant to futures/trading.");
+  }
 
   // Mechanical, $0 safety net -- catches banned generic phrases, an
   // unexplained link, and unverified performance/customer claims

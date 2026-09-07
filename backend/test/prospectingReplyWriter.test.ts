@@ -11,8 +11,8 @@ function jsonResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
 }
 
-function replyResponse(reply: string, mentionsFillbook: boolean, usesLink: boolean) {
-  return jsonResponse({ content: [{ type: "tool_use", name: "submit_reply", input: { reply, mentionsFillbook, usesLink } }] });
+function replyResponse(reply: string, mentionsFillbook: boolean, usesLink: boolean, isRelevant = true) {
+  return jsonResponse({ content: [{ type: "tool_use", name: "submit_reply", input: { isRelevant, reply, mentionsFillbook, usesLink } }] });
 }
 
 async function capturePrompt(platform: string, extra: Partial<Parameters<typeof draftProspectingReply>[1]> = {}) {
@@ -37,6 +37,7 @@ describe("draftProspectingReply", () => {
     );
 
     expect(result).toEqual({
+      isRelevant: true,
       reply: "Most firms reset at end of day, worth checking your rulebook.",
       mentionsFillbook: false,
       usesLink: false,
@@ -95,6 +96,50 @@ describe("draftProspectingReply", () => {
 
     expect(result.mentionsFillbook).toBe(true);
     expect(result.usesLink).toBe(true);
+  });
+
+  /**
+   * Regression coverage for a real, confirmed bug: the model had no
+   * structured way to say "this post doesn't actually fit" except by
+   * writing that admission into the reply text itself (e.g. "this event
+   * isn't futures related"), which then got shown to the owner as if it
+   * were a usable draft. isRelevant is the model's own escape hatch --
+   * the prompt instructs it to judge honestly, and the caller
+   * (prospectingHandlers.ts) checks the flag before ever persisting or
+   * returning a draft.
+   */
+  describe("isRelevant", () => {
+    it("passes through the model's own isRelevant=true", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(replyResponse("Good question.", false, false, true));
+      const llmClient = new LlmClient("test-key", fetchMock);
+
+      const result = await draftProspectingReply(llmClient, { platform: "x", authorHandle: "someone", postText: "hi", discoveryQuery: "drawdown" }, "", "");
+
+      expect(result.isRelevant).toBe(true);
+    });
+
+    it("passes through the model's own isRelevant=false, with an empty reply, rather than inferring relevance", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(replyResponse("", false, false, false));
+      const llmClient = new LlmClient("test-key", fetchMock);
+
+      const result = await draftProspectingReply(
+        llmClient,
+        { platform: "x", authorHandle: "someone", postText: "a sci-fi story about an algorithm and a civilization", discoveryQuery: "hesitation_trading" },
+        "",
+        "",
+      );
+
+      expect(result.isRelevant).toBe(false);
+      expect(result.reply).toBe("");
+    });
+
+    it("the system prompt instructs the model to judge relevance honestly FIRST, before writing anything", async () => {
+      const { system } = await capturePrompt("x");
+
+      expect(system).toMatch(/judge isRelevant honestly/i);
+      expect(system).toContain("set isRelevant=false");
+      expect(system).toMatch(/confident "this isn't relevant" is the correct, expected outcome/i);
+    });
   });
 
   describe("platform awareness", () => {
