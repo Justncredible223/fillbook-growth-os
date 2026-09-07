@@ -274,11 +274,24 @@ private fun ProspectingCard(
                     candidate.authorFollowerCount?.let { count -> Pill(formatFollowerCount(count), TextTertiary) }
                     if (candidate.creatorCandidate) Pill("CREATOR CANDIDATE", Success)
                 }
-                candidate.postCreatedAt?.let { posted ->
-                    relativeTime(posted)?.let { time ->
-                        Spacer(Modifier.height(2.dp))
-                        Text(time, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
-                    }
+                // Both real timestamps, shown together deliberately (2026-09-07
+                // freshness review): "posted" is the original X post time,
+                // "queued" is when Growth OS itself found it -- these can
+                // diverge (a candidate sitting in backlog for days before
+                // winning a daily slot), and the gap itself is useful
+                // information the owner shouldn't have to infer.
+                val postedTime = candidate.postCreatedAt?.let { relativeTime(it) }
+                val queuedTime = candidate.discoveredAt?.let { relativeTime(it) }
+                if (postedTime != null || queuedTime != null) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        listOfNotNull(
+                            postedTime?.let { "Posted $it" },
+                            queuedTime?.let { "Queued $it" },
+                        ).joinToString("  ·  "),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextTertiary,
+                    )
                 }
             }
         }

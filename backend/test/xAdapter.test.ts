@@ -254,6 +254,37 @@ describe("XSignalAdapter", () => {
       expect(requested.searchParams.get("max_results")).toBe("100");
     });
 
+    it("does not set start_time when maxAgeMs is omitted -- existing callers (Partnerships discovery) are unaffected", async () => {
+      const store = new InMemoryXTokenStore({
+        accessToken: "valid-token",
+        refreshToken: "refresh-token",
+        expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+      });
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [] }));
+      const adapter = new XSignalAdapter("client-id", "client-secret", store, fetchMock);
+
+      await adapter.searchRecentPosts("drawdown", 15, now);
+
+      const requested = new URL(fetchMock.mock.calls[0]![0] as string);
+      expect(requested.searchParams.has("start_time")).toBe(false);
+    });
+
+    it("sets start_time to X's own supported recency filter when maxAgeMs is given -- real bounded discovery-time freshness (2026-09-07 review), not client-side-only filtering", async () => {
+      const store = new InMemoryXTokenStore({
+        accessToken: "valid-token",
+        refreshToken: "refresh-token",
+        expiresAt: new Date(now.getTime() + 60 * 60 * 1000),
+      });
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [] }));
+      const adapter = new XSignalAdapter("client-id", "client-secret", store, fetchMock);
+      const seventyTwoHoursMs = 72 * 60 * 60 * 1000;
+
+      await adapter.searchRecentPosts("drawdown", 15, now, seventyTwoHoursMs);
+
+      const requested = new URL(fetchMock.mock.calls[0]![0] as string);
+      expect(requested.searchParams.get("start_time")).toBe(new Date(now.getTime() - seventyTwoHoursMs).toISOString());
+    });
+
     it("does not fabricate author data when X returns no user expansion for a post", async () => {
       const store = new InMemoryXTokenStore({
         accessToken: "valid-token",

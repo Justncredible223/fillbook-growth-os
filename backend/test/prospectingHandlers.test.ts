@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   draftProspectingCandidateReply,
+  listProspectingQueue,
   markProspectingReplied,
   ProspectingActionError,
 } from "../src/prospecting/prospectingHandlers";
@@ -93,6 +94,52 @@ function candidate(overrides: Partial<ProspectingCandidate>): ProspectingCandida
 }
 
 const fakeClient = {} as any;
+
+/**
+ * Regression coverage for the 2026-09-07 freshness/audience-quality
+ * review's diagnostics addition: before this existed, an empty or small
+ * daily set from listProspectingQueue was ambiguous -- "genuinely nothing
+ * found" and "plenty of backlog, all of it too old/too weak today" looked
+ * identical from the API response alone. These prove the counts are
+ * real, additive, and actually distinguish those cases.
+ */
+describe("listProspectingQueue -- selection diagnostics", () => {
+  const NOW = new Date("2026-09-07T12:00:00Z");
+  const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 60 * 60 * 1000).toISOString();
+
+  it("reports counts that are additive and distinguish selected / below-quality-bar / too-old", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "fresh-strong", status: "new", opportunityScore: 70, postCreatedAt: hoursAgo(1), authorExternalId: "a" }));
+    repo.seed(candidate({ id: "weak", status: "new", opportunityScore: 10, postCreatedAt: hoursAgo(1), authorExternalId: "b" }));
+    repo.seed(candidate({ id: "ancient", status: "new", opportunityScore: 90, postCreatedAt: hoursAgo(24 * 10), authorExternalId: "c" }));
+
+    const { candidates, diagnostics } = await listProspectingQueue(fakeClient, NOW, { repo });
+
+    expect(candidates.map((c) => c.id)).toEqual(["fresh-strong"]);
+    expect(diagnostics).toEqual({ totalConsidered: 3, selected: 1, deferred: 0, belowQualityBar: 1, tooOldForToday: 1 });
+  });
+
+  it("never leaves an empty daily set ambiguous -- diagnostics show whether the backlog is genuinely clear or just mostly too old", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "stale-1", status: "shown", opportunityScore: 95, postCreatedAt: hoursAgo(24 * 6), authorExternalId: "a" }));
+    repo.seed(candidate({ id: "stale-2", status: "shown", opportunityScore: 95, postCreatedAt: hoursAgo(24 * 8), authorExternalId: "b" }));
+
+    const { candidates, diagnostics } = await listProspectingQueue(fakeClient, NOW, { repo });
+
+    expect(candidates).toHaveLength(0);
+    expect(diagnostics.totalConsidered).toBe(2);
+    expect(diagnostics.tooOldForToday).toBe(2); // NOT a genuinely empty backlog -- both excluded for age specifically
+    expect(diagnostics.belowQualityBar).toBe(0);
+  });
+
+  it("reports a genuinely empty backlog as zero everywhere, not conflated with an age or quality exclusion", async () => {
+    const repo = new InMemoryProspectingRepository();
+    const { candidates, diagnostics } = await listProspectingQueue(fakeClient, NOW, { repo });
+
+    expect(candidates).toHaveLength(0);
+    expect(diagnostics).toEqual({ totalConsidered: 0, selected: 0, deferred: 0, belowQualityBar: 0, tooOldForToday: 0 });
+  });
+});
 
 describe("markProspectingReplied -- outreach is recorded in the candidate's own platform namespace", () => {
   it("an X reply still records X outreach keyed by the X author id", async () => {

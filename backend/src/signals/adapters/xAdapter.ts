@@ -195,8 +195,18 @@ export class XSignalAdapter {
    * so no new X app/OAuth setup is required. Excludes retweets/replies
    * by construction (query gets " -is:retweet -is:reply" appended) so
    * results are always original posts worth reading in isolation.
+   *
+   * [maxAgeMs] is optional and, when given, sets the request's own
+   * `start_time` param (X's own supported recency filter -- confirmed
+   * present on this endpoint per docs.x.com/x-api/posts/recent-search;
+   * this is a real X API capability, not a client-side simulation) so X
+   * itself never returns anything older than that, rather than us
+   * fetching up to 7 days back and filtering afterward. Omitted entirely
+   * (as it already was for every caller before this) when not given, so
+   * Partnerships discovery's own searchRecentPosts calls -- which have no
+   * freshness requirement -- are completely unaffected.
    */
-  async searchRecentPosts(query: string, maxResults = 25, now: Date = new Date()): Promise<XSearchResult[]> {
+  async searchRecentPosts(query: string, maxResults = 25, now: Date = new Date(), maxAgeMs?: number): Promise<XSearchResult[]> {
     const params: Record<string, string> = {
       query: `${query} -is:retweet -is:reply lang:en`,
       max_results: String(Math.min(Math.max(maxResults, 10), 100)),
@@ -204,6 +214,9 @@ export class XSignalAdapter {
       expansions: "author_id",
       "user.fields": "username,name,public_metrics,verified",
     };
+    if (maxAgeMs !== undefined) {
+      params.start_time = new Date(now.getTime() - maxAgeMs).toISOString();
+    }
 
     const json = (await this.authedGet("/tweets/search/recent", params, now)) as {
       data?: Array<{

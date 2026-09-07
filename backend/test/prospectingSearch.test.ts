@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { runProspectingSearch } from "../src/prospecting/prospectingSearch";
 import { TOPICS_PER_SEARCH_RUN } from "../src/prospecting/prospectingEligibility";
+import { MAX_AGE_FOR_DAILY_SELECTION_MS } from "../src/prospecting/prospectingFreshness";
 import type { XSearchResult } from "../src/signals/adapters/xAdapter";
 import type { NewProspectingCandidate, ProspectingCandidate, ProspectingRepository, ProspectingStatus } from "../src/prospecting/types";
 
@@ -92,6 +93,15 @@ describe("runProspectingSearch", () => {
     expect(result.newCandidates).toBeGreaterThan(0);
     expect(adapter.searchRecentPosts).toHaveBeenCalled();
     expect(repo.rows.size).toBe(result.newCandidates);
+  });
+
+  it("REFINED (2026-09-07 freshness review): bounds discovery itself to the same 72h freshness window selection enforces, via X's own start_time filter -- not just filtering stale posts out after paying to read them", async () => {
+    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+    const repo = new FakeProspectingRepo();
+
+    await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
+
+    expect(adapter.searchRecentPosts).toHaveBeenCalledWith(expect.any(String), expect.any(Number), now, MAX_AGE_FOR_DAILY_SELECTION_MS);
   });
 
   it("never re-inserts a post already known from a prior run", async () => {

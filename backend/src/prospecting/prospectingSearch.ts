@@ -13,6 +13,7 @@ import {
   runSlotsPerDay,
   selectTopicsForRun,
 } from "./prospectingEligibility.js";
+import { MAX_AGE_FOR_DAILY_SELECTION_MS } from "./prospectingFreshness.js";
 import type { ProspectingRepository } from "./types.js";
 
 export interface ProspectingRunResult {
@@ -93,7 +94,17 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   const priorOutreachCache = new Map<string, boolean>();
 
   for (const topic of topics) {
-    const results = await deps.adapter.searchRecentPosts(topic.query, RESULTS_PER_QUERY, now);
+    // Bounded discovery-time freshness (2026-09-07 review): X's recent-search
+    // endpoint supports a real start_time filter (see xAdapter.ts's own doc
+    // comment), so this asks X itself to never return anything older than
+    // the same 72h window prospectingFreshness.ts enforces at selection
+    // time -- catching staleness at the source instead of only filtering it
+    // out after paying to read it. Sharing the one MAX_AGE_FOR_DAILY_SELECTION_MS
+    // constant keeps discovery and selection aligned; a sparse topic
+    // returning fewer (or zero) results under this bound is the correct,
+    // intended outcome, not a bug -- a genuinely quiet topic this run just
+    // means fewer new candidates today, never stale ones let through.
+    const results = await deps.adapter.searchRecentPosts(topic.query, RESULTS_PER_QUERY, now, MAX_AGE_FOR_DAILY_SELECTION_MS);
     postsRead += results.length;
     costUsd += await recordXSearchCostEvent(deps.client, results.length, { topic: topic.key, query: topic.query });
 

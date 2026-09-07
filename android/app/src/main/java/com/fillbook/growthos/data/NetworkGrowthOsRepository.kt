@@ -403,6 +403,7 @@ class NetworkGrowthOsRepository(
         postText = getString("postText"),
         postUrl = getString("postUrl"),
         postCreatedAt = optStringOrNull("postCreatedAt"),
+        discoveredAt = optStringOrNull("discoveredAt"),
         opportunityScore = getDouble("opportunityScore"),
         scoreBreakdown = optJSONObject("scoreBreakdown")?.toStringMap() ?: emptyMap(),
         creatorCandidate = optBoolean("creatorCandidate", false),

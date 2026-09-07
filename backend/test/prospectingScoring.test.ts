@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { scoreProspectingCandidate } from "../src/prospecting/prospectingScoring";
+import { MIN_DAILY_SET_SCORE } from "../src/prospecting/prospectingDailySelection";
 import type { ProspectingTopic } from "../src/prospecting/prospectingTopics";
 
 const topic: ProspectingTopic = { key: "trading_journal", query: '"trading journal"', label: "Trading journal", replyClass: "A" };
@@ -63,6 +64,25 @@ describe("scoreProspectingCandidate", () => {
       baseInput({ authorFollowerCount: 500_000, publicMetrics: { reply_count: 0, quote_count: 0, like_count: 0 } }),
     );
     expect(smallButRelevant.score).toBeGreaterThan(bigButQuiet.score);
+  });
+
+  it("REFINED (2026-09-07 freshness/audience-quality review): a very-low-follower account is not hard-excluded -- a genuinely relevant, engaged post from a near-zero-follower account can still clear MIN_DAILY_SET_SCORE", () => {
+    const tinyAccount = scoreProspectingCandidate(
+      baseInput({
+        authorFollowerCount: 3,
+        publicMetrics: { reply_count: 8, quote_count: 1, like_count: 20 },
+        postText: "How do you actually decide when to cut a losing trade instead of hoping it comes back?",
+      }),
+    );
+    expect(tinyAccount.excluded).toBe(false);
+    expect(tinyAccount.score).toBeGreaterThanOrEqual(MIN_DAILY_SET_SCORE);
+  });
+
+  it("follower count still moves the score (soft signal), just not by much -- confirms it influences ranking without dominating or excluding", () => {
+    const zeroFollowers = scoreProspectingCandidate(baseInput({ authorFollowerCount: 0 }));
+    const hundredKFollowers = scoreProspectingCandidate(baseInput({ authorFollowerCount: 100_000 }));
+    expect(hundredKFollowers.score).toBeGreaterThan(zeroFollowers.score); // it does influence ranking...
+    expect(hundredKFollowers.score - zeroFollowers.score).toBeLessThanOrEqual(15); // ...but only ever by the capped reach-points range, never dominant
   });
 
   it("caps author-reach points regardless of how large the follower count is", () => {

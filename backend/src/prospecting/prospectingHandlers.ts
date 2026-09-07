@@ -42,6 +42,27 @@ export function toProspectingJson(candidate: ProspectingCandidate) {
 const NON_TERMINAL_STATUSES = ["new", "shown", "drafting", "ready"] as const;
 
 /**
+ * Why today's set looks the way it does -- added 2026-09-07 alongside the
+ * freshness-decay/72h-cutoff changes specifically so an empty or small
+ * daily set is never ambiguous. Before this existed, "Queue is clear" and
+ * "everything's just too old right now" were indistinguishable from the
+ * API response alone -- this makes that difference inspectable (and
+ * testable) instead of silent. Counts are additive: totalConsidered ===
+ * selected + deferred + belowQualityBar + tooOldForToday.
+ */
+export interface ProspectingSelectionDiagnostics {
+  /** Every non-terminal (new/shown/drafting/ready) candidate examined this call, before any filtering. */
+  totalConsidered: number;
+  selected: number;
+  /** Cleared the quality bar but lost to the one-per-author rule or the daily cap -- real backlog, not discarded. */
+  deferred: number;
+  /** Did not clear MIN_DAILY_SET_SCORE using today's freshness-adjusted effective score. */
+  belowQualityBar: number;
+  /** Excluded purely for being older than the 72h freshness cutoff -- see prospectingFreshness.ts. */
+  tooOldForToday: number;
+}
+
+/**
  * DISCOVER -> FILTER -> RANK already happened upstream (prospectingSearch.ts
  * / prospectingScoring.ts). This is SELECT DAILY WORKING SET: expires
  * anything that's sat unactioned past STALE_EXPIRY_DAYS, re-ranks the
@@ -51,18 +72,33 @@ const NON_TERMINAL_STATUSES = ["new", "shown", "drafting", "ready"] as const;
  * 'shown'; everything else stays exactly as it was (a 'new' row not
  * selected today is still 'new' tomorrow -- real backlog, not lost).
  */
-export async function listProspectingQueue(client: SupabaseClient, now: Date = new Date(), deps: ProspectingHandlerDeps = {}): Promise<ProspectingCandidate[]> {
+export async function listProspectingQueue(
+  client: SupabaseClient,
+  now: Date = new Date(),
+  deps: ProspectingHandlerDeps = {},
+): Promise<{ candidates: ProspectingCandidate[]; diagnostics: ProspectingSelectionDiagnostics }> {
   const repo = repoFor(client, deps);
 
   const staleCutoff = new Date(now.getTime() - STALE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
   await repo.expireStale(staleCutoff);
 
   const eligible = await repo.listByStatus([...NON_TERMINAL_STATUSES], 500);
-  const { selected } = selectDailyWorkingSet(eligible);
+  const { selected, deferred, belowQualityBar, tooOldForToday } = selectDailyWorkingSet(eligible, now);
 
   const newIds = selected.filter((c) => c.status === "new").map((c) => c.id);
   await repo.markShown(newIds);
-  return selected.map((c) => (newIds.includes(c.id) ? { ...c, status: "shown" as const } : c));
+  const candidates = selected.map((c) => (newIds.includes(c.id) ? { ...c, status: "shown" as const } : c));
+
+  return {
+    candidates,
+    diagnostics: {
+      totalConsidered: eligible.length,
+      selected: selected.length,
+      deferred: deferred.length,
+      belowQualityBar: belowQualityBar.length,
+      tooOldForToday: tooOldForToday.length,
+    },
+  };
 }
 
 export async function listProspectingHistory(client: SupabaseClient, limit = 100, deps: ProspectingHandlerDeps = {}): Promise<ProspectingCandidate[]> {

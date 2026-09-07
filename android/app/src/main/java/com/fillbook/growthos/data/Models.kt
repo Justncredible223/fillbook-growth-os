@@ -235,6 +235,8 @@ data class ProspectingCandidate(
     val postUrl: String,
     /** ISO timestamp of the original post, when X reported one -- null (not fabricated) when unavailable. */
     val postCreatedAt: String?,
+    /** ISO timestamp of when Growth OS itself found this post -- distinct from postCreatedAt. Shown alongside it so a real post-age vs. backlog-age gap (2026-09-07 freshness review) is visible to the owner, not hidden. */
+    val discoveredAt: String?,
     val opportunityScore: Double,
     /** Human-readable reasons behind the score, keyed by factor name ("topicRelevance", "activeDiscussion", ...) -- never fabricated, comes straight from the server's own scoring breakdown. */
     val scoreBreakdown: Map<String, String>,

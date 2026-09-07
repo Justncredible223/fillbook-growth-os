@@ -140,8 +140,18 @@ async function handleProspecting(req: VercelRequest, res: VercelResponse): Promi
 
   if (req.method === "GET") {
     try {
-      const items = req.query.history === "1" ? await listProspectingHistory(client) : await listProspectingQueue(client);
-      res.status(200).json({ items: items.map(toProspectingJson) });
+      if (req.query.history === "1") {
+        const items = await listProspectingHistory(client);
+        res.status(200).json({ items: items.map(toProspectingJson) });
+      } else {
+        // diagnostics makes an empty/small `items` array unambiguous --
+        // "Queue is clear" (nothing to consider at all) is now
+        // distinguishable from "everything's just too old right now" or
+        // "plenty of backlog, none of it clears today's quality bar" (see
+        // prospectingHandlers.ts's ProspectingSelectionDiagnostics).
+        const { candidates, diagnostics } = await listProspectingQueue(client);
+        res.status(200).json({ items: candidates.map(toProspectingJson), diagnostics });
+      }
     } catch (err) {
       res.status(500).json({ error: errorMessage(err) });
     }
