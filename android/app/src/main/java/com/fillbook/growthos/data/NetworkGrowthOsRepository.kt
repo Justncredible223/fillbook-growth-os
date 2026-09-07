@@ -25,14 +25,16 @@ import java.util.concurrent.TimeUnit
  *
  * [appToken] is the second, separate credential that actually gates this
  * project's own business data (see backend/src/lib/requireAppAuth.ts).
- * Same trust tier as the Vercel bypass secret above -- compiled into the
- * app once (MainActivity's APP_TOKEN), never something the owner types
- * or retrieves. The owner's actual gate is BiometricGateScreen
- * (fingerprint/face/device PIN); this token exists so a stranger who
- * only has the Vercel bypass secret still can't reach this project's
- * data without also having decompiled the APK for this value too. Every
- * request here sends it as a standard Authorization: Bearer header; the
- * backend rejects anything that doesn't match its own APP_API_TOKEN env
+ * Same trust tier as the Vercel bypass secret above -- injected into the
+ * app once at build time (see AppConfig.kt's APP_TOKEN, sourced from
+ * android/local.properties or an env var, never a source literal), never
+ * something the owner types or retrieves. The owner's actual gate is
+ * BiometricGateScreen (fingerprint/face/device PIN); this token exists so
+ * a stranger who only has the Vercel bypass secret still can't reach this
+ * project's data without also having decompiled the APK for this value
+ * too. Every request here sends it as a standard Authorization: Bearer
+ * header; the backend rejects anything that doesn't match its own
+ * APP_API_TOKEN (or, during a rotation window, APP_API_TOKEN_PREVIOUS) env
  * var.
  *
  * [deciderName] answers "who approved this" for the audit trail (see

@@ -44,6 +44,45 @@ val releaseStorePassword = signingValue("storePassword", "GROWTH_OS_KEYSTORE_PAS
 val releaseKeyAlias = signingValue("keyAlias", "GROWTH_OS_KEY_ALIAS")
 val releaseKeyPassword = signingValue("keyPassword", "GROWTH_OS_KEY_PASSWORD")
 
+/**
+ * Backend auth credentials (production-readiness audit finding, 2026-09-07):
+ * these used to be plaintext `const val`s committed straight into
+ * AppConfig.kt, and were ALSO duplicated in two tracked handoff docs --
+ * three copies of live production secrets sitting in git history. Moved to
+ * the exact same "gitignored local file, env var fallback" mechanism this
+ * file already uses for release signing above, just reading
+ * `android/local.properties` (already gitignored, already exists on every
+ * dev machine for `sdk.dir`) instead of a separate properties file --
+ * one fewer file for a developer to remember to create.
+ *
+ * Two keys, checked in this order:
+ * 1. `android/local.properties`'s `growthOsProtectionBypassSecret` /
+ *    `growthOsAppToken` entries -- simplest for a developer machine.
+ * 2. Environment variables `GROWTH_OS_PROTECTION_BYPASS_SECRET` /
+ *    `GROWTH_OS_APP_TOKEN` -- for CI or scripted builds.
+ *
+ * Deliberately falls back to an EMPTY string (never fails the build) when
+ * neither source provides a value -- unlike release signing, a debug build
+ * with no configured token is a legitimate, common case (typechecking/
+ * compiling this module, or CI verifying the app still builds, needs
+ * neither secret and must never require them just to succeed). An empty
+ * token simply means the resulting APK gets a 401 from every backend call
+ * until a real value is supplied and the app is rebuilt -- a loud, obvious
+ * runtime failure, never a silent wrong-behavior one.
+ */
+val localPropertiesFile = rootProject.file("local.properties")
+val localProperties = Properties().apply {
+    if (localPropertiesFile.exists()) {
+        FileInputStream(localPropertiesFile).use { load(it) }
+    }
+}
+
+fun secretValue(propertyKey: String, envVarName: String): String =
+    localProperties.getProperty(propertyKey) ?: System.getenv(envVarName) ?: ""
+
+val protectionBypassSecret = secretValue("growthOsProtectionBypassSecret", "GROWTH_OS_PROTECTION_BYPASS_SECRET")
+val appToken = secretValue("growthOsAppToken", "GROWTH_OS_APP_TOKEN")
+
 android {
     namespace = "com.fillbook.growthos"
     compileSdk = 35
@@ -54,6 +93,12 @@ android {
         targetSdk = 35
         versionCode = 3
         versionName = "0.2.1"
+
+        // See secretValue() above -- injected here so BuildConfig carries
+        // them as plain compile-time String constants, same as every other
+        // buildConfigField. AppConfig.kt reads these; no other file should.
+        buildConfigField("String", "PROTECTION_BYPASS_SECRET", "\"$protectionBypassSecret\"")
+        buildConfigField("String", "APP_TOKEN", "\"$appToken\"")
     }
 
     signingConfigs {
