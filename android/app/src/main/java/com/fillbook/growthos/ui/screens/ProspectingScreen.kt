@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.DraftRejectedException
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.ProspectingCandidate
+import com.fillbook.growthos.data.ProspectingDiagnostics
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
@@ -89,6 +90,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ProspectingScreen(repo: GrowthOsRepository) {
     var items by remember { mutableStateOf<List<ProspectingCandidate>>(emptyList()) }
+    var diagnostics by remember { mutableStateOf<ProspectingDiagnostics?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
@@ -106,7 +108,9 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
 
     suspend fun refresh() {
         try {
-            items = repo.getProspectingQueue()
+            val result = repo.getProspectingQueue()
+            items = result.candidates
+            diagnostics = result.diagnostics
             errorMessage = null
         } catch (e: Exception) {
             errorMessage = "Couldn't load Prospecting. Check your connection and try again."
@@ -193,7 +197,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
             PolishedEmptyState(
                 icon = Icons.Filled.TrendingUp,
                 headline = "Queue is clear",
-                subtitle = "New opportunities are found once a day. Check back soon, or pull to refresh.",
+                subtitle = prospectingEmptyStateMessage(diagnostics),
             )
         } else {
             PullToRefreshBox(
@@ -351,4 +355,46 @@ private fun formatFollowerCount(count: Int): String = when {
     count >= 1_000_000 -> "${count / 1_000_000}M followers"
     count >= 1_000 -> "${count / 1_000}K followers"
     else -> "$count followers"
+}
+
+/**
+ * Owner-friendly explanation for an empty queue -- never surfaces internal
+ * field names like "tooOldForToday" or "belowQualityBar" (2026-09-07
+ * freshness/audience-quality follow-up). Pure function, no Compose/Android
+ * dependency, directly unit-testable.
+ *
+ * [diagnostics] is null only when the API response predates that field
+ * (see NetworkGrowthOsRepository.getProspectingQueue) -- that case keeps
+ * the exact original generic copy rather than guessing at a reason.
+ *
+ * When diagnostics ARE present but the pool considered was itself empty
+ * (totalConsidered == 0), that's a genuinely different situation from
+ * "we had candidates but none were shown today" -- discovery found
+ * nothing at all this run, not "found some, excluded them."
+ *
+ * Otherwise, builds one honest sentence from whichever reasons actually
+ * apply -- a real production case had BOTH too-old and below-quality-bar
+ * candidates at once, so this never hides one reason to only report the
+ * other.
+ */
+internal fun prospectingEmptyStateMessage(diagnostics: ProspectingDiagnostics?): String {
+    val fallback = "New opportunities are found once a day. Check back soon, or pull to refresh."
+    if (diagnostics == null) return fallback
+    if (diagnostics.totalConsidered == 0) {
+        return "No new candidates were found. Discovery will try again on its next scheduled run."
+    }
+
+    val reasons = buildList {
+        if (diagnostics.tooOldForToday > 0) {
+            val n = diagnostics.tooOldForToday
+            add(if (n == 1) "1 post was too old for today's active reply window" else "$n posts were too old for today's active reply window")
+        }
+        if (diagnostics.belowQualityBar > 0) {
+            val n = diagnostics.belowQualityBar
+            add(if (n == 1) "1 candidate didn't meet today's quality bar" else "$n candidates didn't meet today's quality bar")
+        }
+    }
+    if (reasons.isEmpty()) return fallback
+
+    return "${reasons.joinToString(", and ")}. Check back soon, or pull to refresh."
 }

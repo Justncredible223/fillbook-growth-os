@@ -220,6 +220,30 @@ data class InboundSummary(
  * status string kept as-is, same rationale as InboundEngagement.status:
  * the server owns the state machine.
  */
+/**
+ * Why today's Prospecting queue looks the way it does -- see
+ * backend/src/prospecting/prospectingHandlers.ts's
+ * ProspectingSelectionDiagnostics, the server-side source of these same
+ * counts. Null (not a zeroed-out instance) when the API response predates
+ * this field, so callers can tell "we asked and got nothing" apart from
+ * "the server hasn't started sending this yet" -- see
+ * ProspectingScreen.kt's emptyStateMessage, which falls back to the
+ * original generic copy specifically for that null case.
+ */
+data class ProspectingDiagnostics(
+    val totalConsidered: Int,
+    val selected: Int,
+    val deferred: Int,
+    val belowQualityBar: Int,
+    val tooOldForToday: Int,
+)
+
+/** Return shape for GrowthOsRepository.getProspectingQueue() -- pairs today's selected candidates with the diagnostics explaining why the list looks the way it does (see ProspectingDiagnostics). */
+data class ProspectingQueueResult(
+    val candidates: List<ProspectingCandidate>,
+    val diagnostics: ProspectingDiagnostics?,
+)
+
 data class ProspectingCandidate(
     val id: String,
     /** Lowercase platform key from the server ("x") -- drives which app "Copy + Open" launches and how the confirmation reads. */

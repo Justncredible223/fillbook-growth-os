@@ -413,10 +413,25 @@ class NetworkGrowthOsRepository(
         replyUsedLink = if (isNull("replyUsedLink")) null else getBoolean("replyUsedLink"),
     )
 
+    private fun JSONObject.toProspectingDiagnostics() = ProspectingDiagnostics(
+        totalConsidered = getInt("totalConsidered"),
+        selected = getInt("selected"),
+        deferred = getInt("deferred"),
+        belowQualityBar = getInt("belowQualityBar"),
+        tooOldForToday = getInt("tooOldForToday"),
+    )
+
     // Folded into /api/approvals (?resource=prospecting) -- same 12-function-cap reasoning as inbound above.
-    override suspend fun getProspectingQueue(): List<ProspectingCandidate> {
+    override suspend fun getProspectingQueue(): ProspectingQueueResult {
         val json = get("/api/approvals?resource=prospecting")
-        return json.getJSONArray("items").map { it.toProspectingCandidate() }
+        return ProspectingQueueResult(
+            candidates = json.getJSONArray("items").map { it.toProspectingCandidate() },
+            // Null (not a zeroed-out instance) when this response predates the
+            // diagnostics field -- optJSONObject returns null for a missing
+            // key rather than throwing, which is exactly the "older/unknown
+            // API response" fallback case this is meant to represent.
+            diagnostics = json.optJSONObject("diagnostics")?.toProspectingDiagnostics(),
+        )
     }
 
     override suspend fun draftProspectingReply(id: String): ProspectingCandidate {

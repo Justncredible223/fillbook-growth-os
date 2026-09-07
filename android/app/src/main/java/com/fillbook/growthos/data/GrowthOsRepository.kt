@@ -75,8 +75,8 @@ interface GrowthOsRepository {
     /** Ignores the ingestion cursor and re-checks the recent window -- the "we found unanswered replies" recovery pass. */
     suspend fun runInboundBacklogRecovery()
 
-    /** The active Prospecting queue -- OTHER people's public X posts worth replying to, ranked highest score first. Marks any still-"new" rows "shown" server-side, so a refresh never presents the same candidate as freshly found twice. */
-    suspend fun getProspectingQueue(): List<ProspectingCandidate>
+    /** The active Prospecting queue -- OTHER people's public X posts worth replying to, ranked highest score first. Marks any still-"new" rows "shown" server-side, so a refresh never presents the same candidate as freshly found twice. [ProspectingQueueResult.diagnostics] is null only when the API response predates that field -- never fabricated client-side. */
+    suspend fun getProspectingQueue(): ProspectingQueueResult
     /** Generates a reply draft via the LLM for one candidate -- never persisted as sent, never posted. Costs one real LLM call. */
     suspend fun draftProspectingReply(id: String): ProspectingCandidate
     /** Records that the owner tapped "Open on X" for this candidate -- timestamp only, no status change. */
@@ -527,11 +527,15 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     /** FIXTURE-ONLY: same contract as debugNextInboundOutcome above, for Prospecting's draft-reply action. Never used by production code. */
     var debugNextProspectingOutcome: String? = null
 
-    override suspend fun getProspectingQueue(): List<ProspectingCandidate> {
+    override suspend fun getProspectingQueue(): ProspectingQueueResult {
         for (i in prospectingItems.indices) {
             if (prospectingItems[i].status == "new") prospectingItems[i] = prospectingItems[i].copy(status = "shown")
         }
-        return prospectingItems.filter { it.status in setOf("new", "shown", "ready") }.sortedByDescending { it.opportunityScore }
+        val candidates = prospectingItems.filter { it.status in setOf("new", "shown", "ready") }.sortedByDescending { it.opportunityScore }
+        // No backend to compute real diagnostics in fake mode -- null correctly
+        // exercises the same "no diagnostics field" fallback a genuinely old
+        // API response would, rather than fabricating plausible-looking counts.
+        return ProspectingQueueResult(candidates, diagnostics = null)
     }
 
     override suspend fun draftProspectingReply(id: String): ProspectingCandidate {
