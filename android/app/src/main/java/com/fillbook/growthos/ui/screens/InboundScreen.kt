@@ -138,15 +138,16 @@ fun InboundScreen(repo: GrowthOsRepository) {
     // gets told so instead of a silent no-op.
     fun copyAndOpen(item: InboundEngagement) {
         val draft = item.draftResponse
+        // Just the drafted reply, no auto-inserted "@handle" -- a
+        // deliberate choice, not a gap: the reply-intent URL below no
+        // longer pre-fills anything either (see InboundReplyLink's own
+        // kdoc for the real, confirmed bug that caused -- X reserving a
+        // blank first line above any `text` it was given). The owner
+        // pastes/types at row 1 themselves, same as a genuine manual
+        // reply would require anyway.
         if (draft != null) copyToClipboard(context, "Reply to ${item.authorHandle ?: "unknown"}", draft)
         val sourceReference = item.sourceReference
-        // For a real X item, opens X's reply-intent URL pre-filled with
-        // "@handle <the drafted reply>" as real composer text, in that
-        // order -- since the native app's own in_reply_to autofill was
-        // confirmed on-device NOT to insert the mention at all, and a
-        // separate paste-after-prefill was confirmed to land BEFORE the
-        // mention (the composer's cursor sits at the start of pre-filled
-        // text, not the end). Built from the exact tweet ID in
+        // Opens X's reply-intent URL built from the exact tweet ID in
         // sourceReference, instead of the tweet's plain URL -- opening the
         // plain URL landed on X's generic composer, which risked the
         // owner's reply posting as a new standalone post instead of a real
@@ -155,7 +156,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
         // status -- opening the platform must never imply a reply was
         // sent; "Mark responded" stays its own explicit action, untouched
         // here.
-        val urlToOpen = InboundReplyLink.buildInboundReplyUrl(item.platform, sourceReference, item.authorHandle, draft)
+        val urlToOpen = InboundReplyLink.buildInboundReplyUrl(item.platform, sourceReference)
         val opened = urlToOpen != null && openExternalUrl(context, urlToOpen)
         // When X actually opened, remind the owner to verify the reply
         // really posted before marking this item responded -- the app has

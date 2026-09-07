@@ -5,11 +5,27 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * Regression coverage for a real bug: opening an Inbound X item's plain
- * tweet URL landed on X's generic composer, which never pre-fills
- * "Replying to @..." -- risking the owner's reply posting as a brand-new
- * standalone tweet instead of an actual reply. See InboundReplyLink's own
- * kdoc for the fix (X's reply-intent URL, built from the exact tweet ID).
+ * Regression coverage for three real, confirmed bugs found live, in
+ * order:
+ * 1. Opening an Inbound X item's plain tweet URL landed on X's generic
+ *    composer, which never pre-fills "Replying to @..." -- risking the
+ *    owner's reply posting as a brand-new standalone tweet instead of an
+ *    actual reply. Fixed by X's reply-intent URL (in_reply_to), built
+ *    from the exact tweet ID.
+ * 2. Switching the reply-intent host to twitter.com/intent/tweet (tried
+ *    to fix bug 3 below) was confirmed live, via the account's own
+ *    Chrome session, to silently drop in_reply_to entirely -- the post
+ *    had no "Replying to @handle" context and never appeared on the
+ *    account's Replies tab. MUST stay on x.com/intent/post permanently.
+ * 3. Supplying a `text` param at all (regardless of host) made X's
+ *    Android app reserve a blank first editable line above it, pushing
+ *    any pre-filled text to row 2 -- unlike a genuine manual reply
+ *    (tapping Reply inside X's own UI), which starts at row 1. Fixed by
+ *    dropping `text` entirely: the URL now only ever carries
+ *    in_reply_to. No mention is auto-inserted anywhere (URL or
+ *    clipboard) -- a deliberate choice, not a gap: the owner pastes/
+ *    types at row 1 themselves from the drafted reply Inbound already
+ *    shows, same as a genuine manual reply would require anyway.
  */
 class InboundReplyLinkTest {
     @Test
@@ -28,9 +44,16 @@ class InboundReplyLinkTest {
     }
 
     @Test
-    fun `builds the reply-intent URL with no text param when no handle is known, URL-encoding the id`() {
+    fun `builds the reply-intent URL from the exact tweet ID, URL-encoding it`() {
         val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/1948273645102938475")
         assertEquals("https://x.com/intent/post?in_reply_to=1948273645102938475", url)
+    }
+
+    @Test
+    fun `never appends a text param -- the reserved-blank-line bug this fixes`() {
+        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501")
+        assertEquals("https://x.com/intent/post?in_reply_to=501", url)
+        assertEquals(false, url!!.contains("text="))
     }
 
     @Test
@@ -57,58 +80,6 @@ class InboundReplyLinkTest {
     }
 
     /**
-     * Regression coverage for a second real bug, found on-device after the
-     * first fix above shipped: the native X app's in_reply_to autofill does
-     * NOT insert "@handle " as actual composer text (confirmed live), so
-     * the owner saw a blank reply box with no @-mention at all. Fixed by
-     * building that text ourselves via the intent's own `text` param.
-     */
-    @Test
-    fun `appends just the @handle as a text param when only the author handle is known`() {
-        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", "DefiDelilah")
-        assertEquals("https://x.com/intent/post?in_reply_to=501&text=%40DefiDelilah", url)
-    }
-
-    @Test
-    fun `omits the text param when the author handle is blank and no draft reply is given`() {
-        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", "  ")
-        assertEquals("https://x.com/intent/post?in_reply_to=501", url)
-    }
-
-    @Test
-    fun `does not append a handle to the fallback URL for a non-X platform`() {
-        val original = "https://youtube.com/watch?v=abc123"
-        assertEquals(original, InboundReplyLink.buildInboundReplyUrl("youtube", original, "DefiDelilah"))
-    }
-
-    /**
-     * Regression coverage for a third real bug, found live immediately
-     * after the second fix above shipped: once the composer pre-filled
-     * "@handle ", pasting the clipboard draft on top of it landed BEFORE
-     * the mention, not after -- the composer's cursor sits at the start of
-     * pre-filled text, not the end. Fixed by building the complete
-     * "@handle <reply>" text ourselves, in the correct order, so there is
-     * nothing left to paste into the wrong position for a plain reply.
-     */
-    @Test
-    fun `puts the @handle mention BEFORE the drafted reply, in one pre-filled text param`() {
-        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", "DefiDelilah", "Happy to help!")
-        assertEquals("https://x.com/intent/post?in_reply_to=501&text=%40DefiDelilah+Happy+to+help%21", url)
-    }
-
-    @Test
-    fun `uses just the drafted reply when no author handle is known`() {
-        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", null, "Happy to help!")
-        assertEquals("https://x.com/intent/post?in_reply_to=501&text=Happy+to+help%21", url)
-    }
-
-    @Test
-    fun `trims the drafted reply and ignores a blank one`() {
-        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501", "DefiDelilah", "   ")
-        assertEquals("https://x.com/intent/post?in_reply_to=501&text=%40DefiDelilah", url)
-    }
-
-    /**
      * Regression coverage for a real incident: x.com/intent/post reserves
      * an extra blank editable line above pre-filled text, purely cosmetic.
      * Switching to twitter.com/intent/tweet (same in_reply_to/text params)
@@ -124,6 +95,15 @@ class InboundReplyLinkTest {
      */
     @Test
     fun `stays on x-com's intent-post endpoint -- twitter-com's intent-tweet was confirmed to drop in_reply_to entirely`() {
+        val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501")
+        assertEquals("https://x.com/intent/post?in_reply_to=501", url)
+    }
+
+    @Test
+    fun `never varies by platform beyond the x-vs-not-x check -- no authorHandle or draftReply parameter exists to accidentally reintroduce a text param`() {
+        // buildInboundReplyUrl takes exactly (platform, sourceReference) --
+        // if this signature ever grows a third parameter again, it's worth
+        // re-reading this class's own kdoc first.
         val url = InboundReplyLink.buildInboundReplyUrl("x", "https://x.com/someTrader/status/501")
         assertEquals("https://x.com/intent/post?in_reply_to=501", url)
     }

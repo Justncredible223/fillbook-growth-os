@@ -4,11 +4,30 @@ import java.net.URLEncoder
 
 /**
  * Builds the correct "reply in context" link for an Inbound X engagement.
+ *
  * Opening a tweet's own plain URL lands on X's generic composer, which
  * does NOT pre-fill "Replying to @..." -- risking the owner's reply
  * posting as a brand-new standalone post instead of a real reply. X's
  * reply-intent URL (https://x.com/intent/post?in_reply_to=<tweet_id>)
  * opens the real in-context reply composer instead.
+ *
+ * Deliberately does NOT also pass a `text` param -- a real, confirmed
+ * usability bug found live: X's Android app renders any `text` supplied
+ * to a reply-intent starting on a SECOND line, with the cursor landing on
+ * a reserved blank first line above it (as if for the owner's own added
+ * comment on top of "quoted" content) -- unlike a genuine manual reply
+ * (tapping Reply inside X's own UI), which starts the owner at row 1.
+ * This happens purely because a `text` param is present at all,
+ * regardless of which reply-intent host receives it (already confirmed
+ * against x.com/intent/post; twitter.com/intent/tweet was separately
+ * tried and ruled out for an unrelated, worse reason -- see the
+ * regression test below). Dropping `text` entirely means the composer
+ * opens exactly like a genuine manual reply: correctly threaded
+ * (in_reply_to is untouched), cursor at row 1. This is a deliberate
+ * choice, not a gap: no mention is auto-inserted anywhere (URL or
+ * clipboard) -- the owner copies the drafted reply from InboundScreen
+ * and pastes/types whatever they want at row 1 themselves, same as a
+ * genuine manual reply would require anyway.
  *
  * Only ever used from InboundScreen's own copyAndOpen -- Prospecting
  * (ProspectingScreen.kt) and Today's X Post keep opening their own
@@ -33,39 +52,18 @@ object InboundReplyLink {
      * an unrecognized URL shape, or a null reference -- never silently
      * drops a real link the owner could still open.
      *
-     * Also pre-fills the composer's `text` param with "@handle " followed
-     * by [draftReply] (when either is known). Two real bugs found live,
-     * fixed by the same change: (1) the native X app's in_reply_to autofill
-     * does NOT insert "@handle " as actual text the way x.com's own web
-     * intent page does -- the owner got a blank box with no @-mention at
-     * all; (2) once we started pre-filling just "@handle ", pasting the
-     * drafted reply (still copied to the clipboard separately) landed
-     * BEFORE that mention rather than after it -- the composer's cursor
-     * doesn't sit at the end of pre-filled text, it sits at the start.
-     * Building the complete "@handle <reply>" text ourselves, in the
-     * correct order, sidesteps that cursor position entirely -- there is
-     * nothing left to paste for a plain no-link reply, only to review.
-     *
-     * MUST stay on x.com/intent/post -- twitter.com/intent/tweet was tried
-     * live (with the exact same in_reply_to/text params) specifically to
-     * remove a reserved blank line the native X app puts above pre-filled
-     * text, but verified live via the account's own Chrome session that it
-     * silently drops in_reply_to entirely: the resulting post has no
-     * "Replying to @handle" context, doesn't appear on the account's
-     * Replies tab, and is a brand-new standalone tweet that merely mentions
-     * the person by name -- worse than the cosmetic blank line it was
-     * meant to fix. Reverted; the blank line stays as a one-keystroke
-     * backspace the owner has to do, in exchange for a REAL threaded reply.
+     * MUST stay on x.com/intent/post, and MUST NOT gain a `text` param
+     * again without live, on-account re-verification -- see this
+     * object's own kdoc above for why both matter, and
+     * InboundReplyLinkTest's regression tests for the two separate real
+     * incidents (broken threading, then the reserved-blank-line bug)
+     * that make this history worth re-reading before changing either.
      */
-    fun buildInboundReplyUrl(platform: String, sourceReference: String?, authorHandle: String? = null, draftReply: String? = null): String? {
+    fun buildInboundReplyUrl(platform: String, sourceReference: String?): String? {
         if (sourceReference == null) return null
         if (platform.lowercase() != "x") return sourceReference
         val tweetId = extractTweetId(sourceReference) ?: return sourceReference
         val encodedId = URLEncoder.encode(tweetId, "UTF-8")
-        val base = "https://x.com/intent/post?in_reply_to=$encodedId"
-        val mention = if (authorHandle.isNullOrBlank()) null else "@$authorHandle"
-        val reply = draftReply?.trim()?.takeIf { it.isNotEmpty() }
-        val text = listOfNotNull(mention, reply).joinToString(" ").takeIf { it.isNotEmpty() } ?: return base
-        return "$base&text=${URLEncoder.encode(text, "UTF-8")}"
+        return "https://x.com/intent/post?in_reply_to=$encodedId"
     }
 }
