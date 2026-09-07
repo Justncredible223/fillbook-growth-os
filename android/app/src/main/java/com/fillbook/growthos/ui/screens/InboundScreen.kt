@@ -65,6 +65,7 @@ import com.fillbook.growthos.ui.components.inboundPriorityLabel
 import com.fillbook.growthos.ui.components.inboundStatusLabel
 import com.fillbook.growthos.ui.components.inboundStatusTone
 import com.fillbook.growthos.ui.components.InboundReplyLink
+import com.fillbook.growthos.ui.components.InboundReplyReminder
 import com.fillbook.growthos.ui.components.openExternalUrl
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
@@ -156,7 +157,16 @@ fun InboundScreen(repo: GrowthOsRepository) {
         // here.
         val urlToOpen = InboundReplyLink.buildInboundReplyUrl(item.platform, sourceReference, item.authorHandle, draft)
         val opened = urlToOpen != null && openExternalUrl(context, urlToOpen)
-        val message = PlatformActions.copyAndOpenMessage(
+        // When X actually opened, remind the owner to verify the reply
+        // really posted before marking this item responded -- the app has
+        // no way to confirm X's own Post action actually succeeded (it can
+        // silently fail with no error surfaced back to us), so this is the
+        // one place that guards against tapping "Mark responded" on a
+        // reply that never reached X. Falls back to PlatformActions' own
+        // message for every other case (nothing copied, nothing to open,
+        // or the platform failed to launch) -- those stay exactly as
+        // before, since implying "opened" there would be wrong.
+        val message = InboundReplyReminder.message(opened) ?: PlatformActions.copyAndOpenMessage(
             platform = item.platform,
             copied = draft != null,
             hadLink = sourceReference != null,
