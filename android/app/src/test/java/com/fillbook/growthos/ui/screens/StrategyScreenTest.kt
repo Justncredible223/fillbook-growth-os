@@ -51,3 +51,21 @@ class StrategyScreenEmptyStateStructureTest {
         }
     }
 }
+
+/**
+ * Regression guard for the UX-consistency audit finding (2026-09-07): this
+ * screen used a bare LoadingIndicator() instead of the list-shaped
+ * SkeletonListLoading() every sibling screen uses -- inconsistent loading
+ * UX, not a functional bug, but flagged for release.
+ */
+class StrategyScreenLoadingStateStructureTest {
+    @Test
+    fun `the loading branch uses SkeletonListLoading, not a bare LoadingIndicator`() {
+        val file = java.io.File("src/main/java/com/fillbook/growthos/ui/screens/StrategyScreen.kt")
+            .let { if (it.exists()) it else java.io.File("app/src/main/java/com/fillbook/growthos/ui/screens/StrategyScreen.kt") }
+        check(file.exists()) { "Could not locate StrategyScreen.kt from working directory ${java.io.File(".").absolutePath}." }
+        val source = file.readText()
+        check(source.contains("SkeletonListLoading()")) { "Expected StrategyScreen to use SkeletonListLoading() for its loading state." }
+        check(!source.contains("LoadingIndicator()")) { "Expected StrategyScreen to no longer use a bare LoadingIndicator()." }
+    }
+}

@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.DraftRejectedException
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.ProspectingCandidate
 import com.fillbook.growthos.data.ProspectingDiagnostics
 import com.fillbook.growthos.ui.components.ExpandableText
@@ -113,7 +114,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
             diagnostics = result.diagnostics
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load Prospecting. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load Prospecting. Check your connection and try again."
         }
         loaded = true
     }

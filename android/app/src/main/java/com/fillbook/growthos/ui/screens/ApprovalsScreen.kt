@@ -35,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.ApprovalAsset
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.CopyButton
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GhostButton
@@ -98,7 +100,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
     var refreshing by remember { mutableStateOf(false) }
     var pendingReject by remember { mutableStateOf<ApprovalAsset?>(null) }
     var pendingRenderConfirm by remember { mutableStateOf<ApprovalAsset?>(null) }
-    var query by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
     // Guards against a fast double-tap firing decideApproval twice for the
     // same asset before the first call's refresh() completes -- every other
     // screen with an in-flight mutating action (Inbound, Prospecting,
@@ -115,7 +117,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             assets = repo.getApprovals()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load approvals. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load approvals. Check your connection and try again."
         }
         loaded = true
     }
@@ -214,6 +216,19 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        // "No matches" state for a search that returns zero
+                        // results (2026-09-07 release audit finding) --
+                        // previously this silently rendered an empty list
+                        // with no indication the search itself was the reason.
+                        if (filtered.isEmpty()) {
+                            item {
+                                PolishedEmptyState(
+                                    icon = Icons.Filled.CheckCircle,
+                                    headline = "No matches",
+                                    subtitle = "No drafts match \"$query\".",
+                                )
+                            }
+                        }
                         items(filtered, key = { it.id }) { asset ->
                             ApprovalCard(
                                 asset = asset,

@@ -68,3 +68,25 @@ class CreatorsScreenEmptyStateStructureTest {
         }
     }
 }
+
+/**
+ * Regression guard for the process-recreation audit finding (2026-09-07):
+ * the search query used plain `remember`, so it was silently lost on
+ * rotation/process death.
+ */
+class CreatorsScreenStateRestorationStructureTest {
+    private fun screenSource(): String {
+        val file = java.io.File("src/main/java/com/fillbook/growthos/ui/screens/CreatorsScreen.kt")
+            .let { if (it.exists()) it else java.io.File("app/src/main/java/com/fillbook/growthos/ui/screens/CreatorsScreen.kt") }
+        check(file.exists()) { "Could not locate CreatorsScreen.kt from working directory ${java.io.File(".").absolutePath}." }
+        return file.readText()
+    }
+
+    @Test
+    fun `the search query survives process recreation via rememberSaveable, not plain remember`() {
+        check(screenSource().contains("var query by rememberSaveable { mutableStateOf(\"\") }")) {
+            "Expected CreatorsScreen's search query to use rememberSaveable, not remember -- otherwise a " +
+                "typed search is silently lost on rotation/process death."
+        }
+    }
+}

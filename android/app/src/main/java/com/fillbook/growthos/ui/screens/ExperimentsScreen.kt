@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.Experiment
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.ExperimentList
 import com.fillbook.growthos.ui.components.GhostButton
 import com.fillbook.growthos.ui.components.GrowthCard
@@ -72,7 +74,7 @@ fun ExperimentsScreen(repo: GrowthOsRepository) {
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
-    var showCreateDialog by remember { mutableStateOf(false) }
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
     var busyId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -81,7 +83,7 @@ fun ExperimentsScreen(repo: GrowthOsRepository) {
             experiments = repo.getExperiments()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load experiments. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load experiments. Check your connection and try again."
         }
         loaded = true
     }
@@ -240,9 +242,9 @@ private fun CreateExperimentDialog(
     onDismiss: () -> Unit,
     onCreate: (hypothesis: String, platform: String, assetType: String, controlWindowDays: Int) -> Unit,
 ) {
-    var hypothesis by remember { mutableStateOf("") }
-    var platform by remember { mutableStateOf("") }
-    var assetType by remember { mutableStateOf("") }
+    var hypothesis by rememberSaveable { mutableStateOf("") }
+    var platform by rememberSaveable { mutableStateOf("") }
+    var assetType by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,

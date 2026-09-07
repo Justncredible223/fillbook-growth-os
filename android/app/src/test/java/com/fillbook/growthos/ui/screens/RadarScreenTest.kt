@@ -68,3 +68,65 @@ class RadarScreenEmptyStateStructureTest {
         }
     }
 }
+
+/**
+ * Regression guard for the process-recreation audit finding (2026-09-07):
+ * a typed search query or an active type filter used plain `remember`, so
+ * it was silently lost on rotation/process death -- confirmed by
+ * inspection against HomeScreen's own X-post textarea, which already used
+ * rememberSaveable correctly. String/String? are natively supported by
+ * rememberSaveable's default saver, so this is a one-word fix with no
+ * custom Saver required.
+ */
+class RadarScreenStateRestorationStructureTest {
+    private fun screenSource(): String {
+        val file = java.io.File("src/main/java/com/fillbook/growthos/ui/screens/RadarScreen.kt")
+            .let { if (it.exists()) it else java.io.File("app/src/main/java/com/fillbook/growthos/ui/screens/RadarScreen.kt") }
+        check(file.exists()) { "Could not locate RadarScreen.kt from working directory ${java.io.File(".").absolutePath}." }
+        return file.readText()
+    }
+
+    @Test
+    fun `the search query survives process recreation via rememberSaveable, not plain remember`() {
+        check(screenSource().contains("var query by rememberSaveable { mutableStateOf(\"\") }")) {
+            "Expected RadarScreen's search query to use rememberSaveable, not remember -- otherwise a typed " +
+                "search is silently lost on rotation/process death."
+        }
+    }
+
+    @Test
+    fun `the type filter survives process recreation via rememberSaveable, not plain remember`() {
+        check(screenSource().contains("var typeFilter by rememberSaveable { mutableStateOf<String?>(null) }")) {
+            "Expected RadarScreen's type filter to use rememberSaveable, not remember -- otherwise an active " +
+                "filter chip is silently lost on rotation/process death."
+        }
+    }
+}
+
+/**
+ * Regression guard for the UX-consistency audit finding (2026-09-07):
+ * unlike Inbound/Prospecting/Partnerships, this screen's draft-reply
+ * failure had no specific handler for DraftRejectedException, so a real,
+ * actionable guardrail rejection always showed the same generic "check
+ * your connection" message instead.
+ */
+class RadarScreenDraftReplyErrorStructureTest {
+    @Test
+    fun `startReply catches DraftRejectedException specifically, before the generic Exception catch`() {
+        val file = java.io.File("src/main/java/com/fillbook/growthos/ui/screens/RadarScreen.kt")
+            .let { if (it.exists()) it else java.io.File("app/src/main/java/com/fillbook/growthos/ui/screens/RadarScreen.kt") }
+        check(file.exists()) { "Could not locate RadarScreen.kt from working directory ${java.io.File(".").absolutePath}." }
+        val source = file.readText()
+
+        val startReplyIndex = source.indexOf("fun startReply(opp: Opportunity)")
+        check(startReplyIndex >= 0) { "Could not find startReply() -- has it been renamed or restructured?" }
+        val specificCatchIndex = source.indexOf("catch (e: DraftRejectedException)", startReplyIndex)
+        val genericCatchIndex = source.indexOf("catch (e: Exception)", startReplyIndex)
+        check(specificCatchIndex >= 0) { "Expected startReply() to catch DraftRejectedException specifically." }
+        check(genericCatchIndex >= 0) { "Expected startReply() to still have a generic catch (e: Exception) fallback." }
+        check(specificCatchIndex < genericCatchIndex) {
+            "DraftRejectedException must be caught BEFORE the generic Exception catch, or the specific " +
+                "catch is unreachable (DraftRejectedException would already have matched the generic one)."
+        }
+    }
+}

@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.AppNotification
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.Pill
@@ -78,7 +79,7 @@ fun NotificationsScreen(repo: GrowthOsRepository) {
             unreadCount = unread
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load notifications. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load notifications. Check your connection and try again."
         }
         loaded = true
     }

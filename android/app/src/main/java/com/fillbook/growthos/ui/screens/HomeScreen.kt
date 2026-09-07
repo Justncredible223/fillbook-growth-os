@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.HealthItem
 import com.fillbook.growthos.data.HomeSummary
 import com.fillbook.growthos.data.InboundSummary
@@ -122,7 +123,7 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
             errorMessage = null
         } catch (e: Exception) {
             android.util.Log.e("GrowthOsDiag", "refresh() failed", e)
-            errorMessage = "Couldn't reach Growth OS. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't reach Growth OS. Check your connection and try again."
         }
         loaded = true
     }

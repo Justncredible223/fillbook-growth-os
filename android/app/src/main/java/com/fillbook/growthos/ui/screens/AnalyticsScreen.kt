@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import com.fillbook.growthos.ui.components.PolishedEmptyState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,10 +33,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.AnalyticsBreakdown
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.BreakdownBar
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.InsetRow
-import com.fillbook.growthos.ui.components.LoadingIndicator
+import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.MetricTile
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.assetStageDisplayName
@@ -70,7 +72,7 @@ fun AnalyticsScreen(repo: GrowthOsRepository) {
             analytics = repo.getHomeSummary().analytics
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load analytics. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load analytics. Check your connection and try again."
         }
         loaded = true
     }
@@ -92,9 +94,20 @@ fun AnalyticsScreen(repo: GrowthOsRepository) {
         }
 
         if (!loaded) {
-            LoadingIndicator()
+            SkeletonListLoading()
         } else {
-            analytics?.let { data ->
+            // Honest visible state for the "loaded, no error, but analytics
+            // is still null" gap found in the 2026-09-07 release audit --
+            // previously this branch rendered nothing at all if the server
+            // ever returned an empty/malformed payload.
+            val data = analytics
+            if (data == null) {
+                PolishedEmptyState(
+                    icon = Icons.Filled.Inbox,
+                    headline = "No analytics yet",
+                    subtitle = "Metrics will appear here once the system has processed some activity.",
+                )
+            } else {
                 PullToRefreshBox(
                     isRefreshing = refreshing,
                     onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },

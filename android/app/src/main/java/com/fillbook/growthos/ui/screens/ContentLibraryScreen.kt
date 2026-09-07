@@ -29,12 +29,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.CopyButton
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
@@ -72,7 +74,7 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
     var allAssets by remember { mutableStateOf<List<CampaignAsset>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var stageFilter by remember { mutableStateOf<String?>(null) }
+    var stageFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
@@ -82,7 +84,7 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
             allAssets = campaigns.flatMap { it.assets }.filter { it.latestBody != null }
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load the content library. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load the content library. Check your connection and try again."
         }
         loaded = true
     }

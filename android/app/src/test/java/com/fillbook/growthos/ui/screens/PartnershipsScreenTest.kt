@@ -203,3 +203,67 @@ class PartnershipsScreenEmptyStateStructureTest {
         }
     }
 }
+
+/**
+ * Regression guard for the process-recreation audit finding (2026-09-07):
+ * "Add prospect" and "Start pilot" dialog input used plain `remember`, so
+ * typed text was silently lost on rotation/process death; the dialogs'
+ * own open/closed state had the same problem. Fixed with rememberSaveable
+ * throughout -- except the pilot dialog's own trigger, which now stores
+ * only the prospect's id (a String), never the PartnershipProspect object
+ * itself, since a network/domain object is not parcelable/serializable
+ * and must never be put in a Bundle.
+ */
+class PartnershipsScreenStateRestorationStructureTest {
+    private fun screenSource(): String {
+        val file = java.io.File("src/main/java/com/fillbook/growthos/ui/screens/PartnershipsScreen.kt")
+            .let { if (it.exists()) it else java.io.File("app/src/main/java/com/fillbook/growthos/ui/screens/PartnershipsScreen.kt") }
+        check(file.exists()) { "Could not locate PartnershipsScreen.kt from working directory ${java.io.File(".").absolutePath}." }
+        return file.readText()
+    }
+
+    @Test
+    fun `the create-dialog visibility flag survives process recreation via rememberSaveable`() {
+        check(screenSource().contains("var showCreateDialog by rememberSaveable { mutableStateOf(false) }")) {
+            "Expected showCreateDialog to use rememberSaveable, not remember -- otherwise the open Add " +
+                "prospect dialog silently closes on rotation/process death."
+        }
+    }
+
+    @Test
+    fun `the pilot dialog's trigger stores only the prospect id, never the domain object, and survives process recreation`() {
+        val source = screenSource()
+        check(source.contains("var pilotDialogProspectId by rememberSaveable { mutableStateOf<String?>(null) }")) {
+            "Expected pilotDialogProspectId (a String?) to use rememberSaveable -- storing only the id (not " +
+                "the PartnershipProspect object) is what makes preserving this dialog's open state across " +
+                "rotation/process death practical without putting a non-parcelable domain object in a Bundle."
+        }
+        check(!source.contains("mutableStateOf<PartnershipProspect?>")) {
+            "A PartnershipProspect (network/domain object) must never be stored directly in remember or " +
+                "rememberSaveable -- it isn't parcelable/serializable. Store its id and look the object up " +
+                "from the current `items` list instead."
+        }
+    }
+
+    @Test
+    fun `Add-prospect dialog fields (organizationName, websiteUrl, collaboration, category) survive process recreation`() {
+        val source = screenSource()
+        for (field in listOf("organizationName", "websiteUrl", "collaboration", "category")) {
+            check(source.contains("var $field by rememberSaveable")) {
+                "Expected CreatePartnershipDialog's '$field' field to use rememberSaveable, not remember -- " +
+                    "otherwise typed input is silently lost on rotation/process death."
+            }
+        }
+    }
+
+    @Test
+    fun `Start-pilot dialog fields (termsAgreed, startDate) survive process recreation`() {
+        val source = screenSource()
+        for (field in listOf("termsAgreed", "startDate")) {
+            check(source.contains("var $field by rememberSaveable")) {
+                "Expected StartPilotDialog's '$field' field to use rememberSaveable, not remember -- " +
+                    "otherwise typed input is silently lost on rotation/process death."
+            }
+        }
+    }
+}

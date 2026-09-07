@@ -35,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,7 +44,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import com.fillbook.growthos.data.DraftRejectedException
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.Opportunity
 import com.fillbook.growthos.ui.components.GhostButton
 import com.fillbook.growthos.ui.components.GrowthCard
@@ -81,10 +84,10 @@ fun RadarScreen(repo: GrowthOsRepository) {
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
     // null = All. "engagement"/"campaign" narrow to Opportunity.isEngagementOpportunity --
     // the same real-data discriminator the card CTA branching already uses, not a new concept.
-    var typeFilter by remember { mutableStateOf<String?>(null) }
+    var typeFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingRun by remember { mutableStateOf<Opportunity?>(null) }
     var runningId by remember { mutableStateOf<String?>(null) }
     var runResultMessage by remember { mutableStateOf<String?>(null) }
@@ -101,7 +104,7 @@ fun RadarScreen(repo: GrowthOsRepository) {
             opportunities = repo.getOpportunities()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load opportunities. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load opportunities. Check your connection and try again."
         }
         loaded = true
     }
@@ -134,8 +137,16 @@ fun RadarScreen(repo: GrowthOsRepository) {
             try {
                 replyDraft = repo.draftOpportunityReply(opp.id)
                 pendingReply = opp
+            } catch (e: DraftRejectedException) {
+                // A real, meaningful rejection (the reply guardrail catching a
+                // banned phrase, an unverified claim, or an undeclared link) --
+                // never a connectivity problem. Shown directly, same pattern
+                // already used by Inbound/Prospecting/Partnerships (2026-09-07
+                // release audit finding: this screen was the one place still
+                // falling back to the generic message below for this case).
+                replyError = e.shortReason
             } catch (e: Exception) {
-                replyError = "Couldn't draft a reply. Check your connection and try again."
+                replyError = authErrorMessage(e) ?: "Couldn't draft a reply. Check your connection and try again."
             }
             draftingReplyId = null
         }

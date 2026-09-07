@@ -196,7 +196,24 @@ class NetworkGrowthOsRepository(
 
     override suspend fun draftOpportunityReply(opportunityId: String): String {
         val body = JSONObject().put("action", "draft-reply").put("opportunityId", opportunityId)
-        val json = post("/api/opportunities", body)
+        // Real gap found in the 2026-09-07 release audit: unlike
+        // draftInboundResponse/draftProspectingReply/generatePartnershipDraft
+        // (all routed through postExpectingDraftRejection), this call used
+        // the plain post() helper, so a real, actionable rejection reason
+        // from opportunities.ts's OpportunityReplyError (HTTP 400 --
+        // different status than the Partnerships/Inbound/Prospecting 404
+        // pattern, since this is a distinct backend route) fell through as
+        // a bare NetworkException. RadarScreen's catch (e: Exception) has
+        // no specific handler for that, so it silently became "Couldn't
+        // draft a reply. Check your connection and try again." instead of
+        // the real guardrail reason.
+        val json = try {
+            post("/api/opportunities", body)
+        } catch (e: NetworkException) {
+            val parsedError = extractOpportunityReplyErrorMessage(e.httpCode, e.message)
+            if (parsedError != null) throw DraftRejectedException(parsedError)
+            throw e
+        }
         return json.getString("draft")
     }
 
@@ -809,6 +826,26 @@ class NetworkGrowthOsRepository(
 class NetworkException(message: String, val httpCode: Int? = null) : Exception(message)
 
 /**
+ * A 401/403 means the app's own APP_API_TOKEN is missing, stale, or was
+ * rotated server-side without a matching APK rebuild (see
+ * requireAppAuth.ts) -- fundamentally different from a network/offline
+ * failure, and no amount of tapping Retry fixes it. Every screen's
+ * "couldn't load" catch block used to show the same generic "check your
+ * connection" message for both cases even though [NetworkException]
+ * already captured [NetworkException.httpCode] -- confirmed as a real gap
+ * in the 2026-09-07 release audit. Returns null (never a message) for
+ * anything else, including a bare offline/timeout failure, so callers
+ * keep their own existing fallback text and existing Retry behavior
+ * unchanged.
+ */
+fun authErrorMessage(e: Throwable): String? =
+    if (e is NetworkException && (e.httpCode == 401 || e.httpCode == 403)) {
+        "Authentication expired. Reopen the app or reinstall the current APK."
+    } else {
+        null
+    }
+
+/**
  * Pure, unit-testable parsing for the `{id, title, score}`-shaped JSON both
  * getMorningBrief's topNewOpportunities and getEveningReport's topOpportunity
  * produce. `id` is deliberately optional (production bug, 2026-09-07): the
@@ -857,6 +894,26 @@ private fun unescapeJsonString(s: String): String =
 
 fun extractPartnershipActionErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
     if (httpCode != 404) return null
+    val body = networkExceptionMessage?.substringAfter(" -- ", missingDelimiterValue = "") ?: return null
+    if (body.isBlank()) return null
+    val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null
+    val error = unescapeJsonString(raw)
+    return error.takeIf { it.isNotBlank() }
+}
+
+/**
+ * Same idea as extractPartnershipActionErrorMessage, but for
+ * opportunities.ts's draft-reply action specifically, which converts a
+ * thrown OpportunityReplyError into HTTP 400 (backend/api/opportunities.ts's
+ * own catch block) -- a different status than the Partnerships/Inbound/
+ * Prospecting 404 pattern, since this is a separate backend route with its
+ * own error-status convention. Confirmed as a real gap in the 2026-09-07
+ * release audit: without this, RadarScreen's draft-reply failure always
+ * showed the same generic "check your connection" message, discarding the
+ * real, actionable rejection reason the backend had already sent.
+ */
+fun extractOpportunityReplyErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
+    if (httpCode != 400) return null
     val body = networkExceptionMessage?.substringAfter(" -- ", missingDelimiterValue = "") ?: return null
     if (body.isBlank()) return null
     val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null

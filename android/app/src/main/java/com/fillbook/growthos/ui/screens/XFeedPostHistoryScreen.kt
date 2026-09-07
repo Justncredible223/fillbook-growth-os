@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.XFeedPostHistoryEntry
 import com.fillbook.growthos.data.XFeedPostHistoryState
 import com.fillbook.growthos.ui.components.CopyButton
@@ -65,7 +66,7 @@ fun XFeedPostHistoryScreen(repo: GrowthOsRepository) {
             entries = repo.getTodayXPostHistory()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load previous drafts. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load previous drafts. Check your connection and try again."
         }
         loaded = true
     }

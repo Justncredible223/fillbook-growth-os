@@ -34,6 +34,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.DraftRejectedException
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.InboundEngagement
 import com.fillbook.growthos.data.InboundSummary
 import com.fillbook.growthos.ui.components.ExpandableText
@@ -109,7 +111,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
     // active statuses), same as the pre-filter behavior. Reconciled against
     // the live list after every refresh (see InboundFilter.reconcile) so it
     // can never point at a status with no remaining items.
-    var statusFilter by remember { mutableStateOf<String?>(null) }
+    var statusFilter by rememberSaveable { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -122,7 +124,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
             statusFilter = InboundFilter.reconcile(statusFilter, fresh.map { it.status })
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load inbound engagement. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load inbound engagement. Check your connection and try again."
         }
         loaded = true
     }

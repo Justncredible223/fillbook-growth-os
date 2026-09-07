@@ -40,13 +40,14 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.CreatorOpportunity
 import com.fillbook.growthos.data.ExperimentSuggestion
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.SeoOpportunity
 import com.fillbook.growthos.data.StrategyItem
 import com.fillbook.growthos.data.StrategyVersion
 import com.fillbook.growthos.ui.components.GhostButton
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.InsetRow
-import com.fillbook.growthos.ui.components.LoadingIndicator
+import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
@@ -83,7 +84,7 @@ fun StrategyScreen(repo: GrowthOsRepository) {
             strategy = repo.getLatestStrategy()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load the strategy report. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load the strategy report. Check your connection and try again."
         }
         loaded = true
     }
@@ -95,7 +96,7 @@ fun StrategyScreen(repo: GrowthOsRepository) {
                 strategy = repo.regenerateStrategy()
                 errorMessage = null
             } catch (e: Exception) {
-                errorMessage = "Couldn't generate a new report. Check your connection and try again."
+                errorMessage = authErrorMessage(e) ?: "Couldn't generate a new report. Check your connection and try again."
             }
             regenerating = false
         }
@@ -118,7 +119,7 @@ fun StrategyScreen(repo: GrowthOsRepository) {
         }
 
         if (!loaded) {
-            LoadingIndicator()
+            SkeletonListLoading()
         } else {
             val current = strategy
             if (current == null) {

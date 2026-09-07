@@ -42,10 +42,11 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.AutoDraftStatus
 import com.fillbook.growthos.data.CostSummary
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.HealthItem
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.HealthDot
-import com.fillbook.growthos.ui.components.LoadingIndicator
+import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.MetricTile
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.QuietStatusLabel
@@ -98,7 +99,7 @@ fun SystemScreen(repo: GrowthOsRepository) {
             systemPaused = summary.systemPaused
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't reach Growth OS. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't reach Growth OS. Check your connection and try again."
         }
         loaded = true
     }
@@ -144,7 +145,7 @@ fun SystemScreen(repo: GrowthOsRepository) {
         }
 
         if (!loaded) {
-            LoadingIndicator()
+            SkeletonListLoading()
         } else {
             PullToRefreshBox(
                 isRefreshing = refreshing,

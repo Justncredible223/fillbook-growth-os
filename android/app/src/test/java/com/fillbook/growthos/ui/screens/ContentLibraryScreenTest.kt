@@ -50,3 +50,25 @@ class ContentLibraryScreenEmptyStateStructureTest {
         }
     }
 }
+
+/**
+ * Regression guard for the process-recreation audit finding (2026-09-07):
+ * the active stage filter used plain `remember`, so it was silently lost
+ * on rotation/process death.
+ */
+class ContentLibraryScreenStateRestorationStructureTest {
+    private fun screenSource(): String {
+        val file = java.io.File("src/main/java/com/fillbook/growthos/ui/screens/ContentLibraryScreen.kt")
+            .let { if (it.exists()) it else java.io.File("app/src/main/java/com/fillbook/growthos/ui/screens/ContentLibraryScreen.kt") }
+        check(file.exists()) { "Could not locate ContentLibraryScreen.kt from working directory ${java.io.File(".").absolutePath}." }
+        return file.readText()
+    }
+
+    @Test
+    fun `the stage filter survives process recreation via rememberSaveable, not plain remember`() {
+        check(screenSource().contains("var stageFilter by rememberSaveable { mutableStateOf<String?>(null) }")) {
+            "Expected ContentLibraryScreen's stage filter to use rememberSaveable, not remember -- otherwise " +
+                "an active filter is silently lost on rotation/process death."
+        }
+    }
+}

@@ -83,3 +83,25 @@ class InboundScreenEmptyStateStructureTest {
         }
     }
 }
+
+/**
+ * Regression guard for the process-recreation audit finding (2026-09-07):
+ * the active status filter used plain `remember`, so it was silently lost
+ * on rotation/process death.
+ */
+class InboundScreenStateRestorationStructureTest {
+    private fun screenSource(): String {
+        val file = java.io.File("src/main/java/com/fillbook/growthos/ui/screens/InboundScreen.kt")
+            .let { if (it.exists()) it else java.io.File("app/src/main/java/com/fillbook/growthos/ui/screens/InboundScreen.kt") }
+        check(file.exists()) { "Could not locate InboundScreen.kt from working directory ${java.io.File(".").absolutePath}." }
+        return file.readText()
+    }
+
+    @Test
+    fun `the status filter survives process recreation via rememberSaveable, not plain remember`() {
+        check(screenSource().contains("var statusFilter by rememberSaveable { mutableStateOf<String?>(null) }")) {
+            "Expected InboundScreen's status filter to use rememberSaveable, not remember -- otherwise an " +
+                "active filter is silently lost on rotation/process death."
+        }
+    }
+}

@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.EveningReport
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.MetricTile
@@ -53,7 +54,7 @@ fun EveningReportScreen(repo: GrowthOsRepository) {
             report = repo.getEveningReport()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load the evening report. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load the evening report. Check your connection and try again."
         }
         loaded = true
     }

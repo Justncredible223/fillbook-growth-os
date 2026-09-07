@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.VideoRenderStatus
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
@@ -97,13 +98,24 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     var downloadedUris by remember { mutableStateOf<Map<String, Uri>>(emptyMap()) }
     // videoRenderId -> the system DownloadManager id for an in-flight download, so the completion receiver knows which render it belongs to.
     var pendingDownloads by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    // Duplicate-tap guard (2026-09-07 release audit): renderIds with a
+    // download currently in flight -- checked before starting a new one and
+    // used to disable/show-busy on that render's own Download button, so a
+    // rapid double-tap can't enqueue two DownloadManager requests for the
+    // same video. Released in every path: enqueue failure (synchronously,
+    // right in download()), and both the success and failure branches of
+    // the completion broadcast receiver below -- there is no user-facing
+    // cancel action in this screen, so "cancellation" here is exactly the
+    // same DownloadManager non-success outcome the failure branch already
+    // handles.
+    var downloadingIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     suspend fun refresh() {
         try {
             renders = repo.getVideoRenderStatuses()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load video status. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load video status. Check your connection and try again."
         }
         loaded = true
     }
@@ -134,9 +146,13 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                         // signed URL's ~1h expiry passed between fetching status
                         // and the download actually running -- pulling to
                         // refresh mints a fresh one (see videoStatusHandlers.ts).
+                        // Also where a user-cancelled download lands (DownloadManager
+                        // reports cancellation as a non-successful status, same as
+                        // any other failure) -- the guard below is released either way.
                         scope.launch { snackbarHostState.showSnackbar("Download failed — the link may have expired. Pull to refresh and try again.") }
                     }
                     pendingDownloads = pendingDownloads - id
+                    downloadingIds = downloadingIds - videoRenderId
                 }
             }
         }
@@ -146,6 +162,10 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     }
 
     fun download(render: VideoRenderStatus) {
+        // Defensive: the button itself is already disabled while this
+        // render's id is in downloadingIds, but a second tap can still land
+        // in the same frame before recomposition disables it.
+        if (render.id in downloadingIds) return
         val url = render.downloadUrl
         if (url == null) {
             scope.launch { snackbarHostState.showSnackbar("No download link yet — pull to refresh.") }
@@ -156,6 +176,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             scope.launch { snackbarHostState.showSnackbar("Downloads aren't available on this device.") }
             return
         }
+        downloadingIds = downloadingIds + render.id
         val fileName = "fillbook-video-${render.id}.mp4"
         val request = DownloadManager.Request(Uri.parse(url))
             .setTitle(fileName)
@@ -164,6 +185,10 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             .setMimeType("video/mp4")
         val id = runCatching { downloadManager.enqueue(request) }.getOrNull()
         if (id == null) {
+            // Enqueue itself failed (or threw) -- release the guard right
+            // here since no broadcast will ever arrive for a download that
+            // never started.
+            downloadingIds = downloadingIds - render.id
             scope.launch { snackbarHostState.showSnackbar("Couldn't start the download. Check your connection and try again.") }
             return
         }
@@ -241,6 +266,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                                 VideoRenderCard(
                                     render = render,
                                     alreadyDownloaded = downloadedUris.containsKey(render.id),
+                                    downloading = render.id in downloadingIds,
                                     onDownload = { download(render) },
                                     onShare = { share(render) },
                                 )
@@ -275,6 +301,7 @@ internal fun statusLabel(status: String): String = when (status) {
 private fun VideoRenderCard(
     render: VideoRenderStatus,
     alreadyDownloaded: Boolean,
+    downloading: Boolean,
     onDownload: () -> Unit,
     onShare: () -> Unit,
 ) {
@@ -317,7 +344,7 @@ private fun VideoRenderCard(
         if (render.status == "ready") {
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                PrimaryButton(text = "Download", onClick = onDownload, modifier = Modifier.weight(1f))
+                PrimaryButton(text = "Download", onClick = onDownload, enabled = !downloading, busy = downloading, modifier = Modifier.weight(1f))
                 SecondaryButton(text = "Share", onClick = onShare, enabled = alreadyDownloaded)
             }
             if (!alreadyDownloaded) {

@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,6 +43,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.PartnerCategory
 import com.fillbook.growthos.data.PartnershipDiscoveryRunResult
 import com.fillbook.growthos.data.PartnershipDraftRejectedException
@@ -94,9 +96,16 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
     var refreshing by remember { mutableStateOf(false) }
     var discoveryBusy by remember { mutableStateOf(false) }
     var busyId by remember { mutableStateOf<String?>(null) }
-    var showCreateDialog by remember { mutableStateOf(false) }
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
     var contactingId by remember { mutableStateOf<String?>(null) }
-    var pilotDialogProspect by remember { mutableStateOf<PartnershipProspect?>(null) }
+    // Stores only the id (a plain String, safe for rememberSaveable), never
+    // the PartnershipProspect object itself -- a network/domain object isn't
+    // parcelable/serializable and must never be put in a Bundle. The actual
+    // prospect is looked up from `items` below, right where the dialog reads
+    // it, the same way any other id-keyed UI state in this app already
+    // works (see editedDrafts). This is what makes preserving the pilot
+    // dialog's own open/closed state across rotation practical at all.
+    var pilotDialogProspectId by rememberSaveable { mutableStateOf<String?>(null) }
     var pilotDialogError by remember { mutableStateOf<String?>(null) }
     var pilotDialogBusy by remember { mutableStateOf(false) }
     // Owner edits to the generated pitch before it's sent -- keyed by
@@ -113,7 +122,7 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
             lastDiscoveryRun = summary.lastDiscoveryRun
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load Partnerships. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load Partnerships. Check your connection and try again."
         }
         loaded = true
     }
@@ -313,7 +322,7 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                                 runAction(prospect) { repo.markPartnershipContacted(prospect.id, channelForRoute(prospect.contactRoute), finalText) }
                             },
                             onRecordReply = { runAction(prospect) { repo.recordPartnershipReply(prospect.id, "Owner recorded a reply.") } },
-                            onStartPilot = { pilotDialogProspect = prospect },
+                            onStartPilot = { pilotDialogProspectId = prospect.id },
                             onArchive = { runAction(prospect) { repo.archivePartnership(prospect.id, "Not pursuing further.") } },
                             onDoNotContact = { runAction(prospect) { repo.markPartnershipDoNotContact(prospect.id, "Owner marked do-not-contact.") } },
                         )
@@ -350,7 +359,7 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                                     runAction(prospect) { repo.markPartnershipContacted(prospect.id, channelForRoute(prospect.contactRoute), finalText) }
                                 },
                                 onRecordReply = { runAction(prospect) { repo.recordPartnershipReply(prospect.id, "Owner recorded a reply.") } },
-                                onStartPilot = { pilotDialogProspect = prospect },
+                                onStartPilot = { pilotDialogProspectId = prospect.id },
                                 onArchive = { runAction(prospect) { repo.archivePartnership(prospect.id, "Not pursuing further.") } },
                                 onDoNotContact = { runAction(prospect) { repo.markPartnershipDoNotContact(prospect.id, "Owner marked do-not-contact.") } },
                             )
@@ -375,7 +384,7 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                                     runAction(prospect) { repo.markPartnershipContacted(prospect.id, channelForRoute(prospect.contactRoute), finalText) }
                                 },
                                 onRecordReply = { runAction(prospect) { repo.recordPartnershipReply(prospect.id, "Owner recorded a reply.") } },
-                                onStartPilot = { pilotDialogProspect = prospect },
+                                onStartPilot = { pilotDialogProspectId = prospect.id },
                                 onArchive = { runAction(prospect) { repo.archivePartnership(prospect.id, "Not pursuing further.") } },
                                 onDoNotContact = { runAction(prospect) { repo.markPartnershipDoNotContact(prospect.id, "Owner marked do-not-contact.") } },
                             )
@@ -405,19 +414,24 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
         )
     }
 
-    pilotDialogProspect?.let { prospect ->
+    // Looked up fresh from `items` every recomposition, rather than storing
+    // the prospect object itself -- see pilotDialogProspectId's own comment.
+    // A stale id that no longer matches anything (an unlikely but possible
+    // restored-from-a-very-old-Bundle edge case) just means the dialog
+    // silently doesn't reopen, never a crash.
+    items.firstOrNull { it.id == pilotDialogProspectId }?.let { prospect ->
         StartPilotDialog(
             organizationName = prospect.organizationName,
             busy = pilotDialogBusy,
             errorMessage = pilotDialogError,
-            onDismiss = { pilotDialogProspect = null; pilotDialogError = null },
+            onDismiss = { pilotDialogProspectId = null; pilotDialogError = null },
             onConfirm = { termsAgreed, startDate ->
                 scope.launch {
                     pilotDialogBusy = true
                     try {
                         repo.startPartnershipPilot(prospect.id, termsAgreed, startDate)
                         refresh()
-                        pilotDialogProspect = null
+                        pilotDialogProspectId = null
                         pilotDialogError = null
                     } catch (e: Exception) {
                         pilotDialogError = "Couldn't start the pilot. Check your connection and try again."
@@ -431,8 +445,8 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
 
 @Composable
 private fun StartPilotDialog(organizationName: String, busy: Boolean, errorMessage: String?, onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
-    var termsAgreed by remember { mutableStateOf("") }
-    var startDate by remember { mutableStateOf("") }
+    var termsAgreed by rememberSaveable { mutableStateOf("") }
+    var startDate by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
@@ -461,10 +475,13 @@ private fun StartPilotDialog(organizationName: String, busy: Boolean, errorMessa
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CreatePartnershipDialog(onDismiss: () -> Unit, onCreate: (String, PartnerCategory, String?, String?) -> Unit) {
-    var organizationName by remember { mutableStateOf("") }
-    var websiteUrl by remember { mutableStateOf("") }
-    var collaboration by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf(PartnerCategory.EDUCATOR_COACH) }
+    var organizationName by rememberSaveable { mutableStateOf("") }
+    var websiteUrl by rememberSaveable { mutableStateOf("") }
+    var collaboration by rememberSaveable { mutableStateOf("") }
+    // PartnerCategory is a Kotlin enum -- java.lang.Enum implements
+    // Serializable, so this is safe for rememberSaveable's default saver
+    // with no custom Saver needed.
+    var category by rememberSaveable { mutableStateOf(PartnerCategory.EDUCATOR_COACH) }
 
     AlertDialog(
         onDismissRequest = onDismiss,

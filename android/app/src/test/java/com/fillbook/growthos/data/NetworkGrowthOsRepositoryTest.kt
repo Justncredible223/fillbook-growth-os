@@ -112,3 +112,100 @@ class ParseOpportunitySummaryTest {
         assertThrows(JSONException::class.java) { parseOpportunitySummary(json) }
     }
 }
+
+/**
+ * Regression coverage for a real gap found in the 2026-09-07 release audit:
+ * NetworkException already captured httpCode specifically so callers could
+ * "tell an auth/config problem (401/500) apart from an unrelated server/
+ * network failure" (see its own doc comment), but nothing actually
+ * consulted it -- every screen's generic catch (e: Exception) showed the
+ * same "check your connection" message for a stale/rotated APP_API_TOKEN
+ * (401/403) as for a genuine offline failure, leaving the owner no way to
+ * tell "reinstall the APK" apart from "check your wifi."
+ */
+/**
+ * Regression coverage for a real gap found in the 2026-09-07 release
+ * audit: unlike draftInboundResponse/draftProspectingReply/
+ * generatePartnershipDraft (all routed through postExpectingDraftRejection
+ * for the Partnerships/Inbound/Prospecting 404 pattern), draftOpportunityReply
+ * used the plain post() helper, so opportunities.ts's OpportunityReplyError
+ * (a distinct HTTP 400 response, not 404) fell through as a bare
+ * NetworkException, silently replacing the real guardrail reason with
+ * RadarScreen's generic "Couldn't draft a reply. Check your connection and
+ * try again." message.
+ */
+class ExtractOpportunityReplyErrorMessageTest {
+    private fun networkExceptionMessage(httpCode: Int, body: String) = "POST /api/opportunities failed: HTTP $httpCode -- $body"
+
+    @Test
+    fun `extracts the real error message from a 400 OpportunityReplyError response`() {
+        val message = networkExceptionMessage(400, """{"error":"This opportunity no longer has enough verified context to draft a reply confidently."}""")
+        val result = extractOpportunityReplyErrorMessage(400, message)
+        assertEquals("This opportunity no longer has enough verified context to draft a reply confidently.", result)
+    }
+
+    @Test
+    fun `returns null for a non-400 status -- a genuine server or auth failure must still surface as NetworkException`() {
+        val message = networkExceptionMessage(500, """{"error":"internal error"}""")
+        assertNull(extractOpportunityReplyErrorMessage(500, message))
+    }
+
+    @Test
+    fun `returns null for a 404 -- that status belongs to the separate Partnerships-Inbound-Prospecting pattern, not this one`() {
+        val message = networkExceptionMessage(404, """{"error":"something"}""")
+        assertNull(extractOpportunityReplyErrorMessage(404, message))
+    }
+
+    @Test
+    fun `returns null for a 400 whose body isn't the expected JSON shape, rather than throwing`() {
+        assertNull(extractOpportunityReplyErrorMessage(400, "POST /api/opportunities failed: HTTP 400 -- not json at all"))
+    }
+
+    @Test
+    fun `returns null for a 400 with a blank error field`() {
+        val message = networkExceptionMessage(400, """{"error":""}""")
+        assertNull(extractOpportunityReplyErrorMessage(400, message))
+    }
+}
+
+class AuthErrorMessageTest {
+    @Test
+    fun `returns the auth-expired message for a 401`() {
+        val e = NetworkException("GET /api/summary failed: HTTP 401 -- {}", 401)
+        assertEquals("Authentication expired. Reopen the app or reinstall the current APK.", authErrorMessage(e))
+    }
+
+    @Test
+    fun `returns the auth-expired message for a 403`() {
+        val e = NetworkException("GET /api/summary failed: HTTP 403 -- {}", 403)
+        assertEquals("Authentication expired. Reopen the app or reinstall the current APK.", authErrorMessage(e))
+    }
+
+    @Test
+    fun `returns null for a 500 -- a genuine server failure, not an auth problem`() {
+        val e = NetworkException("GET /api/summary failed: HTTP 500 -- {}", 500)
+        assertNull(authErrorMessage(e))
+    }
+
+    @Test
+    fun `returns null for a 404 -- handled separately by extractPartnershipActionErrorMessage, not this gate`() {
+        val e = NetworkException("GET /api/summary failed: HTTP 404 -- {}", 404)
+        assertNull(authErrorMessage(e))
+    }
+
+    @Test
+    fun `returns null when httpCode is absent -- a real network failure never had one to check in the first place`() {
+        val e = NetworkException("GET /api/summary failed", null)
+        assertNull(authErrorMessage(e))
+    }
+
+    @Test
+    fun `returns null for a plain timeout -- OkHttp throws SocketTimeoutException, never a NetworkException with an httpCode`() {
+        assertNull(authErrorMessage(java.net.SocketTimeoutException("timeout")))
+    }
+
+    @Test
+    fun `returns null for a plain offline failure -- OkHttp throws UnknownHostException, never a NetworkException with an httpCode`() {
+        assertNull(authErrorMessage(java.net.UnknownHostException("Unable to resolve host")))
+    }
+}
