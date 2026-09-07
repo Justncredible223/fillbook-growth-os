@@ -180,4 +180,14 @@ dependencies {
     // `./gradlew :app:testDebugUnitTest`.
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    // The android.jar used for plain JVM unit tests stubs every method on
+    // platform classes (including org.json.JSONObject) to throw
+    // "RuntimeException: Stub!" -- see NetworkGrowthOsRepository.kt's own
+    // comment on why extractPartnershipActionErrorMessage avoids JSONObject
+    // entirely for this reason. This pulls in the real upstream org.json
+    // reference implementation instead, which the JVM unit test classpath
+    // resolves ahead of the stub -- the standard fix for this well-known
+    // Android/JVM-unit-test limitation, without pulling in Robolectric just
+    // to construct a JSONObject. Test-only; never ships in the APK.
+    testImplementation("org.json:json:20231013")
 }

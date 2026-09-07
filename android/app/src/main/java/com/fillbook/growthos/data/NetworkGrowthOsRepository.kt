@@ -736,11 +736,7 @@ class NetworkGrowthOsRepository(
         post("/api/summary?resource=notifications", JSONObject().put("action", "mark-all-read"))
     }
 
-    private fun JSONObject.toOpportunitySummary() = OpportunitySummary(
-        id = getString("id"),
-        title = getString("title"),
-        score = getDouble("score"),
-    )
+    private fun JSONObject.toOpportunitySummary() = parseOpportunitySummary(this)
 
     override suspend fun getMorningBrief(): MorningBrief {
         val json = get("/api/summary?resource=brief")
@@ -795,6 +791,27 @@ class NetworkGrowthOsRepository(
 
 /** [httpCode] lets callers tell an auth/config problem (401/500) apart from an unrelated server/network failure -- both used to surface as the same generic message before this existed. */
 class NetworkException(message: String, val httpCode: Int? = null) : Exception(message)
+
+/**
+ * Pure, unit-testable parsing for the `{id, title, score}`-shaped JSON both
+ * getMorningBrief's topNewOpportunities and getEveningReport's topOpportunity
+ * produce. `id` is deliberately optional (production bug, 2026-09-07): the
+ * evening-report resource's topOpportunity field (backend/api/summary.ts's
+ * handleEveningReport) only ever selects title/score, never id -- unlike the
+ * morning-brief resource's topNewOpportunities, which does include it.
+ * Neither EveningReportScreen nor MorningBriefScreen ever reads
+ * OpportunitySummary.id (both only render title/score), so requiring it
+ * unconditionally was an unnecessary, over-strict assumption that turned a
+ * missing-but-unneeded field into a hard parse failure -- confirmed live via
+ * a JSONException thrown from getString("id") every time evening-report's
+ * trailing-24h window had a real new opportunity to report, surfacing to the
+ * owner as a generic "check your connection" message instead of real data.
+ */
+fun parseOpportunitySummary(json: JSONObject) = OpportunitySummary(
+    id = json.optString("id", ""),
+    title = json.getString("title"),
+    score = json.getDouble("score"),
+)
 
 /**
  * Pure, unit-testable extraction of the real actionable message
