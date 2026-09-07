@@ -189,6 +189,51 @@ describe("runPartnershipDiscoveryStep", () => {
     expect(result.newCandidates).toBe(0);
   });
 
+  it("a SCHEDULED run skips entirely while the system is paused, before touching cadence, budget, or search", async () => {
+    const client = new FakeSupabaseClient({ creators: [], prospecting_candidates: [], inbound_engagements: [], partnership_prospects: [], cost_events: [] });
+    const adapter = fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] });
+
+    const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "scheduled", now: NOW, isPaused: async () => true });
+
+    expect(result.status).toBe("skipped_paused");
+    expect(result.newCandidates).toBe(0);
+    expect(result.costUsd).toBe(0);
+    expect(client.tables.partnership_prospects).toHaveLength(0);
+    // the pause check runs first -- never even reads the cadence-lookup table
+    expect(client.log.some((l) => l.table === "partnership_discovery_runs")).toBe(false);
+  });
+
+  it("an owner-triggered refresh (triggeredBy: 'owner') proceeds normally regardless of isPaused -- pausing must not block a manual refresh", async () => {
+    const client = new FakeSupabaseClient({ creators: [], prospecting_candidates: [], inbound_engagements: [], partnership_prospects: [], cost_events: [] });
+    const adapter = fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] });
+
+    const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW, isPaused: async () => true });
+
+    expect(result.status).toBe("found");
+    expect(result.newCandidates).toBe(1);
+  });
+
+  it("a SCHEDULED run proceeds normally when isPaused resolves false, and when it's omitted entirely (existing callers' contract is unchanged)", async () => {
+    const clientNotPaused = new FakeSupabaseClient({ creators: [], prospecting_candidates: [], inbound_engagements: [], partnership_prospects: [], cost_events: [] });
+    const resultNotPaused = await runPartnershipDiscoveryStep({
+      client: asSupabase(clientNotPaused),
+      adapter: fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] }),
+      triggeredBy: "scheduled",
+      now: NOW,
+      isPaused: async () => false,
+    });
+    expect(resultNotPaused.status).toBe("found");
+
+    const clientNoDep = new FakeSupabaseClient({ creators: [], prospecting_candidates: [], inbound_engagements: [], partnership_prospects: [], cost_events: [] });
+    const resultNoDep = await runPartnershipDiscoveryStep({
+      client: asSupabase(clientNoDep),
+      adapter: fakeAdapter({ "futures trading coach OR trading mentor": [xResult()] }),
+      triggeredBy: "scheduled",
+      now: NOW,
+    });
+    expect(resultNoDep.status).toBe("found");
+  });
+
   it("an owner-triggered force:true run proceeds even inside the 7-day scheduled cadence (once the minimum interval has passed)", async () => {
     const client = new FakeSupabaseClient({
       creators: [],

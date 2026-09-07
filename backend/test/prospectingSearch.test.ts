@@ -140,6 +140,56 @@ describe("runProspectingSearch", () => {
     expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
   });
 
+  it("skips entirely while the system is paused, before even checking the monthly budget or calling search", async () => {
+    const adapter = { searchRecentPosts: vi.fn() };
+    const repo = new FakeProspectingRepo();
+    const getMonthSpendUsd = vi.fn().mockResolvedValue(0);
+
+    const result = await runProspectingSearch({
+      adapter: adapter as any,
+      repo,
+      client: fakeSupabaseClient(),
+      getMonthSpendUsd,
+      isPaused: async () => true,
+      now,
+    });
+
+    expect(result.skipped).toBe(true);
+    expect(result.skipReason).toBe("system_paused");
+    expect(result.newCandidates).toBe(0);
+    expect(getMonthSpendUsd).not.toHaveBeenCalled();
+    expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
+  });
+
+  it("runs normally when isPaused resolves false, and when it's omitted entirely (existing callers' contract is unchanged)", async () => {
+    const post = searchResult({ id: "1", text: "how do you track your trades over time?" });
+
+    const repoNotPaused = new FakeProspectingRepo();
+    const adapterNotPaused = { searchRecentPosts: vi.fn().mockResolvedValue([post]) };
+    const resultNotPaused = await runProspectingSearch({
+      adapter: adapterNotPaused as any,
+      repo: repoNotPaused,
+      client: fakeSupabaseClient(),
+      getMonthSpendUsd: async () => 0,
+      isPaused: async () => false,
+      now,
+    });
+    expect(resultNotPaused.skipped).toBe(false);
+    expect(resultNotPaused.newCandidates).toBeGreaterThan(0);
+
+    const repoNoDep = new FakeProspectingRepo();
+    const adapterNoDep = { searchRecentPosts: vi.fn().mockResolvedValue([post]) };
+    const resultNoDep = await runProspectingSearch({
+      adapter: adapterNoDep as any,
+      repo: repoNoDep,
+      client: fakeSupabaseClient(),
+      getMonthSpendUsd: async () => 0,
+      now,
+    });
+    expect(resultNoDep.skipped).toBe(false);
+    expect(resultNoDep.newCandidates).toBeGreaterThan(0);
+  });
+
   it("skips entirely once the queue already has enough unshown candidates", async () => {
     const adapter = { searchRecentPosts: vi.fn() };
     const repo = new FakeProspectingRepo();

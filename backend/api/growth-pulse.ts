@@ -179,6 +179,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             repo,
             client,
             getMonthSpendUsd: () => getProspectingMonthSpendUsd(client),
+            isPaused: async () => {
+              const { data } = await client.from("system_settings").select("paused").eq("id", true).single();
+              return data?.paused ?? false;
+            },
             now,
           });
           if (result.skipped) {
@@ -208,7 +212,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // X credentials not configured -- discovery still runs against
           // existing-records sources (creators/prospecting/inbound) only.
         }
-        const result = await runPartnershipDiscoveryStep({ client, adapter, triggeredBy: "scheduled", now });
+        const result = await runPartnershipDiscoveryStep({
+          client,
+          adapter,
+          triggeredBy: "scheduled",
+          now,
+          isPaused: async () => {
+            const { data } = await client.from("system_settings").select("paused").eq("id", true).single();
+            return data?.paused ?? false;
+          },
+        });
         return `${result.status}: ${result.newCandidates} new (sources: ${result.sourcesSearched.join(", ") || "none"}, $${result.costUsd.toFixed(4)})${result.skipReason ? ` -- ${result.skipReason}` : ""}`;
       }),
     );

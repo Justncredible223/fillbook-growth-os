@@ -134,6 +134,43 @@ describe("markProspectingReplied -- outreach is recorded in the candidate's own 
   });
 });
 
+/**
+ * Regression coverage for the system_settings.paused gate added to
+ * scheduled discovery (runProspectingSearch/runPartnershipDiscoveryStep):
+ * reviewing an already-discovered candidate must never be affected by
+ * pause state, since pausing is meant to stop unattended spend, not lock
+ * the owner out of their own queue. Neither handler here accepts or
+ * consults an isPaused dependency at all, and fakeClient is `{} as any` --
+ * if either handler ever grew a `client.from("system_settings")` read
+ * (accidentally coupling review to the pause flag), these tests would fail
+ * immediately with "fakeClient.from is not a function" rather than silently
+ * passing.
+ */
+describe("existing candidate review is unaffected by system pause state", () => {
+  const loadGrounding = async () => ({ brandRulesSummary: "rules", verifiedKnowledgeSummary: "facts" });
+
+  it("draftProspectingCandidateReply succeeds with no isPaused dependency in play", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "paused-1", platform: "x", status: "shown", draftReply: null }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "EOD for most firms.", mentionsFillbook: false, usesLink: false }));
+
+    const updated = await draftProspectingCandidateReply(fakeClient, "paused-1", { repo, drafter, loadGrounding });
+
+    expect(updated.status).toBe("ready");
+    expect(updated.draftReply).toBe("EOD for most firms.");
+  });
+
+  it("markProspectingReplied succeeds with no isPaused dependency in play", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "paused-2", authorExternalId: "9002" }));
+
+    const updated = await markProspectingReplied(fakeClient, "paused-2", undefined, undefined, undefined, { repo });
+
+    expect(updated.status).toBe("replied");
+    expect(await repo.hasPriorOutreach("x", "9002")).toBe(true);
+  });
+});
+
 describe("draftProspectingCandidateReply -- the candidate's platform reaches the drafter", () => {
   const loadGrounding = async () => ({ brandRulesSummary: "rules", verifiedKnowledgeSummary: "facts" });
 

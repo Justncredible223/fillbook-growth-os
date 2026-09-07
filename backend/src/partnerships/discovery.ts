@@ -55,7 +55,7 @@ function matchTopics(text: string): { topics: string[]; category: PartnerCategor
 }
 
 export interface DiscoveryRunResult {
-  status: "found" | "no_matches" | "budget_exhausted" | "error" | "skipped_cadence" | "skipped_backlog_sufficient";
+  status: "found" | "no_matches" | "budget_exhausted" | "error" | "skipped_cadence" | "skipped_backlog_sufficient" | "skipped_paused";
   newCandidates: number;
   sourcesSearched: string[];
   costUsd: number;
@@ -70,6 +70,16 @@ export interface PartnershipDiscoveryDeps {
   triggeredBy: "scheduled" | "owner";
   /** Bypasses SCHEDULED_CADENCE_DAYS (still respects MIN_INTERVAL_MINUTES and the budget gate). */
   force?: boolean;
+  /**
+   * Same system_settings.paused gate already used by autoDraftStep.ts and
+   * buildXFeedPostStepDeps.ts. Only ever consulted when triggeredBy ===
+   * "scheduled" -- an owner-triggered refresh (see approvals.ts's
+   * triggeredBy: "owner" call site) must keep working while paused, since
+   * pausing is meant to stop unattended spend, not something the owner did
+   * to themselves. Optional and defaults to "not paused" so every existing
+   * test that never cared about pause behavior keeps working unchanged.
+   */
+  isPaused?: () => Promise<boolean>;
 }
 
 async function lastRunAt(client: SupabaseClient): Promise<Date | null> {
@@ -299,6 +309,15 @@ export async function runPartnershipDiscoveryStep(deps: PartnershipDiscoveryDeps
   const { client } = deps;
   const now = deps.now ?? new Date();
   const force = deps.force ?? false;
+
+  // Checked first, before even the cadence-lookup read -- cheapest
+  // possible early exit, and matches the cadence-skip branches below in
+  // never calling recordRun: this can legitimately fire 3x/day for as long
+  // as the system stays paused, and (like a cadence skip) isn't interesting
+  // enough to persist a run row for each time it happens.
+  if (deps.triggeredBy === "scheduled" && (await (deps.isPaused?.() ?? Promise.resolve(false)))) {
+    return { status: "skipped_paused", newCandidates: 0, sourcesSearched: [], costUsd: 0, skipReason: "system_paused" };
+  }
 
   const last = await lastRunAt(client);
   if (last) {
