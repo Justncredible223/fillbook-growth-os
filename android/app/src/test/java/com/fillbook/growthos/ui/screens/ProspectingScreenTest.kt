@@ -91,3 +91,68 @@ class ProspectingScreenTest {
         assertEquals("New opportunities are found once a day. Check back soon, or pull to refresh.", message)
     }
 }
+
+/**
+ * Regression guard for a real, confirmed-with-a-real-finger bug
+ * (2026-09-07): PullToRefreshBox detects the pull gesture via a NESTED
+ * SCROLL connection -- it only ever sees drag deltas a scrollable
+ * descendant dispatches upward. PolishedEmptyState is a plain,
+ * non-scrollable Column (see GrowthComponents.kt), so wrapping it directly
+ * in PullToRefreshBox (this file's first, insufficient fix attempt) left
+ * the gesture completely inert: no touch drag on static content ever
+ * reaches the nested-scroll chain, no matter where it's nested. The real
+ * fix wraps the empty state in a LazyColumn (a genuine nested-scroll
+ * participant, the same container the populated case already uses).
+ *
+ * This project has no instrumentation-test infrastructure at all (no
+ * androidTest source set, no Espresso/Compose-UI-test dependency, no
+ * `./gradlew connectedDebugAndroidTest` target -- confirmed by inspecting
+ * app/build.gradle.kts, which explicitly documents "No emulator or
+ * instrumentation needed" as this project's deliberate JVM-only testing
+ * philosophy) -- a true gesture test (simulate a real swipe, assert the
+ * refresh indicator appears) needs `androidx.compose.ui:ui-test-junit4`
+ * plus a connected device/emulator, which is a real project-wide
+ * infrastructure decision well beyond this one fix's scope, so it isn't
+ * added here. This is the strongest coverage available without that:
+ * not a behavioral gesture test, but a structural check on the actual
+ * source that fails loudly if a future edit reintroduces a bare, unwrapped
+ * PolishedEmptyState inside PullToRefreshBox's empty branch.
+ */
+class ProspectingScreenEmptyStateStructureTest {
+    private fun screenSource(): String {
+        val candidates = listOf(
+            "src/main/java/com/fillbook/growthos/ui/screens/ProspectingScreen.kt",
+            "app/src/main/java/com/fillbook/growthos/ui/screens/ProspectingScreen.kt",
+        )
+        val file = candidates.map { java.io.File(it) }.firstOrNull { it.exists() }
+            ?: error(
+                "Could not locate ProspectingScreen.kt from working directory " +
+                    "${java.io.File(".").absolutePath} -- tried: $candidates. " +
+                    "This test intentionally fails loudly rather than silently " +
+                    "skipping the check it exists to enforce.",
+            )
+        return file.readText()
+    }
+
+    @Test
+    fun `the empty-state branch wraps PolishedEmptyState in a LazyColumn, not bare -- otherwise pull-to-refresh is silently inert`() {
+        val source = screenSource()
+        val emptyBranchStart = source.indexOf("errorMessage == null && items.isEmpty()")
+        check(emptyBranchStart >= 0) { "Could not find the empty-state condition in ProspectingScreen.kt -- has this branch been restructured?" }
+
+        // Look at a bounded window right after the condition, not the whole
+        // file, so this can't accidentally match LazyColumn/PolishedEmptyState
+        // usages belonging to the populated-list branch instead.
+        val window = source.substring(emptyBranchStart, minOf(emptyBranchStart + 400, source.length))
+
+        val lazyColumnIndex = window.indexOf("LazyColumn")
+        val polishedEmptyStateIndex = window.indexOf("PolishedEmptyState")
+        check(polishedEmptyStateIndex >= 0) { "Expected to find PolishedEmptyState right after the empty-state condition." }
+        check(lazyColumnIndex in 0 until polishedEmptyStateIndex) {
+            "PolishedEmptyState must be wrapped inside a LazyColumn (or another genuine nested-scroll " +
+                "participant) so PullToRefreshBox's pull gesture has something to detect -- a bare, " +
+                "non-scrollable PolishedEmptyState makes the pull-to-refresh gesture silently inert, " +
+                "confirmed with a real finger on-device (2026-09-07)."
+        }
+    }
+}

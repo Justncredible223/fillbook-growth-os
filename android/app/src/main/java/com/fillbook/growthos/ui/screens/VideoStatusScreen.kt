@@ -206,29 +206,45 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
 
             if (!loaded) {
                 SkeletonListLoading()
-            } else if (errorMessage == null && renders.isEmpty()) {
-                PolishedEmptyState(
-                    icon = Icons.Filled.Movie,
-                    headline = "No videos yet",
-                    subtitle = "Approve a video script draft in Approvals and it'll start rendering here.",
-                )
             } else {
+                // Same nested-scroll fix as ProspectingScreen (2026-09-07):
+                // PullToRefreshBox only detects the pull gesture through a
+                // scrollable descendant's nested-scroll connection. The
+                // empty state used to sit entirely outside PullToRefreshBox
+                // (and even wrapped, a bare PolishedEmptyState -- a plain,
+                // non-scrollable Column -- would never dispatch drag deltas
+                // to it anyway). Fix: PullToRefreshBox now wraps both
+                // branches, and the empty branch uses a LazyColumn (the same
+                // genuine nested-scroll participant the populated branch
+                // already uses) instead of a bare Column.
                 PullToRefreshBox(
                     isRefreshing = refreshing,
                     onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    LazyColumn(
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        items(renders, key = { it.id }) { render ->
-                            VideoRenderCard(
-                                render = render,
-                                alreadyDownloaded = downloadedUris.containsKey(render.id),
-                                onDownload = { download(render) },
-                                onShare = { share(render) },
-                            )
+                    if (errorMessage == null && renders.isEmpty()) {
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            item {
+                                PolishedEmptyState(
+                                    icon = Icons.Filled.Movie,
+                                    headline = "No videos yet",
+                                    subtitle = "Approve a video script draft in Approvals and it'll start rendering here.",
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            items(renders, key = { it.id }) { render ->
+                                VideoRenderCard(
+                                    render = render,
+                                    alreadyDownloaded = downloadedUris.containsKey(render.id),
+                                    onDownload = { download(render) },
+                                    onShare = { share(render) },
+                                )
+                            }
                         }
                     }
                 }

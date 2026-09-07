@@ -193,45 +193,69 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
 
         if (!loaded) {
             SkeletonListLoading()
-        } else if (errorMessage == null && items.isEmpty()) {
-            PolishedEmptyState(
-                icon = Icons.Filled.TrendingUp,
-                headline = "Queue is clear",
-                subtitle = prospectingEmptyStateMessage(diagnostics),
-            )
         } else {
+            // Real bug found on-device with an actual finger, twice
+            // (2026-09-07): first fix (wrapping the empty state in
+            // PullToRefreshBox) wasn't sufficient on its own.
+            // PullToRefreshBox detects the pull gesture via a NESTED SCROLL
+            // connection -- it only ever sees drag deltas that a scrollable
+            // descendant dispatches upward. PolishedEmptyState is a plain,
+            // non-scrollable Column (see GrowthComponents.kt), so it never
+            // participates in nested scroll at all -- no touch drag on it
+            // was ever reaching PullToRefreshBox's connection, no matter
+            // where in the tree it was nested. The same bug exists in
+            // VideoStatusScreen's and InboundScreen's own empty states
+            // (confirmed by inspection, not fixed here -- out of scope).
+            //
+            // Fix: give the empty state a real (if trivial) LazyColumn, the
+            // same scrollable container the populated case already uses --
+            // a LazyColumn participates in nested scroll regardless of
+            // whether its single item actually overflows the viewport, so
+            // PullToRefreshBox has something real to detect the drag against.
             PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
                 modifier = Modifier.fillMaxSize(),
             ) {
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(items, key = { it.id }) { candidate ->
-                        ProspectingCard(
-                            candidate = candidate,
-                            editedText = editedDrafts[candidate.id],
-                            onEditedTextChange = { editedDrafts[candidate.id] = it },
-                            drafting = draftingId == candidate.id,
-                            busy = busyId == candidate.id,
-                            onDraft = { startDraft(candidate) },
-                            onCopyAndOpen = { copyAndOpen(candidate) },
-                            onReplied = {
-                                runOutcome(candidate) {
-                                    repo.markProspectingReplied(
-                                        candidate.id,
-                                        editedDrafts[candidate.id]?.takeIf { it != candidate.draftReply },
-                                        candidate.replyMentionsFillbook,
-                                        candidate.replyUsedLink,
-                                    )
-                                }
-                            },
-                            onSkip = { runOutcome(candidate) { repo.markProspectingSkipped(candidate.id, null) } },
-                            onNotRelevant = { runOutcome(candidate) { repo.markProspectingNotRelevant(candidate.id) } },
-                            onAlreadyHandled = { runOutcome(candidate) { repo.markProspectingAlreadyHandled(candidate.id) } },
-                        )
+                if (errorMessage == null && items.isEmpty()) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.TrendingUp,
+                                headline = "Queue is clear",
+                                subtitle = prospectingEmptyStateMessage(diagnostics),
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(items, key = { it.id }) { candidate ->
+                            ProspectingCard(
+                                candidate = candidate,
+                                editedText = editedDrafts[candidate.id],
+                                onEditedTextChange = { editedDrafts[candidate.id] = it },
+                                drafting = draftingId == candidate.id,
+                                busy = busyId == candidate.id,
+                                onDraft = { startDraft(candidate) },
+                                onCopyAndOpen = { copyAndOpen(candidate) },
+                                onReplied = {
+                                    runOutcome(candidate) {
+                                        repo.markProspectingReplied(
+                                            candidate.id,
+                                            editedDrafts[candidate.id]?.takeIf { it != candidate.draftReply },
+                                            candidate.replyMentionsFillbook,
+                                            candidate.replyUsedLink,
+                                        )
+                                    }
+                                },
+                                onSkip = { runOutcome(candidate) { repo.markProspectingSkipped(candidate.id, null) } },
+                                onNotRelevant = { runOutcome(candidate) { repo.markProspectingNotRelevant(candidate.id) } },
+                                onAlreadyHandled = { runOutcome(candidate) { repo.markProspectingAlreadyHandled(candidate.id) } },
+                            )
+                        }
                     }
                 }
             }

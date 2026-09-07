@@ -277,11 +277,28 @@ fun InboundScreen(repo: GrowthOsRepository) {
             }
 
             if (errorMessage == null && items.isEmpty()) {
-                PolishedEmptyState(
-                    icon = Icons.Filled.Forum,
-                    headline = "Nothing waiting on you",
-                    subtitle = "New replies, mentions, and follow-ups from Fillbook's audience on X show up here.",
-                )
+                // Same nested-scroll fix as ProspectingScreen/VideoStatusScreen
+                // (2026-09-07): a genuinely empty queue used to sit entirely
+                // outside PullToRefreshBox, and even wrapped, a bare
+                // PolishedEmptyState (a plain, non-scrollable Column) never
+                // dispatches drag deltas to it. Fix: wrap in PullToRefreshBox
+                // with a LazyColumn -- a genuine nested-scroll participant --
+                // the same fix already proven on Prospecting.
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.Forum,
+                                headline = "Nothing waiting on you",
+                                subtitle = "New replies, mentions, and follow-ups from Fillbook's audience on X show up here.",
+                            )
+                        }
+                    }
+                }
             } else {
                 val availableStatuses = remember(items) { items.map { it.status }.distinct() }
                 if (availableStatuses.size > 1) {
@@ -308,14 +325,23 @@ fun InboundScreen(repo: GrowthOsRepository) {
                         // Defensive: reconcile() clears a stale filter on
                         // refresh, but a status can still empty out between
                         // renders. Never show a blank queue without a way back.
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            PolishedEmptyState(
-                                icon = Icons.Filled.Forum,
-                                headline = "No items in this filter",
-                                subtitle = "Other items are still waiting -- switch back to All to see them.",
-                            )
-                            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.Center) {
-                                TextButton(onClick = { statusFilter = null }) { Text("Show all") }
+                        // Uses a LazyColumn (not a bare Column) for the same
+                        // nested-scroll reason documented on the genuinely-
+                        // empty branch above -- a plain Column here would make
+                        // pull-to-refresh silently inert while a filter is
+                        // narrowed down to nothing.
+                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                            item {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    PolishedEmptyState(
+                                        icon = Icons.Filled.Forum,
+                                        headline = "No items in this filter",
+                                        subtitle = "Other items are still waiting -- switch back to All to see them.",
+                                    )
+                                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.Center) {
+                                        TextButton(onClick = { statusFilter = null }) { Text("Show all") }
+                                    }
+                                }
                             }
                         }
                     } else {
