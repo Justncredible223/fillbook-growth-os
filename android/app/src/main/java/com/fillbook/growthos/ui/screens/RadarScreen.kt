@@ -197,11 +197,25 @@ fun RadarScreen(repo: GrowthOsRepository) {
         if (!loaded) {
             SkeletonListLoading()
         } else if (errorMessage == null && opportunities.isEmpty()) {
-            PolishedEmptyState(
-                icon = Icons.Filled.Radar,
-                headline = "Nothing on Radar yet",
-                subtitle = "Once the daily signal sweep runs, real opportunities show up here.",
-            )
+            // Same nested-scroll fix as Prospecting/Inbound/VideoStatus/Approvals
+            // (2026-09-07): PullToRefreshBox only detects the pull gesture
+            // through a scrollable descendant's nested-scroll connection --
+            // a bare PolishedEmptyState never dispatched drag deltas to it.
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        PolishedEmptyState(
+                            icon = Icons.Filled.Radar,
+                            headline = "Nothing on Radar yet",
+                            subtitle = "Once the daily signal sweep runs, real opportunities show up here.",
+                        )
+                    }
+                }
+            }
         } else {
             SearchField(query, { query = it }, "Search opportunities", modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
             if (hasEngagement && hasCampaign) {
@@ -221,15 +235,23 @@ fun RadarScreen(repo: GrowthOsRepository) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 if (filtered.isEmpty()) {
-                    PolishedEmptyState(
-                        icon = Icons.Filled.Radar,
-                        headline = "No matches",
-                        subtitle = if (query.isBlank()) {
-                            "No ${if (typeFilter == "engagement") "engagement" else "campaign"} opportunities right now."
-                        } else {
-                            "Nothing on Radar matches \"$query\"."
-                        },
-                    )
+                    // Same nested-scroll fix -- a bare PolishedEmptyState here
+                    // would leave pull-to-refresh inert while a filter/search
+                    // narrows the list down to zero, even though this branch
+                    // is already inside PullToRefreshBox.
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.Radar,
+                                headline = "No matches",
+                                subtitle = if (query.isBlank()) {
+                                    "No ${if (typeFilter == "engagement") "engagement" else "campaign"} opportunities right now."
+                                } else {
+                                    "Nothing on Radar matches \"$query\"."
+                                },
+                            )
+                        }
+                    }
                 } else {
                     val topScore = filtered.maxOf { it.score }
                     LazyColumn(

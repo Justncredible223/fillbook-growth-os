@@ -184,11 +184,25 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             if (!loaded) {
                 SkeletonListLoading()
             } else if (errorMessage == null && assets.isEmpty()) {
-                PolishedEmptyState(
-                    icon = Icons.Filled.CheckCircle,
-                    headline = "Nothing waiting on you",
-                    subtitle = "Drafts land here once the Campaign Factory finishes AI review.",
-                )
+                // Same nested-scroll fix as Prospecting/Inbound/VideoStatus
+                // (2026-09-07): PullToRefreshBox only detects the pull gesture
+                // through a scrollable descendant's nested-scroll connection --
+                // a bare PolishedEmptyState never dispatched drag deltas to it.
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.CheckCircle,
+                                headline = "Nothing waiting on you",
+                                subtitle = "Drafts land here once the Campaign Factory finishes AI review.",
+                            )
+                        }
+                    }
+                }
             } else {
                 SearchField(query, { query = it }, "Search drafts", modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 PullToRefreshBox(

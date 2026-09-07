@@ -106,11 +106,25 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
         if (!loaded) {
             SkeletonListLoading()
         } else if (errorMessage == null && campaigns.isEmpty()) {
-            PolishedEmptyState(
-                icon = Icons.Filled.Campaign,
-                headline = "No campaigns run yet",
-                subtitle = "Once an opportunity runs through the pipeline, it shows up here -- pass or fail.",
-            )
+            // Same nested-scroll fix as Prospecting/Inbound/VideoStatus/etc.
+            // (2026-09-07): PullToRefreshBox only detects the pull gesture
+            // through a scrollable descendant's nested-scroll connection --
+            // a bare PolishedEmptyState never dispatched drag deltas to it.
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        PolishedEmptyState(
+                            icon = Icons.Filled.Campaign,
+                            headline = "No campaigns run yet",
+                            subtitle = "Once an opportunity runs through the pipeline, it shows up here -- pass or fail.",
+                        )
+                    }
+                }
+            }
         } else {
             SearchField(query, { query = it }, "Search campaigns", modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
             PullToRefreshBox(
@@ -119,11 +133,18 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 if (filtered.isEmpty()) {
-                    PolishedEmptyState(
-                        icon = Icons.Filled.Campaign,
-                        headline = "No matches",
-                        subtitle = "No campaigns match \"$query\".",
-                    )
+                    // Same nested-scroll fix -- a bare PolishedEmptyState here
+                    // would leave pull-to-refresh inert while a search narrows
+                    // the list to zero, even though already inside PullToRefreshBox.
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.Campaign,
+                                headline = "No matches",
+                                subtitle = "No campaigns match \"$query\".",
+                            )
+                        }
+                    }
                 } else {
                     LazyColumn(
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),

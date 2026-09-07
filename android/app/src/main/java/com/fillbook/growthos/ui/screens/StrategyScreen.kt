@@ -122,13 +122,27 @@ fun StrategyScreen(repo: GrowthOsRepository) {
         } else {
             val current = strategy
             if (current == null) {
-                PolishedEmptyState(
-                    icon = Icons.Filled.Timeline,
-                    headline = "No strategy report yet",
-                    subtitle = "Generates automatically once a week, or trigger the first one now.",
-                    actionLabel = if (regenerating) "Generating..." else "Generate now",
-                    onAction = if (regenerating) null else ::regenerate,
-                )
+                // Same nested-scroll fix as Prospecting/Inbound/VideoStatus/etc.
+                // (2026-09-07): PullToRefreshBox only detects the pull gesture
+                // through a scrollable descendant's nested-scroll connection --
+                // a bare PolishedEmptyState never dispatched drag deltas to it.
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.Timeline,
+                                headline = "No strategy report yet",
+                                subtitle = "Generates automatically once a week, or trigger the first one now.",
+                                actionLabel = if (regenerating) "Generating..." else "Generate now",
+                                onAction = if (regenerating) null else ::regenerate,
+                            )
+                        }
+                    }
+                }
             } else {
                 PullToRefreshBox(
                     isRefreshing = refreshing,

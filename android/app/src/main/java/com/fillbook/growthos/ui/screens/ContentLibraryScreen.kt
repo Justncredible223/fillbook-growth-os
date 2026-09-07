@@ -112,11 +112,25 @@ fun ContentLibraryScreen(repo: GrowthOsRepository) {
         if (!loaded) {
             SkeletonListLoading()
         } else if (errorMessage == null && allAssets.isEmpty()) {
-            PolishedEmptyState(
-                icon = Icons.Filled.VideoLibrary,
-                headline = "No drafts produced yet",
-                subtitle = "Once an opportunity runs through the pipeline, drafts show up here.",
-            )
+            // Same nested-scroll fix as Prospecting/Inbound/VideoStatus/etc.
+            // (2026-09-07): PullToRefreshBox only detects the pull gesture
+            // through a scrollable descendant's nested-scroll connection --
+            // a bare PolishedEmptyState never dispatched drag deltas to it.
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        PolishedEmptyState(
+                            icon = Icons.Filled.VideoLibrary,
+                            headline = "No drafts produced yet",
+                            subtitle = "Once an opportunity runs through the pipeline, drafts show up here.",
+                        )
+                    }
+                }
+            }
         } else {
             if (stages.size > 1) {
                 LazyRow(

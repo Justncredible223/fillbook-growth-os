@@ -240,16 +240,32 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
         if (!loaded) {
             SkeletonListLoading()
         } else if (errorMessage == null && items.isEmpty()) {
-            PolishedEmptyState(
-                icon = Icons.Filled.Handshake,
-                headline = "No recommendations yet",
-                subtitle = "Discovery hasn't found a qualifying match yet -- tap Refresh discovery below, or add a prospect yourself.",
-            )
-            Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                PrimaryButton(text = if (discoveryBusy) "Searching..." else "Refresh discovery", onClick = { runDiscoveryRefresh() }, enabled = !discoveryBusy, busy = discoveryBusy, modifier = Modifier.weight(1f))
-            }
-            Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
-                TextButton(onClick = { showCreateDialog = true }) { Text("+ Add prospect") }
+            // Same nested-scroll fix as Prospecting/Inbound/VideoStatus/etc.
+            // (2026-09-07): PullToRefreshBox only detects the pull gesture
+            // through a scrollable descendant's nested-scroll connection --
+            // a bare PolishedEmptyState never dispatched drag deltas to it.
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        Column {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.Handshake,
+                                headline = "No recommendations yet",
+                                subtitle = "Discovery hasn't found a qualifying match yet -- tap Refresh discovery below, or add a prospect yourself.",
+                            )
+                            Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                PrimaryButton(text = if (discoveryBusy) "Searching..." else "Refresh discovery", onClick = { runDiscoveryRefresh() }, enabled = !discoveryBusy, busy = discoveryBusy, modifier = Modifier.weight(1f))
+                            }
+                            Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+                                TextButton(onClick = { showCreateDialog = true }) { Text("+ Add prospect") }
+                            }
+                        }
+                    }
+                }
             }
         } else {
             // Recommendations = not yet contacted (the shortlist the owner reviews and acts on),

@@ -113,11 +113,25 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
         if (!loaded) {
             SkeletonListLoading()
         } else if (errorMessage == null && creators.isEmpty()) {
-            PolishedEmptyState(
-                icon = Icons.Filled.Groups,
-                headline = "No creators tracked yet",
-                subtitle = "Vetted, interacted, and rejected creators will show up here.",
-            )
+            // Same nested-scroll fix as Prospecting/Inbound/VideoStatus/etc.
+            // (2026-09-07): PullToRefreshBox only detects the pull gesture
+            // through a scrollable descendant's nested-scroll connection --
+            // a bare PolishedEmptyState never dispatched drag deltas to it.
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        PolishedEmptyState(
+                            icon = Icons.Filled.Groups,
+                            headline = "No creators tracked yet",
+                            subtitle = "Vetted, interacted, and rejected creators will show up here.",
+                        )
+                    }
+                }
+            }
         } else {
             SearchField(query, { query = it }, "Search creators", modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
 
@@ -133,11 +147,18 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 if (filteredCreators.isEmpty()) {
-                    PolishedEmptyState(
-                        icon = Icons.Filled.Groups,
-                        headline = "No matches",
-                        subtitle = "No creators match \"$query\".",
-                    )
+                    // Same nested-scroll fix -- a bare PolishedEmptyState here
+                    // would leave pull-to-refresh inert while a search narrows
+                    // the list to zero, even though already inside PullToRefreshBox.
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.Groups,
+                                headline = "No matches",
+                                subtitle = "No creators match \"$query\".",
+                            )
+                        }
+                    }
                 } else {
                     LazyColumn(
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
