@@ -118,6 +118,69 @@ class ProspectingScreenTest {
  * source that fails loudly if a future edit reintroduces a bare, unwrapped
  * PolishedEmptyState inside PullToRefreshBox's empty branch.
  */
+/**
+ * Regression guard for a real, confirmed bug (2026-09-07): the owner's
+ * phone showed crypto-only posts as actionable Prospecting cards with an
+ * enabled "Draft reply" button, only rejecting them after the tap. The
+ * backend fix (prospectingHandlers.ts's listProspectingQueue) now filters
+ * these to 'not_relevant' before they're ever returned, so this branch
+ * should be structurally unreachable in practice -- this is a defensive,
+ * backward-compatible guard (status is a plain existing String field, no
+ * new schema) against a stale/cached response or an older backend build.
+ *
+ * Same structural-check rationale as ProspectingScreenEmptyStateStructureTest
+ * below: this project has no instrumentation-test infrastructure, so a true
+ * Compose-rendering test isn't added here -- this instead proves, from the
+ * actual source, that a "not_relevant" candidate is routed to a
+ * non-actionable status line before the code path that renders the
+ * "Draft reply" button is ever reached.
+ */
+class ProspectingScreenIneligibleCandidateStructureTest {
+    private fun screenSource(): String {
+        val candidates = listOf(
+            "src/main/java/com/fillbook/growthos/ui/screens/ProspectingScreen.kt",
+            "app/src/main/java/com/fillbook/growthos/ui/screens/ProspectingScreen.kt",
+        )
+        val file = candidates.map { java.io.File(it) }.firstOrNull { it.exists() }
+            ?: error(
+                "Could not locate ProspectingScreen.kt from working directory " +
+                    "${java.io.File(".").absolutePath} -- tried: $candidates.",
+            )
+        return file.readText()
+    }
+
+    @Test
+    fun `a not_relevant candidate is routed to a non-actionable status line before the Draft reply branch`() {
+        val source = screenSource()
+        val notRelevantCheckIndex = source.indexOf("candidate.status == \"not_relevant\"")
+        check(notRelevantCheckIndex >= 0) {
+            "Expected an explicit candidate.status == \"not_relevant\" check in ProspectingScreen.kt -- " +
+                "has the ineligible-candidate guard been removed or restructured?"
+        }
+
+        val draftReplyButtonIndex = source.indexOf("PrimaryButton(text = \"Draft reply\"")
+        check(draftReplyButtonIndex >= 0) { "Expected to find the Draft reply PrimaryButton in ProspectingScreen.kt." }
+
+        check(notRelevantCheckIndex < draftReplyButtonIndex) {
+            "The candidate.status == \"not_relevant\" check must come before (guard) the Draft reply button, " +
+                "as an earlier branch in the same if/else chain -- otherwise an ineligible candidate could still " +
+                "render an enabled Draft reply button, confirmed as a real bug on-device (2026-09-07)."
+        }
+
+        // The two must be part of the SAME if/else chain, not unrelated
+        // code that merely happens to appear in this order -- check no
+        // second, unrelated "if (" starts and never closes between them
+        // by requiring the not_relevant branch's own "else if (draft == null)"
+        // continuation appears before the button.
+        val window = source.substring(notRelevantCheckIndex, draftReplyButtonIndex)
+        check(window.contains("else if (draft == null)")) {
+            "Expected the not_relevant check and the Draft reply button to be part of the same if/else-if " +
+                "chain (\"if (candidate.status == \\\"not_relevant\\\") { ... } else if (draft == null) { <Draft reply> }\") " +
+                "so the guard actually prevents the button from rendering, not just precedes it textually."
+        }
+    }
+}
+
 class ProspectingScreenEmptyStateStructureTest {
     private fun screenSource(): String {
         val candidates = listOf(

@@ -44,3 +44,51 @@ describe("isPlausiblyTradingRelated", () => {
     expect(isPlausiblyTradingRelated("She wrote in her journal about the discipline it takes to finish a marathon.")).toBe(false);
   });
 });
+
+/**
+ * Regression coverage for a second real, confirmed bug (2026-09-07): the
+ * owner's phone showed crypto-only posts ("$USELESS locked in the
+ * profits... a 15% move in less than 2h") as actionable Prospecting
+ * cards under the "Overtrading volume" topic label -- this predicate
+ * already rejected them correctly (proven below), the bug was that
+ * nothing called it until the owner tapped Draft reply. See
+ * prospectingHandlers.ts's listProspectingQueue for the fix that applies
+ * this gate before a candidate is ever shown.
+ */
+describe("isPlausiblyTradingRelated -- crypto-only content", () => {
+  it("rejects the exact crypto posts that exposed this bug live, before any LLM call", () => {
+    expect(isPlausiblyTradingRelated("$USELESS locked in the profits")).toBe(false);
+    expect(isPlausiblyTradingRelated("Not bad a 15% move in less than 2h...")).toBe(false);
+  });
+
+  it("rejects other crypto-only content -- coin/token speculation, meme coins, altcoins, DeFi, NFT/Web3", () => {
+    expect(isPlausiblyTradingRelated("$DOGE about to send it, aping in with my last stack")).toBe(false);
+    expect(isPlausiblyTradingRelated("This new altcoin just 10x'd, should've bought the dip")).toBe(false);
+    expect(isPlausiblyTradingRelated("Just aped into this new DeFi yield farm, APY is insane right now")).toBe(false);
+    expect(isPlausiblyTradingRelated("Minted my first NFT today, welcome to web3")).toBe(false);
+  });
+
+  it("rejects a bare percentage-move post with no futures/trading-discipline context", () => {
+    expect(isPlausiblyTradingRelated("Up 40% this week, best run of my life")).toBe(false);
+  });
+
+  it("a post mentioning crypto remains eligible when it also clearly discusses futures/prop-firm/funded-account/risk-discipline context", () => {
+    expect(isPlausiblyTradingRelated("Blew up my funded account trying to revenge trade back losses from a bad crypto futures position")).toBe(true);
+    expect(isPlausiblyTradingRelated("Failed my prop firm evaluation -- was overleveraged on BTC futures and hit my daily loss limit")).toBe(true);
+  });
+
+  it("'overtrading' alone is no longer sufficient -- it's too generic to anchor a post to futures/trading-discipline content on its own", () => {
+    expect(isPlausiblyTradingRelated("overtrading volume")).toBe(false);
+    expect(isPlausiblyTradingRelated("I really struggled with overtrading this week")).toBe(false);
+  });
+
+  it("a genuine overtrading post still passes via its own other trading-discipline anchor", () => {
+    expect(isPlausiblyTradingRelated("Overtrading after a losing streak is how most funded accounts actually blow up.")).toBe(true);
+  });
+
+  it("no other generic word alone (volume, discipline, performance, entry, move, profits) is sufficient", () => {
+    expect(isPlausiblyTradingRelated("Volume was huge today, what a move")).toBe(false);
+    expect(isPlausiblyTradingRelated("Discipline and performance are everything")).toBe(false);
+    expect(isPlausiblyTradingRelated("Locked in profits on this entry")).toBe(false);
+  });
+});

@@ -141,6 +141,73 @@ describe("listProspectingQueue -- selection diagnostics", () => {
   });
 });
 
+/**
+ * Regression coverage for a real, confirmed bug (2026-09-07): the owner's
+ * phone showed crypto-only posts ("$USELESS locked in the profits...
+ * a 15% move in less than 2h") as actionable Prospecting cards under the
+ * "Overtrading volume" topic label. The mechanical relevance gate
+ * (prospectingRelevance.ts) already correctly rejected this text -- the
+ * bug was that nothing called it until the owner tapped Draft reply.
+ * This closes it at the one place every non-terminal candidate passes
+ * through before ever becoming visible: listProspectingQueue itself.
+ */
+describe("listProspectingQueue -- filters out irrelevant candidates before they become actionable", () => {
+  const NOW = new Date("2026-09-07T12:00:00Z");
+
+  it("excludes the exact crypto posts that exposed this bug live from the returned queue, and moves them to not_relevant", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "crypto-1", status: "shown", postText: "$USELESS locked in the profits", authorExternalId: "a" }));
+    repo.seed(candidate({ id: "crypto-2", status: "new", postText: "Not bad a 15% move in less than 2h...", authorExternalId: "b" }));
+    repo.seed(candidate({ id: "genuine-futures", status: "new", postText: "Been trading MNQ futures for two years, still get nervous before the open.", authorExternalId: "c" }));
+
+    const { candidates } = await listProspectingQueue(fakeClient, NOW, { repo });
+
+    expect(candidates.map((c) => c.id)).toEqual(["genuine-futures"]);
+    expect((await repo.getById("crypto-1"))!.status).toBe("not_relevant");
+    expect((await repo.getById("crypto-2"))!.status).toBe("not_relevant");
+    // Content is preserved, never deleted -- still readable via Prospecting history.
+    expect((await repo.getById("crypto-1"))!.postText).toBe("$USELESS locked in the profits");
+  });
+
+  it("does not affect a genuine futures/prop-firm candidate's status or its place in the returned queue", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "propfirm-1", status: "new", opportunityScore: 80, postText: "Failed my prop firm evaluation because of a trailing drawdown rule.", authorExternalId: "a" }));
+
+    const { candidates } = await listProspectingQueue(fakeClient, NOW, { repo });
+
+    expect(candidates.map((c) => c.id)).toEqual(["propfirm-1"]);
+    expect((await repo.getById("propfirm-1"))!.status).toBe("shown");
+  });
+
+  it("a crypto post that also clearly discusses futures/prop-firm/funded-account context remains eligible and reaches the queue", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(
+      candidate({
+        id: "crypto-futures",
+        status: "new",
+        opportunityScore: 70,
+        postText: "Blew up my funded account trying to revenge trade back losses from a bad crypto futures position",
+        authorExternalId: "a",
+      }),
+    );
+
+    const { candidates } = await listProspectingQueue(fakeClient, NOW, { repo });
+
+    expect(candidates.map((c) => c.id)).toEqual(["crypto-futures"]);
+    expect((await repo.getById("crypto-futures"))!.status).toBe("shown");
+  });
+
+  it("excludes irrelevant candidates from totalConsidered -- they were never really 'considered' for today's selection at all", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "crypto-1", status: "new", postText: "$USELESS locked in the profits", authorExternalId: "a" }));
+    repo.seed(candidate({ id: "genuine-1", status: "new", opportunityScore: 70, postText: "My funded account got pulled today.", authorExternalId: "b" }));
+
+    const { diagnostics } = await listProspectingQueue(fakeClient, NOW, { repo });
+
+    expect(diagnostics).toEqual({ totalConsidered: 1, selected: 1, deferred: 0, belowQualityBar: 0, tooOldForToday: 0 });
+  });
+});
+
 describe("markProspectingReplied -- outreach is recorded in the candidate's own platform namespace", () => {
   it("an X reply still records X outreach keyed by the X author id", async () => {
     const repo = new InMemoryProspectingRepository();
@@ -296,6 +363,19 @@ describe("draftProspectingCandidateReply -- relevance gates", () => {
 
     expect(drafter).not.toHaveBeenCalled();
     const row = await repo.getById("x-scifi");
+    expect(row!.status).toBe("not_relevant");
+    expect(row!.draftReply).toBeNull();
+  });
+
+  it("rejects the exact crypto post that exposed the live bug -- '$USELESS locked in the profits' -- before ever calling the drafter", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-crypto", status: "shown", draftReply: null, postText: "$USELESS locked in the profits" }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "should never be called", mentionsFillbook: false, usesLink: false }));
+
+    await expect(draftProspectingCandidateReply(fakeClient, "x-crypto", { repo, drafter, loadGrounding })).rejects.toThrow(/not eligible for drafting/i);
+
+    expect(drafter).not.toHaveBeenCalled();
+    const row = await repo.getById("x-crypto");
     expect(row!.status).toBe("not_relevant");
     expect(row!.draftReply).toBeNull();
   });

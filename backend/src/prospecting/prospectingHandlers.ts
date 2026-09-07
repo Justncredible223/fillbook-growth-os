@@ -71,6 +71,24 @@ export interface ProspectingSelectionDiagnostics {
  * accumulated backlog. Only rows actually selected today get marked
  * 'shown'; everything else stays exactly as it was (a 'new' row not
  * selected today is still 'new' tomorrow -- real backlog, not lost).
+ *
+ * Real, confirmed bug this closes (2026-09-07): the zero-cost relevance
+ * gate in prospectingRelevance.ts previously only ran when the owner
+ * tapped Draft reply on a candidate that had ALREADY been shown as an
+ * actionable card (e.g. a crypto-only post like "$USELESS locked in the
+ * profits... a 15% move in less than 2h" surfaced under a genuine-sounding
+ * topic label). X's own search for a topic query is not a precise filter
+ * (see prospectingSearch.ts), so off-topic results routinely make it into
+ * the backlog; this is the one place every non-terminal candidate passes
+ * through before ever becoming visible, so the gate is applied here too,
+ * before daily selection -- an irrelevant candidate is moved straight to
+ * 'not_relevant' (the same terminal status the owner's own "Irrelevant"
+ * button sets, so the post itself is preserved, still visible in
+ * Prospecting history, never deleted) and excluded from both the returned
+ * candidates and the diagnostics below, exactly like it was never
+ * discovered. This runs on every call (idempotent, $0, no LLM), so it also
+ * retroactively sweeps any already-discovered irrelevant backlog the next
+ * time the queue is fetched.
  */
 export async function listProspectingQueue(
   client: SupabaseClient,
@@ -82,7 +100,12 @@ export async function listProspectingQueue(
   const staleCutoff = new Date(now.getTime() - STALE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
   await repo.expireStale(staleCutoff);
 
-  const eligible = await repo.listByStatus([...NON_TERMINAL_STATUSES], 500);
+  const nonTerminal = await repo.listByStatus([...NON_TERMINAL_STATUSES], 500);
+  const irrelevantIds = nonTerminal.filter((row) => !isPlausiblyTradingRelated(row.postText)).map((row) => row.id);
+  if (irrelevantIds.length > 0) {
+    await Promise.all(irrelevantIds.map((id) => repo.updateStatus(id, "not_relevant")));
+  }
+  const eligible = irrelevantIds.length > 0 ? nonTerminal.filter((row) => !irrelevantIds.includes(row.id)) : nonTerminal;
   const { selected, deferred, belowQualityBar, tooOldForToday } = selectDailyWorkingSet(eligible, now);
 
   const newIds = selected.filter((c) => c.status === "new").map((c) => c.id);

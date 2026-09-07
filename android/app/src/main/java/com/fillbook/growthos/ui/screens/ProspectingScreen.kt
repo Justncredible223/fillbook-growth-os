@@ -355,7 +355,23 @@ private fun ProspectingCard(
         }
 
         Spacer(Modifier.height(12.dp))
-        if (draft == null) {
+        // Defensive guard (2026-09-07): the backend now filters an
+        // obviously-irrelevant candidate (e.g. crypto-only content) to
+        // 'not_relevant' before it's ever returned by the queue endpoint,
+        // so this candidate.status branch should be structurally
+        // unreachable in practice. Kept anyway as a real backward-
+        // compatible guard against a stale/cached response, or an older
+        // backend build that hasn't deployed that filter yet -- status is
+        // an existing plain String field, so an old API response that
+        // never sends "not_relevant" here simply never triggers this
+        // branch, no new field or schema change required.
+        if (candidate.status == "not_relevant") {
+            Text(
+                "Not relevant to futures trading",
+                style = MaterialTheme.typography.labelMedium,
+                color = TextTertiary,
+            )
+        } else if (draft == null) {
             PrimaryButton(text = "Draft reply", onClick = onDraft, enabled = !drafting, busy = drafting, modifier = Modifier.fillMaxWidth())
         } else {
             PrimaryButton(text = PlatformActions.copyAndOpenLabel(candidate.platform, hasLink = true), onClick = onCopyAndOpen, enabled = !busy, modifier = Modifier.fillMaxWidth())

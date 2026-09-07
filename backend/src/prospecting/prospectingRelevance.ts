@@ -25,6 +25,29 @@
  * fewer candidate gets drafted, which is safe; a false positive (letting
  * through an unrelated post) is exactly the bug being fixed, so the list
  * favors precision over recall.
+ *
+ * Real bug this closed a second time (2026-09-07): crypto-only posts
+ * (e.g. "$USELESS locked in the profits... a 15% move in less than 2h")
+ * were being surfaced as actionable Prospecting cards because this gate
+ * only ran when the owner tapped Draft reply (see
+ * prospectingHandlers.ts's listProspectingQueue, which now applies it
+ * before a candidate is ever shown). Investigating that bug also found
+ * a real gap in this list itself: "overtrading" was a standalone-
+ * sufficient signal, but it's genuinely a generic-enough word (unlike
+ * "prop firm" or "funded account") that it doesn't reliably anchor a
+ * post to futures/trading-discipline content on its own -- it was
+ * removed as a standalone pattern for that reason. A post that
+ * genuinely discusses overtrading in a futures/prop-firm context still
+ * passes via one of its own other anchors (e.g. "funded account",
+ * "drawdown", "revenge trading"), so no real coverage is lost; a crypto
+ * post that merely happens to share vocabulary with trading discourse
+ * is exactly what removing it protects against. The same reasoning
+ * means no bare word like "volume", "discipline", "performance",
+ * "entry", "move", or "profits" is ever added to this list alone --
+ * each of those independently matches vast unrelated content (including
+ * ordinary crypto-only posts), so a real relevance decision always
+ * requires one of the distinctive, multi-word or domain-specific
+ * patterns below.
  */
 
 const TRADING_RELEVANCE_PATTERNS: RegExp[] = [
@@ -53,7 +76,6 @@ const TRADING_RELEVANCE_PATTERNS: RegExp[] = [
 
   // Trading discipline / risk / psychology vocabulary
   /\b(trailing )?drawdown\b/i,
-  /\bovertrading\b/i,
   /\brevenge trading\b/i,
   /\btrading (tilt|psychology|plan|routine|journal|process|strategy)\b/i,
   /\btrade (journal|review|execution)\b/i,
