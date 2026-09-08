@@ -43,7 +43,15 @@ export interface ProspectingTopic {
 export const PROSPECTING_TOPICS: ProspectingTopic[] = [
   // ---- CLASS A -- direct fit ----
   { key: "revenge_trading", query: '"revenge trading"', label: "Revenge trading", replyClass: "A" },
-  { key: "overtrading", query: "overtrading", label: "Overtrading", replyClass: "A" },
+  // "trading" is appended (not just bare "overtrading") so a matching post is guaranteed
+  // to contain the "trading" anchor prospectingRelevance.ts's isPlausiblyTradingRelated()
+  // requires -- bare "overtrading" alone isn't a relevance anchor there (see that file's
+  // own doc comment: too generic on its own, a crypto trader can "overtrade" too), so
+  // without this every candidate this topic found was being silently killed the moment
+  // listProspectingQueue() re-ran the relevance gate on fetch, even though ingestion had
+  // just accepted it as "new" (confirmed 2026-09-07: 0 of this topic's finds ever reached
+  // the app).
+  { key: "overtrading", query: "overtrading trading", label: "Overtrading", replyClass: "A" },
   { key: "trading_journal", query: '"trading journal"', label: "Trading journal", replyClass: "A" },
   { key: "expectancy", query: '"trading expectancy"', label: "Expectancy", replyClass: "A" },
   { key: "consistency_rule", query: '"consistency rule" OR ("prop firm" consistency)', label: "Consistency rule", replyClass: "A" },
@@ -74,7 +82,11 @@ export const PROSPECTING_TOPICS: ProspectingTopic[] = [
   { key: "trading_routine", query: '"trading routine" OR "trading process"', label: "Trading routine", replyClass: "B" },
   { key: "risk_management", query: '"risk management" futures', label: "Risk management (futures)", replyClass: "B" },
   { key: "gave_back_profits", query: '"gave back" profits trading', label: "Gave back profits", replyClass: "B" },
-  { key: "too_many_trades", query: '"too many trades"', label: "Overtrading volume", replyClass: "B" },
+  // "trading" appended for the same reason as "overtrading" above -- the bare phrase
+  // "too many trades" contains no anchor isPlausiblyTradingRelated() recognizes, so
+  // every candidate this topic found (confirmed live 2026-09-07: 4 of 4) was silently
+  // reclassified 'not_relevant' the instant the app fetched the queue.
+  { key: "too_many_trades", query: '"too many trades" trading', label: "Overtrading volume", replyClass: "B" },
   { key: "hesitation_trading", query: '"hesitate to enter" OR "entry hesitation" trading', label: "Hesitation", replyClass: "B" },
   { key: "holding_losers", query: '"holding losers"', label: "Holding losers", replyClass: "B" },
   { key: "bad_trading_day", query: '"bad trading day"', label: "Bad trading day", replyClass: "B" },

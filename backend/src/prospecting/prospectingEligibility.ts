@@ -12,16 +12,23 @@ import { currentScheduleSlot, getScheduleTimezone, getXProspectingSchedule } fro
 /**
  * How many of PROSPECTING_TOPICS get searched per growth-pulse run --
  * rotates through the full list over time rather than querying everything
- * at once. Deliberately small: the owner replies to a strict 8-15
- * candidates/day (shadowban-risk discipline), and QUEUE_FULL_THRESHOLD
- * below already stops search entirely once 2 days' worth of backlog is
- * queued -- fetching more raw reads than that ceiling allows through
- * doesn't produce more usable replies, it just spends more on results
- * that sit unactioned. At 1 topic/run * 3 runs/day (RUN_HOURS_UTC), that's
- * 3 topics/day covered, cycling PROSPECTING_TOPICS's full list every
- * ~14 days.
+ * at once. QUEUE_FULL_THRESHOLD below still stops search entirely once 2
+ * days' worth of backlog is queued, so this can't overrun the owner's
+ * strict 8-15 candidates/day reply cadence (shadowban-risk discipline) --
+ * it only controls how much TOPIC DIVERSITY shows up per run while the
+ * queue is empty/low.
+ *
+ * Raised from 1 to 2 (2026-09-07): at 1 topic/run * 3 runs/day, every
+ * candidate found in one run came from the exact same search topic (real
+ * example: a run that found 4 candidates, all under "too_many_trades"),
+ * and the full ~35-topic list took ~14 days to cycle once. At 2/run * 3
+ * runs/day = 6 topics/day, the full list cycles in under a week, and a
+ * single run is no longer guaranteed to be single-topic. Cost impact: see
+ * MONTHLY_PROSPECTING_BUDGET_USD's own comment -- still self-limiting,
+ * still well under the shared $10 credit pool even at this run's real,
+ * lower-than-ceiling read counts.
  */
-export const TOPICS_PER_SEARCH_RUN = 1;
+export const TOPICS_PER_SEARCH_RUN = 2;
 
 /** X's own minimum for max_results on this endpoint; going lower wastes a call for no benefit. Lowered from 15 -- 10 is still X's floor, and cuts read volume ~33% per query with no coverage loss that matters for a rotating discovery feed. */
 export const RESULTS_PER_QUERY = 10;
@@ -72,11 +79,13 @@ export const STALE_EXPIRY_DAYS = 14;
 /**
  * Conservative monthly ceiling, leaving real headroom under the $10
  * deposited credit shared with mentions ingestion (which costs fractions
- * of a cent per run). At TOPICS_PER_SEARCH_RUN=1 * RESULTS_PER_QUERY=10 *
- * $0.005 = $0.05/run, 3 runs/day * 30 days = $4.50/month uncapped -- this
- * cap leaves headroom for a heavier month while still stopping real spend
- * well short of the shared $10 credit pool, using actual recorded
- * cost_events rows, not just the theoretical estimate.
+ * of a cent per run). At TOPICS_PER_SEARCH_RUN=2 * RESULTS_PER_QUERY=10 *
+ * $0.005 = $0.10/run, 3 runs/day * 30 days = $9.00/month uncapped in
+ * theory -- this cap (unchanged at $8) is what actually keeps that under
+ * the shared $10 pool; real spend runs lower in practice since most
+ * queries return fewer than the full 10 results once the freshness/
+ * dedup filters apply (this codebase's own recorded cost_events, not
+ * just the theoretical ceiling, is what evaluateMonthlyBudget checks).
  */
 export const MONTHLY_PROSPECTING_BUDGET_USD = 8.0;
 
