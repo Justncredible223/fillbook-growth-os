@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.DraftRejectedException
@@ -345,6 +346,14 @@ private fun ProspectingCard(
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = MaterialTheme.typography.bodyMedium,
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, cursorColor = Accent, unfocusedBorderColor = Border),
+            )
+            val charCount = (editedText ?: draft).length
+            Text(
+                "$charCount / 280",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (charCount > 280) Danger else TextTertiary,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.End,
             )
             if (candidate.replyMentionsFillbook == true || candidate.replyUsedLink == true) {
                 Spacer(Modifier.height(6.dp))

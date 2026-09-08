@@ -311,9 +311,9 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, pen
             composable(Destination.Creators.route) { CreatorsScreen(repo) }
             composable(Destination.Strategy.route) { StrategyScreen(repo) }
             composable(Destination.Experiments.route) { ExperimentsScreen(repo) }
-            composable(Destination.Notifications.route) { NotificationsScreen(repo) }
-            composable(Destination.MorningBrief.route) { MorningBriefScreen(repo) }
-            composable(Destination.EveningReport.route) { EveningReportScreen(repo) }
+            composable(Destination.Notifications.route) { NotificationsScreen(repo, onNavigate = ::navigate) }
+            composable(Destination.MorningBrief.route) { MorningBriefScreen(repo, onNavigate = ::navigate) }
+            composable(Destination.EveningReport.route) { EveningReportScreen(repo, onNavigate = ::navigate) }
             composable(Destination.System.route) { SystemScreen(repo) }
             composable(Destination.Settings.route) { SettingsScreen(repo) }
             composable(Destination.XFeedPostHistory.route) { XFeedPostHistoryScreen(repo) }

@@ -16,9 +16,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.NotificationsNone
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,10 +36,10 @@ import com.fillbook.growthos.data.AppNotification
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.GrowthCard
-import com.fillbook.growthos.ui.components.LoadingIndicator
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
+import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
@@ -48,6 +50,22 @@ import kotlinx.coroutines.launch
 
 /** Sentinel busy key for the whole-list "Mark all read" action, distinct from any real notification id. */
 private const val MARK_ALL_BUSY_KEY = "__mark_all_read__"
+
+private fun routeFor(type: String): String? = when (type) {
+    "high_value_opportunity" -> "radar"
+    "strategy_updated" -> "strategy"
+    "experiment_significant" -> "experiments"
+    "platform_failure" -> "system"
+    else -> null
+}
+
+private fun destinationLabel(type: String): String = when (type) {
+    "high_value_opportunity" -> "Radar"
+    "strategy_updated" -> "Strategy"
+    "experiment_significant" -> "Experiments"
+    "platform_failure" -> "System"
+    else -> ""
+}
 
 /**
  * Real, meaningful-events-only feed (see
@@ -61,12 +79,20 @@ private const val MARK_ALL_BUSY_KEY = "__mark_all_read__"
  * failure shows a dismissable message instead of leaving the row unread
  * with no explanation (or crashing the screen), and the tapped control
  * is disabled while the request is in flight.
+ *
+ * Tap-to-navigate (2026-09-07): high_value_opportunity → Radar,
+ * strategy_updated → Strategy, experiment_significant → Experiments,
+ * platform_failure → System. relatedId is already stored server-side
+ * but currently just carried along -- each destination screen loads its
+ * own data on entry, so no client-side lookup is needed.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificationsScreen(repo: GrowthOsRepository) {
+fun NotificationsScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit = {}) {
     var notifications by remember { mutableStateOf<List<AppNotification>>(emptyList()) }
     var unreadCount by remember { mutableIntStateOf(0) }
     var loaded by remember { mutableStateOf(false) }
+    var refreshing by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
     var busyKey by remember { mutableStateOf<String?>(null) }
@@ -128,24 +154,38 @@ fun NotificationsScreen(repo: GrowthOsRepository) {
         }
 
         if (!loaded) {
-            LoadingIndicator()
-        } else if (notifications.isEmpty()) {
-            PolishedEmptyState(
-                icon = Icons.Filled.NotificationsNone,
-                headline = "Nothing to report",
-                subtitle = "You'll hear from Growth OS only when something's actually worth your attention.",
-            )
+            SkeletonListLoading()
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                modifier = Modifier.fillMaxSize(),
             ) {
-                items(notifications, key = { it.id }) { notification ->
-                    NotificationCard(
-                        notification = notification,
-                        busy = busyKey == notification.id || busyKey == MARK_ALL_BUSY_KEY,
-                        onMarkRead = { runAction(notification.id, "Couldn't mark that read. Check your connection and try again.") { repo.markNotificationRead(notification.id) } },
-                    )
+                if (notifications.isEmpty()) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.NotificationsNone,
+                                headline = "Nothing to report",
+                                subtitle = "You'll hear from Growth OS only when something's actually worth your attention.",
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(notifications, key = { it.id }) { notification ->
+                            NotificationCard(
+                                notification = notification,
+                                busy = busyKey == notification.id || busyKey == MARK_ALL_BUSY_KEY,
+                                onMarkRead = { runAction(notification.id, "Couldn't mark that read. Check your connection and try again.") { repo.markNotificationRead(notification.id) } },
+                                onNavigate = routeFor(notification.type)?.let { route -> { onNavigate(route) } },
+                                destinationLabel = destinationLabel(notification.type),
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -154,7 +194,13 @@ fun NotificationsScreen(repo: GrowthOsRepository) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun NotificationCard(notification: AppNotification, busy: Boolean, onMarkRead: () -> Unit) {
+private fun NotificationCard(
+    notification: AppNotification,
+    busy: Boolean,
+    onMarkRead: () -> Unit,
+    onNavigate: (() -> Unit)?,
+    destinationLabel: String,
+) {
     val isUnread = notification.readAt == null
     GrowthCard(accentBar = if (isUnread) severityColor(notification.severity) else null) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -165,9 +211,16 @@ private fun NotificationCard(notification: AppNotification, busy: Boolean, onMar
         Text(notification.title, style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
         Text(notification.body, style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
-        if (isUnread) {
-            Spacer(Modifier.height(10.dp))
-            TextButton(onClick = onMarkRead, enabled = !busy) { Text(if (busy) "Marking..." else "Mark read") }
+        if (isUnread || onNavigate != null) {
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (isUnread) {
+                    TextButton(onClick = onMarkRead, enabled = !busy) { Text(if (busy) "Marking..." else "Mark read") }
+                }
+                if (onNavigate != null && destinationLabel.isNotEmpty()) {
+                    TextButton(onClick = onNavigate) { Text("View in $destinationLabel →") }
+                }
+            }
         }
     }
 }
