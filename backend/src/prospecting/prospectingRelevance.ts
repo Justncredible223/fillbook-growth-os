@@ -104,11 +104,54 @@ const TRADING_RELEVANCE_PATTERNS: RegExp[] = [
 ];
 
 /**
+ * Posts that match at least one of these are almost certainly about
+ * automated/algorithmic trading systems, not the manual-discipline
+ * traders Fillbook serves. We exclude them even when they also contain
+ * a TRADING_RELEVANCE_PATTERNS match (e.g. "automated trading" matches
+ * both /\btrading\b/ and this list -- the exclusion wins).
+ *
+ * The override patterns below let a post survive exclusion when it's
+ * clearly about manual discipline *in addition to* mentioning automation.
+ */
+const AUTOMATED_TRADING_EXCLUSION_PATTERNS: RegExp[] = [
+  /\bautomated trading\b/i,
+  /\balgo(rithmic)? trading\b/i,
+  /\btrading bot\b/i,
+  /\btrading (robot|algorithm|system|EA)\b/i,
+  /\bexpert advisor\b/i,
+  /\bcopy trading\b/i,
+  /\bhigh[- ]frequency trading\b/i,
+  /\bHFT\b/,
+  /\bsmart grid\b/i,
+  /\bquantitative trading\b/i,
+  /\bquant trader\b/i,
+  /\bautotrading\b/i,
+];
+
+/** These override the exclusion list when also present -- a post about
+ *  algo tools that also discusses prop-firm rules or manual psychology
+ *  is still worth showing. */
+const MANUAL_DISCIPLINE_OVERRIDE_PATTERNS: RegExp[] = [
+  /\bprop firm\b/i,
+  /\bfunded (account|trader)\b/i,
+  /\b(trailing )?drawdown\b/i,
+  /\brevenge trading\b/i,
+  /\btrading (journal|psychology|plan|routine)\b/i,
+  /\b(blew|blown) (my |the )?account\b/i,
+  /\bdaily loss limit\b/i,
+  /\bposition sizing\b/i,
+];
+
+/**
  * True if [postText] contains at least one distinctive futures/markets/
- * prop-trading signal. Used as a pre-drafting gate in
- * prospectingHandlers.ts -- an irrelevant candidate is skipped (moved to
- * 'not_relevant') before any LLM call, never reaching draftProspectingReply.
+ * prop-trading signal AND is not primarily about automated/algorithmic
+ * trading systems. Used as a pre-drafting gate in prospectingHandlers.ts.
  */
 export function isPlausiblyTradingRelated(postText: string): boolean {
-  return TRADING_RELEVANCE_PATTERNS.some((pattern) => pattern.test(postText));
+  if (!TRADING_RELEVANCE_PATTERNS.some((p) => p.test(postText))) return false;
+  if (AUTOMATED_TRADING_EXCLUSION_PATTERNS.some((p) => p.test(postText))) {
+    // Allow through only if there's also clear manual-discipline content
+    return MANUAL_DISCIPLINE_OVERRIDE_PATTERNS.some((p) => p.test(postText));
+  }
+  return true;
 }
