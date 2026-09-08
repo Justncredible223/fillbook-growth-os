@@ -25,14 +25,16 @@ import java.util.concurrent.TimeUnit
  *
  * [appToken] is the second, separate credential that actually gates this
  * project's own business data (see backend/src/lib/requireAppAuth.ts).
- * Same trust tier as the Vercel bypass secret above -- compiled into the
- * app once (MainActivity's APP_TOKEN), never something the owner types
- * or retrieves. The owner's actual gate is BiometricGateScreen
- * (fingerprint/face/device PIN); this token exists so a stranger who
- * only has the Vercel bypass secret still can't reach this project's
- * data without also having decompiled the APK for this value too. Every
- * request here sends it as a standard Authorization: Bearer header; the
- * backend rejects anything that doesn't match its own APP_API_TOKEN env
+ * Same trust tier as the Vercel bypass secret above -- injected into the
+ * app once at build time (see AppConfig.kt's APP_TOKEN, sourced from
+ * android/local.properties or an env var, never a source literal), never
+ * something the owner types or retrieves. The owner's actual gate is
+ * BiometricGateScreen (fingerprint/face/device PIN); this token exists so
+ * a stranger who only has the Vercel bypass secret still can't reach this
+ * project's data without also having decompiled the APK for this value
+ * too. Every request here sends it as a standard Authorization: Bearer
+ * header; the backend rejects anything that doesn't match its own
+ * APP_API_TOKEN (or, during a rotation window, APP_API_TOKEN_PREVIOUS) env
  * var.
  *
  * [deciderName] answers "who approved this" for the audit trail (see
@@ -95,6 +97,28 @@ class NetworkGrowthOsRepository(
         }
     }
 
+    /**
+     * Same fix as generatePartnershipDraft's own 404-body parsing (see
+     * extractPartnershipActionErrorMessage's docstring) -- confirmed on
+     * inspection that draftProspectingReply/draftInboundResponse had never
+     * received it: a thrown ProspectingActionError/InboundActionError
+     * (e.g. the reply guardrail rejecting a banned phrase or unverified
+     * claim) converts into an HTTP 404 with a real, actionable
+     * `{error: message}` body, but without this, it fell through as a bare
+     * NetworkException -- ProspectingScreen/InboundScreen's generic
+     * `catch (e: Exception)` has no specific handler for that, so it
+     * silently became "Couldn't draft a reply. Check your connection and
+     * try again.", hiding the real reason the owner needed to see.
+     */
+    private suspend fun postExpectingDraftRejection(path: String, jsonBody: JSONObject): JSONObject =
+        try {
+            post(path, jsonBody)
+        } catch (e: NetworkException) {
+            val parsedError = extractPartnershipActionErrorMessage(e.httpCode, e.message)
+            if (parsedError != null) throw DraftRejectedException(parsedError)
+            throw e
+        }
+
     override suspend fun getHomeSummary(): HomeSummary {
         val json = get("/api/summary")
         val analytics = json.getJSONObject("analytics")
@@ -123,14 +147,21 @@ class NetworkGrowthOsRepository(
                     )
                 },
             ),
-            todayXPost = json.optJSONObject("todayXPost")?.let { post ->
-                TodayXPost(
-                    state = runCatching { TodayXPostState.valueOf(post.getString("state").uppercase()) }
-                        .getOrDefault(TodayXPostState.EMPTY),
-                    campaignAssetId = post.optStringOrNull("campaignAssetId"),
-                    previewText = post.optStringOrNull("previewText"),
-                )
-            } ?: TodayXPost(TodayXPostState.EMPTY, null, null),
+            todayXPost = json.optJSONObject("todayXPost").toTodayXPost(),
+        )
+    }
+
+    /** Shared parsing for GET /api/summary's embedded todayXPost and the x-feed-post resource's own responses -- same shape from both. */
+    private fun JSONObject?.toTodayXPost(): TodayXPost {
+        if (this == null) return TodayXPost(TodayXPostState.EMPTY, null, null)
+        return TodayXPost(
+            state = runCatching { TodayXPostState.valueOf(getString("state").uppercase()) }.getOrDefault(TodayXPostState.EMPTY),
+            campaignAssetId = optStringOrNull("campaignAssetId"),
+            previewText = optStringOrNull("previewText"),
+            topicLabel = optStringOrNull("topicLabel"),
+            reason = optStringOrNull("reason"),
+            selectionReason = optStringOrNull("selectionReason"),
+            canRegenerate = optBoolean("canRegenerate", false),
         )
     }
 
@@ -165,7 +196,24 @@ class NetworkGrowthOsRepository(
 
     override suspend fun draftOpportunityReply(opportunityId: String): String {
         val body = JSONObject().put("action", "draft-reply").put("opportunityId", opportunityId)
-        val json = post("/api/opportunities", body)
+        // Real gap found in the 2026-09-07 release audit: unlike
+        // draftInboundResponse/draftProspectingReply/generatePartnershipDraft
+        // (all routed through postExpectingDraftRejection), this call used
+        // the plain post() helper, so a real, actionable rejection reason
+        // from opportunities.ts's OpportunityReplyError (HTTP 400 --
+        // different status than the Partnerships/Inbound/Prospecting 404
+        // pattern, since this is a distinct backend route) fell through as
+        // a bare NetworkException. RadarScreen's catch (e: Exception) has
+        // no specific handler for that, so it silently became "Couldn't
+        // draft a reply. Check your connection and try again." instead of
+        // the real guardrail reason.
+        val json = try {
+            post("/api/opportunities", body)
+        } catch (e: NetworkException) {
+            val parsedError = extractOpportunityReplyErrorMessage(e.httpCode, e.message)
+            if (parsedError != null) throw DraftRejectedException(parsedError)
+            throw e
+        }
         return json.getString("draft")
     }
 
@@ -177,6 +225,54 @@ class NetworkGrowthOsRepository(
             blockReasons = result.optJSONArray("mechanicalBlockReasons")?.mapStrings() ?: emptyList(),
             costUsd = json.getDouble("costUsd"),
         )
+    }
+
+    override suspend fun requestVideoScript(topic: String?, opportunityId: String?): CampaignRunResult {
+        val body = JSONObject().put("assetType", "video_script")
+        if (topic != null) body.put("topic", topic)
+        if (opportunityId != null) body.put("opportunityId", opportunityId)
+        val json = post("/api/run-campaign", body)
+        val result = json.getJSONObject("result")
+        return CampaignRunResult(
+            finalStage = result.getString("finalStage"),
+            blockReasons = result.optJSONArray("mechanicalBlockReasons")?.mapStrings() ?: emptyList(),
+            costUsd = json.getDouble("costUsd"),
+        )
+    }
+
+    override suspend fun requestResearch(topic: String?, opportunityId: String?): CampaignRunResult {
+        val body = JSONObject().put("assetType", "research")
+        if (topic != null) body.put("topic", topic)
+        if (opportunityId != null) body.put("opportunityId", opportunityId)
+        val json = post("/api/run-campaign", body)
+        val result = json.getJSONObject("result")
+        return CampaignRunResult(
+            finalStage = result.getString("finalStage"),
+            blockReasons = result.optJSONArray("mechanicalBlockReasons")?.mapStrings() ?: emptyList(),
+            costUsd = json.getDouble("costUsd"),
+        )
+    }
+
+    private fun JSONObject.toResearchRecord() = ResearchRecord(
+        id = getString("id"),
+        title = getString("title"),
+        question = getString("question"),
+        summary = getString("summary"),
+        findings = optJSONArray("findings")?.mapStrings() ?: emptyList(),
+        evidenceReferences = optJSONArray("evidenceReferences")?.mapStrings() ?: emptyList(),
+        caveats = optJSONArray("caveats")?.mapStrings() ?: emptyList(),
+        contentAngles = optJSONArray("contentAngles")?.mapStrings() ?: emptyList(),
+        status = getString("status"),
+        costUsd = if (isNull("costUsd")) null else getDouble("costUsd"),
+        createdAt = getString("createdAt"),
+    )
+
+    // Folded into /api/approvals (?resource=research) -- same Vercel
+    // Hobby 12-function-cap reasoning as inbound/prospecting/partnerships/
+    // video-status above.
+    override suspend fun listResearch(): List<ResearchRecord> {
+        val json = get("/api/approvals?resource=research")
+        return json.getJSONArray("items").map { it.toResearchRecord() }
     }
 
     override suspend fun getApprovals(): List<ApprovalAsset> {
@@ -274,6 +370,32 @@ class NetworkGrowthOsRepository(
         return HandOffResult(campaignAssetId = json.getString("campaignAssetId"), stage = json.getString("stage"))
     }
 
+    override suspend fun regenerateTodayXPost(): TodayXPost {
+        val json = post("/api/summary?resource=x-feed-post", JSONObject().put("action", "regenerate"))
+        return json.optJSONObject("todayXPost").toTodayXPost()
+    }
+
+    override suspend fun markTodayXPostPosted(campaignAssetId: String, postedText: String): TodayXPost {
+        val body = JSONObject().put("action", "mark-posted").put("campaignAssetId", campaignAssetId).put("postedText", postedText)
+        val json = post("/api/summary?resource=x-feed-post", body)
+        return json.optJSONObject("todayXPost").toTodayXPost()
+    }
+
+    override suspend fun getTodayXPostHistory(): List<XFeedPostHistoryEntry> {
+        val json = get("/api/summary?resource=x-feed-post-history")
+        return json.getJSONArray("entries").map { item ->
+            XFeedPostHistoryEntry(
+                operatingDate = item.getString("operatingDate"),
+                state = runCatching { XFeedPostHistoryState.valueOf(item.getString("state").uppercase()) }
+                    .getOrDefault(XFeedPostHistoryState.FAILED),
+                topicLabel = item.optStringOrNull("topicLabel"),
+                previewText = item.optStringOrNull("previewText"),
+                reason = item.optStringOrNull("reason"),
+                campaignAssetId = item.optStringOrNull("campaignAssetId"),
+            )
+        }
+    }
+
     private fun JSONObject.toInboundEngagement() = InboundEngagement(
         id = getString("id"),
         platform = getString("platform"),
@@ -310,7 +432,7 @@ class NetworkGrowthOsRepository(
     }
 
     override suspend fun draftInboundResponse(id: String): InboundEngagement {
-        val json = post("/api/approvals?resource=inbound", JSONObject().put("action", "draft").put("id", id))
+        val json = postExpectingDraftRejection("/api/approvals?resource=inbound", JSONObject().put("action", "draft").put("id", id))
         return json.toInboundEngagement()
     }
 
@@ -334,6 +456,9 @@ class NetworkGrowthOsRepository(
 
     private fun JSONObject.toProspectingCandidate() = ProspectingCandidate(
         id = getString("id"),
+        // Every row has a platform server-side; "x" is only the fallback for a
+        // response predating the field.
+        platform = optStringOrNull("platform") ?: "x",
         discoveryQuery = getString("discoveryQuery"),
         discoveryLabel = optStringOrNull("discoveryLabel") ?: getString("discoveryQuery"),
         replyClass = optStringOrNull("replyClass") ?: "B",
@@ -343,6 +468,7 @@ class NetworkGrowthOsRepository(
         postText = getString("postText"),
         postUrl = getString("postUrl"),
         postCreatedAt = optStringOrNull("postCreatedAt"),
+        discoveredAt = optStringOrNull("discoveredAt"),
         opportunityScore = getDouble("opportunityScore"),
         scoreBreakdown = optJSONObject("scoreBreakdown")?.toStringMap() ?: emptyMap(),
         creatorCandidate = optBoolean("creatorCandidate", false),
@@ -352,14 +478,29 @@ class NetworkGrowthOsRepository(
         replyUsedLink = if (isNull("replyUsedLink")) null else getBoolean("replyUsedLink"),
     )
 
+    private fun JSONObject.toProspectingDiagnostics() = ProspectingDiagnostics(
+        totalConsidered = getInt("totalConsidered"),
+        selected = getInt("selected"),
+        deferred = getInt("deferred"),
+        belowQualityBar = getInt("belowQualityBar"),
+        tooOldForToday = getInt("tooOldForToday"),
+    )
+
     // Folded into /api/approvals (?resource=prospecting) -- same 12-function-cap reasoning as inbound above.
-    override suspend fun getProspectingQueue(): List<ProspectingCandidate> {
+    override suspend fun getProspectingQueue(): ProspectingQueueResult {
         val json = get("/api/approvals?resource=prospecting")
-        return json.getJSONArray("items").map { it.toProspectingCandidate() }
+        return ProspectingQueueResult(
+            candidates = json.getJSONArray("items").map { it.toProspectingCandidate() },
+            // Null (not a zeroed-out instance) when this response predates the
+            // diagnostics field -- optJSONObject returns null for a missing
+            // key rather than throwing, which is exactly the "older/unknown
+            // API response" fallback case this is meant to represent.
+            diagnostics = json.optJSONObject("diagnostics")?.toProspectingDiagnostics(),
+        )
     }
 
     override suspend fun draftProspectingReply(id: String): ProspectingCandidate {
-        val json = post("/api/approvals?resource=prospecting", JSONObject().put("action", "draft").put("id", id))
+        val json = postExpectingDraftRejection("/api/approvals?resource=prospecting", JSONObject().put("action", "draft").put("id", id))
         return json.toProspectingCandidate()
     }
 
@@ -389,6 +530,159 @@ class NetworkGrowthOsRepository(
     override suspend fun markProspectingAlreadyHandled(id: String) {
         post("/api/approvals?resource=prospecting", JSONObject().put("action", "already-handled").put("id", id))
     }
+
+    private fun JSONObject.toPartnershipProspect(): PartnershipProspect {
+        val socialLinksObj = optJSONObject("socialLinks")
+        val socialLinks = mutableMapOf<String, String>()
+        socialLinksObj?.keys()?.forEach { key -> socialLinks[key] = socialLinksObj.getString(key) }
+        return PartnershipProspect(
+            id = getString("id"),
+            organizationName = getString("organizationName"),
+            contactName = optStringOrNull("contactName"),
+            partnerCategory = runCatching { PartnerCategory.valueOf(getString("partnerCategory").uppercase()) }.getOrDefault(PartnerCategory.OTHER),
+            stage = runCatching { PartnershipStage.valueOf(getString("stage").uppercase()) }.getOrDefault(PartnershipStage.PROSPECT),
+            websiteUrl = optStringOrNull("websiteUrl"),
+            socialLinks = socialLinks,
+            contactRoute = optStringOrNull("contactRoute"),
+            contactRouteSource = optStringOrNull("contactRouteSource"),
+            audienceFocus = optStringOrNull("audienceFocus"),
+            futuresRelevanceEvidence = optStringOrNull("futuresRelevanceEvidence"),
+            sourceUrls = optJSONArray("sourceUrls")?.mapStrings() ?: emptyList(),
+            researchDate = optStringOrNull("researchDate"),
+            competingJournalRelationships = optStringOrNull("competingJournalRelationships"),
+            competingJournalEvidence = optStringOrNull("competingJournalEvidence"),
+            proposedCollaboration = optStringOrNull("proposedCollaboration"),
+            qualificationRationale = optStringOrNull("qualificationRationale"),
+            ownerNotes = optStringOrNull("ownerNotes"),
+            nextAction = optStringOrNull("nextAction"),
+            nextActionDueDate = optStringOrNull("nextActionDueDate"),
+            pilotTermsProposed = optStringOrNull("pilotTermsProposed"),
+            pilotTermsAgreed = optStringOrNull("pilotTermsAgreed"),
+            pilotStartDate = optStringOrNull("pilotStartDate"),
+            pilotEndDate = optStringOrNull("pilotEndDate"),
+            followUpCount = optInt("followUpCount", 0),
+            approvedCampaignAssetId = optStringOrNull("approvedCampaignAssetId"),
+            previewText = optStringOrNull("previewText"),
+            contactedAt = optStringOrNull("contactedAt"),
+            contactedChannel = optStringOrNull("contactedChannel"),
+            discoveryScore = if (isNull("discoveryScore")) null else optDouble("discoveryScore").toInt(),
+            discoveryConfidence = optStringOrNull("discoveryConfidence"),
+            discoveredVia = optString("discoveredVia", "manual"),
+            suppressedReason = optStringOrNull("suppressedReason"),
+        )
+    }
+
+    private fun JSONObject.toDiscoveryRunResult(): PartnershipDiscoveryRunResult = PartnershipDiscoveryRunResult(
+        status = getString("status"),
+        newCandidates = optInt("newCandidates", 0),
+        sourcesSearched = optJSONArray("sourcesSearched")?.mapStrings() ?: emptyList(),
+        costUsd = optDouble("costUsd", 0.0),
+        error = optStringOrNull("error"),
+        skipReason = optStringOrNull("skipReason"),
+    )
+
+    override suspend fun getPartnerships(): PartnershipsSummary {
+        val json = get("/api/approvals?resource=partnerships")
+        val items = json.getJSONArray("items").map { it.toPartnershipProspect() }
+        val lastRun = json.optJSONObject("lastDiscoveryRun")?.toDiscoveryRunResult()
+        return PartnershipsSummary(items, lastRun)
+    }
+
+    override suspend fun refreshPartnershipDiscovery(): PartnershipDiscoveryRunResult {
+        val json = post("/api/approvals?resource=partnerships", JSONObject().put("action", "refresh-discovery"))
+        return json.toDiscoveryRunResult()
+    }
+
+    override suspend fun createPartnership(organizationName: String, contactName: String?, partnerCategory: PartnerCategory, websiteUrl: String?, proposedCollaboration: String?): PartnershipProspect {
+        val body = JSONObject()
+            .put("action", "create")
+            .put("organizationName", organizationName)
+            .put("partnerCategory", partnerCategory.name.lowercase())
+        if (contactName != null) body.put("contactName", contactName)
+        if (websiteUrl != null) body.put("websiteUrl", websiteUrl)
+        if (proposedCollaboration != null) body.put("proposedCollaboration", proposedCollaboration)
+        return post("/api/approvals?resource=partnerships", body).toPartnershipProspect()
+    }
+
+    override suspend fun updatePartnership(id: String, ownerNotes: String?, nextAction: String?, nextActionDueDate: String?, contactRoute: String?, contactRouteSource: String?, audienceFocus: String?, futuresRelevanceEvidence: String?): PartnershipProspect {
+        val body = JSONObject().put("action", "update").put("id", id)
+        ownerNotes?.let { body.put("ownerNotes", it) }
+        nextAction?.let { body.put("nextAction", it) }
+        nextActionDueDate?.let { body.put("nextActionDueDate", it) }
+        contactRoute?.let { body.put("contactRoute", it) }
+        contactRouteSource?.let { body.put("contactRouteSource", it) }
+        audienceFocus?.let { body.put("audienceFocus", it) }
+        futuresRelevanceEvidence?.let { body.put("futuresRelevanceEvidence", it) }
+        return post("/api/approvals?resource=partnerships", body).toPartnershipProspect()
+    }
+
+    override suspend fun qualifyPartnership(id: String, rationale: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "qualify").put("id", id).put("rationale", rationale)).toPartnershipProspect()
+
+    override suspend fun generatePartnershipDraft(id: String): PartnershipProspect {
+        val result =
+            try {
+                post("/api/approvals?resource=partnerships", JSONObject().put("action", "generate-draft").put("id", id))
+            } catch (e: NetworkException) {
+                // approvals.ts converts a thrown PartnershipActionError into an
+                // HTTP 404 with a real, actionable {error: message} body (e.g.
+                // the evidence-insufficiency guard, or the generation_claimed_at
+                // duplicate-request mutex rejection) -- BEFORE this fix, that
+                // fell through as a bare NetworkException, which
+                // PartnershipsScreen's catch block has no specific handler for,
+                // so it silently became the generic "Couldn't complete that
+                // action. Check your connection and try again." -- hiding the
+                // real, useful reason the owner actually needed to see (add
+                // more evidence; wait for the in-flight generation to finish).
+                // Confirmed by tracing this exact path end-to-end while
+                // verifying this round's new error messages on-device.
+                val parsedError = extractPartnershipActionErrorMessage(e.httpCode, e.message)
+                if (parsedError != null) throw PartnershipDraftRejectedException(shortReason = parsedError)
+                throw e
+            }
+        // "failed" (didn't pass the mechanical/review gates) and "skipped" (budget
+        // exhausted) are real, meaningful outcomes the owner needs to actually see
+        // -- not a connection problem, and not something to silently discard.
+        // Thrown here (rather than swallowed) so PartnershipsScreen's existing
+        // error-display path shows the real reason instead of a generic message.
+        when (result.optString("status")) {
+            "failed" -> {
+                val attempts = result.optInt("attempts", 1)
+                throw PartnershipDraftRejectedException(
+                    shortReason = "Didn't pass review after $attempts attempt${if (attempts == 1) "" else "s"} -- needs stronger, more specific personalization for this recipient.",
+                    details = result.optString("error", "no details returned"),
+                )
+            }
+            "skipped" -> throw PartnershipDraftRejectedException(
+                shortReason = "Draft generation skipped -- this month's Partnerships budget is used up.",
+                details = result.optString("skipReason", "no details returned"),
+            )
+        }
+        // The generate-draft response is a lightweight result (status/cost), not the full prospect shape --
+        // re-fetch this one prospect's real current state (including the new previewText) from the list.
+        return getPartnerships().items.first { it.id == id }
+    }
+
+    override suspend fun markPartnershipContacted(id: String, channel: String, finalText: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "mark-contacted").put("id", id).put("channel", channel).put("finalText", finalText)).toPartnershipProspect()
+
+    override suspend fun recordPartnershipReply(id: String, summary: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "record-reply").put("id", id).put("summary", summary)).toPartnershipProspect()
+
+    override suspend fun startPartnershipPilot(id: String, termsAgreed: String, startDate: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "start-pilot").put("id", id).put("termsAgreed", termsAgreed).put("startDate", startDate)).toPartnershipProspect()
+
+    override suspend fun activatePartnership(id: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "activate").put("id", id)).toPartnershipProspect()
+
+    override suspend fun closePartnership(id: String, reason: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "close").put("id", id).put("reason", reason)).toPartnershipProspect()
+
+    override suspend fun archivePartnership(id: String, reason: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "archive").put("id", id).put("reason", reason)).toPartnershipProspect()
+
+    override suspend fun markPartnershipDoNotContact(id: String, reason: String): PartnershipProspect =
+        post("/api/approvals?resource=partnerships", JSONObject().put("action", "do-not-contact").put("id", id).put("reason", reason)).toPartnershipProspect()
 
     private fun JSONObject.toStrategyItemList(key: String): List<StrategyItem> =
         getJSONArray(key).map { StrategyItem(label = it.optStringOrNull("topic") ?: it.getString("platform") + " / " + it.getString("assetType"), reason = it.getString("reason")) }
@@ -523,11 +817,7 @@ class NetworkGrowthOsRepository(
         post("/api/summary?resource=notifications", JSONObject().put("action", "mark-all-read"))
     }
 
-    private fun JSONObject.toOpportunitySummary() = OpportunitySummary(
-        id = getString("id"),
-        title = getString("title"),
-        score = getDouble("score"),
-    )
+    private fun JSONObject.toOpportunitySummary() = parseOpportunitySummary(this)
 
     override suspend fun getMorningBrief(): MorningBrief {
         val json = get("/api/summary?resource=brief")
@@ -540,6 +830,41 @@ class NetworkGrowthOsRepository(
             strategySummary = json.optStringOrNull("strategySummary"),
             unreadNotificationCount = json.getJSONArray("unreadNotifications").length(),
         )
+    }
+
+    private fun JSONObject.toVideoRenderMetadata(): VideoRenderMetadata? {
+        val meta = optJSONObject("videoMetadata") ?: return null
+        return VideoRenderMetadata(
+            youtubeTitle = meta.getString("youtubeTitle"),
+            youtubeDescription = meta.getString("youtubeDescription"),
+            tiktokCaption = meta.getString("tiktokCaption"),
+            hashtags = meta.optJSONArray("hashtags")?.mapStrings() ?: emptyList(),
+            disclosureCta = meta.optStringOrNull("disclosureCta"),
+        )
+    }
+
+    private fun JSONObject.toVideoRenderStatus() = VideoRenderStatus(
+        id = getString("id"),
+        campaignAssetId = getString("campaignAssetId"),
+        status = getString("status"),
+        downloadUrl = optStringOrNull("downloadUrl"),
+        durationSeconds = if (isNull("durationSeconds")) null else getDouble("durationSeconds"),
+        error = optStringOrNull("error"),
+        createdAt = getString("createdAt"),
+        updatedAt = getString("updatedAt"),
+        videoMetadata = toVideoRenderMetadata(),
+    )
+
+    // Folded into /api/approvals (?resource=video-status) -- same
+    // Vercel Hobby 12-function-cap reasoning as inbound/prospecting/
+    // partnerships above.
+    override suspend fun getVideoRenderStatuses(): List<VideoRenderStatus> {
+        val json = get("/api/approvals?resource=video-status")
+        return json.getJSONArray("items").map { it.toVideoRenderStatus() }
+    }
+
+    override suspend fun registerDeviceToken(fcmToken: String) {
+        post("/api/approvals?resource=video-status", JSONObject().put("action", "register-device").put("fcmToken", fcmToken))
     }
 
     override suspend fun getEveningReport(): EveningReport {
@@ -559,6 +884,161 @@ class NetworkGrowthOsRepository(
 
 /** [httpCode] lets callers tell an auth/config problem (401/500) apart from an unrelated server/network failure -- both used to surface as the same generic message before this existed. */
 class NetworkException(message: String, val httpCode: Int? = null) : Exception(message)
+
+/**
+ * A 401/403 means the app's own APP_API_TOKEN is missing, stale, or was
+ * rotated server-side without a matching APK rebuild (see
+ * requireAppAuth.ts) -- fundamentally different from a network/offline
+ * failure, and no amount of tapping Retry fixes it. Every screen's
+ * "couldn't load" catch block used to show the same generic "check your
+ * connection" message for both cases even though [NetworkException]
+ * already captured [NetworkException.httpCode] -- confirmed as a real gap
+ * in the 2026-09-07 release audit. Returns null (never a message) for
+ * anything else, including a bare offline/timeout failure, so callers
+ * keep their own existing fallback text and existing Retry behavior
+ * unchanged.
+ */
+fun authErrorMessage(e: Throwable): String? =
+    if (e is NetworkException && (e.httpCode == 401 || e.httpCode == 403)) {
+        "Authentication expired. Reopen the app or reinstall the current APK."
+    } else {
+        null
+    }
+
+/**
+ * Pure, unit-testable parsing for the `{id, title, score}`-shaped JSON both
+ * getMorningBrief's topNewOpportunities and getEveningReport's topOpportunity
+ * produce. `id` is deliberately optional (production bug, 2026-09-07): the
+ * evening-report resource's topOpportunity field (backend/api/summary.ts's
+ * handleEveningReport) only ever selects title/score, never id -- unlike the
+ * morning-brief resource's topNewOpportunities, which does include it.
+ * Neither EveningReportScreen nor MorningBriefScreen ever reads
+ * OpportunitySummary.id (both only render title/score), so requiring it
+ * unconditionally was an unnecessary, over-strict assumption that turned a
+ * missing-but-unneeded field into a hard parse failure -- confirmed live via
+ * a JSONException thrown from getString("id") every time evening-report's
+ * trailing-24h window had a real new opportunity to report, surfacing to the
+ * owner as a generic "check your connection" message instead of real data.
+ */
+fun parseOpportunitySummary(json: JSONObject) = OpportunitySummary(
+    id = json.optString("id", ""),
+    title = json.getString("title"),
+    score = json.getDouble("score"),
+)
+
+/**
+ * Pure, unit-testable extraction of the real actionable message
+ * approvals.ts sends back when it catches a thrown PartnershipActionError
+ * (evidence-insufficiency, the generation_claimed_at duplicate-request
+ * mutex) -- it converts that into an HTTP 404 with a JSON `{error: string}`
+ * body (see approvals.ts's own catch block), which post()'s generic
+ * failure path wraps into `NetworkException("POST $path failed: HTTP 404 --
+ * $responseBody", 404)`. Before this existed, that whole message fell
+ * through PartnershipsScreen's catch-all as a bare NetworkException,
+ * silently replacing the real reason with "Couldn't complete that action.
+ * Check your connection and try again." -- confirmed by tracing this exact
+ * path while verifying this round's new error messages on-device. Returns
+ * null (never throws) for anything that isn't this specific shape, so a
+ * genuine network/auth failure still surfaces as NetworkException.
+ */
+// Deliberately a hand-rolled regex, not JSONObject -- org.json is an
+// unmocked Android stub under a plain JVM unit test (no Robolectric in
+// this project), so a real parse here would silently return null in every
+// test and only work on-device. approvals.ts's error bodies are always a
+// single flat `{"error": "..."}` (see its catch block), so this is a
+// bounded, safe simplification, not a general JSON parser.
+private val ERROR_FIELD_PATTERN = Regex(""""error"\s*:\s*"((?:[^"\\]|\\.)*)"""")
+
+private fun unescapeJsonString(s: String): String =
+    s.replace("\\\"", "\"").replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t").replace("\\\\", "\\")
+
+/**
+ * "Create Fillbook Video" (2026-09-08): extracts the real, actionable
+ * error message api/run-campaign.ts's `topic`/`assetType` handling sends
+ * back -- an off-topic topic, an opportunity that doesn't read as
+ * trading-related enough, invalid topic length, or a duplicate-topic
+ * conflict. Unlike extractPartnershipActionErrorMessage (which only ever
+ * applies to a 404), this endpoint's own new validation uses 400 (bad
+ * input) and 409 (duplicate) -- both real, meaningful rejections the
+ * owner needs to see, never a "check your connection" failure.
+ */
+fun extractVideoScriptRequestErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
+    if (httpCode != 400 && httpCode != 409) return null
+    val body = networkExceptionMessage?.substringAfter(" -- ", missingDelimiterValue = "") ?: return null
+    if (body.isBlank()) return null
+    val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null
+    val error = unescapeJsonString(raw)
+    return error.takeIf { it.isNotBlank() }
+}
+
+/**
+ * Same idea as [extractVideoScriptRequestErrorMessage], for Research
+ * Lab's own use of api/run-campaign.ts's `topic`/`assetType` validation --
+ * an off-topic topic, invalid length, an opportunity that doesn't read as
+ * trading-related enough, a duplicate-topic conflict (409), or a
+ * duplicate-opportunity conflict (409, this opportunity already has
+ * non-retired research).
+ */
+fun extractResearchRequestErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
+    if (httpCode != 400 && httpCode != 409) return null
+    val body = networkExceptionMessage?.substringAfter(" -- ", missingDelimiterValue = "") ?: return null
+    if (body.isBlank()) return null
+    val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null
+    val error = unescapeJsonString(raw)
+    return error.takeIf { it.isNotBlank() }
+}
+
+fun extractPartnershipActionErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
+    if (httpCode != 404) return null
+    val body = networkExceptionMessage?.substringAfter(" -- ", missingDelimiterValue = "") ?: return null
+    if (body.isBlank()) return null
+    val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null
+    val error = unescapeJsonString(raw)
+    return error.takeIf { it.isNotBlank() }
+}
+
+/**
+ * Same idea as extractPartnershipActionErrorMessage, but for
+ * opportunities.ts's draft-reply action specifically, which converts a
+ * thrown OpportunityReplyError into HTTP 400 (backend/api/opportunities.ts's
+ * own catch block) -- a different status than the Partnerships/Inbound/
+ * Prospecting 404 pattern, since this is a separate backend route with its
+ * own error-status convention. Confirmed as a real gap in the 2026-09-07
+ * release audit: without this, RadarScreen's draft-reply failure always
+ * showed the same generic "check your connection" message, discarding the
+ * real, actionable rejection reason the backend had already sent.
+ */
+fun extractOpportunityReplyErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
+    if (httpCode != 400) return null
+    val body = networkExceptionMessage?.substringAfter(" -- ", missingDelimiterValue = "") ?: return null
+    if (body.isBlank()) return null
+    val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null
+    val error = unescapeJsonString(raw)
+    return error.takeIf { it.isNotBlank() }
+}
+
+/**
+ * A real, meaningful outcome from generate-draft (failed review/mechanical
+ * gate, or budget exhaustion) -- distinct from NetworkException so callers
+ * never mistake a legitimate content-quality rejection for a connectivity
+ * problem. [shortReason] is a plain-language one-liner for the primary
+ * error display; [details] is the full raw reviewer/skip text, shown only
+ * behind an explicit "Show details" disclosure -- the real per-agent
+ * critique is long and technical (confirmed on a real device: nine
+ * reviewers' full reasoning at once is a wall of text), not something to
+ * dump on the owner by default.
+ */
+class PartnershipDraftRejectedException(val shortReason: String, val details: String? = null) : Exception(shortReason)
+
+/**
+ * Same real-outcome-not-a-connectivity-problem distinction as
+ * PartnershipDraftRejectedException above, for Prospecting's and Inbound's
+ * draft-reply actions -- e.g. the mechanical reply guardrail (banned
+ * generic phrase, an unverified claim, an undeclared link) rejecting a
+ * draft before it's ever persisted. Kept as its own, more generically
+ * named type rather than reusing the Partnership-named one.
+ */
+class DraftRejectedException(val shortReason: String) : Exception(shortReason)
 
 /** Small helpers since org.json's JSONArray predates Kotlin collections. */
 private fun <T> JSONArray.map(transform: (JSONObject) -> T): List<T> =

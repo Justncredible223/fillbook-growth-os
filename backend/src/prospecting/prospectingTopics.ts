@@ -43,20 +43,28 @@ export interface ProspectingTopic {
 export const PROSPECTING_TOPICS: ProspectingTopic[] = [
   // ---- CLASS A -- direct fit ----
   { key: "revenge_trading", query: '"revenge trading"', label: "Revenge trading", replyClass: "A" },
+  // "trading" is appended (not just bare "overtrading") so a matching post is guaranteed
+  // to contain the "trading" anchor prospectingRelevance.ts's isPlausiblyTradingRelated()
+  // requires -- bare "overtrading" alone isn't a relevance anchor there (see that file's
+  // own doc comment: too generic on its own, a crypto trader can "overtrade" too), so
+  // without this every candidate this topic found was being silently killed the moment
+  // listProspectingQueue() re-ran the relevance gate on fetch, even though ingestion had
+  // just accepted it as "new" (confirmed 2026-09-07: 0 of this topic's finds ever reached
+  // the app).
   { key: "overtrading", query: "overtrading trading", label: "Overtrading", replyClass: "A" },
   { key: "trading_journal", query: '"trading journal"', label: "Trading journal", replyClass: "A" },
-  { key: "expectancy", query: "trading expectancy", label: "Expectancy", replyClass: "A" },
-  { key: "consistency_rule", query: '"consistency rule" OR "consistency" prop', label: "Consistency rule", replyClass: "A" },
-  { key: "drawdown", query: "drawdown trading account", label: "Drawdown", replyClass: "A" },
+  { key: "expectancy", query: '"trading expectancy"', label: "Expectancy", replyClass: "A" },
+  { key: "consistency_rule", query: '"consistency rule" OR ("prop firm" consistency)', label: "Consistency rule", replyClass: "A" },
+  { key: "drawdown", query: '"drawdown" trading', label: "Drawdown", replyClass: "A" },
   { key: "trailing_drawdown", query: '"trailing drawdown"', label: "Trailing drawdown", replyClass: "A" },
   { key: "prop_firm", query: '"prop firm"', label: "Prop firm", replyClass: "A" },
   { key: "funded_account", query: '"funded account"', label: "Funded account", replyClass: "A" },
-  { key: "funded_discipline", query: "funded account discipline", label: "Funded-account discipline", replyClass: "A" },
-  { key: "behavior_tracking", query: "trading behavior tracking", label: "Behavior tracking", replyClass: "A" },
+  { key: "funded_discipline", query: '"funded account" discipline', label: "Funded-account discipline", replyClass: "A" },
+  { key: "behavior_tracking", query: '"trading behavior" tracking', label: "Behavior tracking", replyClass: "A" },
   { key: "plan_adherence", query: '"trading plan" (follow OR stick OR broke)', label: "Plan adherence", replyClass: "A" },
   { key: "trade_review", query: '"trade review"', label: "Trade review", replyClass: "A" },
-  { key: "trading_mistakes", query: "trading mistakes review", label: "Trade-review mistakes", replyClass: "A" },
-  { key: "first_loss", query: "first loss trading behavior", label: "First-loss behavior", replyClass: "A" },
+  { key: "trading_mistakes", query: '"trading mistakes"', label: "Trade-review mistakes", replyClass: "A" },
+  { key: "first_loss", query: '"first loss" trading', label: "First-loss behavior", replyClass: "A" },
   { key: "why_i_lost", query: '"why I lost" trading', label: "Why I lost", replyClass: "A" },
   { key: "blown_account", query: '"blew my account" OR "blown account"', label: "Blown account", replyClass: "A" },
   { key: "broke_rules", query: '"broke my rules" OR "broke rules" trading', label: "Broke my rules", replyClass: "A" },
@@ -64,23 +72,27 @@ export const PROSPECTING_TOPICS: ProspectingTopic[] = [
   // ---- CLASS B -- adjacent fit ----
   { key: "position_sizing", query: '"position sizing"', label: "Position sizing", replyClass: "B" },
   { key: "sized_up", query: '"sized up" trading loss', label: "Sizing up after losses", replyClass: "B" },
-  { key: "tilt", query: "trading tilt", label: "Trading tilt", replyClass: "B" },
+  { key: "tilt", query: '"trading tilt"', label: "Trading tilt", replyClass: "B" },
   { key: "losing_streak", query: '"losing streak" trading', label: "Losing streak", replyClass: "B" },
-  { key: "fomo_trading", query: "FOMO trading", label: "FOMO", replyClass: "B" },
+  { key: "fomo_trading", query: '"FOMO" trading', label: "FOMO", replyClass: "B" },
   { key: "trading_psychology", query: '"trading psychology"', label: "Trading psychology", replyClass: "B" },
-  { key: "execution_trading", query: "trade execution consistency", label: "Execution consistency", replyClass: "B" },
+  { key: "execution_trading", query: '"trade execution" consistency', label: "Execution consistency", replyClass: "B" },
   { key: "daily_loss", query: '"daily loss limit"', label: "Daily loss limit", replyClass: "B" },
-  { key: "strategy_hopping", query: "strategy hopping trading", label: "Strategy hopping", replyClass: "B" },
+  { key: "strategy_hopping", query: '"strategy hopping"', label: "Strategy hopping", replyClass: "B" },
   { key: "trading_routine", query: '"trading routine" OR "trading process"', label: "Trading routine", replyClass: "B" },
   { key: "risk_management", query: '"risk management" futures', label: "Risk management (futures)", replyClass: "B" },
   { key: "gave_back_profits", query: '"gave back" profits trading', label: "Gave back profits", replyClass: "B" },
+  // "trading" appended for the same reason as "overtrading" above -- the bare phrase
+  // "too many trades" contains no anchor isPlausiblyTradingRelated() recognizes, so
+  // every candidate this topic found (confirmed live 2026-09-07: 4 of 4) was silently
+  // reclassified 'not_relevant' the instant the app fetched the queue.
   { key: "too_many_trades", query: '"too many trades" trading', label: "Overtrading volume", replyClass: "B" },
-  { key: "hesitation_trading", query: "hesitation trading entry", label: "Hesitation", replyClass: "B" },
-  { key: "holding_losers", query: "holding losers cutting winners", label: "Holding losers", replyClass: "B" },
+  { key: "hesitation_trading", query: '"hesitate to enter" OR "entry hesitation" trading', label: "Hesitation", replyClass: "B" },
+  { key: "holding_losers", query: '"holding losers"', label: "Holding losers", replyClass: "B" },
   { key: "bad_trading_day", query: '"bad trading day"', label: "Bad trading day", replyClass: "B" },
 
   // ---- CLASS C -- relationship fit (credible futures traders/creators, no Fillbook fit required) ----
-  { key: "futures_trader", query: '"futures trader" process OR psychology', label: "Futures trader", replyClass: "C" },
+  { key: "futures_trader", query: '"futures trader" (process OR psychology)', label: "Futures trader", replyClass: "C" },
   { key: "futures_trading_general", query: '"futures trading"', label: "Futures trading", replyClass: "C" },
   { key: "mnq_nq", query: "(MNQ OR NQ OR ES OR MES) futures trading", label: "Index futures (MNQ/NQ/ES)", replyClass: "C" },
   { key: "energy_futures", query: "(crude oil OR CL) futures trading", label: "Energy futures", replyClass: "C" },

@@ -3,6 +3,8 @@ package com.fillbook.growthos.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,13 +40,14 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.CreatorOpportunity
 import com.fillbook.growthos.data.ExperimentSuggestion
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.SeoOpportunity
 import com.fillbook.growthos.data.StrategyItem
 import com.fillbook.growthos.data.StrategyVersion
 import com.fillbook.growthos.ui.components.GhostButton
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.InsetRow
-import com.fillbook.growthos.ui.components.LoadingIndicator
+import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.Pill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.ScreenHeader
@@ -66,7 +69,7 @@ import kotlinx.coroutines.launch
  * should read as directional, not settled, per the master spec's own
  * "avoid fake statistical certainty" requirement.
  */
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun StrategyScreen(repo: GrowthOsRepository) {
     var strategy by remember { mutableStateOf<StrategyVersion?>(null) }
@@ -81,7 +84,7 @@ fun StrategyScreen(repo: GrowthOsRepository) {
             strategy = repo.getLatestStrategy()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load the strategy report. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load the strategy report. Check your connection and try again."
         }
         loaded = true
     }
@@ -93,7 +96,7 @@ fun StrategyScreen(repo: GrowthOsRepository) {
                 strategy = repo.regenerateStrategy()
                 errorMessage = null
             } catch (e: Exception) {
-                errorMessage = "Couldn't generate a new report. Check your connection and try again."
+                errorMessage = authErrorMessage(e) ?: "Couldn't generate a new report. Check your connection and try again."
             }
             regenerating = false
         }
@@ -116,17 +119,31 @@ fun StrategyScreen(repo: GrowthOsRepository) {
         }
 
         if (!loaded) {
-            LoadingIndicator()
+            SkeletonListLoading()
         } else {
             val current = strategy
             if (current == null) {
-                PolishedEmptyState(
-                    icon = Icons.Filled.Timeline,
-                    headline = "No strategy report yet",
-                    subtitle = "Generates automatically once a week, or trigger the first one now.",
-                    actionLabel = if (regenerating) "Generating..." else "Generate now",
-                    onAction = if (regenerating) null else ::regenerate,
-                )
+                // Same nested-scroll fix as Prospecting/Inbound/VideoStatus/etc.
+                // (2026-09-07): PullToRefreshBox only detects the pull gesture
+                // through a scrollable descendant's nested-scroll connection --
+                // a bare PolishedEmptyState never dispatched drag deltas to it.
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.Timeline,
+                                headline = "No strategy report yet",
+                                subtitle = "Generates automatically once a week, or trigger the first one now.",
+                                actionLabel = if (regenerating) "Generating..." else "Generate now",
+                                onAction = if (regenerating) null else ::regenerate,
+                            )
+                        }
+                    }
+                }
             } else {
                 PullToRefreshBox(
                     isRefreshing = refreshing,
@@ -139,7 +156,7 @@ fun StrategyScreen(repo: GrowthOsRepository) {
                     ) {
                         item {
                             GrowthCard {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     if (current.lowConfidence) {
                                         Pill("Directional -- not enough data yet", Warning)
                                     } else {

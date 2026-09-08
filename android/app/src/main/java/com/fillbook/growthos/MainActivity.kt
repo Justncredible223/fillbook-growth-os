@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.Handshake
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Insights
@@ -44,6 +46,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +56,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -95,7 +99,13 @@ import com.fillbook.growthos.ui.screens.ExperimentsScreen
 import com.fillbook.growthos.ui.screens.NotificationsScreen
 import com.fillbook.growthos.ui.screens.MorningBriefScreen
 import com.fillbook.growthos.ui.screens.EveningReportScreen
+import com.fillbook.growthos.ui.screens.PartnershipsScreen
 import com.fillbook.growthos.ui.screens.SystemScreen
+import com.fillbook.growthos.ui.screens.XFeedPostHistoryScreen
+import com.fillbook.growthos.ui.screens.VideoStatusScreen
+import com.fillbook.growthos.data.AppConfig
+import com.fillbook.growthos.data.VideoNotifications
+import kotlinx.coroutines.tasks.await
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Background
 import com.fillbook.growthos.ui.theme.Border
@@ -124,6 +134,9 @@ private sealed class Destination(val route: String, val label: String, val icon:
     data object EveningReport : Destination("evening_report", "Evening Report", Icons.Filled.Nightlight)
     data object System : Destination("system", "System", Icons.Filled.Dns)
     data object Settings : Destination("settings", "Settings", Icons.Filled.Settings)
+    data object XFeedPostHistory : Destination("x_feed_post_history", "Previous X Drafts", Icons.Filled.History)
+    data object Partnerships : Destination("partnerships", "Partnerships", Icons.Filled.Handshake)
+    data object VideoStatus : Destination("video_status", "Video Status", Icons.Filled.Movie)
 }
 
 /**
@@ -132,13 +145,16 @@ private sealed class Destination(val route: String, val label: String, val icon:
  * with no inbound traffic yet, proactive daily outreach is the primary
  * growth system, not a periodic check (see docs/PROSPECTING.md) --
  * Analytics is still one tap away in More, just no longer competing for
- * the habitual daily slot.
+ * the habitual daily slot. Inbound later replaced Approvals for the same
+ * reason: real engagement replies are now a daily habit, while Approvals
+ * is a periodic review that doesn't need a permanent slot -- it's still
+ * one tap away in More.
  */
-private val primaryDestinations = listOf(Destination.Home, Destination.Radar, Destination.Prospecting, Destination.Approvals)
+private val primaryDestinations = listOf(Destination.Home, Destination.Radar, Destination.Prospecting, Destination.Inbound, Destination.Partnerships)
 
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
-    Destination.Inbound,
+    Destination.Approvals,
     Destination.Analytics,
     Destination.Campaigns,
     Destination.ContentLibrary,
@@ -151,52 +167,46 @@ private val moreDestinations = listOf(
     Destination.Notifications,
     Destination.MorningBrief,
     Destination.EveningReport,
+    Destination.XFeedPostHistory,
+    Destination.VideoStatus,
 )
 
 private val allDestinations = primaryDestinations + moreDestinations
-
-private const val BASE_URL = "https://fillbook-growth-os.vercel.app"
-
-/**
- * See NetworkGrowthOsRepository's kdoc: this is a Vercel deployment-
- * protection bypass token, not the Supabase service_role key -- safe to
- * embed client-side by design. It gets the app's requests PAST Vercel's
- * deployment protection; it is not what authorizes them against this
- * project's own data. That's APP_TOKEN's job now.
- */
-private const val PROTECTION_BYPASS_SECRET = "7TVBpvTPeeHbiGlZco9RDS8miXqtbfoi"
-
-/**
- * The actual per-project access token `requireAppAuth` checks server-
- * side. There is no more user-facing "access code" to type or lose --
- * this is compiled into the app once, same trust tier as the bypass
- * secret above, and the ONLY thing standing between a stranger with this
- * APK and this project's data is (a) needing to decompile the APK to
- * find both values, same baseline as any client-embedded secret, and
- * (b) the ExternalWriteFirewall, which no token of any kind can bypass
- * -- it rejects EXTERNAL_WRITE unconditionally regardless of who's
- * asking. The owner's actual gate is BiometricGateScreen (fingerprint/
- * face/device PIN), not this value.
- */
-private const val APP_TOKEN = "_VSLHPVS8C0bBcF_cjuJG0RBj3Ps3_vRWhrefxHfHiI"
 
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        CrashReporter.install(this, BASE_URL, PROTECTION_BYPASS_SECRET, APP_TOKEN)
+        CrashReporter.install(this, AppConfig.BASE_URL, AppConfig.PROTECTION_BYPASS_SECRET, AppConfig.APP_TOKEN)
+        VideoNotifications.createChannel(this)
+        // The deep-link route (if this activity was launched by tapping a
+        // video-render push notification) is read once here and threaded
+        // down through GrowthOsRoot/GrowthOsApp as initial nav state --
+        // onNewIntent (below) updates the same holder for the
+        // already-running-process case, since a singleTop/singleTask
+        // launch never re-runs onCreate.
+        pendingDeepLinkRoute.value = intent?.let { VideoNotifications.deepLinkRouteFor(it) }
         setContent {
             FillbookGrowthOSTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    GrowthOsRoot(this)
+                    GrowthOsRoot(this, pendingDeepLinkRoute)
                 }
             }
         }
     }
+
+    /** Fires instead of a fresh onCreate when the app is already running and a new notification tap arrives (default launchMode is already effectively singleTop for a single-Activity app's back stack root). */
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingDeepLinkRoute.value = VideoNotifications.deepLinkRouteFor(intent)
+    }
+
+    private val pendingDeepLinkRoute = mutableStateOf<String?>(null)
 }
 
 @Composable
-private fun GrowthOsRoot(activity: FragmentActivity) {
+private fun GrowthOsRoot(activity: FragmentActivity, pendingDeepLinkRoute: androidx.compose.runtime.MutableState<String?>) {
     // Re-checked once per process, not per recomposition. If the device
     // has no lock screen configured at all, there's nothing to gate on --
     // skip straight into the app rather than blocking access with a
@@ -207,16 +217,48 @@ private fun GrowthOsRoot(activity: FragmentActivity) {
     if (!unlocked) {
         BiometricGateScreen(activity = activity, onUnlocked = { unlocked = true })
     } else {
-        val repo = remember {
-            NetworkGrowthOsRepository(BASE_URL, PROTECTION_BYPASS_SECRET, APP_TOKEN, "Owner")
+        val repo = remember { AppConfig.buildRepository() }
+
+        // POST_NOTIFICATIONS is a runtime permission on API 33+; below
+        // that, notifications are granted at install time and this launcher
+        // is simply never invoked. Requested once per process, right after
+        // unlock -- not before, so the very first thing after the
+        // biometric gate isn't yet another system dialog. A denial isn't
+        // re-prompted here; the owner can still grant it later from system
+        // Settings, and the rest of the app works identically either way
+        // (the render pipeline itself needs no permission -- only the push
+        // notification about it does).
+        val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+        ) { /* no-op either way -- see comment above */ }
+        LaunchedEffect(Unit) {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                val granted = androidx.core.content.ContextCompat.checkSelfPermission(activity, android.Manifest.permission.POST_NOTIFICATIONS) ==
+                    android.content.pm.PackageManager.PERMISSION_GRANTED
+                if (!granted) notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+            // Registers this device's current FCM token once per process
+            // start -- covers both "token already existed before this
+            // launch" (onNewToken in FillbookMessagingService only fires
+            // for a NEW/rotated token, not an existing valid one) and a
+            // fresh install. A failure here (offline, token not yet
+            // available) is silent and non-fatal -- the token naturally
+            // gets registered on the next successful launch or the next
+            // real onNewToken callback, and it never blocks any other part
+            // of the app from working.
+            runCatching {
+                val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+                repo.registerDeviceToken(token)
+            }
         }
-        GrowthOsApp(repo = repo)
+
+        GrowthOsApp(repo = repo, pendingDeepLinkRoute = pendingDeepLinkRoute)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository) {
+private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, pendingDeepLinkRoute: androidx.compose.runtime.MutableState<String?>) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
@@ -227,6 +269,16 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository) {
             popUpTo(navController.graph.startDestinationId) { saveState = true }
             launchSingleTop = true
             restoreState = true
+        }
+    }
+
+    // Consumes a notification-tap deep link exactly once -- read then
+    // immediately cleared, so rotating the device or any later
+    // recomposition never re-navigates on its own.
+    LaunchedEffect(pendingDeepLinkRoute.value) {
+        pendingDeepLinkRoute.value?.let { route ->
+            navigate(route)
+            pendingDeepLinkRoute.value = null
         }
     }
 
@@ -255,7 +307,7 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository) {
             composable(Destination.Campaigns.route) { CampaignsScreen(repo) }
             composable(Destination.Analytics.route) { AnalyticsScreen(repo) }
             composable(Destination.ContentLibrary.route) { ContentLibraryScreen(repo) }
-            composable(Destination.Research.route) { ResearchScreen() }
+            composable(Destination.Research.route) { ResearchScreen(repo, onNavigateToApprovals = { navigate(Destination.Approvals.route) }) }
             composable(Destination.Creators.route) { CreatorsScreen(repo) }
             composable(Destination.Strategy.route) { StrategyScreen(repo) }
             composable(Destination.Experiments.route) { ExperimentsScreen(repo) }
@@ -264,6 +316,9 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository) {
             composable(Destination.EveningReport.route) { EveningReportScreen(repo) }
             composable(Destination.System.route) { SystemScreen(repo) }
             composable(Destination.Settings.route) { SettingsScreen(repo) }
+            composable(Destination.XFeedPostHistory.route) { XFeedPostHistoryScreen(repo) }
+            composable(Destination.Partnerships.route) { PartnershipsScreen(repo) }
+            composable(Destination.VideoStatus.route) { VideoStatusScreen(repo) }
         }
     }
 

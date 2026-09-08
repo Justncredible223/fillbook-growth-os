@@ -24,6 +24,7 @@ export interface InboundEngagement {
   priority: InboundPriority;
   status: InboundStatus;
   draftResponse: string | null;
+  draftUsesLink: boolean | null;
   respondedAt: string | null;
   respondedNote: string | null;
   isRepeatEngager: boolean;
@@ -49,5 +50,9 @@ export interface InboundRepository {
   findLatestInConversation(conversationId: string): Promise<InboundEngagement | null>;
   listByStatus(statuses: InboundStatus[]): Promise<InboundEngagement[]>;
   getById(id: string): Promise<InboundEngagement | null>;
-  updateStatus(id: string, status: InboundStatus, fields?: Partial<Pick<InboundEngagement, "draftResponse" | "respondedAt" | "respondedNote">>): Promise<void>;
+  updateStatus(
+    id: string,
+    status: InboundStatus,
+    fields?: Partial<Pick<InboundEngagement, "draftResponse" | "draftUsesLink" | "respondedAt" | "respondedNote">>,
+  ): Promise<void>;
 }

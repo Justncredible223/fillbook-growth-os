@@ -14,7 +14,8 @@ import {
   runBacklogRecovery,
   summarizeInbound,
 } from "../src/inbound/inboundHandlers.js";
-import { CampaignFactory, type AssetStage } from "../src/content/campaignFactory.js";
+import { CampaignFactory, applyOwnerDecisionIfPending, type AssetStage } from "../src/content/campaignFactory.js";
+import { isReviewableBacklogAsset } from "../src/content/campaignBacklog.js";
 import { ContentQualityGate } from "../src/content/contentQualityGate.js";
 import { BrandConstitution } from "../src/knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../src/knowledge/supabaseRepositories.js";
@@ -30,6 +31,29 @@ import {
   markProspectingSkipped,
   toProspectingJson,
 } from "../src/prospecting/prospectingHandlers.js";
+import {
+  PartnershipActionError,
+  activatePartnership,
+  archivePartnership,
+  closePartnership,
+  createPartnership,
+  generateDraftForPartnership,
+  listPartnerships,
+  markPartnershipContacted,
+  markPartnershipDoNotContact,
+  qualifyPartnership,
+  recordPartnershipOutcome,
+  recordPartnershipReply,
+  startPartnershipPilot,
+  toPartnershipJson,
+  updatePartnership,
+} from "../src/partnerships/partnershipsHandlers.js";
+import type { NewPartnershipProspect, PartnershipOutcomeMetric, PartnershipOutcomeSource } from "../src/partnerships/types.js";
+import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
+import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
+import { listVideoRenderStatuses, registerDevicePushToken } from "../src/video/videoStatusHandlers.js";
+import { MAX_VIDEO_RENDERS_PER_MONTH } from "../src/video/videoRenderEligibility.js";
+import { listResearchRecords } from "../src/research/researchHandlers.js";
 
 /**
  * `?resource=inbound` handles the Inbound Engagement Queue -- a
@@ -117,8 +141,18 @@ async function handleProspecting(req: VercelRequest, res: VercelResponse): Promi
 
   if (req.method === "GET") {
     try {
-      const items = req.query.history === "1" ? await listProspectingHistory(client) : await listProspectingQueue(client);
-      res.status(200).json({ items: items.map(toProspectingJson) });
+      if (req.query.history === "1") {
+        const items = await listProspectingHistory(client);
+        res.status(200).json({ items: items.map(toProspectingJson) });
+      } else {
+        // diagnostics makes an empty/small `items` array unambiguous --
+        // "Queue is clear" (nothing to consider at all) is now
+        // distinguishable from "everything's just too old right now" or
+        // "plenty of backlog, none of it clears today's quality bar" (see
+        // prospectingHandlers.ts's ProspectingSelectionDiagnostics).
+        const { candidates, diagnostics } = await listProspectingQueue(client);
+        res.status(200).json({ items: candidates.map(toProspectingJson), diagnostics });
+      }
     } catch (err) {
       res.status(500).json({ error: errorMessage(err) });
     }
@@ -179,6 +213,184 @@ async function handleProspecting(req: VercelRequest, res: VercelResponse): Promi
 }
 
 /**
+ * `?resource=partnerships` handles the Partnerships prospect/pitch/pilot
+ * pipeline -- a manual-first workflow distinct from prospecting (public
+ * posts) and inbound (people who engaged with @FillbookHQ). Folded in
+ * here for the same Vercel Hobby 12-function-cap reason as inbound and
+ * prospecting above. See docs/PARTNERSHIPS_MISSION.md.
+ */
+async function handlePartnerships(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const client = getServiceClient();
+
+  if (req.method === "GET") {
+    try {
+      const prospects = await listPartnerships(client);
+      const withApprovedDraft = prospects.filter((p) => p.approvedCampaignAssetId);
+      let previewByAssetId = new Map<string, string>();
+      if (withApprovedDraft.length > 0) {
+        const { data: versions } = await client
+          .from("content_versions")
+          .select("campaign_asset_id, body, version")
+          .in("campaign_asset_id", withApprovedDraft.map((p) => p.approvedCampaignAssetId));
+        const latestByAsset = new Map<string, { body: string; version: number }>();
+        for (const row of (versions ?? []) as Array<{ campaign_asset_id: string; body: string; version: number }>) {
+          const current = latestByAsset.get(row.campaign_asset_id);
+          if (!current || row.version > current.version) latestByAsset.set(row.campaign_asset_id, row);
+        }
+        previewByAssetId = new Map([...latestByAsset.entries()].map(([assetId, v]) => [assetId, v.body]));
+      }
+      const items = prospects.map((p) => ({
+        ...toPartnershipJson(p),
+        previewText: p.approvedCampaignAssetId ? (previewByAssetId.get(p.approvedCampaignAssetId) ?? null) : null,
+      }));
+      const { data: lastRunRow } = await client
+        .from("partnership_discovery_runs")
+        .select("status, new_candidates, sources_searched, cost_usd, error, created_at")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const lastDiscoveryRun = lastRunRow
+        ? {
+            status: (lastRunRow as { status: string }).status,
+            newCandidates: (lastRunRow as { new_candidates: number }).new_candidates,
+            sourcesSearched: (lastRunRow as { sources_searched: string[] }).sources_searched,
+            costUsd: (lastRunRow as { cost_usd: number }).cost_usd,
+            error: (lastRunRow as { error: string | null }).error,
+            createdAt: (lastRunRow as { created_at: string }).created_at,
+          }
+        : null;
+      res.status(200).json({ items, lastDiscoveryRun });
+    } catch (err) {
+      res.status(500).json({ error: errorMessage(err) });
+    }
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const body = req.body as
+      | ({
+          action?: string;
+          id?: string;
+          channel?: string;
+          finalText?: string;
+          reason?: string;
+          summary?: string;
+          rationale?: string;
+          termsAgreed?: string;
+          startDate?: string;
+          metric?: PartnershipOutcomeMetric;
+          value?: number | null;
+          source?: PartnershipOutcomeSource;
+          note?: string | null;
+        } & Partial<NewPartnershipProspect>)
+      | undefined;
+    const action = body?.action;
+
+    if (action === "create") {
+      if (!body?.organizationName || !body?.partnerCategory) {
+        res.status(400).json({ error: "Body must include { organizationName, partnerCategory } to create a prospect" });
+        return;
+      }
+      const { prospect, existingMatches } = await createPartnership(client, body as NewPartnershipProspect);
+      res.status(200).json({ ...toPartnershipJson(prospect), previewText: null, existingMatches });
+      return;
+    }
+
+    if (action === "refresh-discovery") {
+      // Owner-triggered, bounded (see discovery.ts's MAX_NEW_CANDIDATES_PER_RUN
+      // and MIN_INTERVAL_MINUTES) -- force:true only bypasses the 7-day
+      // SCHEDULED cadence gate, never the budget gate or the minimum-interval
+      // gate, so repeated taps can't silently keep spending.
+      let adapter = null;
+      try {
+        adapter = createXSignalAdapter(client);
+      } catch {
+        // X credentials not configured -- discovery still runs against
+        // existing-records sources only, never treated as a hard failure.
+      }
+      const result = await runPartnershipDiscoveryStep({ client, adapter, triggeredBy: "owner", force: true });
+      res.status(200).json(result);
+      return;
+    }
+
+    const id = body?.id;
+    if (!id) {
+      res.status(400).json({ error: "Body must include { id: string }" });
+      return;
+    }
+
+    switch (action) {
+      case "update":
+        res.status(200).json(toPartnershipJson(await updatePartnership(client, id, body as Partial<NewPartnershipProspect>)));
+        return;
+      case "qualify":
+        if (!body?.rationale) {
+          res.status(400).json({ error: "qualify requires { rationale: string }" });
+          return;
+        }
+        res.status(200).json(toPartnershipJson(await qualifyPartnership(client, id, body.rationale)));
+        return;
+      case "generate-draft":
+        res.status(200).json(await generateDraftForPartnership(client, id));
+        return;
+      case "mark-contacted":
+        if (!body?.channel || !body?.finalText) {
+          res.status(400).json({ error: "mark-contacted requires { channel: string, finalText: string }" });
+          return;
+        }
+        res.status(200).json(toPartnershipJson(await markPartnershipContacted(client, id, body.channel, body.finalText)));
+        return;
+      case "record-reply":
+        res.status(200).json(toPartnershipJson(await recordPartnershipReply(client, id, body?.summary ?? "Reply received.")));
+        return;
+      case "start-pilot":
+        if (!body?.termsAgreed || !body?.startDate) {
+          res.status(400).json({ error: "start-pilot requires { termsAgreed: string, startDate: string }" });
+          return;
+        }
+        res.status(200).json(toPartnershipJson(await startPartnershipPilot(client, id, body.termsAgreed, body.startDate)));
+        return;
+      case "activate":
+        res.status(200).json(toPartnershipJson(await activatePartnership(client, id)));
+        return;
+      case "close":
+        res.status(200).json(toPartnershipJson(await closePartnership(client, id, body?.reason ?? "")));
+        return;
+      case "archive":
+        res.status(200).json(toPartnershipJson(await archivePartnership(client, id, body?.reason ?? "")));
+        return;
+      case "do-not-contact":
+        res.status(200).json(toPartnershipJson(await markPartnershipDoNotContact(client, id, body?.reason ?? "")));
+        return;
+      case "record-outcome":
+        if (!body?.metric || !body?.source) {
+          res.status(400).json({ error: "record-outcome requires { metric: string, source: 'measured'|'manual_entry' }" });
+          return;
+        }
+        await recordPartnershipOutcome(client, id, body.metric, body.value ?? null, body.source, body.note);
+        res.status(200).json({ id, recorded: true });
+        return;
+      default:
+        res.status(400).json({
+          error:
+            "action must be one of: create, refresh-discovery, update, qualify, generate-draft, mark-contacted, record-reply, start-pilot, activate, close, archive, do-not-contact, record-outcome",
+        });
+    }
+  } catch (err) {
+    if (err instanceof PartnershipActionError) {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+/**
  * Wires CampaignFactory.handOffToOwner() -- built, tested, and never
  * called from any route until now -- to a real action. EXTERNAL_DRAFT
  * only ("opened the platform's own composer / staged the file for the
@@ -209,6 +421,74 @@ async function handOffAsset(client: SupabaseClient, campaignAssetId: string): Pr
 }
 
 /**
+ * `?resource=video-status` -- the Android Video Status screen's polling
+ * endpoint (GET) and device push-token registration (POST). Folded into
+ * this file for the same Vercel Hobby 12-function-cap reason as
+ * inbound/prospecting/partnerships above. GET is the durable source of
+ * truth for render state (see the implementation plan's "Honest limit on
+ * exactly-once" note: this never depends on a push notification actually
+ * arriving). POST registers the FCM token asserted by the phone's own
+ * app -- since every request here already passed requireAppAuth, the
+ * caller is trusted to be the one owner's device.
+ */
+async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const client = getServiceClient();
+
+  if (req.method === "GET") {
+    try {
+      const items = await listVideoRenderStatuses(client);
+      res.status(200).json({ items });
+    } catch (err) {
+      res.status(500).json({ error: errorMessage(err) });
+    }
+    return;
+  }
+
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const body = req.body as { action?: string; fcmToken?: string } | undefined;
+    if (body?.action !== "register-device" || !body.fcmToken) {
+      res.status(400).json({ error: "Body must be { action: 'register-device', fcmToken: string }" });
+      return;
+    }
+    // requireAppAuth already validated this header against APP_API_TOKEN.
+    const appApiToken = process.env.APP_API_TOKEN as string;
+    await registerDevicePushToken(client, body.fcmToken, appApiToken);
+    res.status(200).json({ registered: true });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+/**
+ * `?resource=research` -- the Android Research Lab screen's list endpoint
+ * (GET only; creation happens through api/run-campaign.ts's own
+ * `assetType: "research"` branch, exactly like video creation goes
+ * through that same endpoint rather than through approvals.ts). Folded
+ * into this file for the same Vercel Hobby 12-function-cap reason as
+ * inbound/prospecting/partnerships/video-status above.
+ */
+async function handleResearch(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const client = getServiceClient();
+
+  if (req.method !== "GET") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const items = await listResearchRecords(client);
+    res.status(200).json({ items });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+/**
  * GET: assembles ApprovalAsset-shaped rows (matching the Android app's
  * data model) from campaign_assets at 'ready_for_owner' whose campaign is
  * still 'in_review' -- i.e. AI-reviewed and genuinely still awaiting a
@@ -221,11 +501,18 @@ async function handOffAsset(client: SupabaseClient, campaignAssetId: string): Pr
  * wait for. Body: { campaignAssetId, action: "approve" | "reject" }.
  * 'approve' sets campaigns.status = 'approved' -- the only code path
  * anywhere that ever sets this value; auto-draft/run-campaign only ever
- * reach 'in_review'. 'reject' sets campaigns.status = 'retired'. Neither
- * action publishes, posts, or contacts any external platform -- approving
- * here only changes what this app displays; the owner still does the
- * actual posting themselves, same as every other path into
- * CampaignFactory (see docs/EXTERNAL_WRITE_FIREWALL.md).
+ * reach 'in_review'. 'reject' sets campaigns.status = 'retired'. Also
+ * transitions the asset's OWN stage off 'ready_for_owner' (to
+ * 'handed_off'/'retired' via resolveOwnerDecisionStage) whenever it's
+ * still there -- closes a real, confirmed bug where an already-decided
+ * asset stayed at 'ready_for_owner' forever, invisible here (this GET
+ * requires 'in_review') but still permanently counted by the backlog cap
+ * (see campaignBacklog.ts, and migration 0030's one-time repair for rows
+ * that got stuck before this fix). Neither action publishes, posts, or
+ * contacts any external platform -- approving here only changes what
+ * this app displays; the owner still does the actual posting themselves,
+ * same as every other path into CampaignFactory (see
+ * docs/EXTERNAL_WRITE_FIREWALL.md).
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res)) return;
@@ -235,6 +522,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.query.resource === "prospecting") {
     await handleProspecting(req, res);
+    return;
+  }
+  if (req.query.resource === "partnerships") {
+    await handlePartnerships(req, res);
+    return;
+  }
+  if (req.query.resource === "video-status") {
+    await handleVideoStatus(req, res);
+    return;
+  }
+  if (req.query.resource === "research") {
+    await handleResearch(req, res);
     return;
   }
   const client = getServiceClient();
@@ -262,7 +561,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const { data: asset, error: assetError } = await client
         .from("campaign_assets")
-        .select("campaign_id")
+        .select("campaign_id, asset_type, stage")
         .eq("id", campaignAssetId)
         .single();
       if (assetError) throw assetError;
@@ -280,7 +579,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq("id", asset.campaign_id);
       if (updateError) throw updateError;
 
-      res.status(200).json({ campaignId: asset.campaign_id, status: newStatus });
+      // Closes a real, confirmed bug: approving/rejecting previously only
+      // ever updated campaigns.status above -- this asset's own stage
+      // stayed at 'ready_for_owner' forever afterward, invisible in the
+      // Approvals list (which requires campaigns.status='in_review') but
+      // still permanently counted by the backlog cap. Returns null (a
+      // safe no-op) for a repeated call or one that races an
+      // already-processed decision, instead of throwing. See
+      // campaignFactory.ts's own kdoc for why this reuses 'handed_off'/
+      // 'retired' rather than a new stage, and why it's not routed through
+      // handOffToOwner (deciding is not the same action as opening the
+      // platform's own composer).
+      const newAssetStage = applyOwnerDecisionIfPending(asset.stage as AssetStage, action === "approve" ? "approved" : "rejected");
+      if (newAssetStage) {
+        const { error: stageError } = await client.from("campaign_assets").update({ stage: newAssetStage }).eq("id", campaignAssetId);
+        if (stageError) throw stageError;
+      }
+
+      // Video rendering isolation: approving a video_script draft queues
+      // exactly one render via the single atomic enqueue_video_render RPC
+      // (migration 0027) -- see the implementation plan's "Approval/
+      // enqueue reliability" section. This never blocks approving the
+      // content itself; a monthly-cap denial still returns 200 with the
+      // reason surfaced to the app, not an error.
+      let videoRender: { queued: boolean; alreadyExisted: boolean; reason: string | null } | undefined;
+      if (action === "approve" && asset.asset_type === "video_script") {
+        const { data: enqueueData, error: enqueueError } = await client.rpc("enqueue_video_render", {
+          p_campaign_asset_id: campaignAssetId,
+          p_monthly_cap: MAX_VIDEO_RENDERS_PER_MONTH,
+        });
+        if (enqueueError) throw enqueueError;
+        const row = (Array.isArray(enqueueData) ? enqueueData[0] : enqueueData) as
+          | { already_existed: boolean; eligible: boolean; reason: string | null }
+          | undefined;
+        videoRender = {
+          queued: Boolean(row?.eligible),
+          alreadyExisted: Boolean(row?.already_existed),
+          reason: row?.reason ?? null,
+        };
+      }
+
+      res.status(200).json({ campaignId: asset.campaign_id, status: newStatus, videoRender });
     } catch (err) {
       res.status(500).json({ error: errorMessage(err) });
     }
@@ -299,7 +638,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq("stage", "ready_for_owner");
     if (assetsError) throw assetsError;
 
-    const awaitingDecision = (assets ?? []).filter((asset: any) => asset.campaigns?.status === "in_review");
+    const awaitingDecision = (assets ?? []).filter((asset: any) => isReviewableBacklogAsset({ stage: "ready_for_owner", campaignStatus: asset.campaigns?.status }));
 
     const { data: autoDraftRuns, error: autoDraftError } = await client
       .from("auto_draft_runs")

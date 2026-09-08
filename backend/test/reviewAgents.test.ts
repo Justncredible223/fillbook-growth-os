@@ -71,3 +71,61 @@ describe("runReviewAgent", () => {
     expect(traderSystem).toContain("futures day trader");
   });
 });
+
+describe("runReviewAgent -- partnership pitch context", () => {
+  const pitchContext = {
+    ...context,
+    contentFormat: "partnership_pitch" as const,
+    pitchRecipientOrganization: "Apex Journaling Coach LLC",
+    pitchChannel: "email" as const,
+  };
+
+  function fetchMockPass() {
+    return vi.fn().mockResolvedValue(jsonResponse({ content: [{ type: "tool_use", name: "submit_verdict", input: { pass: true, score: 1, reasoning: "ok", issues: [] } }] }));
+  }
+
+  it("tells every reviewer this is a partnership pitch, including the recipient and channel -- never the generic post/reply framing", async () => {
+    const fetchMock = fetchMockPass();
+    const client = new LlmClient("test-key", fetchMock);
+
+    await runReviewAgent(client, "growth_strategist", "Hi Dana -- ...", pitchContext);
+
+    const userMessage = JSON.parse(fetchMock.mock.calls[0]![1].body as string).messages[0].content as string;
+    expect(userMessage).toContain("PARTNERSHIP PITCH");
+    expect(userMessage).toContain("Apex Journaling Coach LLC");
+    expect(userMessage).toContain("email");
+    expect(userMessage).not.toContain("REPLY to a real X user's mention");
+  });
+
+  it("uses the X DM wording (not email) when pitchChannel is x", async () => {
+    const fetchMock = fetchMockPass();
+    const client = new LlmClient("test-key", fetchMock);
+
+    await runReviewAgent(client, "hook_specialist", "Hi Jordan -- ...", { ...pitchContext, pitchChannel: "x" });
+
+    const userMessage = JSON.parse(fetchMock.mock.calls[0]![1].body as string).messages[0].content as string;
+    expect(userMessage).toContain("X DM");
+  });
+
+  it("hook_specialist, growth_strategist, conversion_reviewer, and fact_checker each carry real partnership-pitch guidance in their own system prompt", async () => {
+    const pitchAwareAgents = ["hook_specialist", "growth_strategist", "conversion_reviewer", "fact_checker"] as const;
+    for (const agent of pitchAwareAgents) {
+      const fetchMock = fetchMockPass();
+      const client = new LlmClient("test-key", fetchMock);
+      await runReviewAgent(client, agent, "some pitch text", pitchContext);
+      const systemPrompt = JSON.parse(fetchMock.mock.calls[0]![1].body as string).system as string;
+      expect(systemPrompt).toContain("PARTNERSHIP PITCH");
+    }
+  });
+
+  it("conversion_reviewer is asked to judge the pitch's ask, not a generic CTA", async () => {
+    const fetchMock = fetchMockPass();
+    const client = new LlmClient("test-key", fetchMock);
+
+    await runReviewAgent(client, "conversion_reviewer", "Would you be open to a quick call?", pitchContext);
+
+    const systemPrompt = JSON.parse(fetchMock.mock.calls[0]![1].body as string).system as string;
+    expect(systemPrompt).toContain("PARTNERSHIP PITCH");
+    expect(systemPrompt.toLowerCase()).toContain("proportionate");
+  });
+});

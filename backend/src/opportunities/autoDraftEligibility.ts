@@ -27,11 +27,14 @@ export const BACKLOG_CAP = 3;
 /**
  * Hard monthly ceiling on auto-draft spend. A single full run (1 draft +
  * up to 9 review calls) has been observed to cost ~$0.086. At most 1
- * auto-draft/day (~31/month) would cost roughly $2.67 at that rate --
- * $5/month gives real headroom for larger drafts/review text without
- * being an open-ended commitment.
+ * auto-draft/day (~31/month) would cost roughly $2.67 at that rate.
+ * Raised from $5 to $10 (owner-approved 2026-09-06) to give this shared
+ * pool headroom for video-script generation on Fliki's off-days as well
+ * -- real month-to-date spend was only $0.16 of the old $5 cap at the
+ * time of this change, so this is margin, not a response to a real
+ * shortfall.
  */
-export const MONTHLY_AUTO_DRAFT_BUDGET_USD = 5.0;
+export const MONTHLY_AUTO_DRAFT_BUDGET_USD = 10.0;
 
 /** A single auto-draft run should never exceed 1 draft call + 9 review-agent calls. */
 export const MAX_CALLS_PER_RUN = 10;

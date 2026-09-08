@@ -3,7 +3,8 @@ import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
 import { createLlmClient } from "../content/llmClient.js";
 import { recordCostEvent, estimateCostUsd } from "../cost/costTracking.js";
-import { draftInboundResponse } from "./inboundResponseWriter.js";
+import { draftInboundResponse, INBOUND_APPROVED_LINK_DOMAINS } from "./inboundResponseWriter.js";
+import { checkReplyGuardrails, impliesContactOrLinkRequest } from "../content/xReplyGuardrails.js";
 import { SupabaseInboundRepository } from "./supabaseInboundRepository.js";
 import { ingestInboundMentions } from "./inboundIngestion.js";
 import { createXSignalAdapter } from "../signals/adapters/xAdapter.js";
@@ -141,6 +142,7 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
   const draft = await draftInboundResponse(
     llmClient,
     {
+      platform: row.platform,
       authorHandle: row.authorHandle,
       messageText: row.body,
       inResponseToText: row.inResponseToText,
@@ -151,8 +153,29 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
     verifiedKnowledgeSummary,
   );
 
-  await repo.updateStatus(id, "draft_ready", { draftResponse: draft });
-  return { ...row, status: "draft_ready", draftResponse: draft };
+  // A link is only ever earned when BOTH the model declared usesLink=true
+  // AND the person's own message actually asked for contact info/a link --
+  // checked here (not inside checkReplyGuardrails, which has no visibility
+  // into the original message) so a model that sets usesLink=true on an
+  // unrelated conversation still gets rejected, not silently trusted.
+  if (draft.usesLink && !impliesContactOrLinkRequest(row.body)) {
+    throw new InboundActionError(
+      "Draft rejected -- includes a link, but the original message never asked for contact info or a link. Try drafting again.",
+    );
+  }
+
+  // Mechanical, $0 safety net -- see xReplyGuardrails.ts. A link is only
+  // ever permitted when usesLink=true (checked above against the original
+  // message) AND it resolves to Fillbook's own approved contact link -- an
+  // arbitrary or promotional domain is still rejected even with
+  // usesLink=true.
+  const violation = checkReplyGuardrails(draft.reply, draft.usesLink, { approvedLinkDomains: INBOUND_APPROVED_LINK_DOMAINS });
+  if (violation) {
+    throw new InboundActionError(`Draft rejected -- ${violation.reason}. Try drafting again.`);
+  }
+
+  await repo.updateStatus(id, "draft_ready", { draftResponse: draft.reply, draftUsesLink: draft.usesLink });
+  return { ...row, status: "draft_ready", draftResponse: draft.reply, draftUsesLink: draft.usesLink };
 }
 
 /**

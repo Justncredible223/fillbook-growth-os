@@ -8,10 +8,24 @@ import { timingSafeEqual } from "node:crypto";
  * Vercel's deployment-protection-bypass header -- a single static value
  * that has to be embedded in the client to let the app through at all,
  * which means it was never actually a secret. This checks a second,
- * separate token (APP_API_TOKEN) that the app now asks its user to enter
- * once and stores encrypted on-device, instead of shipping baked into
- * the APK. Returns true and lets the caller continue if the request is
- * authorized; writes a 401 and returns false otherwise.
+ * separate token (APP_API_TOKEN): a fixed value injected into the Android
+ * build at compile time (see android/app/build.gradle.kts's secretValue()
+ * and AppConfig.kt), never typed or stored by the owner at runtime -- there
+ * is no "enter it once" flow in this app.
+ *
+ * APP_API_TOKEN_PREVIOUS (optional) exists purely to make token rotation
+ * safe: during a rotation, the server is redeployed with the NEW value in
+ * APP_API_TOKEN and the OUTGOING value in APP_API_TOKEN_PREVIOUS, so
+ * whichever APK build the owner's device is still running (old or new
+ * token) keeps working until the new APK is confirmed installed, at which
+ * point APP_API_TOKEN_PREVIOUS is removed in a follow-up deploy. Only
+ * APP_API_TOKEN is required -- APP_API_TOKEN_PREVIOUS being unset is a
+ * normal, non-error "not currently mid-rotation" state, not a
+ * misconfiguration.
+ *
+ * Returns true and lets the caller continue if the request's bearer token
+ * matches either currently-accepted value; writes a 401 and returns false
+ * otherwise, or a 500 if the server itself isn't configured at all.
  */
 export function requireAppAuth(req: VercelRequest, res: VercelResponse): boolean {
   const expected = process.env.APP_API_TOKEN;
@@ -21,7 +35,20 @@ export function requireAppAuth(req: VercelRequest, res: VercelResponse): boolean
   }
 
   const header = req.headers.authorization;
-  if (!header || !constantTimeEquals(header, `Bearer ${expected}`)) {
+  if (!header) {
+    res.status(401).json({ error: "Missing or invalid Authorization header" });
+    return false;
+  }
+
+  // Both comparisons always run, never short-circuited on the first match --
+  // same rationale as constantTimeEquals itself, extended from "matches THE
+  // one accepted value" to "matches ANY of the presently-accepted values"
+  // so a rotation in progress can't be distinguished via response timing.
+  const previous = process.env.APP_API_TOKEN_PREVIOUS;
+  const matchesCurrent = constantTimeEquals(header, `Bearer ${expected}`);
+  const matchesPrevious = previous ? constantTimeEquals(header, `Bearer ${previous}`) : false;
+
+  if (!matchesCurrent && !matchesPrevious) {
     res.status(401).json({ error: "Missing or invalid Authorization header" });
     return false;
   }
@@ -38,7 +65,7 @@ export function requireAppAuth(req: VercelRequest, res: VercelResponse): boolean
  * (that comparison is already safe -- length alone reveals far less than
  * a full prefix match would).
  */
-function constantTimeEquals(a: string, b: string): boolean {
+export function constantTimeEquals(a: string, b: string): boolean {
   const bufferA = Buffer.from(a);
   const bufferB = Buffer.from(b);
   if (bufferA.length !== bufferB.length) return false;

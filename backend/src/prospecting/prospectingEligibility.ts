@@ -12,11 +12,21 @@ import { currentScheduleSlot, getScheduleTimezone, getXProspectingSchedule } fro
 /**
  * How many of PROSPECTING_TOPICS get searched per growth-pulse run --
  * rotates through the full list over time rather than querying everything
- * at once. At 2 topics/run * 3 runs/day = 6 topics/day, cycling the full
- * ~36-topic list every ~6 days. QUEUE_FULL_THRESHOLD below already stops
- * search once 2 days' worth of backlog is queued (30 candidates), so
- * this never overfills -- it just keeps the daily working set closer to
- * the 8-15 target the owner actually wants to work through each day.
+ * at once. QUEUE_FULL_THRESHOLD below still stops search entirely once 2
+ * days' worth of backlog is queued, so this can't overrun the owner's
+ * strict 8-15 candidates/day reply cadence (shadowban-risk discipline) --
+ * it only controls how much TOPIC DIVERSITY shows up per run while the
+ * queue is empty/low.
+ *
+ * Raised from 1 to 2 (2026-09-07): at 1 topic/run * 3 runs/day, every
+ * candidate found in one run came from the exact same search topic (real
+ * example: a run that found 4 candidates, all under "too_many_trades"),
+ * and the full ~35-topic list took ~14 days to cycle once. At 2/run * 3
+ * runs/day = 6 topics/day, the full list cycles in under a week, and a
+ * single run is no longer guaranteed to be single-topic. Cost impact: see
+ * MONTHLY_PROSPECTING_BUDGET_USD's own comment -- still self-limiting,
+ * still well under the shared $10 credit pool even at this run's real,
+ * lower-than-ceiling read counts.
  */
 export const TOPICS_PER_SEARCH_RUN = 2;
 

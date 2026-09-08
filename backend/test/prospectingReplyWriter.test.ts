@@ -1,13 +1,27 @@
 import { describe, it, expect, vi } from "vitest";
 import { LlmClient } from "../src/content/llmClient";
-import { draftProspectingReply } from "../src/prospecting/prospectingReplyWriter";
+import {
+  draftProspectingReply,
+  buildProspectingSystemPrompt,
+  prospectingPlatformProfile,
+  PROSPECTING_TRACKABLE_LINK,
+} from "../src/prospecting/prospectingReplyWriter";
 
 function jsonResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
 }
 
-function replyResponse(reply: string, mentionsFillbook: boolean, usesLink: boolean) {
-  return jsonResponse({ content: [{ type: "tool_use", name: "submit_reply", input: { reply, mentionsFillbook, usesLink } }] });
+function replyResponse(reply: string, mentionsFillbook: boolean, usesLink: boolean, isRelevant = true) {
+  return jsonResponse({ content: [{ type: "tool_use", name: "submit_reply", input: { isRelevant, reply, mentionsFillbook, usesLink } }] });
+}
+
+async function capturePrompt(platform: string, extra: Partial<Parameters<typeof draftProspectingReply>[1]> = {}) {
+  const fetchMock = vi.fn().mockResolvedValue(replyResponse("...", false, false));
+  const llmClient = new LlmClient("test-key", fetchMock);
+  await draftProspectingReply(llmClient, { platform, authorHandle: "someone", postText: "hi", discoveryQuery: "drawdown", ...extra }, "", "");
+  const [, options] = fetchMock.mock.calls[0]!;
+  const body = JSON.parse((options as { body: string }).body);
+  return { system: body.system as string, user: body.messages[0].content as string };
 }
 
 describe("draftProspectingReply", () => {
@@ -17,12 +31,13 @@ describe("draftProspectingReply", () => {
 
     const result = await draftProspectingReply(
       llmClient,
-      { authorHandle: "someTrader", postText: "does trailing drawdown reset daily or lock in?", discoveryQuery: "trailing_drawdown" },
+      { platform: "x", authorHandle: "someTrader", postText: "does trailing drawdown reset daily or lock in?", discoveryQuery: "trailing_drawdown" },
       "voice: concise",
       "",
     );
 
     expect(result).toEqual({
+      isRelevant: true,
       reply: "Most firms reset at end of day, worth checking your rulebook.",
       mentionsFillbook: false,
       usesLink: false,
@@ -38,24 +53,32 @@ describe("draftProspectingReply", () => {
     const fetchMock = vi.fn().mockResolvedValue(replyResponse("Good question.", false, false));
     const llmClient = new LlmClient("test-key", fetchMock);
 
-    await draftProspectingReply(llmClient, { authorHandle: null, postText: "hi", discoveryQuery: "drawdown" }, "", "");
+    await draftProspectingReply(llmClient, { platform: "x", authorHandle: null, postText: "hi", discoveryQuery: "drawdown" }, "", "");
 
     const [, options] = fetchMock.mock.calls[0]!;
     const body = JSON.parse((options as { body: string }).body);
     expect(body.messages[0].content).toContain("From: @unknown");
   });
 
-  it("the system prompt instructs a value-first, mostly-no-mention default", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(replyResponse("...", false, false));
-    const llmClient = new LlmClient("test-key", fetchMock);
+  it("REFINED (2026-09-05): X's system prompt gives a structure for an earned mention instead of a blanket 90%+ no-mention default -- still value-first, still silence-by-default when unsure, but no longer reads as pure advice with no path to awareness", async () => {
+    const { system } = await capturePrompt("x");
 
-    await draftProspectingReply(llmClient, { authorHandle: "x", postText: "hi", discoveryQuery: "drawdown" }, "", "");
+    // The old blanket rule is gone for X specifically.
+    expect(system).not.toMatch(/90%\+/);
+    expect(system).not.toContain("mentionsFillbook=false");
+    // The new structure and its hard rules are present.
+    expect(system).toContain("thoughtful trader or builder joining the conversation");
+    expect(system).toMatch(/respond specifically to what they actually said/i);
+    expect(system).toContain("connect their problem to journaling");
+    expect(system).toContain("That's one of the things we're trying to make easier with Fillbook");
+    expect(system).toContain("Never include a link by default");
+    expect(system).toContain("check out our platform");
+    expect(system).toContain("Never impersonate an individual trader or conceal");
+  });
 
-    const [, options] = fetchMock.mock.calls[0]!;
-    const body = JSON.parse((options as { body: string }).body);
-    expect(body.system).toMatch(/90%\+/);
-    expect(body.system).toContain("mentionsFillbook=false");
-    expect(body.system).toContain("we built Fillbook for this, check it out");
+  it("an unrecognized platform also keeps the conservative default, never X's more structured one", async () => {
+    const { system } = await capturePrompt("mastodon");
+    expect(system).toMatch(/90%\+/);
   });
 
   it("passes through the model's own mentionsFillbook/usesLink flags rather than inferring them", async () => {
@@ -66,12 +89,87 @@ describe("draftProspectingReply", () => {
 
     const result = await draftProspectingReply(
       llmClient,
-      { authorHandle: "trader1", postText: "wish I had a way to track this automatically", discoveryQuery: "trading_journal" },
+      { platform: "x", authorHandle: "trader1", postText: "wish I had a way to track this automatically", discoveryQuery: "trading_journal" },
       "",
       "",
     );
 
     expect(result.mentionsFillbook).toBe(true);
     expect(result.usesLink).toBe(true);
+  });
+
+  /**
+   * Regression coverage for a real, confirmed bug: the model had no
+   * structured way to say "this post doesn't actually fit" except by
+   * writing that admission into the reply text itself (e.g. "this event
+   * isn't futures related"), which then got shown to the owner as if it
+   * were a usable draft. isRelevant is the model's own escape hatch --
+   * the prompt instructs it to judge honestly, and the caller
+   * (prospectingHandlers.ts) checks the flag before ever persisting or
+   * returning a draft.
+   */
+  describe("isRelevant", () => {
+    it("passes through the model's own isRelevant=true", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(replyResponse("Good question.", false, false, true));
+      const llmClient = new LlmClient("test-key", fetchMock);
+
+      const result = await draftProspectingReply(llmClient, { platform: "x", authorHandle: "someone", postText: "hi", discoveryQuery: "drawdown" }, "", "");
+
+      expect(result.isRelevant).toBe(true);
+    });
+
+    it("passes through the model's own isRelevant=false, with an empty reply, rather than inferring relevance", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(replyResponse("", false, false, false));
+      const llmClient = new LlmClient("test-key", fetchMock);
+
+      const result = await draftProspectingReply(
+        llmClient,
+        { platform: "x", authorHandle: "someone", postText: "a sci-fi story about an algorithm and a civilization", discoveryQuery: "hesitation_trading" },
+        "",
+        "",
+      );
+
+      expect(result.isRelevant).toBe(false);
+      expect(result.reply).toBe("");
+    });
+
+    it("the system prompt instructs the model to judge relevance honestly FIRST, before writing anything", async () => {
+      const { system } = await capturePrompt("x");
+
+      expect(system).toMatch(/judge isRelevant honestly/i);
+      expect(system).toContain("set isRelevant=false");
+      expect(system).toMatch(/confident "this isn't relevant" is the correct, expected outcome/i);
+    });
+  });
+
+  describe("platform awareness", () => {
+    it("an X candidate is framed as an X post with X's short-reply shape and the trackable link", async () => {
+      const { system, user } = await capturePrompt("x");
+
+      expect(system).toContain("public X post on X");
+      expect(system).toContain("Shape for X:");
+      expect(system).toContain("one or two sentences");
+      expect(system).toContain(PROSPECTING_TRACKABLE_LINK);
+      expect(system).not.toContain("Reddit");
+      expect(user).toContain("Platform: X");
+      expect(user).toContain("From: @someone");
+    });
+
+    it("an unknown platform gets a neutral profile instead of X language or a crash", async () => {
+      const { system, user } = await capturePrompt("mastodon");
+
+      expect(system).toContain("public mastodon post on mastodon");
+      expect(system).not.toContain("X post");
+      expect(user).toContain("Platform: mastodon");
+    });
+
+    it("platform lookup is case-insensitive and every profile pins the single allowed link", () => {
+      expect(prospectingPlatformProfile("X").displayName).toBe("X");
+      for (const platform of ["x", "unknown"]) {
+        const profile = prospectingPlatformProfile(platform);
+        expect(profile.trackableLink).toBe(PROSPECTING_TRACKABLE_LINK);
+        expect(buildProspectingSystemPrompt(profile)).toContain(PROSPECTING_TRACKABLE_LINK);
+      }
+    });
   });
 });

@@ -32,7 +32,17 @@ hedge it explicitly ("in my experience", "it's easy to underestimate how often..
 drop the comparison and make a narrower, defensible observation instead.
 
 Submit your result via the submit_draft tool. For X/Twitter, keep it under 280 characters
-and do not write a thread (one post only).`;
+and do not write a thread (one post only).
+
+If the user message tells you this is a PARTNERSHIP PITCH: this is a private, one-recipient
+cold-outreach message, not a public post -- ignore the platform-native/public-post framing
+above (character limits still apply for an X DM). You MUST reference something concrete and
+specific from the "Evidence about them" text (quote or closely paraphrase an actual detail --
+what they actually said, teach, or focus on), not a generic industry statement. A pitch that
+could be sent to any recipient in the same category with only the name swapped is a failure,
+not a stylistic choice. Present the proposed collaboration as something to discuss, never as
+an already-agreed term, discount, or commission. End with exactly ONE clear, proportionate
+next step (e.g. "open to a quick call?").`;
 
 /**
  * Generates one candidate post for a given opportunity. This is the one
@@ -56,6 +66,22 @@ export async function draftContent(
    * of a consistent judgment.
    */
   replyTo?: { authorHandle: string | null },
+  /**
+   * Present only for partnership pitches (see partnershipsHandlers.ts's
+   * generateDraftForPartnership). evidenceExcerpts must be the
+   * recipient's OWN real words (post text, bio, notes) -- never a
+   * description of how they were found -- or the writer has nothing
+   * concrete to personalize with, which is exactly the gap a real
+   * production pitch failed 5 of 9 reviewers for.
+   */
+  pitchContext?: {
+    recipientOrganization: string;
+    channel: "email" | "x";
+    evidenceExcerpts: string[];
+    proposedCollaboration: string;
+    /** Set on a bounded revision attempt (see generateDraftForPartnership) -- the prior draft's own review-gate feedback, so the rewrite targets the ACTUAL problems instead of guessing again from scratch. */
+    priorFeedback?: string;
+  },
 ): Promise<string> {
   const userMessage = [
     `Platform: ${platform}`,
@@ -67,8 +93,23 @@ export async function draftContent(
           "Do not write standalone-post hook copy -- this is read with their original post as context, not mid-scroll on its own.",
         ].join("\n")
       : null,
-    `Opportunity: ${opportunity.title}`,
-    `Rationale: ${opportunity.rationale}`,
+    pitchContext
+      ? [
+          "Content format: PARTNERSHIP PITCH -- a private, one-recipient business proposition, not public content.",
+          `Recipient: ${pitchContext.recipientOrganization}`,
+          `Channel this will actually be sent through: ${pitchContext.channel === "email" ? "email" : "X DM"}`,
+          "Evidence about them (their own real words -- you must use this for specificity):",
+          ...pitchContext.evidenceExcerpts.map((e) => `- "${e}"`),
+          `Proposed collaboration to raise as a discussion point: ${pitchContext.proposedCollaboration}`,
+          pitchContext.priorFeedback
+            ? `A prior draft was rejected for these specific reasons -- do not repeat them:\n${pitchContext.priorFeedback}`
+            : null,
+        ]
+          .filter((line) => line !== null)
+          .join("\n")
+      : null,
+    pitchContext ? null : `Opportunity: ${opportunity.title}`,
+    pitchContext ? null : `Rationale: ${opportunity.rationale}`,
     "",
     "Brand rules:",
     brandRulesSummary,

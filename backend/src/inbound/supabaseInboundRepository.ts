@@ -17,6 +17,7 @@ function fromRow(data: Record<string, any>): InboundEngagement {
     priority: data.priority,
     status: data.status,
     draftResponse: data.draft_response,
+    draftUsesLink: data.draft_uses_link,
     respondedAt: data.responded_at,
     respondedNote: data.responded_note,
     isRepeatEngager: data.is_repeat_engager,
@@ -56,6 +57,7 @@ export class SupabaseInboundRepository implements InboundRepository {
         priority: engagement.priority,
         status: engagement.status,
         draft_response: engagement.draftResponse,
+        draft_uses_link: engagement.draftUsesLink,
         responded_at: engagement.respondedAt,
         responded_note: engagement.respondedNote,
         is_repeat_engager: engagement.isRepeatEngager,
@@ -124,10 +126,11 @@ export class SupabaseInboundRepository implements InboundRepository {
   async updateStatus(
     id: string,
     status: InboundStatus,
-    fields?: Partial<Pick<InboundEngagement, "draftResponse" | "respondedAt" | "respondedNote">>,
+    fields?: Partial<Pick<InboundEngagement, "draftResponse" | "draftUsesLink" | "respondedAt" | "respondedNote">>,
   ): Promise<void> {
     const update: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
     if (fields?.draftResponse !== undefined) update.draft_response = fields.draftResponse;
+    if (fields?.draftUsesLink !== undefined) update.draft_uses_link = fields.draftUsesLink;
     if (fields?.respondedAt !== undefined) update.responded_at = fields.respondedAt;
     if (fields?.respondedNote !== undefined) update.responded_note = fields.respondedNote;
     const { error } = await this.client.from("inbound_engagements").update(update).eq("id", id);

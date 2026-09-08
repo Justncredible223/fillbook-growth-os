@@ -1,10 +1,11 @@
 package com.fillbook.growthos.ui.screens
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -42,12 +44,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import com.fillbook.growthos.data.DraftRejectedException
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.Opportunity
 import com.fillbook.growthos.ui.components.GhostButton
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.InsetRow
+import com.fillbook.growthos.ui.components.openExternalUrl
 import com.fillbook.growthos.ui.components.PrimaryButton
 import com.fillbook.growthos.ui.components.assetStageDisplayName
 import com.fillbook.growthos.ui.components.Pill
@@ -79,10 +84,10 @@ fun RadarScreen(repo: GrowthOsRepository) {
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
     // null = All. "engagement"/"campaign" narrow to Opportunity.isEngagementOpportunity --
     // the same real-data discriminator the card CTA branching already uses, not a new concept.
-    var typeFilter by remember { mutableStateOf<String?>(null) }
+    var typeFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var pendingRun by remember { mutableStateOf<Opportunity?>(null) }
     var runningId by remember { mutableStateOf<String?>(null) }
     var runResultMessage by remember { mutableStateOf<String?>(null) }
@@ -99,7 +104,7 @@ fun RadarScreen(repo: GrowthOsRepository) {
             opportunities = repo.getOpportunities()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load opportunities. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load opportunities. Check your connection and try again."
         }
         loaded = true
     }
@@ -132,8 +137,16 @@ fun RadarScreen(repo: GrowthOsRepository) {
             try {
                 replyDraft = repo.draftOpportunityReply(opp.id)
                 pendingReply = opp
+            } catch (e: DraftRejectedException) {
+                // A real, meaningful rejection (the reply guardrail catching a
+                // banned phrase, an unverified claim, or an undeclared link) --
+                // never a connectivity problem. Shown directly, same pattern
+                // already used by Inbound/Prospecting/Partnerships (2026-09-07
+                // release audit finding: this screen was the one place still
+                // falling back to the generic message below for this case).
+                replyError = e.shortReason
             } catch (e: Exception) {
-                replyError = "Couldn't draft a reply. Check your connection and try again."
+                replyError = authErrorMessage(e) ?: "Couldn't draft a reply. Check your connection and try again."
             }
             draftingReplyId = null
         }
@@ -141,12 +154,14 @@ fun RadarScreen(repo: GrowthOsRepository) {
 
     fun copyAndOpenReply(opp: Opportunity, draft: String) {
         copyToClipboard(context, "Reply to ${opp.title}", draft)
-        opp.sourceUrl?.let { url ->
-            context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
-        }
+        // openExternalUrl (not a bare startActivity) -- fails safely instead
+        // of crashing with ActivityNotFoundException on a device/profile
+        // with nothing able to handle the intent.
+        val opened = opp.sourceUrl?.let { url -> openExternalUrl(context, url) } ?: false
         pendingReply = null
         replyDraft = null
-        scope.launch { snackbarHostState.showSnackbar("Copied — paste in X") }
+        val message = if (opp.sourceUrl != null && !opened) "Copied, but no app could open the link" else "Copied — paste in X"
+        scope.launch { snackbarHostState.showSnackbar(message) }
     }
 
     val hasEngagement = opportunities.any { it.isEngagementOpportunity }
@@ -193,11 +208,25 @@ fun RadarScreen(repo: GrowthOsRepository) {
         if (!loaded) {
             SkeletonListLoading()
         } else if (errorMessage == null && opportunities.isEmpty()) {
-            PolishedEmptyState(
-                icon = Icons.Filled.Radar,
-                headline = "Nothing on Radar yet",
-                subtitle = "Once the daily signal sweep runs, real opportunities show up here.",
-            )
+            // Same nested-scroll fix as Prospecting/Inbound/VideoStatus/Approvals
+            // (2026-09-07): PullToRefreshBox only detects the pull gesture
+            // through a scrollable descendant's nested-scroll connection --
+            // a bare PolishedEmptyState never dispatched drag deltas to it.
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        PolishedEmptyState(
+                            icon = Icons.Filled.Radar,
+                            headline = "Nothing on Radar yet",
+                            subtitle = "Once the daily signal sweep runs, real opportunities show up here.",
+                        )
+                    }
+                }
+            }
         } else {
             SearchField(query, { query = it }, "Search opportunities", modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
             if (hasEngagement && hasCampaign) {
@@ -217,15 +246,23 @@ fun RadarScreen(repo: GrowthOsRepository) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 if (filtered.isEmpty()) {
-                    PolishedEmptyState(
-                        icon = Icons.Filled.Radar,
-                        headline = "No matches",
-                        subtitle = if (query.isBlank()) {
-                            "No ${if (typeFilter == "engagement") "engagement" else "campaign"} opportunities right now."
-                        } else {
-                            "Nothing on Radar matches \"$query\"."
-                        },
-                    )
+                    // Same nested-scroll fix -- a bare PolishedEmptyState here
+                    // would leave pull-to-refresh inert while a filter/search
+                    // narrows the list down to zero, even though this branch
+                    // is already inside PullToRefreshBox.
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.Radar,
+                                headline = "No matches",
+                                subtitle = if (query.isBlank()) {
+                                    "No ${if (typeFilter == "engagement") "engagement" else "campaign"} opportunities right now."
+                                } else {
+                                    "Nothing on Radar matches \"$query\"."
+                                },
+                            )
+                        }
+                    }
                 } else {
                     val topScore = filtered.maxOf { it.score }
                     LazyColumn(
@@ -293,7 +330,10 @@ fun RadarScreen(repo: GrowthOsRepository) {
                         creatorProfileUrl("x", handle)?.let { profileUrl ->
                             Spacer(Modifier.height(10.dp))
                             TextButton(
-                                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(profileUrl))) },
+                                // openExternalUrl, not a bare startActivity --
+                                // fails safely instead of crashing with
+                                // ActivityNotFoundException.
+                                onClick = { openExternalUrl(context, profileUrl) },
                                 contentPadding = PaddingValues(0.dp),
                             ) { Text("View @$handle's profile", style = MaterialTheme.typography.labelMedium, color = Accent) }
                         }
@@ -350,6 +390,7 @@ private fun splitTitle(title: String): Pair<String, String?> {
  * and a brighter card border; every other card gets a quiet text-only
  * action so a long list doesn't turn into a stack of equally-loud buttons.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun OpportunityCard(
     opp: Opportunity,
@@ -370,7 +411,7 @@ private fun OpportunityCard(
             ScoreBadge(score = opp.score.toInt(), semanticLabel = "Opportunity score ${opp.score.toInt()}, ${band.label}")
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Pill(band.label.uppercase(), bandColor)
                     if (topRanked) Pill("TOP PICK", Accent)
                     if (opp.isEngagementOpportunity) Pill("ENGAGEMENT", TextSecondary)
@@ -378,7 +419,7 @@ private fun OpportunityCard(
                 Spacer(Modifier.height(6.dp))
                 Text(headline, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     opp.channels.forEach { channel -> IconPill(platformDisplayName(channel), platformIcon(channel), TextSecondary) }
                     source?.let { Pill(signalSourceDisplayName(it), TextSecondary) }
                 }

@@ -2,8 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   DEFAULT_SCHEDULE_TIMEZONE,
   currentScheduleSlot,
-  getRedditInboundSchedule,
-  getRedditProspectingSchedule,
+  getOperatingDate,
   getScheduleTimezone,
   getXInboundSchedule,
   getXProspectingSchedule,
@@ -33,19 +32,12 @@ describe("default workflow schedules -- approved cadence", () => {
   it("X inbound is 3x/day at 08:00/13:00/18:00", () => {
     expect(getXInboundSchedule({})).toEqual(["08:00", "13:00", "18:00"]);
   });
-  it("Reddit prospecting is 1x/day at 09:00", () => {
-    expect(getRedditProspectingSchedule({})).toEqual(["09:00"]);
-  });
-  it("Reddit inbound is 3x/day at 08:00/13:00/18:00", () => {
-    expect(getRedditInboundSchedule({})).toEqual(["08:00", "13:00", "18:00"]);
-  });
-
   it("rejects a malformed override instead of silently ignoring it", () => {
     expect(() => getXProspectingSchedule({ X_PROSPECTING_TIMES: "8am,13:00" })).toThrow(/invalid time/);
   });
 
   it("honors a valid comma-separated override", () => {
-    expect(getRedditProspectingSchedule({ REDDIT_PROSPECTING_TIMES: "07:30,19:15" })).toEqual(["07:30", "19:15"]);
+    expect(getXProspectingSchedule({ X_PROSPECTING_TIMES: "07:30,19:15" })).toEqual(["07:30", "19:15"]);
   });
 });
 
@@ -94,7 +86,7 @@ describe("currentScheduleSlot", () => {
 });
 
 describe("isWithinScheduleWindow", () => {
-  const schedule = ["09:00"]; // Reddit prospecting default
+  const schedule = ["09:00"]; // an arbitrary once/day slot
   const tz = "America/Phoenix"; // 09:00 Phoenix == 16:00 UTC
 
   it("is true exactly at the configured UTC hour", () => {
@@ -109,5 +101,30 @@ describe("isWithinScheduleWindow", () => {
   });
   it("respects a custom tolerance", () => {
     expect(isWithinScheduleWindow(schedule, tz, new Date("2026-09-04T15:05:00Z"), 0)).toBe(false);
+  });
+});
+
+describe("getOperatingDate -- the operating-day key every once-per-day feature should use instead of a raw UTC date slice", () => {
+  const tz = "America/Phoenix"; // fixed UTC-7, no DST
+
+  it("an instant early in the UTC day is still the PREVIOUS Phoenix calendar day (the exact bug this replaces: UTC-midnight slicing read this as 'today')", () => {
+    // 2026-09-05T05:00:00Z is 2026-09-04T22:00:00 in Phoenix -- still Sep 4 there.
+    expect(getOperatingDate(new Date("2026-09-05T05:00:00Z"), tz)).toBe("2026-09-04");
+  });
+
+  it("an instant late in the UTC day is the SAME Phoenix calendar day", () => {
+    // 2026-09-04T15:00:00Z is 2026-09-04T08:00:00 in Phoenix.
+    expect(getOperatingDate(new Date("2026-09-04T15:00:00Z"), tz)).toBe("2026-09-04");
+  });
+
+  it("matches the plain UTC date only well into the UTC day (after Phoenix's own midnight, 07:00 UTC)", () => {
+    expect(getOperatingDate(new Date("2026-09-04T00:00:00Z"), tz)).toBe("2026-09-03"); // UTC midnight is still Sep 3 in Phoenix
+    expect(getOperatingDate(new Date("2026-09-04T07:00:00Z"), tz)).toBe("2026-09-04"); // Phoenix midnight
+    expect(getOperatingDate(new Date("2026-09-04T06:59:00Z"), tz)).toBe("2026-09-03"); // one minute before Phoenix midnight
+  });
+
+  it("is correct for a DST-observing zone too, not just Phoenix", () => {
+    // 2026-07-15T03:30:00Z is 2026-07-14T23:30:00 EDT (UTC-4 in summer) -- still July 14 in New York.
+    expect(getOperatingDate(new Date("2026-07-15T03:30:00Z"), "America/New_York")).toBe("2026-07-14");
   });
 });

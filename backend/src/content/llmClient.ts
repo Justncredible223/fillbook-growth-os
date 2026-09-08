@@ -2,6 +2,18 @@ const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MODEL = "claude-sonnet-4-5-20250929";
 
+/**
+ * Previously there was NO per-call timeout at all -- a single hung request
+ * could consume an entire Vercel invocation's 60s maxDuration with no way
+ * for the caller to bound or recover from it. 20s is conservative against
+ * real Claude Messages API latency for a 1024-max-token tool-forced call
+ * (typically single-digit seconds), while still leaving room for two
+ * sequential round-trips (draft, then the parallel review batch) plus DB
+ * writes inside one 60s invocation. Configurable via env for tuning
+ * without a code change.
+ */
+const DEFAULT_TIMEOUT_MS = Number(process.env.LLM_CALL_TIMEOUT_MS) || 20_000;
+
 export class LlmClientError extends Error {}
 
 export interface ToolCallResult<T> {
@@ -32,24 +44,37 @@ export class LlmClient {
     private onUsage?: (usage: LlmUsage) => void,
   ) {}
 
-  async callTool<T>(systemPrompt: string, userMessage: string, toolName: string, toolSchema: object): Promise<T> {
-    const res = await this.fetchImpl(ANTHROPIC_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": this.apiKey,
-        "anthropic-version": ANTHROPIC_VERSION,
-        ...(this.workspaceId ? { "anthropic-workspace-id": this.workspaceId } : {}),
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
-        tools: [{ name: toolName, description: `Submit your ${toolName} result`, input_schema: toolSchema }],
-        tool_choice: { type: "tool", name: toolName },
-      }),
-    });
+  async callTool<T>(systemPrompt: string, userMessage: string, toolName: string, toolSchema: object, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await this.fetchImpl(ANTHROPIC_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": this.apiKey,
+          "anthropic-version": ANTHROPIC_VERSION,
+          ...(this.workspaceId ? { "anthropic-workspace-id": this.workspaceId } : {}),
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userMessage }],
+          tools: [{ name: toolName, description: `Submit your ${toolName} result`, input_schema: toolSchema }],
+          tool_choice: { type: "tool", name: toolName },
+        }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new LlmClientError(`Claude API request timed out after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
 
     if (!res.ok) {
       const body = await res.text();

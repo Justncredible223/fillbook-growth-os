@@ -39,10 +39,11 @@ import com.fillbook.growthos.ui.theme.TextSecondary
  * face, or PIN/pattern/password -- via Android's own BiometricPrompt with
  * both BIOMETRIC_STRONG and DEVICE_CREDENTIAL allowed. There is no
  * separate app-level access code to type or lose; the actual API token
- * that authorizes requests server-side is a fixed value compiled into
- * the app (see MainActivity's APP_TOKEN, same trust tier as the existing
- * Vercel protection-bypass secret), never something the owner has to
- * remember or re-enter. If the device has no lock screen configured at
+ * that authorizes requests server-side is a fixed value injected into the
+ * app at build time (see AppConfig.kt's APP_TOKEN, sourced from
+ * android/local.properties or an env var -- same trust tier as the
+ * existing Vercel protection-bypass secret), never something the owner has
+ * to remember or re-enter. If the device has no lock screen configured at
  * all, [canUseDeviceLock] returns false and the caller skips this gate
  * entirely rather than blocking access with a check that can't work.
  */

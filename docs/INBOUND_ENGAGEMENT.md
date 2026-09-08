@@ -119,7 +119,7 @@ this current), `last_success_at`, and `last_error`. Surfaced in
 `DOWN` with the actual error — never as a merely-empty, falsely-reassuring
 queue.
 
-## Update 2026-09-04 -- 3x/day cadence + Reddit inbound added
+## Update 2026-09-04 -- 3x/day cadence added
 
 Step 2 above described a 1x/day sync via `daily-pipeline.ts`'s
 `inbound_engagement` step. That step has since moved to
@@ -127,23 +127,11 @@ Step 2 above described a 1x/day sync via `daily-pipeline.ts`'s
 -- see `docs/PROSPECTING.md`'s matching update and
 `backend/src/config/scheduleConfig.ts` for the exact times/timezone).
 People replying to `@FillbookHQ` are now noticed within one of three daily
-windows instead of waiting up to 24h for the next cron tick -- the
-"Known limitations" note below about once-daily sync being a real Vercel
-Hobby ceiling is now Reddit-specific and X-inbound-specific-to-backlog-
-recovery-only; the routine sync itself is no longer once/day for either
-platform.
+windows instead of waiting up to 24h for the next cron tick.
 
-Reddit inbound was added as a second, independent inbound source
-(`docs/REDDIT_INTEGRATION.md`) -- same `inbound_engagements` table
-(`platform='reddit'`), same `classifyPriority()` classifier, same status
-lifecycle, 3x/day. Reddit's `GET /message/inbox` is the one endpoint
-covering comment replies + username mentions + private messages together
-(no separate "already-tracked-conversation" endpoint the way this doc's
-original "detects new activity in an already-tracked conversation" X
-description implies exists on X either -- see `redditIngestion.ts`'s doc
-comment) -- private messages are recorded as "not actionable" rather than
-inserted as a public-conversation row, since there's no public permalink
-for the standard copy-draft-and-open-conversation workflow to point at.
+Reddit inbound was added as a second inbound source on 2026-09-04 and
+removed on 2026-09-06 -- Reddit closed self-service app registration and
+no credentials were ever obtained. Inbound is X-only today.
 
 ## Known limitations
 

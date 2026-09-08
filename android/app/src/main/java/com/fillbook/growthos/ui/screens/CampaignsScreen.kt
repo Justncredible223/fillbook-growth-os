@@ -3,6 +3,8 @@ package com.fillbook.growthos.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -34,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.Campaign
 import com.fillbook.growthos.data.CampaignAsset
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.CopyButton
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
@@ -68,7 +72,7 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -76,7 +80,7 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
             campaigns = repo.getCampaigns()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load campaigns. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load campaigns. Check your connection and try again."
         }
         loaded = true
     }
@@ -104,11 +108,25 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
         if (!loaded) {
             SkeletonListLoading()
         } else if (errorMessage == null && campaigns.isEmpty()) {
-            PolishedEmptyState(
-                icon = Icons.Filled.Campaign,
-                headline = "No campaigns run yet",
-                subtitle = "Once an opportunity runs through the pipeline, it shows up here -- pass or fail.",
-            )
+            // Same nested-scroll fix as Prospecting/Inbound/VideoStatus/etc.
+            // (2026-09-07): PullToRefreshBox only detects the pull gesture
+            // through a scrollable descendant's nested-scroll connection --
+            // a bare PolishedEmptyState never dispatched drag deltas to it.
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        PolishedEmptyState(
+                            icon = Icons.Filled.Campaign,
+                            headline = "No campaigns run yet",
+                            subtitle = "Once an opportunity runs through the pipeline, it shows up here -- pass or fail.",
+                        )
+                    }
+                }
+            }
         } else {
             SearchField(query, { query = it }, "Search campaigns", modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
             PullToRefreshBox(
@@ -117,11 +135,18 @@ fun CampaignsScreen(repo: GrowthOsRepository) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 if (filtered.isEmpty()) {
-                    PolishedEmptyState(
-                        icon = Icons.Filled.Campaign,
-                        headline = "No matches",
-                        subtitle = "No campaigns match \"$query\".",
-                    )
+                    // Same nested-scroll fix -- a bare PolishedEmptyState here
+                    // would leave pull-to-refresh inert while a search narrows
+                    // the list to zero, even though already inside PullToRefreshBox.
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.Campaign,
+                                headline = "No matches",
+                                subtitle = "No campaigns match \"$query\".",
+                            )
+                        }
+                    }
                 } else {
                     LazyColumn(
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
@@ -202,10 +227,11 @@ private fun stageRank(stage: String): Int = when (stage) {
     else -> 0
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AssetRow(asset: CampaignAsset) {
     InsetRow {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             IconPill(platformDisplayName(asset.platform), platformIcon(asset.platform), TextSecondary)
             QuietStatusLabel(assetStageDisplayName(asset.stage), assetStageTone(asset.stage))
             if (asset.reviewPassCount + asset.reviewFailCount > 0) {

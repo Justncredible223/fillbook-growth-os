@@ -3,6 +3,8 @@ package com.fillbook.growthos.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,12 +31,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.Experiment
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
+import com.fillbook.growthos.ui.components.ExperimentList
 import com.fillbook.growthos.ui.components.GhostButton
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.LoadingIndicator
@@ -56,6 +62,10 @@ import java.time.LocalDate
  * different visitors). "Control" is the period before an experiment's
  * start date, "treatment" is start date onward, both measured on the
  * same real review-pass-rate metric.
+ *
+ * "Check now" (measure) is now persisted server-side AND merged into the
+ * on-screen list from the response before the follow-up refresh, so the
+ * measured result is visible immediately and survives reloads.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,7 +73,8 @@ fun ExperimentsScreen(repo: GrowthOsRepository) {
     var experiments by remember { mutableStateOf<List<Experiment>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var showCreateDialog by remember { mutableStateOf(false) }
+    var actionError by remember { mutableStateOf<String?>(null) }
+    var showCreateDialog by rememberSaveable { mutableStateOf(false) }
     var busyId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -72,23 +83,33 @@ fun ExperimentsScreen(repo: GrowthOsRepository) {
             experiments = repo.getExperiments()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load experiments. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load experiments. Check your connection and try again."
         }
         loaded = true
     }
 
     LaunchedEffect(Unit) { refresh() }
 
-    fun act(id: String, action: suspend (String) -> Unit) {
+    /**
+     * Runs one experiment action. An action that returns the updated
+     * Experiment (measure, complete) is merged into the list right away
+     * -- the server's own response is the truth for that row -- and only
+     * then is the list re-fetched. A refresh failure after a successful
+     * action keeps the merged row rather than blanking the result.
+     */
+    fun act(id: String, failureMessage: String, action: suspend (String) -> Experiment?) {
         scope.launch {
             busyId = id
             try {
-                action(id)
+                val updated = action(id)
+                if (updated != null) experiments = ExperimentList.merge(experiments, updated)
+                actionError = null
                 refresh()
             } catch (e: Exception) {
-                errorMessage = "That action didn't go through. Check your connection and try again."
+                actionError = failureMessage
+            } finally {
+                busyId = null
             }
-            busyId = null
         }
     }
 
@@ -105,10 +126,14 @@ fun ExperimentsScreen(repo: GrowthOsRepository) {
                 "Before/after content tests -- one account, so periods are compared, not a live A/B split.",
             )
 
-            errorMessage?.let { message ->
-                Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            (errorMessage ?: actionError)?.let { message ->
+                Row(modifier = Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
+                    if (errorMessage != null) {
+                        TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
+                    } else {
+                        TextButton(onClick = { actionError = null }) { Text("Dismiss") }
+                    }
                 }
             }
 
@@ -125,13 +150,13 @@ fun ExperimentsScreen(repo: GrowthOsRepository) {
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    items(experiments) { experiment ->
+                    items(experiments, key = { it.id }) { experiment ->
                         ExperimentCard(
                             experiment = experiment,
                             busy = busyId == experiment.id,
-                            onMeasure = { act(experiment.id) { id -> repo.measureExperiment(id) } },
-                            onComplete = { act(experiment.id) { id -> repo.completeExperiment(id) } },
-                            onAbort = { act(experiment.id) { id -> repo.abortExperiment(id) } },
+                            onMeasure = { act(experiment.id, "Couldn't measure that experiment. Check your connection and try again.") { id -> repo.measureExperiment(id) } },
+                            onComplete = { act(experiment.id, "Couldn't complete that experiment. Check your connection and try again.") { id -> repo.completeExperiment(id) } },
+                            onAbort = { act(experiment.id, "Couldn't abort that experiment. Check your connection and try again.") { id -> repo.abortExperiment(id); null } },
                         )
                     }
                 }
@@ -145,7 +170,7 @@ fun ExperimentsScreen(repo: GrowthOsRepository) {
             onCreate = { hypothesis, platform, assetType, controlWindowDays ->
                 scope.launch {
                     try {
-                        repo.createExperiment(
+                        val created = repo.createExperiment(
                             hypothesis = hypothesis,
                             scopePlatform = platform.ifBlank { null },
                             scopeAssetType = assetType.ifBlank { null },
@@ -153,10 +178,12 @@ fun ExperimentsScreen(repo: GrowthOsRepository) {
                             startDate = LocalDate.now().toString(),
                             controlWindowDays = controlWindowDays,
                         )
+                        experiments = ExperimentList.merge(experiments, created)
+                        actionError = null
                         showCreateDialog = false
                         refresh()
                     } catch (e: Exception) {
-                        errorMessage = "Couldn't create that experiment. Check your connection and try again."
+                        actionError = "Couldn't create that experiment. Check your connection and try again."
                         showCreateDialog = false
                     }
                 }
@@ -165,6 +192,7 @@ fun ExperimentsScreen(repo: GrowthOsRepository) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ExperimentCard(
     experiment: Experiment,
@@ -174,7 +202,7 @@ private fun ExperimentCard(
     onAbort: () -> Unit,
 ) {
     GrowthCard {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Pill(experiment.status, statusColor(experiment.status))
             if (experiment.scopePlatform != null) Pill(experiment.scopePlatform, TextTertiary)
             if (experiment.scopeAssetType != null) Pill(experiment.scopeAssetType, TextTertiary)
@@ -191,7 +219,9 @@ private fun ExperimentCard(
 
         if (experiment.status == "running") {
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Three text actions can exceed a narrow phone's card width;
+            // FlowRow lets the last one wrap instead of being pushed off.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
                 GhostButton(text = if (busy) "Working..." else "Check now", onClick = onMeasure, enabled = !busy)
                 GhostButton(text = "Complete", onClick = onComplete, enabled = !busy, color = Accent)
                 GhostButton(text = "Abort", onClick = onAbort, enabled = !busy, color = Danger)
@@ -212,9 +242,9 @@ private fun CreateExperimentDialog(
     onDismiss: () -> Unit,
     onCreate: (hypothesis: String, platform: String, assetType: String, controlWindowDays: Int) -> Unit,
 ) {
-    var hypothesis by remember { mutableStateOf("") }
-    var platform by remember { mutableStateOf("") }
-    var assetType by remember { mutableStateOf("") }
+    var hypothesis by rememberSaveable { mutableStateOf("") }
+    var platform by rememberSaveable { mutableStateOf("") }
+    var assetType by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,

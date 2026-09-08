@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.MorningBrief
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.InsetRow
@@ -55,7 +56,7 @@ fun MorningBriefScreen(repo: GrowthOsRepository) {
             brief = repo.getMorningBrief()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load the morning brief. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load the morning brief. Check your connection and try again."
         }
         loaded = true
     }

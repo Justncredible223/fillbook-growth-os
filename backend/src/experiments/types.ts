@@ -51,6 +51,8 @@ export interface ExperimentRepository {
   list(): Promise<Experiment[]>;
   get(id: string): Promise<Experiment | null>;
   create(input: NewExperiment): Promise<Experiment>;
+  /** Stores an interim result for a still-running experiment ("Check now"). Never changes status or end_date. */
+  recordProvisionalResult(id: string, result: ExperimentResult): Promise<Experiment>;
   complete(id: string, result: ExperimentResult, endDate: string): Promise<Experiment>;
   abort(id: string): Promise<void>;
 }

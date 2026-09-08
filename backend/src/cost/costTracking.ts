@@ -24,15 +24,40 @@ export function estimateCostUsd(usage: LlmUsage): number {
  * Persists one real LLM call's cost. Never blocks or fails the caller's
  * actual work if this write fails -- cost visibility matters, but it
  * should never be the reason a real review agent call gets lost.
+ *
+ * [eventType] defaults to "llm_call" (every existing caller's exact
+ * prior behavior -- auto-draft, prospecting's reply writer, Today's X
+ * Post, video scripts). Partnerships passes "partnership_llm_call"
+ * explicitly -- confirmed live in production that without this, every
+ * partnership pitch-generation call was silently recorded under the
+ * generic "llm_call" type, which getPartnershipMonthSpendUsd never
+ * queries (it only looks for "partnership_llm_call"), so the $3/month
+ * cap was never actually gating LLM generation cost, only the separate
+ * X-search-read cost. A single shared event_type here would have the
+ * opposite problem -- Partnerships' budget would then also count every
+ * OTHER feature's LLM spend against its own $3 cap, and vice versa.
+ */
+/**
+ * Returns whether the write actually succeeded (checking the insert's own
+ * `error` result, not just catching a thrown exception -- a Supabase
+ * insert normally FAILS by returning `{error}`, not by throwing, so the
+ * previous version of this function -- try/catch with no error check --
+ * could never actually detect a failed write). Partnerships' budget
+ * reservation settlement (see budgetReservation.ts / migration 0025)
+ * depends on this being accurate: a caller that can't tell "the cost was
+ * recorded" from "the LLM call merely returned a usage block" would risk
+ * reversing a conservative settled charge for an attempt whose real cost
+ * was never actually durably recorded, silently losing track of it.
  */
 export async function recordCostEvent(
   client: SupabaseClient,
   usage: LlmUsage,
   context: Record<string, unknown> = {},
-): Promise<void> {
+  eventType: string = "llm_call",
+): Promise<boolean> {
   try {
-    await client.from("cost_events").insert({
-      event_type: "llm_call",
+    const { error } = await client.from("cost_events").insert({
+      event_type: eventType,
       provider: "anthropic",
       model: usage.model,
       input_tokens: usage.inputTokens,
@@ -40,8 +65,11 @@ export async function recordCostEvent(
       cost_usd: estimateCostUsd(usage),
       context,
     });
+    return !error;
   } catch {
-    // Deliberately swallowed -- see docstring above.
+    // Deliberately swallowed -- see docstring above; cost visibility must
+    // never block the actual work. Reported as a failed write, not thrown.
+    return false;
   }
 }
 
@@ -77,41 +105,70 @@ export async function recordXSearchCostEvent(
 }
 
 /**
- * Reddit's free tier has no documented per-call dollar cost (see
- * docs/REDDIT_INTEGRATION.md), so this records a $0 cost_events row purely
- * for the same per-source/run observability every other adapter gets
- * (System screen counters, /api/health) -- not a budget gate. If Reddit's
- * terms change to a paid tier, this is the one place a real per-read cost
- * would be plugged in, mirroring recordXSearchCostEvent.
+ * Same $0.005/read rate as recordXSearchCostEvent, but its OWN event_type
+ * -- Partnerships discovery must never inflate Prospecting's separate
+ * getProspectingMonthSpendUsd budget gate (it sums ALL "x_search_read"
+ * rows regardless of caller), and Partnerships' own
+ * getPartnershipMonthSpendUsd needs to see this spend alongside its LLM
+ * pitch-generation cost to enforce ONE shared $3/month cap across
+ * discovery + ranking + drafting, per docs/PARTNERSHIPS_MISSION.md
+ * Phase 7 ("account for research/provider costs and model
+ * generation/review costs ... together").
  */
-export async function recordRedditReadCostEvent(
+/**
+ * Returns both the (always-computed) cost and whether it was actually
+ * durably recorded -- see recordCostEvent's docstring on why checking the
+ * insert's own `error` result matters. Partnerships' discovery budget
+ * reservation (see discovery.ts / migration 0025) needs to know real
+ * recorded status, not just the theoretical cost, before it can safely
+ * reverse a conservative settled charge.
+ */
+export async function recordPartnershipXSearchCostEvent(
   client: SupabaseClient,
   resultsReturned: number,
   context: Record<string, unknown> = {},
-): Promise<void> {
+): Promise<{ costUsd: number; recorded: boolean }> {
+  const costUsd = resultsReturned * X_SEARCH_COST_PER_READ_USD;
   try {
-    await client.from("cost_events").insert({
-      event_type: "reddit_read",
-      provider: "reddit",
-      model: "oauth/read",
+    const { error } = await client.from("cost_events").insert({
+      event_type: "partnership_x_search_read",
+      provider: "x",
+      model: "search/recent",
       input_tokens: 0,
       output_tokens: resultsReturned,
-      cost_usd: 0,
+      cost_usd: costUsd,
       context,
     });
+    return { costUsd, recorded: !error };
   } catch {
     // Deliberately swallowed -- see recordCostEvent's docstring above.
+    return { costUsd, recorded: false };
   }
 }
 
-/** Real recorded X-search spend for the given month (created_at-based, not run_date -- x_search_read events have no separate "run date" concept), for Prospecting's budget gate. */
+/**
+ * Real recorded spend for the given month across BOTH of Prospecting's own
+ * cost sources -- its X search reads ("x_search_read") and its reply-writer
+ * LLM calls ("prospecting_llm_call", see draftProspectingCandidateReply).
+ *
+ * Previously this only summed "x_search_read", so the reply-writer's LLM
+ * cost was recorded under the generic "llm_call" event_type (shared with
+ * auto-draft/inbound/x-feed-post/run-campaign) and never counted against
+ * MONTHLY_PROSPECTING_BUDGET_USD at all -- the same bug class Partnerships
+ * had (see recordCostEvent's own docstring). Confirmed via
+ * cost_events.context->>'endpoint' = 'prospecting-draft': 39 historical rows
+ * ($0.3333) were cleanly attributable and reclassified to
+ * "prospecting_llm_call"; every other "llm_call" row had its own
+ * unambiguous endpoint (run-campaign/x-feed-post/inbound-draft/
+ * opportunity-reply-draft) and was left untouched.
+ */
 export async function getProspectingMonthSpendUsd(client: SupabaseClient, now: Date = new Date()): Promise<number> {
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
   const nextMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
   const { data, error } = await client
     .from("cost_events")
     .select("cost_usd")
-    .eq("event_type", "x_search_read")
+    .in("event_type", ["x_search_read", "prospecting_llm_call"])
     .gte("created_at", monthStart)
     .lt("created_at", nextMonthStart);
   if (error) throw new Error(`getProspectingMonthSpendUsd failed: ${error.message}`);

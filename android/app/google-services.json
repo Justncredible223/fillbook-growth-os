@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "684060714020",
+    "project_id": "fillbook-growth-os-b9bb2",
+    "storage_bucket": "fillbook-growth-os-b9bb2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:684060714020:android:5ac163220ca96eeb70a4b1",
+        "android_client_info": {
+          "package_name": "com.fillbook.growthos"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDOTNZKYoeLFgDDlDe996AW0JGy3uVNweU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

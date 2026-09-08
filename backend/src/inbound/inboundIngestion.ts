@@ -109,6 +109,7 @@ async function buildRow(
     priority,
     status,
     draftResponse: null,
+    draftUsesLink: null,
     respondedAt: null,
     respondedNote: null,
     isRepeatEngager: priorCount > 0,

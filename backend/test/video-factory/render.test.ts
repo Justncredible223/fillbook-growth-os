@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { buildFfmpegArgs, renderVideo } from "../../scripts/video-factory/render";
+import { buildFfmpegArgs, renderBasename, renderDirname, renderVideo } from "../../scripts/video-factory/render";
 import { VideoFactoryError, type RenderPlan } from "../../scripts/video-factory/types";
 import type { ProcessRunner } from "../../scripts/video-factory/processRunner";
 
@@ -58,6 +58,43 @@ describe("buildFfmpegArgs", () => {
 
   it("throws on an empty scene list", () => {
     expect(() => buildFfmpegArgs({ ...plan, scenes: [] })).toThrow(VideoFactoryError);
+  });
+});
+
+/**
+ * The three assertions below encode why the original tests failed on a
+ * Linux/macOS reviewer machine: node:path's platform default treated the
+ * Windows plan paths as a single filename there, leaking "C:\out\..."
+ * into the filter graph and running ffmpeg in ".". The render helpers
+ * must give identical results on every host for either path style.
+ */
+describe("host-OS independence of path handling", () => {
+  const posixPlan: RenderPlan = {
+    ...plan,
+    voiceoverPath: "/tmp/out/draft-1/voiceover.mp3",
+    assPath: "/tmp/out/draft-1/captions.ass",
+    outputPath: "/tmp/out/draft-1/final.mp4",
+  };
+
+  it("strips Windows directories from every file reference no matter the host", () => {
+    expect(renderBasename("C:\\out\\draft-1\\voiceover.mp3")).toBe("voiceover.mp3");
+    expect(renderDirname("C:\\out\\draft-1\\final.mp4")).toBe("C:\\out\\draft-1");
+    const filter = buildFfmpegArgs(plan)[buildFfmpegArgs(plan).indexOf("-filter_complex") + 1]!;
+    expect(filter).not.toMatch(/[A-Za-z]:\\/);
+    expect(filter).not.toContain("\\");
+  });
+
+  it("handles POSIX paths the same way", async () => {
+    expect(renderBasename("/tmp/out/draft-1/voiceover.mp3")).toBe("voiceover.mp3");
+    expect(renderDirname("/tmp/out/draft-1/final.mp4")).toBe("/tmp/out/draft-1");
+
+    const args = buildFfmpegArgs(posixPlan);
+    expect(args.join(" ")).not.toContain("/tmp/out");
+    expect(args[args.indexOf("-filter_complex") + 1]).toContain("[bgraw]subtitles=captions.ass[v]");
+
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+    await renderVideo(posixPlan, { run });
+    expect(run.mock.calls[0]![2]?.cwd).toBe("/tmp/out/draft-1");
   });
 });
 

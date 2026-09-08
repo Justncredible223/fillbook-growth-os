@@ -1,9 +1,10 @@
 package com.fillbook.growthos.ui.screens
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +29,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.Creator
 import com.fillbook.growthos.data.CreatorCategory
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
@@ -51,6 +54,7 @@ import com.fillbook.growthos.ui.components.SectionHeader
 import com.fillbook.growthos.ui.components.StatusChip
 import com.fillbook.growthos.ui.components.StatusTone
 import com.fillbook.growthos.ui.components.creatorProfileUrl
+import com.fillbook.growthos.ui.components.openExternalUrl
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
@@ -70,7 +74,7 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
     val scope = rememberCoroutineScope()
 
     suspend fun refresh() {
@@ -78,7 +82,7 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
             creators = repo.getCreators()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load creators. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load creators. Check your connection and try again."
         }
         loaded = true
     }
@@ -111,11 +115,25 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
         if (!loaded) {
             SkeletonListLoading()
         } else if (errorMessage == null && creators.isEmpty()) {
-            PolishedEmptyState(
-                icon = Icons.Filled.Groups,
-                headline = "No creators tracked yet",
-                subtitle = "Vetted, interacted, and rejected creators will show up here.",
-            )
+            // Same nested-scroll fix as Prospecting/Inbound/VideoStatus/etc.
+            // (2026-09-07): PullToRefreshBox only detects the pull gesture
+            // through a scrollable descendant's nested-scroll connection --
+            // a bare PolishedEmptyState never dispatched drag deltas to it.
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyColumn(modifier = Modifier.fillMaxSize()) {
+                    item {
+                        PolishedEmptyState(
+                            icon = Icons.Filled.Groups,
+                            headline = "No creators tracked yet",
+                            subtitle = "Vetted, interacted, and rejected creators will show up here.",
+                        )
+                    }
+                }
+            }
         } else {
             SearchField(query, { query = it }, "Search creators", modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
 
@@ -131,11 +149,18 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
                 modifier = Modifier.fillMaxSize(),
             ) {
                 if (filteredCreators.isEmpty()) {
-                    PolishedEmptyState(
-                        icon = Icons.Filled.Groups,
-                        headline = "No matches",
-                        subtitle = "No creators match \"$query\".",
-                    )
+                    // Same nested-scroll fix -- a bare PolishedEmptyState here
+                    // would leave pull-to-refresh inert while a search narrows
+                    // the list to zero, even though already inside PullToRefreshBox.
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.Groups,
+                                headline = "No matches",
+                                subtitle = "No creators match \"$query\".",
+                            )
+                        }
+                    }
                 } else {
                     LazyColumn(
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
@@ -160,6 +185,7 @@ fun CreatorsScreen(repo: GrowthOsRepository) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CreatorCard(creator: Creator) {
     val accentBar = when (creator.category) {
@@ -183,7 +209,7 @@ private fun CreatorCard(creator: Creator) {
                     Text(relationshipStageLabel(creator.readinessScore), style = MaterialTheme.typography.bodyMedium, color = TextSecondary)
                 }
                 Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconPill(platformDisplayName(creator.platform), platformIcon(creator.platform), TextSecondary)
                     creator.followerCount?.let { count -> Pill(formatFollowers(count), TextSecondary) }
                     if (creator.category == CreatorCategory.REJECTED) {
@@ -213,7 +239,12 @@ private fun CreatorCard(creator: Creator) {
             Spacer(Modifier.height(12.dp))
             SecondaryButton(
                 text = "Open profile",
-                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) },
+                // Was a bare startActivity(ACTION_VIEW) -- crashed with
+                // ActivityNotFoundException on a device/profile with nothing
+                // able to handle the intent (e.g. a work profile with no
+                // browser). openExternalUrl (already used by every other
+                // screen's own external links) fails safely instead.
+                onClick = { openExternalUrl(context, url) },
                 modifier = Modifier.fillMaxWidth(),
             )
         }

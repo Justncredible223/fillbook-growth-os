@@ -4,6 +4,7 @@ import type { ContentScoreRepository } from "./contentScoreRepository.js";
 import type { DeepReviewResult } from "./deepReviewGate.js";
 import { draftContent } from "./contentWriter.js";
 import { draftVideoScript, formatVideoScriptAsText, type VideoScript } from "./videoScriptWriter.js";
+import { draftResearch, formatResearchAsText, type ResearchReport } from "./researchWriter.js";
 
 /**
  * Platforms whose native format is short-form video, not a text post --
@@ -41,6 +42,36 @@ export interface PipelineContext {
   brandRulesSummary: string;
   verifiedKnowledgeSummary: string;
   recentTextsForSameTopic: string[];
+  /**
+   * Overrides the asset_type this run creates -- defaults to the
+   * existing "video_script" (video platforms) / "post" (everything
+   * else) inference when omitted, so every existing caller (manual
+   * /api/run-campaign, auto-draft) is unaffected. Used by the daily X
+   * feed-post step to mark its output with a distinct, dedicated
+   * asset_type (X_FEED_POST_ASSET_TYPE) instead of the generic "post"
+   * value replies/opportunity-drafts already use -- see
+   * dailyXFeedPost.ts's own doc comment for why that distinction is
+   * what keeps Home's Today's X Post genuinely separate from replies.
+   */
+  assetTypeOverride?: string;
+  /**
+   * Tells the deep-review agents what shape of content this actually is,
+   * beyond the existing post/reply distinction -- a partnership pitch is
+   * a third shape (a private, one-recipient business proposition, not
+   * public content), and judging it with the wrong bar (e.g.
+   * hook_specialist expecting a scroll-stopping public hook) produces
+   * wrong verdicts. Omitted defaults to the existing isReply-based
+   * post/reply distinction, so every existing caller is unaffected.
+   */
+  contentFormat?: "post" | "reply" | "partnership_pitch";
+  /** Only meaningful when contentFormat is "partnership_pitch" -- who this specific pitch is addressed to, so growth_strategist can judge recipient-specific relevance rather than a generic audience bar. */
+  pitchRecipientOrganization?: string;
+  /** Only meaningful when contentFormat is "partnership_pitch" -- which channel this will actually be sent through, so hook_specialist judges an email subject/opener vs an X DM opener appropriately. */
+  pitchChannel?: "email" | "x";
+  /** Only meaningful when contentFormat is "partnership_pitch" -- the recipient's OWN real words, given to both the writer (for personalization) and every reviewer (for specificity/fact-claim verification). See reviewAgents.ts's own doc comment for why this closed a real gap. */
+  pitchEvidenceExcerpts?: string[];
+  /** Only meaningful when contentFormat is "partnership_pitch" -- a prior failed attempt's own review-gate feedback, passed to the writer on a bounded revision retry so a rewrite targets the ACTUAL rejection reasons instead of guessing again from scratch. */
+  pitchPriorFeedback?: string;
 }
 
 export interface PipelineResult {
@@ -72,13 +103,36 @@ export async function runCampaignPipeline(
   context: PipelineContext,
 ): Promise<PipelineResult> {
   const platform = opportunity.recommendedChannels[0] ?? "x";
-  const isVideo = VIDEO_PLATFORMS.has(platform);
+  // Owner-requested video script (2026-09-08): normally isVideo is purely a
+  // function of the opportunity's own recommended channel, but the owner
+  // can now explicitly request a video script for ANY open opportunity
+  // (see api/run-campaign.ts's validated `assetType` field) regardless of
+  // its channel -- e.g. because the TikTok/YouTube signal adapters that
+  // used to produce tiktok-first opportunities were intentionally removed
+  // (see api/ingest.ts's own doc comment), so relying on platform alone
+  // would make the video-script path permanently unreachable. Explicitly
+  // requesting assetTypeOverride: "video_script" both labels the resulting
+  // campaign_asset correctly AND switches the writer step below to the
+  // real video-script writer instead of the plain text writer -- the two
+  // were previously the same boolean by construction, so this is the one
+  // place they need to be reconciled.
+  const isVideo = VIDEO_PLATFORMS.has(platform) || context.assetTypeOverride === "video_script";
+  // Owner-requested research (2026-09-07): a private, internal research
+  // document for the owner to review, not public-facing content -- see
+  // researchWriter.ts's own doc comment. Checked ahead of isVideo/isReply
+  // since research is neither a video script nor a text post/reply; it
+  // takes over the writer step entirely below.
+  const isResearch = context.assetTypeOverride === "research";
   // Same signal the Android app uses to tell an "engagement" opportunity
   // from a "campaign/content" one -- never inferred from title text.
   const isReply = Boolean(opportunity.sourceUrl);
   let draftText: string;
   let videoScript: VideoScript | null = null;
-  if (isVideo) {
+  let researchReport: ResearchReport | null = null;
+  if (isResearch) {
+    researchReport = await draftResearch(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
+    draftText = formatResearchAsText(researchReport);
+  } else if (isVideo) {
     videoScript = await draftVideoScript(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
     draftText = formatVideoScriptAsText(videoScript);
   } else {
@@ -89,16 +143,29 @@ export async function runCampaignPipeline(
       context.brandRulesSummary,
       context.verifiedKnowledgeSummary,
       isReply ? { authorHandle: opportunity.authorHandle ?? null } : undefined,
+      context.contentFormat === "partnership_pitch" && context.pitchRecipientOrganization && context.pitchChannel
+        ? {
+            recipientOrganization: context.pitchRecipientOrganization,
+            channel: context.pitchChannel,
+            evidenceExcerpts: context.pitchEvidenceExcerpts ?? [],
+            proposedCollaboration: opportunity.rationale,
+            priorFeedback: context.pitchPriorFeedback,
+          }
+        : undefined,
     );
   }
 
   const campaignId = await campaignRepo.createCampaign(opportunity.id, opportunity.title);
-  const campaignAssetId = await campaignRepo.createCampaignAsset(campaignId, platform, isVideo ? "video_script" : "post");
+  const campaignAssetId = await campaignRepo.createCampaignAsset(
+    campaignId,
+    platform,
+    context.assetTypeOverride ?? (isVideo ? "video_script" : "post"),
+  );
   const contentVersionId = await campaignRepo.insertContentVersion(
     campaignAssetId,
     1,
     draftText,
-    videoScript ? { videoScript } : undefined,
+    videoScript ? { videoScript } : researchReport ? { research: researchReport } : undefined,
   );
 
   const mechanical = await factory.submitDraft("draft", draftText, context.recentTextsForSameTopic);
@@ -117,11 +184,41 @@ export async function runCampaignPipeline(
     };
   }
 
+  // Research (2026-09-07): deliberately SKIPS the nine-agent deep review
+  // entirely and goes straight from the mechanical gate to
+  // ready_for_owner -- same lighter-review treatment
+  // draftOpportunityReply already gives a lighter content type. A research
+  // report is a private internal document the owner already has to read
+  // in full before it informs anything public; hook_specialist,
+  // conversion_reviewer, and growth_strategist all judge public-facing
+  // content mechanics (scroll-stopping hooks, CTAs, audience growth) that
+  // simply don't apply to a document nobody but the owner will ever see.
+  // The mechanical gate (banned-phrase/duplicate check) still runs above,
+  // unchanged, for every content type including this one.
+  if (isResearch) {
+    const readyStage = factory.markReadyForOwner(mechanical.newStage);
+    await campaignRepo.updateAssetStage(campaignAssetId, readyStage);
+    return {
+      campaignId,
+      campaignAssetId,
+      platform,
+      draftText,
+      mechanicalGatePassed: true,
+      mechanicalBlockReasons: [],
+      deepReview: null,
+      finalStage: readyStage,
+    };
+  }
+
   const deepReview = await factory.runAndRecordDeepReview(llmClient, scoreRepo, contentVersionId, draftText, {
     platform,
     brandRulesSummary: context.brandRulesSummary,
     verifiedKnowledgeSummary: context.verifiedKnowledgeSummary,
     isReply,
+    contentFormat: context.contentFormat,
+    pitchRecipientOrganization: context.pitchRecipientOrganization,
+    pitchChannel: context.pitchChannel,
+    pitchEvidenceExcerpts: context.pitchEvidenceExcerpts,
   });
 
   if (!deepReview.passed) {

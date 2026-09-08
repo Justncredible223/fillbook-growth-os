@@ -21,8 +21,11 @@ describe("draftVideoScript", () => {
       hook: "Your funded account can get pulled even on a winning trade.",
       script: "Your funded account can get pulled even on a winning trade. Here's why trailing drawdown catches people off guard...",
       shotList: ["Text card: the hook line", "Fillbook UI: example drawdown chart (demo data)"],
-      caption: "Trailing drawdown explained in 30 seconds.",
+      youtubeTitle: "Why Your Funded Account Gets Pulled Even When You're Winning",
+      youtubeDescription: "Trailing drawdown catches even profitable traders off guard -- here's what to watch for.",
+      tiktokCaption: "Trailing drawdown explained in 30 seconds.",
       hashtags: ["futurestrading", "propfirm"],
+      disclosureCta: null,
     };
     const fetchMock = vi.fn().mockResolvedValue(scriptResponse(script));
     const client = new LlmClient("test-key", fetchMock);
@@ -37,13 +40,16 @@ describe("draftVideoScript", () => {
 });
 
 describe("formatVideoScriptAsText", () => {
-  it("flattens the script into one readable, numbered text block", () => {
+  it("flattens the script into one readable, numbered text block, with all platform-specific metadata distinct from each other", () => {
     const script: VideoScript = {
       hook: "The hook line.",
       script: "The full spoken script.",
       shotList: ["First shot", "Second shot"],
-      caption: "The caption.",
+      youtubeTitle: "The YouTube title.",
+      youtubeDescription: "The YouTube description.",
+      tiktokCaption: "The TikTok caption.",
       hashtags: ["futurestrading", "propfirm"],
+      disclosureCta: "Example data shown for illustration only.",
     };
 
     const text = formatVideoScriptAsText(script);
@@ -51,7 +57,27 @@ describe("formatVideoScriptAsText", () => {
     expect(text).toContain("HOOK: The hook line.");
     expect(text).toContain("1. First shot");
     expect(text).toContain("2. Second shot");
-    expect(text).toContain("CAPTION:\nThe caption.");
+    expect(text).toContain("YOUTUBE TITLE:\nThe YouTube title.");
+    expect(text).toContain("YOUTUBE DESCRIPTION:\nThe YouTube description.");
+    expect(text).toContain("TIKTOK CAPTION:\nThe TikTok caption.");
     expect(text).toContain("HASHTAGS: #futurestrading #propfirm");
+    expect(text).toContain("DISCLOSURE/CTA: Example data shown for illustration only.");
+  });
+
+  it("omits the disclosure/CTA line entirely when null -- never fabricates a filler line", () => {
+    const script: VideoScript = {
+      hook: "The hook line.",
+      script: "The full spoken script.",
+      shotList: ["First shot"],
+      youtubeTitle: "The YouTube title.",
+      youtubeDescription: "The YouTube description.",
+      tiktokCaption: "The TikTok caption.",
+      hashtags: ["futurestrading"],
+      disclosureCta: null,
+    };
+
+    const text = formatVideoScriptAsText(script);
+
+    expect(text).not.toContain("DISCLOSURE/CTA");
   });
 });

@@ -1,15 +1,15 @@
 /**
- * Single source of truth for when each of the four collection workflows
- * (X prospecting, X inbound, Reddit prospecting, Reddit inbound) runs, plus
- * the timezone they're expressed in. Nothing else in the codebase should
- * hard-code a run time or timezone -- read it from here so the operating
- * schedule lives in exactly one place.
+ * Single source of truth for when each of the collection workflows
+ * (X prospecting, X inbound) runs, plus the timezone they're expressed
+ * in. Nothing else in the codebase should hard-code a run time or
+ * timezone -- read it from here so the operating schedule lives in
+ * exactly one place.
  *
- * Approved operating model (2026-09-04):
+ * Approved operating model (2026-09-04, Reddit removed 2026-09-06 --
+ * Reddit closed self-service app registration and no credentials were
+ * ever obtained):
  *   X prospecting        3x/day  08:00, 13:00, 18:00 (local)
  *   X inbound            3x/day  08:00, 13:00, 18:00 (local)
- *   Reddit prospecting   1x/day  09:00 (local)
- *   Reddit inbound       3x/day  08:00, 13:00, 18:00 (local)
  *   Anthropic auto-draft 1x/day  unchanged -- see api/daily-pipeline.ts's
  *                                 existing "0 13 * * *" Vercel Cron entry,
  *                                 preserved as-is per the spec's own
@@ -71,16 +71,6 @@ export function getXProspectingSchedule(env: NodeJS.ProcessEnv = process.env): s
 /** Local "HH:MM" run times for X inbound mentions/replies. Override with X_INBOUND_TIMES. */
 export function getXInboundSchedule(env: NodeJS.ProcessEnv = process.env): string[] {
   return parseTimes(env.X_INBOUND_TIMES, ["08:00", "13:00", "18:00"], "X_INBOUND_TIMES");
-}
-
-/** Local "HH:MM" run times for Reddit prospecting/discovery. Override with REDDIT_PROSPECTING_TIMES. Stays 1x/day per the approved spec -- do not add entries here to increase frequency without an explicit, approved spec change. */
-export function getRedditProspectingSchedule(env: NodeJS.ProcessEnv = process.env): string[] {
-  return parseTimes(env.REDDIT_PROSPECTING_TIMES, ["09:00"], "REDDIT_PROSPECTING_TIMES");
-}
-
-/** Local "HH:MM" run times for Reddit inbound replies/mentions. Override with REDDIT_INBOUND_TIMES. */
-export function getRedditInboundSchedule(env: NodeJS.ProcessEnv = process.env): string[] {
-  return parseTimes(env.REDDIT_INBOUND_TIMES, ["08:00", "13:00", "18:00"], "REDDIT_INBOUND_TIMES");
 }
 
 /**
@@ -155,8 +145,8 @@ export function currentScheduleSlot(localTimes: string[], timezone: string, now:
  * `localTimes` converted to UTC for `now`'s calendar date. Useful for
  * wall-clock-based "is this the right window for a once/day step nested
  * inside a more-frequent invocation" checks. NOT used by
- * api/growth-pulse.ts today -- that endpoint's X/Reddit step groups are
- * gated by explicit query flags the caller
+ * api/growth-pulse.ts today -- that endpoint's step groups are gated by
+ * explicit query flags the caller
  * (.github/workflows/growth-pulse.yml) sets instead (see growth-pulse.ts's
  * own doc comment for why explicit flags won over wall-clock inference
  * there). Kept here, tested, and exported as a general-purpose scheduling
@@ -170,4 +160,20 @@ export function isWithinScheduleWindow(localTimes: string[], timezone: string, n
     const raw = Math.abs(hour - runHour);
     return Math.min(raw, 24 - raw) <= toleranceHours;
   });
+}
+
+/**
+ * The calendar date, as "YYYY-MM-DD", that `instant` falls on in
+ * `timezone` -- the "operating day" every once-per-day feature in this
+ * codebase should key off of, instead of `instant.toISOString().slice(0,
+ * 10)` (which is the UTC date and silently drifts from the configured
+ * schedule timezone -- for America/Phoenix, UTC is 7 hours ahead, so
+ * anything after 5pm Phoenix time already reads as "tomorrow" in UTC).
+ * Uses the "en-CA" locale specifically because it renders
+ * Intl.DateTimeFormat dates as YYYY-MM-DD directly -- no manual
+ * component reassembly, and no ambiguity from a locale that reorders
+ * month/day.
+ */
+export function getOperatingDate(instant: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant);
 }

@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
+import { constantTimeEquals } from "../src/lib/requireAppAuth.js";
 import { SignalGraph } from "../src/signals/signalGraph.js";
 import { SupabaseSignalRepository } from "../src/signals/supabaseSignalRepository.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
@@ -13,9 +14,8 @@ import { recordSyncAttempt, recordSyncSuccess, recordSyncFailure } from "../src/
 import { runProspectingSearch } from "../src/prospecting/prospectingSearch.js";
 import { SupabaseProspectingRepository } from "../src/prospecting/supabaseProspectingRepository.js";
 import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
-import { createRedditSignalAdapter } from "../src/signals/adapters/redditAdapter.js";
-import { ingestRedditInboundMentions } from "../src/inbound/redditIngestion.js";
-import { runRedditProspectingSearch } from "../src/prospecting/redditProspectingSearch.js";
+import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
+import { reconcileVideoRenders } from "../src/video/videoRenderReconciliation.js";
 
 interface StepResult {
   step: string;
@@ -33,8 +33,8 @@ async function runStep(step: string, fn: () => Promise<string>): Promise<StepRes
 
 export interface StepGroups {
   x: boolean;
-  redditInbound: boolean;
-  redditProspecting: boolean;
+  partnerships: boolean;
+  videoReconciliation: boolean;
 }
 
 /**
@@ -49,20 +49,28 @@ export interface StepGroups {
  */
 export function resolveStepGroups(query: Record<string, unknown>): StepGroups {
   const isTrue = (v: unknown) => v === "1" || v === "true";
-  const anyFlagPresent = ["x", "redditInbound", "redditProspecting"].some((k) => k in query);
+  const anyFlagPresent = ["x", "partnerships", "videoReconciliation"].some((k) => k in query);
   return {
     x: !anyFlagPresent || isTrue(query.x),
-    redditInbound: !anyFlagPresent || isTrue(query.redditInbound),
-    redditProspecting: !anyFlagPresent || isTrue(query.redditProspecting),
+    // discovery.ts's own SCHEDULED_CADENCE_DAYS=7 gate means most of these
+    // daily calls are a cheap no-op anyway (see discovery.ts's doc
+    // comment), so it's fine to fire on the same 3x/day slots as X rather
+    // than needing a schedule slot of its own.
+    partnerships: !anyFlagPresent || isTrue(query.partnerships),
+    // Own flag, own step, own try/catch -- shares this endpoint's 3x/day
+    // schedule with X purely for cron-slot economy (see the implementation
+    // plan's isolation section); a bug here can never throw into
+    // x_mentions/x_inbound/x_prospecting or vice versa.
+    videoReconciliation: !anyFlagPresent || isTrue(query.videoReconciliation),
   };
 }
 
 /**
- * The higher-than-1x/day companion to daily-pipeline.ts, covering both X's
- * and Reddit's more-frequent workflows. Deliberately ONE file/serverless
- * function (not two, not four) -- this project was found to already be
- * sitting exactly AT Vercel Hobby's 12-function cap with the existing 12
- * files (one slot freed by folding the former api/cost-summary.ts into
+ * The higher-than-1x/day companion to daily-pipeline.ts, covering X's
+ * more-frequent workflows. Deliberately ONE file/serverless function (not
+ * split further) -- this project was found to already be sitting exactly
+ * AT Vercel Hobby's 12-function cap with the existing 12 files (one slot
+ * freed by folding the former api/cost-summary.ts into
  * api/summary.ts?view=cost -- see that file's doc comment). Adding a
  * separate function per workflow would have silently re-broken the cap
  * the same way docs/PROGRESS_LEDGER.md's Phase 15 already documents once
@@ -70,27 +78,31 @@ export function resolveStepGroups(query: Record<string, unknown>): StepGroups {
  * further log line).
  *
  * Which step-groups run is controlled by explicit query-string flags
- * (`?x=1`, `?redditInbound=1`, `?redditProspecting=1`) set by the CALLER
+ * (`?x=1`, `?partnerships=1`) set by the CALLER
  * (.github/workflows/growth-pulse.yml), not inferred from wall-clock time
- * inside this handler. That's a deliberate choice over
- * "guess which schedule window `now` is nearest to": the four workflows
- * have three DIFFERENT cadences packed into one shared endpoint (X
- * prospecting+inbound 3x/day, Reddit inbound 3x/day, Reddit prospecting
- * 1x/day) and GitHub Actions cron triggers are already explicit UTC times
- * -- the workflow file is the one place that already has to know exactly
- * which invocation is which, so passing that as an explicit flag avoids a
- * second, fuzzier inference of the same fact (and the DST/off-by-an-hour
- * edge cases that inference would otherwise need re-solving here). If NO
- * flag is present at all, every step group runs -- this is the manual
- * "run now" behavior (e.g. calling this endpoint by hand while
- * debugging), matching how daily-pipeline.ts's own steps always all run.
+ * inside this handler. That's a deliberate choice over "guess which
+ * schedule window `now` is nearest to": GitHub Actions cron triggers are
+ * already explicit UTC times -- the workflow file is the one place that
+ * already has to know exactly which invocation is which, so passing that
+ * as an explicit flag avoids a second, fuzzier inference of the same fact
+ * (and the DST/off-by-an-hour edge cases that inference would otherwise
+ * need re-solving here). If NO flag is present at all, every step group
+ * runs -- this is the manual "run now" behavior (e.g. calling this
+ * endpoint by hand while debugging), matching how daily-pipeline.ts's own
+ * steps always all run.
  *
  * Every step is independently try/caught, same pattern as
- * daily-pipeline.ts: one source failing (an expired token, a rate limit,
- * missing Reddit credentials) never blocks the others.
+ * daily-pipeline.ts: one source failing (an expired token, a rate limit)
+ * never blocks the others.
  *
- * Called 3-4x/day by .github/workflows/growth-pulse.yml. Same auth
- * contract as daily-pipeline.ts: GET or POST with `Authorization: Bearer
+ * Reddit inbound/prospecting used to run from this same endpoint but were
+ * removed (2026-09-06): Reddit closed self-service app registration and
+ * no credentials were ever obtained -- see docs/CODE_REVIEW_HANDOFF.md's
+ * history for the prior "code-complete, credentials pending" state this
+ * replaced.
+ *
+ * Called 3x/day by .github/workflows/growth-pulse.yml. Same auth contract
+ * as daily-pipeline.ts: GET or POST with `Authorization: Bearer
  * <CRON_SECRET>`.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -104,14 +116,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(500).json({ error: "CRON_SECRET is not configured on the server" });
     return;
   }
-  if (req.headers.authorization !== `Bearer ${cronSecret}`) {
+  if (!req.headers.authorization || !constantTimeEquals(req.headers.authorization, `Bearer ${cronSecret}`)) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
-  const { x: runX, redditInbound: runRedditInbound, redditProspecting: runRedditProspecting } = resolveStepGroups(
-    req.query as Record<string, unknown>,
-  );
+  const {
+    x: runX,
+    partnerships: runPartnerships,
+    videoReconciliation: runVideoReconciliation,
+  } = resolveStepGroups(req.query as Record<string, unknown>);
 
   const client = getServiceClient();
   const now = new Date();
@@ -165,6 +179,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             repo,
             client,
             getMonthSpendUsd: () => getProspectingMonthSpendUsd(client),
+            isPaused: async () => {
+              const { data } = await client.from("system_settings").select("paused").eq("id", true).single();
+              return data?.paused ?? false;
+            },
             now,
           });
           if (result.skipped) {
@@ -184,60 +202,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
   }
 
-  if (runRedditInbound) {
+  if (runPartnerships) {
     results.push(
-      await runStep("reddit_inbound", async () => {
-        await recordSyncAttempt(client, "reddit_inbound");
+      await runStep("partnerships_discovery", async () => {
+        let adapter = null;
         try {
-          const adapter = createRedditSignalAdapter(client);
-          const repo = new SupabaseInboundRepository(client);
-          const prospectingRepo = new SupabaseProspectingRepository(client);
-          const result = await ingestRedditInboundMentions(
-            {
-              adapter,
-              repo,
-              findCreatorIdByHandle: (handle) => findCreatorIdByHandle(client, handle),
-              hasProspectingOutreach: (handle) => prospectingRepo.hasPriorOutreach("reddit", handle),
-            },
-            cursorStore,
-            now,
-          );
-          await recordSyncSuccess(
-            client,
-            "reddit_inbound",
-            `${result.inserted} new, ${result.skippedExisting} already tracked, ${result.notActionable} not actionable`,
-          );
-          return `${result.inserted} new inbound (${result.fetched} fetched, ${result.skippedExisting} already tracked, ${result.notActionable} not actionable)`;
-        } catch (err) {
-          await recordSyncFailure(client, "reddit_inbound", errorMessage(err));
-          throw err;
+          adapter = createXSignalAdapter(client);
+        } catch {
+          // X credentials not configured -- discovery still runs against
+          // existing-records sources (creators/prospecting/inbound) only.
         }
+        const result = await runPartnershipDiscoveryStep({
+          client,
+          adapter,
+          triggeredBy: "scheduled",
+          now,
+          isPaused: async () => {
+            const { data } = await client.from("system_settings").select("paused").eq("id", true).single();
+            return data?.paused ?? false;
+          },
+        });
+        return `${result.status}: ${result.newCandidates} new (sources: ${result.sourcesSearched.join(", ") || "none"}, $${result.costUsd.toFixed(4)})${result.skipReason ? ` -- ${result.skipReason}` : ""}`;
       }),
     );
   }
 
-  if (runRedditProspecting) {
-    results.push(
-      await runStep("reddit_prospecting", async () => {
-        await recordSyncAttempt(client, "reddit_prospecting");
-        try {
-          const adapter = createRedditSignalAdapter(client);
-          const repo = new SupabaseProspectingRepository(client);
-          const result = await runRedditProspectingSearch({ adapter, repo, client, now });
-          if (result.skipped) {
-            await recordSyncSuccess(client, "reddit_prospecting", `skipped -- ${result.skipReason}`);
-            return `skipped -- ${result.skipReason}`;
-          }
-          await recordSyncSuccess(client, "reddit_prospecting", `${result.newCandidates} new, ${result.postsRead} read`);
-          return `${result.newCandidates} new (${result.postsRead} read, ${result.excludedAsSpam} excluded as spam) across topics: ${result.topicsSearched.join(", ")}`;
-        } catch (err) {
-          await recordSyncFailure(client, "reddit_prospecting", errorMessage(err));
-          throw err;
-        }
-      }),
-    );
+  if (runVideoReconciliation) {
+    results.push(await runStep("video_render_reconciliation", () => reconcileVideoRenders(client)));
   }
 
   const allOk = results.every((r) => r.ok);
-  res.status(allOk ? 200 : 207).json({ results, ranGroups: { x: runX, redditInbound: runRedditInbound, redditProspecting: runRedditProspecting } });
+  res.status(allOk ? 200 : 207).json({
+    results,
+    ranGroups: { x: runX, partnerships: runPartnerships, videoReconciliation: runVideoReconciliation },
+  });
 }

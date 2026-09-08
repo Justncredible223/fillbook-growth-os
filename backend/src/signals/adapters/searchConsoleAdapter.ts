@@ -20,10 +20,10 @@ export interface SearchConsoleQueryRow {
 }
 
 /**
- * Shared by both Google adapters (Search Console here, YouTube in
- * youtubeAdapter.ts) -- same client credentials, same token pair, same
- * refresh flow. Read-only by construction: only GET/POST-read endpoints,
- * nothing that could modify the property or channel.
+ * The one remaining Google adapter (the YouTube adapter that used to
+ * share this client/token pair was removed along with YouTube signal
+ * ingestion -- see api/ingest.ts). Read-only by construction: only
+ * GET/POST-read endpoints, nothing that could modify the property.
  */
 export class SearchConsoleAdapter {
   constructor(

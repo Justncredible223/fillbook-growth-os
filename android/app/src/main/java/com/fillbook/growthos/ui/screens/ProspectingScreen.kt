@@ -1,10 +1,11 @@
 package com.fillbook.growthos.ui.screens
 
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -39,17 +40,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.fillbook.growthos.data.DraftRejectedException
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.ProspectingCandidate
+import com.fillbook.growthos.data.ProspectingDiagnostics
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
+import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.Pill
+import com.fillbook.growthos.ui.components.PlatformActions
 import com.fillbook.growthos.ui.components.PolishedEmptyState
 import com.fillbook.growthos.ui.components.PrimaryButton
 import com.fillbook.growthos.ui.components.ScoreBadge
 import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.copyToClipboard
+import com.fillbook.growthos.ui.components.openExternalUrl
+import com.fillbook.growthos.ui.components.platformDisplayName
+import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Border
@@ -63,11 +72,12 @@ import kotlinx.coroutines.launch
 /**
  * Prospecting -- the proactive-outreach half of growth, distinct from
  * Radar/Inbound (which only ever surface people already talking TO
- * @FillbookHQ). This queue surfaces OTHER traders' public X posts worth
- * joining. Same non-negotiable guarantee as everywhere else in this app:
- * nothing here ever posts anything. The furthest any action here reaches
- * is "opened X with a draft copied to the clipboard" -- the owner reviews,
- * edits, and posts every reply themselves (see
+ * Fillbook). This queue surfaces OTHER traders' public posts on X worth
+ * joining. Same non-negotiable guarantee as everywhere else
+ * in this app: nothing here ever posts anything. The furthest any action
+ * here reaches is "opened the candidate's own platform with a draft copied
+ * to the clipboard" -- the owner reviews, edits, and posts every reply
+ * themselves (see
  * fillbookhq/docs/social/MASTER_SOCIAL_STRATEGY.md's human-execution
  * boundary, which this screen implements as an app UI instead of a manual
  * chat workflow).
@@ -81,6 +91,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ProspectingScreen(repo: GrowthOsRepository) {
     var items by remember { mutableStateOf<List<ProspectingCandidate>>(emptyList()) }
+    var diagnostics by remember { mutableStateOf<ProspectingDiagnostics?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
@@ -98,10 +109,12 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
 
     suspend fun refresh() {
         try {
-            items = repo.getProspectingQueue()
+            val result = repo.getProspectingQueue()
+            items = result.candidates
+            diagnostics = result.diagnostics
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load Prospecting. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load Prospecting. Check your connection and try again."
         }
         loaded = true
     }
@@ -116,6 +129,12 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                 items = items.map { if (it.id == updated.id) updated else it }
                 editedDrafts[updated.id] = updated.draftReply.orEmpty()
                 actionError = null
+            } catch (e: DraftRejectedException) {
+                // A real, meaningful rejection (the reply guardrail catching a
+                // banned phrase, an unverified claim, or an undeclared link) --
+                // never a connectivity problem. Shown directly, not swallowed
+                // into the generic message below.
+                actionError = e.shortReason
             } catch (e: Exception) {
                 actionError = "Couldn't draft a reply. Check your connection and try again."
             }
@@ -123,13 +142,19 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
         }
     }
 
+    // Copies the (possibly edited) draft and opens the post in the
+    // candidate's OWN platform app -- X for an X post -- with the
+    // confirmation worded to match. A failed launch
+    // (no handler on the device) is reported, not swallowed; the timestamp
+    // call is best-effort and never blocks the owner.
     fun copyAndOpen(candidate: ProspectingCandidate) {
         val text = editedDrafts[candidate.id] ?: candidate.draftReply
-        if (text != null) copyToClipboard(context, "Reply to @${candidate.authorHandle ?: "unknown"}", text)
-        context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(candidate.postUrl)))
+        if (text != null) copyToClipboard(context, "Reply to ${candidate.authorHandle ?: "unknown"}", text)
+        val opened = openExternalUrl(context, candidate.postUrl)
         scope.launch {
-            runCatching { repo.openProspectingCandidate(candidate.id) }
-            snackbarHostState.showSnackbar(if (text != null) "Copied — paste in X" else "Opened in X")
+            if (opened) runCatching { repo.openProspectingCandidate(candidate.id) }
+            PlatformActions.copyAndOpenMessage(candidate.platform, copied = text != null, hadLink = true, opened = opened)
+                ?.let { snackbarHostState.showSnackbar(it) }
         }
     }
 
@@ -169,45 +194,69 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
 
         if (!loaded) {
             SkeletonListLoading()
-        } else if (errorMessage == null && items.isEmpty()) {
-            PolishedEmptyState(
-                icon = Icons.Filled.TrendingUp,
-                headline = "Queue is clear",
-                subtitle = "New opportunities are found once a day. Check back soon, or pull to refresh.",
-            )
         } else {
+            // Real bug found on-device with an actual finger, twice
+            // (2026-09-07): first fix (wrapping the empty state in
+            // PullToRefreshBox) wasn't sufficient on its own.
+            // PullToRefreshBox detects the pull gesture via a NESTED SCROLL
+            // connection -- it only ever sees drag deltas that a scrollable
+            // descendant dispatches upward. PolishedEmptyState is a plain,
+            // non-scrollable Column (see GrowthComponents.kt), so it never
+            // participates in nested scroll at all -- no touch drag on it
+            // was ever reaching PullToRefreshBox's connection, no matter
+            // where in the tree it was nested. The same bug exists in
+            // VideoStatusScreen's and InboundScreen's own empty states
+            // (confirmed by inspection, not fixed here -- out of scope).
+            //
+            // Fix: give the empty state a real (if trivial) LazyColumn, the
+            // same scrollable container the populated case already uses --
+            // a LazyColumn participates in nested scroll regardless of
+            // whether its single item actually overflows the viewport, so
+            // PullToRefreshBox has something real to detect the drag against.
             PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
                 modifier = Modifier.fillMaxSize(),
             ) {
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    items(items, key = { it.id }) { candidate ->
-                        ProspectingCard(
-                            candidate = candidate,
-                            editedText = editedDrafts[candidate.id],
-                            onEditedTextChange = { editedDrafts[candidate.id] = it },
-                            drafting = draftingId == candidate.id,
-                            busy = busyId == candidate.id,
-                            onDraft = { startDraft(candidate) },
-                            onCopyAndOpen = { copyAndOpen(candidate) },
-                            onReplied = {
-                                runOutcome(candidate) {
-                                    repo.markProspectingReplied(
-                                        candidate.id,
-                                        editedDrafts[candidate.id]?.takeIf { it != candidate.draftReply },
-                                        candidate.replyMentionsFillbook,
-                                        candidate.replyUsedLink,
-                                    )
-                                }
-                            },
-                            onSkip = { runOutcome(candidate) { repo.markProspectingSkipped(candidate.id, null) } },
-                            onNotRelevant = { runOutcome(candidate) { repo.markProspectingNotRelevant(candidate.id) } },
-                            onAlreadyHandled = { runOutcome(candidate) { repo.markProspectingAlreadyHandled(candidate.id) } },
-                        )
+                if (errorMessage == null && items.isEmpty()) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.TrendingUp,
+                                headline = "Queue is clear",
+                                subtitle = prospectingEmptyStateMessage(diagnostics),
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        items(items, key = { it.id }) { candidate ->
+                            ProspectingCard(
+                                candidate = candidate,
+                                editedText = editedDrafts[candidate.id],
+                                onEditedTextChange = { editedDrafts[candidate.id] = it },
+                                drafting = draftingId == candidate.id,
+                                busy = busyId == candidate.id,
+                                onDraft = { startDraft(candidate) },
+                                onCopyAndOpen = { copyAndOpen(candidate) },
+                                onReplied = {
+                                    runOutcome(candidate) {
+                                        repo.markProspectingReplied(
+                                            candidate.id,
+                                            editedDrafts[candidate.id]?.takeIf { it != candidate.draftReply },
+                                            candidate.replyMentionsFillbook,
+                                            candidate.replyUsedLink,
+                                        )
+                                    }
+                                },
+                                onSkip = { runOutcome(candidate) { repo.markProspectingSkipped(candidate.id, null) } },
+                                onNotRelevant = { runOutcome(candidate) { repo.markProspectingNotRelevant(candidate.id) } },
+                                onAlreadyHandled = { runOutcome(candidate) { repo.markProspectingAlreadyHandled(candidate.id) } },
+                            )
+                        }
                     }
                 }
             }
@@ -217,6 +266,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ProspectingCard(
     candidate: ProspectingCandidate,
@@ -243,17 +293,34 @@ private fun ProspectingCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // FlowRow, not Row: up to five variable-width chips here, and
+                // "CREATOR CANDIDATE" alone can be wider than a narrow phone
+                // leaves after the score badge -- wrapping beats clipping.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconPill(platformDisplayName(candidate.platform), platformIcon(candidate.platform), TextSecondary)
                     Pill("CLASS ${candidate.replyClass}", Accent)
                     Pill(candidate.discoveryLabel, TextSecondary)
                     candidate.authorFollowerCount?.let { count -> Pill(formatFollowerCount(count), TextTertiary) }
                     if (candidate.creatorCandidate) Pill("CREATOR CANDIDATE", Success)
                 }
-                candidate.postCreatedAt?.let { posted ->
-                    relativeTime(posted)?.let { time ->
-                        Spacer(Modifier.height(2.dp))
-                        Text(time, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
-                    }
+                // Both real timestamps, shown together deliberately (2026-09-07
+                // freshness review): "posted" is the original X post time,
+                // "queued" is when Growth OS itself found it -- these can
+                // diverge (a candidate sitting in backlog for days before
+                // winning a daily slot), and the gap itself is useful
+                // information the owner shouldn't have to infer.
+                val postedTime = candidate.postCreatedAt?.let { relativeTime(it) }
+                val queuedTime = candidate.discoveredAt?.let { relativeTime(it) }
+                if (postedTime != null || queuedTime != null) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        listOfNotNull(
+                            postedTime?.let { "Posted $it" },
+                            queuedTime?.let { "Queued $it" },
+                        ).joinToString("  ·  "),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextTertiary,
+                    )
                 }
             }
         }
@@ -289,18 +356,38 @@ private fun ProspectingCard(
         }
 
         Spacer(Modifier.height(12.dp))
-        if (draft == null) {
+        // Defensive guard (2026-09-07): the backend now filters an
+        // obviously-irrelevant candidate (e.g. crypto-only content) to
+        // 'not_relevant' before it's ever returned by the queue endpoint,
+        // so this candidate.status branch should be structurally
+        // unreachable in practice. Kept anyway as a real backward-
+        // compatible guard against a stale/cached response, or an older
+        // backend build that hasn't deployed that filter yet -- status is
+        // an existing plain String field, so an old API response that
+        // never sends "not_relevant" here simply never triggers this
+        // branch, no new field or schema change required.
+        if (candidate.status == "not_relevant") {
+            Text(
+                "Not relevant to futures trading",
+                style = MaterialTheme.typography.labelMedium,
+                color = TextTertiary,
+            )
+        } else if (draft == null) {
             PrimaryButton(text = "Draft reply", onClick = onDraft, enabled = !drafting, busy = drafting, modifier = Modifier.fillMaxWidth())
         } else {
-            PrimaryButton(text = "Copy + Open X", onClick = onCopyAndOpen, enabled = !busy, modifier = Modifier.fillMaxWidth())
+            PrimaryButton(text = PlatformActions.copyAndOpenLabel(candidate.platform, hasLink = true), onClick = onCopyAndOpen, enabled = !busy, modifier = Modifier.fillMaxWidth())
         }
 
         Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-            TextButton(onClick = onReplied, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Replied", maxLines = 1) }
-            TextButton(onClick = onSkip, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Skip", maxLines = 1) }
-            TextButton(onClick = onNotRelevant, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Not relevant", maxLines = 1) }
-            TextButton(onClick = onAlreadyHandled, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Handled", maxLines = 1) }
+        // FlowRow, not a fixed 4-column Row: "Irrelevant" cramped/near-
+        // ellipsis against 3 siblings sharing equal weight on a 360dp
+        // phone -- wraps to a second line instead, same fix already used
+        // for this card's own platform/class/follower chips above.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(0.dp), modifier = Modifier.fillMaxWidth()) {
+            TextButton(onClick = onReplied, enabled = !busy) { Text("Replied", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            TextButton(onClick = onSkip, enabled = !busy) { Text("Skip", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            TextButton(onClick = onNotRelevant, enabled = !busy) { Text("Irrelevant", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            TextButton(onClick = onAlreadyHandled, enabled = !busy) { Text("Handled", maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
     }
 }
@@ -309,4 +396,46 @@ private fun formatFollowerCount(count: Int): String = when {
     count >= 1_000_000 -> "${count / 1_000_000}M followers"
     count >= 1_000 -> "${count / 1_000}K followers"
     else -> "$count followers"
+}
+
+/**
+ * Owner-friendly explanation for an empty queue -- never surfaces internal
+ * field names like "tooOldForToday" or "belowQualityBar" (2026-09-07
+ * freshness/audience-quality follow-up). Pure function, no Compose/Android
+ * dependency, directly unit-testable.
+ *
+ * [diagnostics] is null only when the API response predates that field
+ * (see NetworkGrowthOsRepository.getProspectingQueue) -- that case keeps
+ * the exact original generic copy rather than guessing at a reason.
+ *
+ * When diagnostics ARE present but the pool considered was itself empty
+ * (totalConsidered == 0), that's a genuinely different situation from
+ * "we had candidates but none were shown today" -- discovery found
+ * nothing at all this run, not "found some, excluded them."
+ *
+ * Otherwise, builds one honest sentence from whichever reasons actually
+ * apply -- a real production case had BOTH too-old and below-quality-bar
+ * candidates at once, so this never hides one reason to only report the
+ * other.
+ */
+internal fun prospectingEmptyStateMessage(diagnostics: ProspectingDiagnostics?): String {
+    val fallback = "New opportunities are found once a day. Check back soon, or pull to refresh."
+    if (diagnostics == null) return fallback
+    if (diagnostics.totalConsidered == 0) {
+        return "No new candidates were found. Discovery will try again on its next scheduled run."
+    }
+
+    val reasons = buildList {
+        if (diagnostics.tooOldForToday > 0) {
+            val n = diagnostics.tooOldForToday
+            add(if (n == 1) "1 post was too old for today's active reply window" else "$n posts were too old for today's active reply window")
+        }
+        if (diagnostics.belowQualityBar > 0) {
+            val n = diagnostics.belowQualityBar
+            add(if (n == 1) "1 candidate didn't meet today's quality bar" else "$n candidates didn't meet today's quality bar")
+        }
+    }
+    if (reasons.isEmpty()) return fallback
+
+    return "${reasons.joinToString(", and ")}. Check back soon, or pull to refresh."
 }

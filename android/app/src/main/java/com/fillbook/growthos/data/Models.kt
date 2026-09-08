@@ -87,22 +87,47 @@ data class HomeSummary(
     val pendingReview: Int,
     val systemPaused: Boolean,
     val analytics: AnalyticsBreakdown,
-    val todayXPost: TodayXPost = TodayXPost(TodayXPostState.EMPTY, null, null),
+    val todayXPost: TodayXPost = TodayXPost(TodayXPostState.EMPTY, null, null, null, null, null, false),
 )
 
-enum class TodayXPostState { EMPTY, READY, HANDED_OFF }
+enum class TodayXPostState { EMPTY, RUNNING, READY, HANDED_OFF, POSTED, FAILED }
 
 /**
- * Never fabricated: EMPTY means no real X asset was created today, full
- * stop -- Home must not invent a placeholder. READY/HANDED_OFF only ever
- * reflect a genuine campaign_assets row (see api/summary.ts). HANDED_OFF
- * means the owner already opened X with this draft -- never "published,"
- * this app has no way to confirm an actual post happened.
+ * Never fabricated: EMPTY means no real, still-wanted X feed post exists
+ * for today's operating day, full stop -- Home must not invent a
+ * placeholder. RUNNING/READY/HANDED_OFF/POSTED/FAILED only ever reflect a
+ * genuine x_feed_post_runs + campaign_assets row (see api/summary.ts's
+ * computeTodayXPostView). RUNNING means generation is genuinely (or
+ * apparently) in flight right now -- distinct from EMPTY (nothing has
+ * even started). HANDED_OFF means the owner already opened X with this
+ * draft -- never "published." POSTED is a SEPARATE, later, explicit
+ * owner confirmation ("Mark posted") that the post actually went out --
+ * this app has no way to verify that via the X API, same reasoning as
+ * Inbound's "Mark responded." FAILED means a genuine generation attempt
+ * ran and didn't produce a passing post -- [reason] carries the real
+ * cause, and [canRegenerate] says whether a retry is offered.
  */
 data class TodayXPost(
     val state: TodayXPostState,
     val campaignAssetId: String?,
     val previewText: String?,
+    val topicLabel: String? = null,
+    val reason: String? = null,
+    /** Why this angle was selected over the other candidates actually compared for today -- see backend's selectFeedPostAngle. Null for a run created before this field existed, or when not yet generated. */
+    val selectionReason: String? = null,
+    val canRegenerate: Boolean = false,
+)
+
+enum class XFeedPostHistoryState { UNPOSTED_DRAFT, POSTED, FAILED }
+
+/** One prior day's X feed post run, for the Previous drafts / history surface -- never today's own (that's TodayXPost above). */
+data class XFeedPostHistoryEntry(
+    val operatingDate: String,
+    val state: XFeedPostHistoryState,
+    val topicLabel: String?,
+    val previewText: String?,
+    val reason: String?,
+    val campaignAssetId: String?,
 )
 
 enum class CreatorCategory { TIER_B, RESEARCH_NEXT, REJECTED }
@@ -190,13 +215,39 @@ data class InboundSummary(
 )
 
 /**
- * Someone else's public X post found by Prospecting -- NOT a person who
- * mentioned/replied to @FillbookHQ (that's InboundEngagement). Raw status
- * string kept as-is, same rationale as InboundEngagement.status: the
- * server owns the state machine.
+ * Someone else's public post found by Prospecting on X -- NOT a person
+ * who mentioned/replied to Fillbook (that's InboundEngagement). Raw
+ * status string kept as-is, same rationale as InboundEngagement.status:
+ * the server owns the state machine.
  */
+/**
+ * Why today's Prospecting queue looks the way it does -- see
+ * backend/src/prospecting/prospectingHandlers.ts's
+ * ProspectingSelectionDiagnostics, the server-side source of these same
+ * counts. Null (not a zeroed-out instance) when the API response predates
+ * this field, so callers can tell "we asked and got nothing" apart from
+ * "the server hasn't started sending this yet" -- see
+ * ProspectingScreen.kt's emptyStateMessage, which falls back to the
+ * original generic copy specifically for that null case.
+ */
+data class ProspectingDiagnostics(
+    val totalConsidered: Int,
+    val selected: Int,
+    val deferred: Int,
+    val belowQualityBar: Int,
+    val tooOldForToday: Int,
+)
+
+/** Return shape for GrowthOsRepository.getProspectingQueue() -- pairs today's selected candidates with the diagnostics explaining why the list looks the way it does (see ProspectingDiagnostics). */
+data class ProspectingQueueResult(
+    val candidates: List<ProspectingCandidate>,
+    val diagnostics: ProspectingDiagnostics?,
+)
+
 data class ProspectingCandidate(
     val id: String,
+    /** Lowercase platform key from the server ("x") -- drives which app "Copy + Open" launches and how the confirmation reads. */
+    val platform: String,
     val discoveryQuery: String,
     val discoveryLabel: String,
     /** "A" = direct fit, "B" = adjacent fit, "C" = relationship fit (no Fillbook mention required) -- see backend/src/prospecting/prospectingTopics.ts. */
@@ -208,6 +259,8 @@ data class ProspectingCandidate(
     val postUrl: String,
     /** ISO timestamp of the original post, when X reported one -- null (not fabricated) when unavailable. */
     val postCreatedAt: String?,
+    /** ISO timestamp of when Growth OS itself found this post -- distinct from postCreatedAt. Shown alongside it so a real post-age vs. backlog-age gap (2026-09-07 freshness review) is visible to the owner, not hidden. */
+    val discoveredAt: String?,
     val opportunityScore: Double,
     /** Human-readable reasons behind the score, keyed by factor name ("topicRelevance", "activeDiscussion", ...) -- never fabricated, comes straight from the server's own scoring breakdown. */
     val scoreBreakdown: Map<String, String>,
@@ -327,3 +380,143 @@ data class ExperimentResult(
     val interpretation: String,
     val computedAt: String,
 )
+
+enum class PartnerCategory { EDUCATOR_COACH, CREATOR_COMMUNITY, PROP_FIRM, PLATFORM_BROKER, OTHER }
+
+enum class PartnershipStage { PROSPECT, QUALIFIED, DRAFT_READY, CONTACTED, REPLIED, PILOT, ACTIVE_PARTNER, CLOSED, ARCHIVED, DO_NOT_CONTACT }
+
+/**
+ * A potential Fillbook partner and where things stand with them -- never a
+ * cold list of guesses. Every research-derived field (audienceFocus,
+ * futuresRelevanceEvidence, sourceUrls, etc.) stays null/empty rather than
+ * fabricated when genuinely unknown; the UI must show that plainly, not
+ * paper over it. previewText, if present, is the currently-approved
+ * pitch's real reviewed text (from campaign_assets/content_versions via
+ * approvedCampaignAssetId) -- never invented client-side.
+ */
+data class PartnershipProspect(
+    val id: String,
+    val organizationName: String,
+    val contactName: String?,
+    val partnerCategory: PartnerCategory,
+    val stage: PartnershipStage,
+    val websiteUrl: String?,
+    val socialLinks: Map<String, String>,
+    val contactRoute: String?,
+    val contactRouteSource: String?,
+    val audienceFocus: String?,
+    val futuresRelevanceEvidence: String?,
+    val sourceUrls: List<String>,
+    val researchDate: String?,
+    val competingJournalRelationships: String?,
+    val competingJournalEvidence: String?,
+    val proposedCollaboration: String?,
+    val qualificationRationale: String?,
+    val ownerNotes: String?,
+    val nextAction: String?,
+    val nextActionDueDate: String?,
+    val pilotTermsProposed: String?,
+    val pilotTermsAgreed: String?,
+    val pilotStartDate: String?,
+    val pilotEndDate: String?,
+    val followUpCount: Int,
+    val approvedCampaignAssetId: String?,
+    val previewText: String?,
+    val contactedAt: String?,
+    val contactedChannel: String?,
+    /** 0-100 ranking score from discoveryScoring.ts -- null for a manually entered prospect. */
+    val discoveryScore: Int?,
+    val discoveryConfidence: String?,
+    /** "manual" for owner-entered prospects; otherwise which automated source found this one. */
+    val discoveredVia: String,
+    /** Set only by automated backend reassessment when stored evidence no longer shows a concrete partnership basis (an audience/community/business/educational-offering/complementary-product) -- null means not suppressed. Never set by this app, never implies the record was deleted or its stage changed -- see PartnershipsScreen's own suppressed section. */
+    val suppressedReason: String? = null,
+)
+
+/** The result of one discovery run (scheduled or owner-triggered "Refresh") -- see backend/src/partnerships/discovery.ts's DiscoveryRunResult. */
+data class PartnershipDiscoveryRunResult(
+    val status: String, // "found" | "no_matches" | "budget_exhausted" | "error" | "skipped_cadence"
+    val newCandidates: Int,
+    val sourcesSearched: List<String>,
+    val costUsd: Double,
+    val error: String?,
+    val skipReason: String?,
+)
+
+/** GET /api/approvals?resource=partnerships' full response -- items plus what the most recent discovery run (scheduled or owner-triggered) actually did, so the UI can distinguish "never run" / "found N" / "no matches" / "budget exhausted" / "errored" without triggering a new run itself. */
+data class PartnershipsSummary(
+    val items: List<PartnershipProspect>,
+    val lastDiscoveryRun: PartnershipDiscoveryRunResult?,
+)
+
+/**
+ * Raw status string kept as-is (mirrors InboundEngagement.status's own
+ * rationale) rather than an enum -- the server owns this state machine
+ * (queued -> rendering -> ready|failed|canceled, see migration 0027).
+ */
+data class VideoRenderStatus(
+    val id: String,
+    val campaignAssetId: String,
+    val status: String,
+    /**
+     * A short-lived signed URL into the private rendered-videos bucket --
+     * present only when [status] is "ready" and the backend's signing call
+     * succeeded for THIS particular fetch. Never cached/reused past this
+     * screen session: a stale one simply 404s/expires, and the fix is
+     * pulling to refresh for a fresh one, never re-deriving a URL
+     * client-side (this app never holds Supabase Storage credentials of
+     * any kind).
+     */
+    val downloadUrl: String?,
+    val durationSeconds: Double?,
+    val error: String?,
+    val createdAt: String,
+    val updatedAt: String,
+    /**
+     * The platform-specific publishing metadata generated alongside the
+     * video script ("Create Fillbook Video", 2026-09-08) -- null whenever
+     * the underlying draft has no structured videoScript on file (e.g. a
+     * render created before this field existed). Never fabricated
+     * client-side; always exactly what the backend actually stored.
+     */
+    val videoMetadata: VideoRenderMetadata? = null,
+)
+
+/** See [VideoRenderStatus.videoMetadata]'s own doc comment. */
+data class VideoRenderMetadata(
+    val youtubeTitle: String,
+    val youtubeDescription: String,
+    val tiktokCaption: String,
+    val hashtags: List<String>,
+    /** Null when the video genuinely didn't need one -- never a fabricated filler line. */
+    val disclosureCta: String?,
+)
+
+/**
+ * A private, internal research document (Research Lab, 2026-09-07) -- the
+ * owner reviews this in full before it informs any public content;
+ * nothing here is ever published or shown to anyone else directly. See
+ * backend/src/content/researchWriter.ts's ResearchReport, which this
+ * mirrors field-for-field.
+ *
+ * [status] is a raw string kept as-is (same rationale as
+ * [VideoRenderStatus.status]) rather than an enum -- the server owns this
+ * state machine. "requested"/"researching" are transient CLIENT-SIDE-only
+ * states covering the moment between this app's own POST and the next GET
+ * reflecting a persisted row -- they are never actually returned by the
+ * backend; only ready_for_review/approved/rejected/failed are.
+ */
+data class ResearchRecord(
+    val id: String,
+    val title: String,
+    val question: String,
+    val summary: String,
+    val findings: List<String>,
+    val evidenceReferences: List<String>,
+    val caveats: List<String>,
+    val contentAngles: List<String>,
+    val status: String,
+    val costUsd: Double?,
+    val createdAt: String,
+)
+

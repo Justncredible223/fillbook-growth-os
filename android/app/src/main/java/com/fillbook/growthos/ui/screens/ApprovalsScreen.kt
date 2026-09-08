@@ -8,6 +8,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -41,6 +44,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.ApprovalAsset
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.CopyButton
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GhostButton
@@ -95,7 +99,15 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
     var actionError by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
     var pendingReject by remember { mutableStateOf<ApprovalAsset?>(null) }
-    var query by remember { mutableStateOf("") }
+    var pendingRenderConfirm by remember { mutableStateOf<ApprovalAsset?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    // Guards against a fast double-tap firing decideApproval twice for the
+    // same asset before the first call's refresh() completes -- every other
+    // screen with an in-flight mutating action (Inbound, Prospecting,
+    // Notifications, Partnerships) already disables its action buttons this
+    // same way; this screen had been the one exception, including for the
+    // video-render-triggering approve path specifically.
+    var busyId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
@@ -105,7 +117,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             assets = repo.getApprovals()
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = "Couldn't load approvals. Check your connection and try again."
+            errorMessage = authErrorMessage(e) ?: "Couldn't load approvals. Check your connection and try again."
         }
         loaded = true
     }
@@ -118,7 +130,9 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
     }
 
     fun decide(asset: ApprovalAsset, approve: Boolean) {
+        if (busyId == asset.id) return
         scope.launch {
+            busyId = asset.id
             try {
                 repo.decideApproval(asset.id, approve)
                 actionError = null
@@ -126,6 +140,8 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                 snackbarHostState.showSnackbar(if (approve) "Approved" else "Rejected")
             } catch (e: Exception) {
                 actionError = "Couldn't record that decision. Check your connection and try again."
+            } finally {
+                busyId = null
             }
         }
     }
@@ -170,11 +186,25 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             if (!loaded) {
                 SkeletonListLoading()
             } else if (errorMessage == null && assets.isEmpty()) {
-                PolishedEmptyState(
-                    icon = Icons.Filled.CheckCircle,
-                    headline = "Nothing waiting on you",
-                    subtitle = "Drafts land here once the Campaign Factory finishes AI review.",
-                )
+                // Same nested-scroll fix as Prospecting/Inbound/VideoStatus
+                // (2026-09-07): PullToRefreshBox only detects the pull gesture
+                // through a scrollable descendant's nested-scroll connection --
+                // a bare PolishedEmptyState never dispatched drag deltas to it.
+                PullToRefreshBox(
+                    isRefreshing = refreshing,
+                    onRefresh = { scope.launch { refreshing = true; refresh(); refreshing = false } },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item {
+                            PolishedEmptyState(
+                                icon = Icons.Filled.CheckCircle,
+                                headline = "Nothing waiting on you",
+                                subtitle = "Drafts land here once the Campaign Factory finishes AI review.",
+                            )
+                        }
+                    }
+                }
             } else {
                 SearchField(query, { query = it }, "Search drafts", modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp))
                 PullToRefreshBox(
@@ -186,10 +216,32 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
                         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
+                        // "No matches" state for a search that returns zero
+                        // results (2026-09-07 release audit finding) --
+                        // previously this silently rendered an empty list
+                        // with no indication the search itself was the reason.
+                        if (filtered.isEmpty()) {
+                            item {
+                                PolishedEmptyState(
+                                    icon = Icons.Filled.CheckCircle,
+                                    headline = "No matches",
+                                    subtitle = "No drafts match \"$query\".",
+                                )
+                            }
+                        }
                         items(filtered, key = { it.id }) { asset ->
                             ApprovalCard(
                                 asset = asset,
-                                onApprove = { decide(asset, approve = true) },
+                                busy = busyId == asset.id,
+                                onApprove = {
+                                    // Approving a video_script asset triggers a REAL server-side
+                                    // render (see enqueue_video_render in approvals.ts) -- unlike
+                                    // every other asset type, this isn't reversible from here once
+                                    // it starts, so it gets its own explicit confirmation instead
+                                    // of firing immediately like a plain text-post approval does.
+                                    if (asset.assetType == "video_script") pendingRenderConfirm = asset
+                                    else decide(asset, approve = true)
+                                },
                                 onReject = { pendingReject = asset },
                                 onCopyAndShare = { copyAndShare(asset) },
                             )
@@ -214,11 +266,33 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             },
         )
     }
+
+    pendingRenderConfirm?.let { asset ->
+        AlertDialog(
+            onDismissRequest = { pendingRenderConfirm = null },
+            title = { Text("Render this video?") },
+            text = {
+                Text(
+                    "\"${asset.campaignTitle}\" will queue on the render server now. It renders automatically -- " +
+                        "you'll get a notification and can download it from Video Status once it's ready. " +
+                        "This never posts anywhere on its own; you still choose to share it yourself.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { decide(asset, approve = true); pendingRenderConfirm = null }) { Text("Render video") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRenderConfirm = null }) { Text("Cancel") }
+            },
+        )
+    }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ApprovalCard(
     asset: ApprovalAsset,
+    busy: Boolean,
     onApprove: () -> Unit,
     onReject: () -> Unit,
     onCopyAndShare: () -> Unit,
@@ -238,7 +312,7 @@ private fun ApprovalCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text(asset.campaignTitle, style = MaterialTheme.typography.titleLarge, maxLines = 3, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
                 Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     IconPill(platformDisplayName(asset.platform), platformIcon(asset.platform), TextSecondary)
                     IconPill(assetTypeDisplayName(asset.assetType), assetTypeIcon(asset.assetType), TextSecondary)
                     if (asset.isAutoDraft) Pill("AUTO-DRAFT", statusToneColor(StatusTone.NEW))
@@ -288,10 +362,10 @@ private fun ApprovalCard(
         }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            PrimaryButton(text = "Approve", onClick = onApprove, modifier = Modifier.weight(1f))
-            SecondaryButton(text = "Reject", onClick = onReject, contentColor = Danger)
+            PrimaryButton(text = "Approve", onClick = onApprove, enabled = !busy, busy = busy, modifier = Modifier.weight(1f))
+            SecondaryButton(text = "Reject", onClick = onReject, enabled = !busy, contentColor = Danger)
         }
         Spacer(Modifier.height(2.dp))
-        GhostButton(text = "Copy & Share", onClick = onCopyAndShare, modifier = Modifier.fillMaxWidth())
+        GhostButton(text = "Copy & Share", onClick = onCopyAndShare, enabled = !busy, modifier = Modifier.fillMaxWidth())
     }
 }

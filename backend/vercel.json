@@ -1,6 +1,7 @@
 {
   "crons": [
-    { "path": "/api/daily-pipeline", "schedule": "0 13 * * *" }
+    { "path": "/api/daily-pipeline?group=core", "schedule": "0 13 * * *" },
+    { "path": "/api/daily-pipeline?group=x_feed_post", "schedule": "0 14 * * *" }
   ],
   "functions": {
     "api/run-campaign.ts": { "maxDuration": 60 },

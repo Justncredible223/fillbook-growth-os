@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { runProspectingSearch } from "../src/prospecting/prospectingSearch";
 import { TOPICS_PER_SEARCH_RUN } from "../src/prospecting/prospectingEligibility";
+import { MAX_AGE_FOR_DAILY_SELECTION_MS } from "../src/prospecting/prospectingFreshness";
 import type { XSearchResult } from "../src/signals/adapters/xAdapter";
 import type { NewProspectingCandidate, ProspectingCandidate, ProspectingRepository, ProspectingStatus } from "../src/prospecting/types";
 
@@ -94,6 +95,15 @@ describe("runProspectingSearch", () => {
     expect(repo.rows.size).toBe(result.newCandidates);
   });
 
+  it("REFINED (2026-09-07 freshness review): bounds discovery itself to the same 72h freshness window selection enforces, via X's own start_time filter -- not just filtering stale posts out after paying to read them", async () => {
+    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+    const repo = new FakeProspectingRepo();
+
+    await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
+
+    expect(adapter.searchRecentPosts).toHaveBeenCalledWith(expect.any(String), expect.any(Number), now, MAX_AGE_FOR_DAILY_SELECTION_MS);
+  });
+
   it("never re-inserts a post already known from a prior run", async () => {
     const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "how do you track your trades over time?" })]) };
     const repo = new FakeProspectingRepo();
@@ -138,6 +148,56 @@ describe("runProspectingSearch", () => {
     expect(result.skipped).toBe(true);
     expect(result.skipReason).toMatch(/monthly_budget_reached/);
     expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
+  });
+
+  it("skips entirely while the system is paused, before even checking the monthly budget or calling search", async () => {
+    const adapter = { searchRecentPosts: vi.fn() };
+    const repo = new FakeProspectingRepo();
+    const getMonthSpendUsd = vi.fn().mockResolvedValue(0);
+
+    const result = await runProspectingSearch({
+      adapter: adapter as any,
+      repo,
+      client: fakeSupabaseClient(),
+      getMonthSpendUsd,
+      isPaused: async () => true,
+      now,
+    });
+
+    expect(result.skipped).toBe(true);
+    expect(result.skipReason).toBe("system_paused");
+    expect(result.newCandidates).toBe(0);
+    expect(getMonthSpendUsd).not.toHaveBeenCalled();
+    expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
+  });
+
+  it("runs normally when isPaused resolves false, and when it's omitted entirely (existing callers' contract is unchanged)", async () => {
+    const post = searchResult({ id: "1", text: "how do you track your trades over time?" });
+
+    const repoNotPaused = new FakeProspectingRepo();
+    const adapterNotPaused = { searchRecentPosts: vi.fn().mockResolvedValue([post]) };
+    const resultNotPaused = await runProspectingSearch({
+      adapter: adapterNotPaused as any,
+      repo: repoNotPaused,
+      client: fakeSupabaseClient(),
+      getMonthSpendUsd: async () => 0,
+      isPaused: async () => false,
+      now,
+    });
+    expect(resultNotPaused.skipped).toBe(false);
+    expect(resultNotPaused.newCandidates).toBeGreaterThan(0);
+
+    const repoNoDep = new FakeProspectingRepo();
+    const adapterNoDep = { searchRecentPosts: vi.fn().mockResolvedValue([post]) };
+    const resultNoDep = await runProspectingSearch({
+      adapter: adapterNoDep as any,
+      repo: repoNoDep,
+      client: fakeSupabaseClient(),
+      getMonthSpendUsd: async () => 0,
+      now,
+    });
+    expect(resultNoDep.skipped).toBe(false);
+    expect(resultNoDep.newCandidates).toBeGreaterThan(0);
   });
 
   it("skips entirely once the queue already has enough unshown candidates", async () => {

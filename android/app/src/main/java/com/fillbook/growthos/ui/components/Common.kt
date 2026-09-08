@@ -131,6 +131,18 @@ fun platformIcon(platform: String): ImageVector = when (platform.lowercase()) {
     else -> Icons.Filled.Public
 }
 
+/**
+ * Opens a URL in whatever app handles it (X, a browser). Returns
+ * false instead of throwing when nothing on the device can handle the
+ * intent (no browser, a restricted profile) or the system refuses it --
+ * callers show a visible error rather than letting the tap silently do
+ * nothing or crash the screen.
+ */
+fun openExternalUrl(context: Context, url: String): Boolean = runCatching {
+    context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+    true
+}.getOrElse { false }
+
 /** "video_script" -> "Video script", "post" -> "Post" -- same lowercase-DB-value pattern as platformDisplayName. */
 fun assetTypeDisplayName(assetType: String): String =
     assetType.replace('_', ' ').replaceFirstChar { it.uppercase() }

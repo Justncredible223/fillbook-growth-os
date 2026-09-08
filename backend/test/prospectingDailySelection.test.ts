@@ -94,6 +94,63 @@ describe("selectDailyWorkingSet", () => {
 
   it("returns an empty selection for an empty pool without erroring", () => {
     const result = selectDailyWorkingSet([]);
-    expect(result).toEqual({ selected: [], deferred: [], belowQualityBar: [] });
+    expect(result).toEqual({ selected: [], deferred: [], belowQualityBar: [], tooOldForToday: [] });
+  });
+});
+
+/**
+ * Regression coverage for the 2026-09-07 freshness/audience-quality
+ * review: opportunity_score used to be the ONLY thing ranking ever looked
+ * at, frozen at discovery time -- a candidate could sit in backlog for
+ * days re-winning a slot on how fresh it WAS, not how fresh it IS, which is
+ * why candidates commonly surfaced to the owner 2-4 days old. These tests
+ * exercise selectDailyWorkingSet's `now` parameter directly (not just the
+ * pure prospectingFreshness.ts functions in isolation) to prove the actual
+ * selection behavior changed, not just its building blocks.
+ */
+describe("selectDailyWorkingSet -- freshness-adjusted ranking", () => {
+  const NOW = new Date("2026-09-07T12:00:00Z");
+  const HOUR = 60 * 60 * 1000;
+  const hoursAgo = (h: number) => new Date(NOW.getTime() - h * HOUR).toISOString();
+
+  it("excludes a post older than 72h from today's set entirely, regardless of how high its stored score is -- it's set aside as tooOldForToday, not scored or deferred", () => {
+    const pool = [candidate({ id: "ancient", opportunityScore: 95, postCreatedAt: hoursAgo(24 * 10), authorExternalId: "a" })];
+    const result = selectDailyWorkingSet(pool, NOW);
+    expect(result.selected).toHaveLength(0);
+    expect(result.belowQualityBar).toHaveLength(0);
+    expect(result.tooOldForToday.map((c) => c.id)).toEqual(["ancient"]);
+  });
+
+  it("still selects a post at exactly the 72h boundary -- 'older than 72 hours' is strictly greater, not equal", () => {
+    const pool = [candidate({ id: "boundary", opportunityScore: 90, postCreatedAt: hoursAgo(72), authorExternalId: "a" })];
+    const result = selectDailyWorkingSet(pool, NOW);
+    expect(result.tooOldForToday).toHaveLength(0);
+    expect(result.selected.map((c) => c.id)).toEqual(["boundary"]);
+  });
+
+  it("a fresh, relevant candidate outranks an older candidate that has a higher FROZEN score -- proves ranking now uses today's effective score, not the stored one", () => {
+    const pool = [
+      // Frozen at 68 when it was fresh; now 70h old (near the 72h cutoff, still technically eligible)
+      // -- heavily decayed today, and should no longer beat a fresh candidate scored much lower at discovery.
+      candidate({ id: "old-but-was-high-scoring", opportunityScore: 68, postCreatedAt: hoursAgo(70), authorExternalId: "a" }),
+      // Discovered just now, frozen score lower, but nothing to decay -- keeps its full value.
+      candidate({ id: "fresh", opportunityScore: 42, postCreatedAt: hoursAgo(1), authorExternalId: "b" }),
+    ];
+    const result = selectDailyWorkingSet(pool, NOW);
+    expect(result.selected.map((c) => c.id)).toEqual(["fresh"]);
+    expect(result.belowQualityBar.map((c) => c.id)).toContain("old-but-was-high-scoring");
+  });
+
+  it("a candidate with no known post time is never decayed or excluded by age -- existing behavior for postCreatedAt: null is fully preserved", () => {
+    const pool = [candidate({ id: "unknown-age", opportunityScore: 60, postCreatedAt: null, authorExternalId: "a" })];
+    const result = selectDailyWorkingSet(pool, NOW);
+    expect(result.tooOldForToday).toHaveLength(0);
+    expect(result.selected.map((c) => c.id)).toEqual(["unknown-age"]);
+  });
+
+  it("defaults `now` to the real current time when omitted -- existing callers that never passed it keep working", () => {
+    const pool = [candidate({ id: "1", opportunityScore: 60, postCreatedAt: null, authorExternalId: "a" })];
+    const result = selectDailyWorkingSet(pool);
+    expect(result.selected.map((c) => c.id)).toEqual(["1"]);
   });
 });

@@ -11,9 +11,9 @@ rather than generic advice.
 An automated marketing/prospecting pipeline for Fillbook (a futures/
 prop-firm trading-journal product). A Vercel/TypeScript serverless
 backend + a Kotlin/Jetpack Compose Android client ("the operator
-console"). It discovers relevant conversations on X and Reddit, drafts
-replies with Claude, and requires a human to actually post everything —
-nothing auto-publishes anywhere.
+console"). It discovers relevant conversations on X, drafts replies with
+Claude, and requires a human to actually post everything — nothing
+auto-publishes anywhere.
 
 ## Tech stack
 
@@ -21,13 +21,14 @@ nothing auto-publishes anywhere.
   Supabase/Postgres, Vitest for tests.
 - **Android:** Kotlin, Jetpack Compose, single-activity, screens under
   `android/app/src/main/java/com/fillbook/growthos/ui/screens/`.
-- **External APIs:** X (pay-per-read), Reddit (OAuth, pending approval,
-  currently no live credentials), Anthropic Claude (content drafting +
-  9-agent review pipeline), Google Search Console.
+- **External APIs:** X (pay-per-read), Anthropic Claude (content drafting +
+  9-agent review pipeline), Google Search Console. (Reddit was integrated
+  2026-09-04 and removed 2026-09-06 — Reddit closed self-service app
+  registration and no credentials were ever obtained.)
 - **Scheduling:** Vercel Cron (Hobby plan — capped at 2 jobs/once-daily
   each) for the once/day pipeline, plus a free GitHub Actions workflow
-  (`.github/workflows/growth-pulse.yml`) for a 3x/day X+Reddit pulse,
-  since Hobby can't schedule more than once/day itself.
+  (`.github/workflows/growth-pulse.yml`) for a 3x/day X pulse, since
+  Hobby can't schedule more than once/day itself.
 
 ## Directory map
 
@@ -46,30 +47,36 @@ backend/src/jobs/          -- background job helpers
 backend/src/knowledge/     -- verified-fact grounding for content claims
 backend/src/notifications/ -- in-app notification engine (new, no LLM calls)
 backend/src/opportunities/ -- opportunity generation, auto-draft step
-backend/src/prospecting/   -- X + Reddit discovery: topics, scoring, eligibility/budget gates
-backend/src/signals/       -- per-platform ingestion adapters (X, Reddit, YouTube[unused], TikTok[unused], Search Console)
+backend/src/prospecting/   -- X discovery: topics, scoring, eligibility/budget gates
+backend/src/signals/       -- per-platform ingestion adapters (X, YouTube[unused], TikTok[unused], Search Console)
 backend/src/strategy/      -- weekly strategy-evolution reports (new, no LLM calls)
 
 android/.../data/    -- GrowthOsRepository (interface + fake), Models.kt (all DTOs), NetworkGrowthOsRepository (real API client)
 android/.../ui/screens/ -- one file per screen (Home, Prospecting, Inbound, Approvals, Radar, Creators, Campaigns, Settings, System, Notifications, MorningBrief, EveningReport, Experiments, Strategy)
 ```
 
-## Recent changes worth knowing about (as of 2026-09-04)
+## Recent changes worth knowing about (as of 2026-09-06)
 
-1. Just merged two branches: one added X 3x/day scheduling + Reddit
-   prospecting/inbound (currently inert — no live Reddit credentials
-   yet, fails closed/skips gracefully) + a bugfix where Home's "Today's
-   spend" tile was reading a lifetime-all-providers sum instead of
-   today's actual spend. The other independently added Notifications,
-   Morning Brief, Evening Report, Experiments, Strategy Evolution, and
-   swapped a typed access code for biometric/PIN unlock.
-2. YouTube and TikTok signal ingestion were deliberately removed from
+1. Merged two branches (2026-09-04): one added X 3x/day scheduling +
+   Reddit prospecting/inbound + a bugfix where Home's "Today's spend"
+   tile was reading a lifetime-all-providers sum instead of today's
+   actual spend. The other independently added Notifications, Morning
+   Brief, Evening Report, Experiments, Strategy Evolution, and swapped a
+   typed access code for biometric/PIN unlock.
+2. Reddit removed outright (2026-09-06): Reddit closed self-service app
+   registration and no credentials were ever obtained, so the integration
+   never went live. All Reddit-specific adapters, ingestion/discovery
+   modules, health checks, schedule config, workflow steps, env vars, and
+   Android copy/fixtures were deleted; Prospecting and Inbound are X-only.
+3. YouTube and TikTok signal ingestion were deliberately removed from
    the scheduled pipeline (owner distributes video content through a
-   separate tool called Fliki) — but `backend/api/ingest.ts` still has
-   the YouTube/TikTok adapter code as a dead, manually-triggered-only
-   endpoint nothing calls automatically. Worth a second opinion on
-   whether to delete it outright.
-3. Just fixed one UI bug found live on-device: `ProspectingScreen.kt`'s
+   separate tool called Fliki). Following the first external review, the
+   dead manual-only path in `backend/api/ingest.ts` and the underlying
+   YouTube/TikTok adapters, ingestion modules, token store, health
+   checks, and tests were removed outright; `ingest.ts` now accepts only
+   `x` and `search_console`. The `youtube_video`/`tiktok_video` signal
+   source values remain valid for historical rows.
+4. Just fixed one UI bug found live on-device: `ProspectingScreen.kt`'s
    action-button row had 4 `TextButton`s sharing equal width with
    `maxLines = 1` and no overflow handling — "Not relevant" got clipped
    to "Not" on a real phone. Fixed by shortening the label and adding
@@ -80,8 +87,6 @@ android/.../ui/screens/ -- one file per screen (Home, Prospecting, Inbound, Appr
 
 ## Known limitations (already documented, not bugs)
 
-- Reddit: no live credentials, self-service API registration is closed,
-  owner submitted a manual access request, pending review.
 - TikTok: promote/posting is account-blocked; organic staging only.
 - No lint script configured in `backend/package.json`.
 - Vercel Hobby plan: 12-serverless-function cap, 2-cron-job cap — several
@@ -95,17 +100,17 @@ android/.../ui/screens/ -- one file per screen (Home, Prospecting, Inbound, Appr
    `Row`/`Column` with fixed-width children and text that could overflow
    on a real device, especially anything with `maxLines` set without
    `overflow = TextOverflow.Ellipsis`.
-2. **Dead code** — is `backend/api/ingest.ts`'s YouTube/TikTok path (and
-   the underlying adapters) worth deleting now that nothing schedules it?
+2. **Dead code** — `backend/api/ingest.ts`'s YouTube/TikTok path and the
+   underlying adapters have now been deleted (see Recent changes above);
+   anything else that is reachable only by hand and never exercised is
+   still worth flagging.
 3. **Error handling gaps** — places where a failed API call might surface
    a confusing state to the user rather than a clear error/retry.
 4. **Test coverage gaps** — especially around the newly merged features
-   (Experiments statistical logic, Strategy Evolution, Notifications) and
-   the Reddit adapters (currently untestable live, but check the unit
-   tests mock realistic failure modes).
+   (Experiments statistical logic, Strategy Evolution, Notifications).
 5. **Architecture/consistency** — anywhere the same pattern is implemented
-   differently across X vs. Reddit vs. YouTube-era code, now that X/Reddit
-   are the only two live sources.
+   differently across X vs. YouTube-era code, now that X is the only live
+   source.
 
 Ask for specific `file:line` citations for every finding, not general
 advice — this codebase has a lot of deliberate, documented design
