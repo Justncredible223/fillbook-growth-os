@@ -12,8 +12,11 @@ export interface VideoScript {
   hook: string;
   script: string;
   shotList: string[];
-  caption: string;
+  youtubeTitle: string;
+  youtubeDescription: string;
+  tiktokCaption: string;
   hashtags: string[];
+  disclosureCta: string | null;
 }
 
 /**
@@ -86,7 +89,7 @@ export interface RenderReport {
   draftId: string;
   campaignTitle: string;
   hook: string;
-  caption: string;
+  tiktokCaption: string;
   hashtags: string[];
   durationSeconds: number;
   resolution: string;

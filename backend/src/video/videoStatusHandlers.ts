@@ -1,6 +1,22 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/**
+ * The platform-specific publishing metadata generated alongside the video
+ * script (see backend/src/content/videoScriptWriter.ts's VideoScript) --
+ * surfaced here so Video Status can show copyable YouTube/TikTok sections
+ * without a separate fetch. Null whenever the underlying content_versions
+ * row has no structured videoScript metadata (e.g. a render created before
+ * this field existed) -- never fabricated.
+ */
+export interface VideoRenderMetadataJson {
+  youtubeTitle: string;
+  youtubeDescription: string;
+  tiktokCaption: string;
+  hashtags: string[];
+  disclosureCta: string | null;
+}
+
 export interface VideoRenderStatusJson {
   id: string;
   campaignAssetId: string;
@@ -12,6 +28,37 @@ export interface VideoRenderStatusJson {
   error: string | null;
   createdAt: string;
   updatedAt: string;
+  videoMetadata: VideoRenderMetadataJson | null;
+}
+
+/**
+ * Pure parsing, independent of Supabase -- given whatever raw JSON sits in
+ * content_versions.metadata, returns the typed publishing metadata or null.
+ * Deliberately tolerant of a partially-shaped object (returns null rather
+ * than throwing) since a render's metadata is best-effort display, never
+ * something that should break the whole status list.
+ */
+export function parseVideoRenderMetadata(rawMetadata: unknown): VideoRenderMetadataJson | null {
+  if (typeof rawMetadata !== "object" || rawMetadata === null) return null;
+  const videoScript = (rawMetadata as Record<string, unknown>).videoScript;
+  if (typeof videoScript !== "object" || videoScript === null) return null;
+  const v = videoScript as Record<string, unknown>;
+  if (
+    typeof v.youtubeTitle !== "string" ||
+    typeof v.youtubeDescription !== "string" ||
+    typeof v.tiktokCaption !== "string" ||
+    !Array.isArray(v.hashtags) ||
+    !v.hashtags.every((h) => typeof h === "string")
+  ) {
+    return null;
+  }
+  return {
+    youtubeTitle: v.youtubeTitle,
+    youtubeDescription: v.youtubeDescription,
+    tiktokCaption: v.tiktokCaption,
+    hashtags: v.hashtags as string[],
+    disclosureCta: typeof v.disclosureCta === "string" ? v.disclosureCta : null,
+  };
 }
 
 interface VideoRenderRow {
@@ -39,6 +86,29 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
   if (error) throw new Error(`listVideoRenderStatuses failed: ${error.message}`);
 
   const rows = (data ?? []) as VideoRenderRow[];
+
+  // One batched query for every row's own latest content_versions.metadata,
+  // instead of one query per row -- a render's own campaign_asset_id is the
+  // join key. Best-effort: a failure here never fails the whole status
+  // list (same tolerance already applied to signed-URL minting below), it
+  // just leaves videoMetadata null for every row this call.
+  const metadataByAssetId = new Map<string, VideoRenderMetadataJson | null>();
+  const assetIds = [...new Set(rows.map((r) => r.campaign_asset_id))];
+  if (assetIds.length > 0) {
+    const { data: versions } = await client
+      .from("content_versions")
+      .select("campaign_asset_id, metadata, version")
+      .in("campaign_asset_id", assetIds)
+      .order("version", { ascending: false });
+    for (const v of (versions ?? []) as Array<{ campaign_asset_id: string; metadata: unknown }>) {
+      // Rows arrive ordered by version desc -- the first one seen per
+      // asset id is its latest version, so a later (older) row for the
+      // same asset is skipped rather than overwriting it.
+      if (metadataByAssetId.has(v.campaign_asset_id)) continue;
+      metadataByAssetId.set(v.campaign_asset_id, parseVideoRenderMetadata(v.metadata));
+    }
+  }
+
   return Promise.all(
     rows.map(async (row) => {
       let downloadUrl: string | null = null;
@@ -60,6 +130,7 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
         error: row.error,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+        videoMetadata: metadataByAssetId.get(row.campaign_asset_id) ?? null,
       };
     }),
   );

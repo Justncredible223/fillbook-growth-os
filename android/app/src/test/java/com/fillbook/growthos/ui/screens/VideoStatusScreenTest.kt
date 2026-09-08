@@ -150,3 +150,95 @@ class VideoStatusScreenDownloadGuardStructureTest {
         }
     }
 }
+
+/**
+ * Regression guard for the "Create Fillbook Video" feature (2026-09-08):
+ * this project has no instrumentation-test infrastructure (see
+ * ProspectingScreenEmptyStateStructureTest's kdoc for the full
+ * explanation), so these are structural checks on the actual source
+ * proving the confirmation dialog exists with its required disclosure
+ * points, the duplicate-tap guard is checked before firing a request, and
+ * the real backend error message is surfaced rather than a generic one.
+ */
+class VideoStatusScreenCreateVideoStructureTest {
+    private fun screenSource(): String {
+        val file = java.io.File("src/main/java/com/fillbook/growthos/ui/screens/VideoStatusScreen.kt")
+            .let { if (it.exists()) it else java.io.File("app/src/main/java/com/fillbook/growthos/ui/screens/VideoStatusScreen.kt") }
+        check(file.exists()) { "Could not locate VideoStatusScreen.kt from working directory ${java.io.File(".").absolutePath}." }
+        return file.readText()
+    }
+
+    @Test
+    fun `the confirmation dialog explains paid LLM budget, no auto-post, and that approval starts the render`() {
+        val source = screenSource()
+        val confirmDialogIndex = source.indexOf("Create a real video draft?")
+        check(confirmDialogIndex >= 0) { "Expected a confirmation dialog titled 'Create a real video draft?'." }
+
+        val window = source.substring(confirmDialogIndex, minOf(confirmDialogIndex + 1200, source.length))
+        check(window.contains("paid LLM/render budget")) { "Expected the confirmation dialog to disclose real paid LLM/render budget usage." }
+        check(window.contains("REAL video draft")) { "Expected the confirmation dialog to state this creates a real draft, not a preview." }
+        check(window.contains("NOT post anywhere automatically")) { "Expected the confirmation dialog to disclose no auto-posting." }
+        check(window.contains("approving it there is what starts the render")) {
+            "Expected the confirmation dialog to disclose that approval in Approvals is what starts the render."
+        }
+    }
+
+    @Test
+    fun `requestVideoScript() checks the busy-duplicate-tap guard before doing anything else`() {
+        val source = screenSource()
+        val fnIndex = source.indexOf("fun requestVideoScript() {")
+        check(fnIndex >= 0) { "Could not find requestVideoScript() -- has it been renamed or restructured?" }
+        val window = source.substring(fnIndex, minOf(fnIndex + 300, source.length))
+        check(window.contains("if (creatingVideoScript) return")) {
+            "Expected requestVideoScript() to bail out early when a request is already in flight -- otherwise a " +
+                "rapid double-tap on Confirm can fire two real, paid requests for the same topic."
+        }
+    }
+
+    @Test
+    fun `the Confirm button is disabled while a request is in flight`() {
+        val source = screenSource()
+        val confirmDialogIndex = source.indexOf("Create a real video draft?")
+        check(confirmDialogIndex >= 0)
+        val window = source.substring(confirmDialogIndex, minOf(confirmDialogIndex + 1500, source.length))
+        check(window.contains("enabled = !creatingVideoScript")) {
+            "Expected the Confirm button to be disabled while creatingVideoScript is true, showing a busy state."
+        }
+    }
+
+    @Test
+    fun `a real backend rejection (off-topic, duplicate, invalid) is surfaced via extractVideoScriptRequestErrorMessage, not a generic message`() {
+        val source = screenSource()
+        val fnIndex = source.indexOf("fun requestVideoScript() {")
+        check(fnIndex >= 0)
+        val window = source.substring(fnIndex, minOf(fnIndex + 1600, source.length))
+        check(window.contains("extractVideoScriptRequestErrorMessage(e.httpCode, e.message)")) {
+            "Expected requestVideoScript() to try extracting the real backend error message before falling back " +
+                "to a generic 'check your connection' message -- otherwise an off-topic-topic or duplicate-topic " +
+                "rejection is indistinguishable from a network failure."
+        }
+    }
+
+    @Test
+    fun `Continue is disabled until a topic is typed or an opportunity is selected`() {
+        val source = screenSource()
+        val dialogIndex = source.indexOf("Create Fillbook Video")
+        check(dialogIndex >= 0) { "Expected a 'Create Fillbook Video' entry dialog title." }
+        val canContinueIndex = source.indexOf("val canContinue =")
+        check(canContinueIndex >= 0) { "Expected a canContinue gate controlling the Continue button." }
+        val window = source.substring(canContinueIndex, minOf(canContinueIndex + 200, source.length))
+        check(window.contains("selectedOpportunityId != null") && window.contains("videoTopicInput.trim().length >= 3")) {
+            "Expected canContinue to require either a selected opportunity or a real (non-trivial) typed topic."
+        }
+    }
+
+    @Test
+    fun `ready-with-metadata renders both a YouTube Shorts and a TikTok copyable section`() {
+        val source = screenSource()
+        check(source.contains("\"YOUTUBE SHORTS\"")) { "Expected a YouTube Shorts metadata section." }
+        check(source.contains("\"TIKTOK\"")) { "Expected a TikTok metadata section." }
+        check(source.contains("copyToClipboard(context, copyLabel, body)")) {
+            "Expected each metadata section to be copyable via copyToClipboard."
+        }
+    }
+}

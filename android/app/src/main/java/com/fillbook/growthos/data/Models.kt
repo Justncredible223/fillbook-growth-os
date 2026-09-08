@@ -472,5 +472,51 @@ data class VideoRenderStatus(
     val error: String?,
     val createdAt: String,
     val updatedAt: String,
+    /**
+     * The platform-specific publishing metadata generated alongside the
+     * video script ("Create Fillbook Video", 2026-09-08) -- null whenever
+     * the underlying draft has no structured videoScript on file (e.g. a
+     * render created before this field existed). Never fabricated
+     * client-side; always exactly what the backend actually stored.
+     */
+    val videoMetadata: VideoRenderMetadata? = null,
+)
+
+/** See [VideoRenderStatus.videoMetadata]'s own doc comment. */
+data class VideoRenderMetadata(
+    val youtubeTitle: String,
+    val youtubeDescription: String,
+    val tiktokCaption: String,
+    val hashtags: List<String>,
+    /** Null when the video genuinely didn't need one -- never a fabricated filler line. */
+    val disclosureCta: String?,
+)
+
+/**
+ * A private, internal research document (Research Lab, 2026-09-07) -- the
+ * owner reviews this in full before it informs any public content;
+ * nothing here is ever published or shown to anyone else directly. See
+ * backend/src/content/researchWriter.ts's ResearchReport, which this
+ * mirrors field-for-field.
+ *
+ * [status] is a raw string kept as-is (same rationale as
+ * [VideoRenderStatus.status]) rather than an enum -- the server owns this
+ * state machine. "requested"/"researching" are transient CLIENT-SIDE-only
+ * states covering the moment between this app's own POST and the next GET
+ * reflecting a persisted row -- they are never actually returned by the
+ * backend; only ready_for_review/approved/rejected/failed are.
+ */
+data class ResearchRecord(
+    val id: String,
+    val title: String,
+    val question: String,
+    val summary: String,
+    val findings: List<String>,
+    val evidenceReferences: List<String>,
+    val caveats: List<String>,
+    val contentAngles: List<String>,
+    val status: String,
+    val costUsd: Double?,
+    val createdAt: String,
 )
 

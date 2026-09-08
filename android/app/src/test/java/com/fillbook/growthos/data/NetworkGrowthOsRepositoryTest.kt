@@ -209,3 +209,80 @@ class AuthErrorMessageTest {
         assertNull(authErrorMessage(java.net.UnknownHostException("Unable to resolve host")))
     }
 }
+
+/**
+ * Regression coverage for the "Create Fillbook Video" feature (2026-09-08):
+ * api/run-campaign.ts's `topic` handling rejects an off-topic topic (400),
+ * a topic that's too short/too long (400), or a duplicate topic (409) with
+ * a real, actionable error message -- this extracts it the same way
+ * extractPartnershipActionErrorMessage/extractOpportunityReplyErrorMessage
+ * already do for their own status codes, so a real rejection is never
+ * shown to the owner as a generic "check your connection" failure.
+ */
+class ExtractVideoScriptRequestErrorMessageTest {
+    private fun networkExceptionMessage(httpCode: Int, body: String) = "POST /api/run-campaign failed: HTTP $httpCode -- $body"
+
+    @Test
+    fun `extracts the real error message from a 400 (off-topic or invalid topic) response`() {
+        val message = networkExceptionMessage(400, """{"error":"This topic doesn't read as futures trading, prop-firm trading, or trading discipline."}""")
+        assertEquals(
+            "This topic doesn't read as futures trading, prop-firm trading, or trading discipline.",
+            extractVideoScriptRequestErrorMessage(400, message),
+        )
+    }
+
+    @Test
+    fun `extracts the real error message from a 409 (duplicate topic) response`() {
+        val message = networkExceptionMessage(409, """{"error":"A video for this topic already exists."}""")
+        assertEquals("A video for this topic already exists.", extractVideoScriptRequestErrorMessage(409, message))
+    }
+
+    @Test
+    fun `returns null for a non-400-non-409 status -- a genuine server or auth failure must still surface as NetworkException`() {
+        val message = networkExceptionMessage(500, """{"error":"internal error"}""")
+        assertNull(extractVideoScriptRequestErrorMessage(500, message))
+    }
+
+    @Test
+    fun `returns null for a 400 whose body isn't the expected JSON shape, rather than throwing`() {
+        assertNull(extractVideoScriptRequestErrorMessage(400, "POST /api/run-campaign failed: HTTP 400 -- not json at all"))
+    }
+}
+
+/**
+ * Regression coverage for the Research Lab feature (2026-09-07):
+ * api/run-campaign.ts's `topic`/`assetType: "research"` handling rejects
+ * an off-topic topic, a topic that's too short/too long (400), a
+ * duplicate topic (409), or a duplicate-opportunity request (409) with a
+ * real, actionable error message -- extracted the exact same way
+ * extractVideoScriptRequestErrorMessage already does for video.
+ */
+class ExtractResearchRequestErrorMessageTest {
+    private fun networkExceptionMessage(httpCode: Int, body: String) = "POST /api/run-campaign failed: HTTP $httpCode -- $body"
+
+    @Test
+    fun `extracts the real error message from a 400 (off-topic or invalid topic) response`() {
+        val message = networkExceptionMessage(400, """{"error":"This topic doesn't read as futures trading, prop-firm trading, or trading discipline."}""")
+        assertEquals(
+            "This topic doesn't read as futures trading, prop-firm trading, or trading discipline.",
+            extractResearchRequestErrorMessage(400, message),
+        )
+    }
+
+    @Test
+    fun `extracts the real error message from a 409 (duplicate topic or duplicate opportunity) response`() {
+        val message = networkExceptionMessage(409, """{"error":"Research already exists for this opportunity."}""")
+        assertEquals("Research already exists for this opportunity.", extractResearchRequestErrorMessage(409, message))
+    }
+
+    @Test
+    fun `returns null for a non-400-non-409 status -- a genuine server or auth failure must still surface as NetworkException`() {
+        val message = networkExceptionMessage(500, """{"error":"internal error"}""")
+        assertNull(extractResearchRequestErrorMessage(500, message))
+    }
+
+    @Test
+    fun `returns null for a 400 whose body isn't the expected JSON shape, rather than throwing`() {
+        assertNull(extractResearchRequestErrorMessage(400, "POST /api/run-campaign failed: HTTP 400 -- not json at all"))
+    }
+}

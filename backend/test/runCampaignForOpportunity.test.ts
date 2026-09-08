@@ -27,12 +27,12 @@ function verdictResponse(pass: boolean) {
 }
 
 class InMemoryCampaignRepository implements CampaignRepository {
-  assets: Array<{ id: string; stage: AssetStage }> = [];
+  assets: Array<{ id: string; assetType: string; stage: AssetStage }> = [];
   private counter = 0;
   async createCampaign() { return `campaign-${++this.counter}`; }
-  async createCampaignAsset() {
+  async createCampaignAsset(_campaignId: string, _platform: string, assetType: string) {
     const id = `asset-${++this.counter}`;
-    this.assets.push({ id, stage: "draft" });
+    this.assets.push({ id, assetType, stage: "draft" });
     return id;
   }
   async insertContentVersion() { return `version-${++this.counter}`; }
@@ -40,6 +40,27 @@ class InMemoryCampaignRepository implements CampaignRepository {
     const asset = this.assets.find((a) => a.id === id);
     if (asset) asset.stage = stage;
   }
+}
+
+function videoScriptResponse() {
+  return jsonResponse({
+    content: [
+      {
+        type: "tool_use",
+        name: "submit_video_script",
+        input: {
+          hook: "Your funded account can get pulled even on a winning trade.",
+          script: "Your funded account can get pulled even on a winning trade. Here's why.",
+          shotList: ["Text card: the hook"],
+          youtubeTitle: "Why Funded Accounts Get Pulled Even When Winning",
+          youtubeDescription: "Trailing drawdown explained.",
+          tiktokCaption: "Trailing drawdown explained.",
+          hashtags: ["futurestrading"],
+          disclosureCta: null,
+        },
+      },
+    ],
+  });
 }
 
 function buildDeps(fetchMock: ReturnType<typeof vi.fn>, overrides: Partial<RunCampaignDeps> = {}) {
@@ -110,5 +131,40 @@ describe("runCampaignForOpportunity", () => {
 
     expect(["draft", "final_draft", "ready_for_owner"]).toContain(result.finalStage);
     expect(result.finalStage).not.toBe("handed_off");
+  });
+
+  /**
+   * Regression coverage (2026-09-08): the owner-requested video-script
+   * feature threads options.assetTypeOverride from this function's third
+   * parameter down into the pipeline's context -- confirms it actually
+   * reaches campaignPipeline.ts and produces a real video_script asset
+   * even for a non-video-platform opportunity (recommendedChannels: ["x"]
+   * here, same fixture every other test in this file uses unmodified).
+   */
+  it("creates a video_script asset when options.assetTypeOverride is 'video_script', even for a non-video-platform opportunity", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(videoScriptResponse()).mockResolvedValue(verdictResponse(true));
+    const deps = buildDeps(fetchMock);
+
+    const result = await runCampaignForOpportunity(deps, opportunity, { assetTypeOverride: "video_script" });
+
+    expect(result.finalStage).toBe("ready_for_owner");
+    expect(result.draftText).toContain("SHOT LIST:");
+    expect((deps.campaignRepo as InMemoryCampaignRepository).assets.find((a) => a.id === result.campaignAssetId)?.assetType).toBe(
+      "video_script",
+    );
+  });
+
+  it("omitting options entirely preserves the exact prior behavior -- a plain text post, not a video script", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(draftResponse("Most funded accounts get pulled for violating a rule nobody reads twice."))
+      .mockResolvedValue(verdictResponse(true));
+    const deps = buildDeps(fetchMock);
+
+    const result = await runCampaignForOpportunity(deps, opportunity);
+
+    expect((deps.campaignRepo as InMemoryCampaignRepository).assets.find((a) => a.id === result.campaignAssetId)?.assetType).toBe(
+      "post",
+    );
   });
 });

@@ -28,8 +28,14 @@ export function validateVideoScript(raw: unknown): VideoScript {
   if (!isNonEmptyString(v.hook)) missing.push("hook");
   if (!isNonEmptyString(v.script)) missing.push("script");
   if (!isStringArray(v.shotList) || v.shotList.length === 0) missing.push("shotList (non-empty string array)");
-  if (!isNonEmptyString(v.caption)) missing.push("caption");
+  if (!isNonEmptyString(v.youtubeTitle)) missing.push("youtubeTitle");
+  if (!isNonEmptyString(v.youtubeDescription)) missing.push("youtubeDescription");
+  if (!isNonEmptyString(v.tiktokCaption)) missing.push("tiktokCaption");
   if (!isStringArray(v.hashtags)) missing.push("hashtags (string array)");
+  // disclosureCta is intentionally NOT required -- null is a valid, honest
+  // answer (see videoScriptWriter.ts's own doc comment: never a fabricated
+  // filler line when the video genuinely doesn't need one).
+  if (v.disclosureCta !== null && !isNonEmptyString(v.disclosureCta)) missing.push("disclosureCta (string or null)");
   if (missing.length > 0) {
     throw new VideoFactoryError(`videoScript is missing required field(s): ${missing.join(", ")}`);
   }
@@ -37,8 +43,11 @@ export function validateVideoScript(raw: unknown): VideoScript {
     hook: v.hook as string,
     script: v.script as string,
     shotList: v.shotList as string[],
-    caption: v.caption as string,
+    youtubeTitle: v.youtubeTitle as string,
+    youtubeDescription: v.youtubeDescription as string,
+    tiktokCaption: v.tiktokCaption as string,
     hashtags: v.hashtags as string[],
+    disclosureCta: (v.disclosureCta as string | null) ?? null,
   };
 }
 

@@ -20,6 +20,48 @@ interface GrowthOsRepository {
      */
     suspend fun runCampaignForOpportunity(opportunityId: String): CampaignRunResult
     /**
+     * "Create Fillbook Video" (2026-09-08): requests a video_script draft
+     * for EITHER a custom, owner-typed [topic] OR an existing [opportunityId]
+     * -- exactly one of the two must be non-null, enforced server-side, not
+     * just by convention here. Reuses the exact same pipeline as
+     * [runCampaignForOpportunity] (review agents, grounding, budget/paused
+     * gate, idempotency) -- the only difference is the resulting
+     * campaign_asset is explicitly asset_type "video_script" and the
+     * writer produces a real production package (hook/script/shot list/
+     * YouTube+TikTok metadata) instead of a plain text post. The backend
+     * rejects an off-topic [topic] (not futures/prop-firm/trading-
+     * discipline) with a clear error BEFORE any LLM call, so this can
+     * throw for a reason distinct from a network failure -- see
+     * DraftRejectedException is NOT used here (that's for a content-
+     * generation rejection after the LLM already ran); an off-topic/
+     * duplicate/invalid request surfaces as a plain [NetworkException]
+     * with a real message from the backend's own 400/409 body.
+     */
+    suspend fun requestVideoScript(topic: String?, opportunityId: String?): CampaignRunResult
+    /**
+     * Research Lab (2026-09-07): requests a private, internal research
+     * report for EITHER a custom, owner-typed [topic] OR an existing
+     * [opportunityId] -- exactly one of the two must be non-null, enforced
+     * server-side, not just by convention here. Reuses the exact same
+     * pipeline as [runCampaignForOpportunity]/[requestVideoScript]
+     * (grounding, budget/paused gate, idempotency) -- the difference is
+     * the resulting campaign_asset is asset_type "research", the writer
+     * produces a ResearchReport instead of public-facing content, and the
+     * nine-agent deep review is deliberately skipped (see
+     * campaignPipeline.ts's own doc comment for why). The backend rejects
+     * an off-topic [topic] with a clear error BEFORE any LLM call, same as
+     * [requestVideoScript] -- an off-topic/duplicate/invalid request
+     * surfaces as a plain [NetworkException] with a real message from the
+     * backend's own 400/409 body.
+     */
+    suspend fun requestResearch(topic: String?, opportunityId: String?): CampaignRunResult
+    /**
+     * Every research record the owner has ever requested, most recent
+     * first -- the durable source of truth for research status
+     * (ready_for_review/approved/rejected/failed).
+     */
+    suspend fun listResearch(): List<ResearchRecord>
+    /**
      * The lightweight path for a single-post engagement opportunity --
      * one real LLM call, never the multi-agent campaign pipeline. Nothing
      * is persisted server-side; the draft is only ever returned for the
@@ -302,6 +344,52 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         blockReasons = emptyList(),
         costUsd = 0.03,
     )
+
+    override suspend fun requestVideoScript(topic: String?, opportunityId: String?) = CampaignRunResult(
+        finalStage = "ready_for_owner",
+        blockReasons = emptyList(),
+        costUsd = 0.09,
+    )
+
+    override suspend fun requestResearch(topic: String?, opportunityId: String?) = CampaignRunResult(
+        finalStage = "ready_for_owner",
+        blockReasons = emptyList(),
+        costUsd = 0.02,
+    )
+
+    private val fakeResearchRecords = listOf(
+        ResearchRecord(
+            id = "research-fake-1",
+            title = "Trailing drawdown confusion among funded traders",
+            question = "Do funded traders understand how trailing drawdown is calculated?",
+            summary = "Many funded traders confuse trailing drawdown with a fixed daily loss limit, especially around EOD balance-based calculations.",
+            findings = listOf(
+                "Trailing drawdown is commonly confused with a static daily loss limit.",
+                "EOD balance-based trailing calculations are the most misunderstood variant.",
+            ),
+            evidenceReferences = listOf("Fillbook prop-firm drawdown tracking doc"),
+            caveats = listOf("General trading-domain reasoning, not verified against Fillbook's own knowledge base."),
+            contentAngles = listOf("A short explainer comparing trailing vs static drawdown."),
+            status = "ready_for_review",
+            costUsd = 0.021,
+            createdAt = "2026-09-06T14:00:00Z",
+        ),
+        ResearchRecord(
+            id = "research-fake-2",
+            title = "Why funded traders overtrade after a loss",
+            question = "What patterns precede a revenge-trading spiral?",
+            summary = "Revenge trading typically follows an unexpected loss on a trade the trader felt confident about.",
+            findings = listOf("Position sizing tends to increase immediately after an unexpected loss."),
+            evidenceReferences = emptyList(),
+            caveats = listOf("General trading-domain reasoning, not verified against Fillbook's own knowledge base."),
+            contentAngles = listOf("A video on spotting the first warning sign of a revenge-trading spiral."),
+            status = "approved",
+            costUsd = 0.019,
+            createdAt = "2026-09-04T09:00:00Z",
+        ),
+    )
+
+    override suspend fun listResearch(): List<ResearchRecord> = fakeResearchRecords
 
     override suspend fun draftOpportunityReply(opportunityId: String) =
         "Depends on the firm -- most reset trailing drawdown at end of day, but a few use a static floor instead. Worth checking your specific rulebook."

@@ -53,6 +53,7 @@ import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
 import { listVideoRenderStatuses, registerDevicePushToken } from "../src/video/videoStatusHandlers.js";
 import { MAX_VIDEO_RENDERS_PER_MONTH } from "../src/video/videoRenderEligibility.js";
+import { listResearchRecords } from "../src/research/researchHandlers.js";
 
 /**
  * `?resource=inbound` handles the Inbound Engagement Queue -- a
@@ -464,6 +465,30 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
 }
 
 /**
+ * `?resource=research` -- the Android Research Lab screen's list endpoint
+ * (GET only; creation happens through api/run-campaign.ts's own
+ * `assetType: "research"` branch, exactly like video creation goes
+ * through that same endpoint rather than through approvals.ts). Folded
+ * into this file for the same Vercel Hobby 12-function-cap reason as
+ * inbound/prospecting/partnerships/video-status above.
+ */
+async function handleResearch(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const client = getServiceClient();
+
+  if (req.method !== "GET") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  try {
+    const items = await listResearchRecords(client);
+    res.status(200).json({ items });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+/**
  * GET: assembles ApprovalAsset-shaped rows (matching the Android app's
  * data model) from campaign_assets at 'ready_for_owner' whose campaign is
  * still 'in_review' -- i.e. AI-reviewed and genuinely still awaiting a
@@ -505,6 +530,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.query.resource === "video-status") {
     await handleVideoStatus(req, res);
+    return;
+  }
+  if (req.query.resource === "research") {
+    await handleResearch(req, res);
     return;
   }
   const client = getServiceClient();

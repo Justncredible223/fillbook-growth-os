@@ -10,8 +10,11 @@ const validScript = {
   hook: "Your funded account can get pulled even on a winning trade.",
   script: "Full spoken script here.",
   shotList: ["Text card: the hook", "Fillbook UI: example drawdown chart"],
-  caption: "Trailing drawdown explained.",
+  youtubeTitle: "Why Funded Accounts Get Pulled Even When Winning",
+  youtubeDescription: "Trailing drawdown explained.",
+  tiktokCaption: "Trailing drawdown explained.",
   hashtags: ["futurestrading", "propfirm"],
+  disclosureCta: null,
 };
 
 const validPackage: VideoScriptPackage = {
@@ -36,7 +39,9 @@ describe("validateVideoScript", () => {
     } catch (err) {
       expect((err as Error).message).toContain("script");
       expect((err as Error).message).toContain("shotList");
-      expect((err as Error).message).toContain("caption");
+      expect((err as Error).message).toContain("youtubeTitle");
+      expect((err as Error).message).toContain("youtubeDescription");
+      expect((err as Error).message).toContain("tiktokCaption");
       expect((err as Error).message).toContain("hashtags");
     }
   });
@@ -48,6 +53,19 @@ describe("validateVideoScript", () => {
   it("rejects a non-object", () => {
     expect(() => validateVideoScript(null)).toThrow(VideoFactoryError);
     expect(() => validateVideoScript("a string")).toThrow(VideoFactoryError);
+  });
+
+  it("accepts disclosureCta as null -- never required, never fabricated", () => {
+    expect(validateVideoScript({ ...validScript, disclosureCta: null })).toEqual({ ...validScript, disclosureCta: null });
+  });
+
+  it("accepts a real disclosureCta string when present", () => {
+    const withCta = { ...validScript, disclosureCta: "Example data shown for illustration only." };
+    expect(validateVideoScript(withCta)).toEqual(withCta);
+  });
+
+  it("rejects a disclosureCta that is neither a non-empty string nor null", () => {
+    expect(() => validateVideoScript({ ...validScript, disclosureCta: "" })).toThrow(/disclosureCta/);
   });
 });
 

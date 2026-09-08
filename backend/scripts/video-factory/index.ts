@@ -108,7 +108,7 @@ function printSummary(report: RenderReport): void {
   console.log(report.outputPath);
   console.log("");
   console.log("TikTok caption:");
-  console.log(report.caption);
+  console.log(report.tiktokCaption);
   console.log("");
   console.log("Hashtags:");
   console.log(report.hashtags.map((h) => `#${h}`).join(" "));
@@ -170,7 +170,7 @@ async function main(): Promise<void> {
     draftId: pkg.draftId,
     campaignTitle: pkg.campaignTitle,
     hook: pkg.videoScript.hook,
-    caption: pkg.videoScript.caption,
+    tiktokCaption: pkg.videoScript.tiktokCaption,
     hashtags: pkg.videoScript.hashtags,
     durationSeconds: Number(ffprobeResult.format.duration ?? totalDurationSeconds),
     resolution: videoStream ? `${videoStream.width}x${videoStream.height}` : "unknown",

@@ -22,14 +22,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -42,6 +46,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,8 +55,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.getSystemService
 import com.fillbook.growthos.data.GrowthOsRepository
-import com.fillbook.growthos.data.authErrorMessage
+import com.fillbook.growthos.data.Opportunity
+import com.fillbook.growthos.data.VideoRenderMetadata
 import com.fillbook.growthos.data.VideoRenderStatus
+import com.fillbook.growthos.data.authErrorMessage
+import com.fillbook.growthos.data.extractVideoScriptRequestErrorMessage
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
 import com.fillbook.growthos.ui.components.PolishedEmptyState
@@ -60,8 +68,11 @@ import com.fillbook.growthos.ui.components.ScreenHeader
 import com.fillbook.growthos.ui.components.SecondaryButton
 import com.fillbook.growthos.ui.components.SkeletonListLoading
 import com.fillbook.growthos.ui.components.StatusTone
+import com.fillbook.growthos.ui.components.assetStageDisplayName
+import com.fillbook.growthos.ui.components.copyToClipboard
 import com.fillbook.growthos.ui.components.relativeTime
 import com.fillbook.growthos.ui.components.statusToneColor
+import com.fillbook.growthos.ui.theme.Accent
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
@@ -109,6 +120,31 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     // same DownloadManager non-success outcome the failure branch already
     // handles.
     var downloadingIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    // "Create Fillbook Video" (2026-09-08): a fresh, real video_script
+    // request for either a custom topic or an existing Radar opportunity.
+    // Two-step flow -- the entry dialog collects the topic/opportunity
+    // choice, the confirmation dialog is the one place the required
+    // real-draft/LLM-budget/no-auto-post/approval-starts-render disclosure
+    // lives, separately from the entry step so it can never be skipped by
+    // habit (e.g. auto-filling remembered field values).
+    var showCreateVideoDialog by remember { mutableStateOf(false) }
+    var showVideoConfirmDialog by remember { mutableStateOf(false) }
+    var videoTopicInput by rememberSaveable { mutableStateOf("") }
+    // false = custom topic, true = pick an existing opportunity. A plain
+    // Boolean survives rotation fine via rememberSaveable.
+    var useExistingOpportunity by rememberSaveable { mutableStateOf(false) }
+    // Only the id is saved/tracked here, not the Opportunity object itself
+    // -- same reasoning as PartnershipsScreen's pilotDialogProspectId: a
+    // network/domain object is never a candidate for persisted UI state.
+    var selectedOpportunityId by rememberSaveable { mutableStateOf<String?>(null) }
+    var eligibleOpportunities by remember { mutableStateOf<List<Opportunity>>(emptyList()) }
+    var loadingOpportunities by remember { mutableStateOf(false) }
+    // Doubles as both the busy/spinner state AND the duplicate-tap guard --
+    // a rapid double-tap on Confirm can't fire two requests since the
+    // button is disabled the instant the first tap sets this true.
+    var creatingVideoScript by remember { mutableStateOf(false) }
+    var createVideoResultMessage by remember { mutableStateOf<String?>(null) }
 
     suspend fun refresh() {
         try {
@@ -214,6 +250,58 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
         context.startActivity(Intent.createChooser(shareIntent, "Share video"))
     }
 
+    fun loadEligibleOpportunities() {
+        scope.launch {
+            loadingOpportunities = true
+            eligibleOpportunities = try {
+                // Engagement (reply-worthy) opportunities are never a fit for
+                // a shootable video production package -- same real
+                // discriminator RadarScreen already uses, not a new concept.
+                repo.getOpportunities().filter { !it.isEngagementOpportunity }
+            } catch (e: Exception) {
+                emptyList()
+            }
+            loadingOpportunities = false
+        }
+    }
+
+    fun requestVideoScript() {
+        // Duplicate-tap guard: the Confirm button is also disabled while
+        // this is true, but a second tap can still land in the same frame
+        // before recomposition disables it.
+        if (creatingVideoScript) return
+        val topic = videoTopicInput.trim()
+        val opportunityId = selectedOpportunityId
+        scope.launch {
+            creatingVideoScript = true
+            try {
+                val result = repo.requestVideoScript(
+                    topic = if (!useExistingOpportunity) topic else null,
+                    opportunityId = if (useExistingOpportunity) opportunityId else null,
+                )
+                createVideoResultMessage = if (result.finalStage == "ready_for_owner") {
+                    "Video script sent to Approvals for your review."
+                } else {
+                    "Didn't clear review (${assetStageDisplayName(result.finalStage)})" +
+                        if (result.blockReasons.isNotEmpty()) ": ${result.blockReasons.joinToString("; ")}" else "."
+                }
+                showVideoConfirmDialog = false
+                showCreateVideoDialog = false
+                videoTopicInput = ""
+                selectedOpportunityId = null
+                useExistingOpportunity = false
+                refresh()
+            } catch (e: com.fillbook.growthos.data.NetworkException) {
+                createVideoResultMessage = extractVideoScriptRequestErrorMessage(e.httpCode, e.message)
+                    ?: authErrorMessage(e)
+                    ?: "Couldn't create the video script. Check your connection and try again."
+            } catch (e: Exception) {
+                createVideoResultMessage = "Couldn't create the video script. Check your connection and try again."
+            }
+            creatingVideoScript = false
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             ScreenHeader(
@@ -222,10 +310,29 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                 kicker = if (loaded && renders.isNotEmpty()) "${renders.size} render${if (renders.size == 1) "" else "s"}" else null,
             )
 
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)) {
+                SecondaryButton(
+                    text = "+ Create Fillbook Video",
+                    onClick = {
+                        videoTopicInput = ""
+                        selectedOpportunityId = null
+                        useExistingOpportunity = false
+                        showCreateVideoDialog = true
+                    },
+                )
+            }
+
             errorMessage?.let { message ->
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(message, style = MaterialTheme.typography.bodyMedium, color = Danger, modifier = Modifier.weight(1f))
                     TextButton(onClick = { scope.launch { refresh() } }) { Text("Retry") }
+                }
+            }
+
+            createVideoResultMessage?.let { message ->
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(message, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { createVideoResultMessage = null }) { Text("Dismiss") }
                 }
             }
 
@@ -277,6 +384,111 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             }
         }
         SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+
+    if (showCreateVideoDialog) {
+        val canContinue = if (useExistingOpportunity) selectedOpportunityId != null else videoTopicInput.trim().length >= 3
+        AlertDialog(
+            onDismissRequest = { showCreateVideoDialog = false },
+            title = { Text("Create Fillbook Video") },
+            text = {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = !useExistingOpportunity, onClick = { useExistingOpportunity = false })
+                        Text("Custom topic", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (!useExistingOpportunity) {
+                        OutlinedTextField(
+                            value = videoTopicInput,
+                            onValueChange = { videoTopicInput = it },
+                            label = { Text("Futures/prop-firm/trading-discipline topic") },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            "Must be about futures trading, prop firms, or trading discipline -- an unrelated topic is rejected before anything is generated.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextTertiary,
+                        )
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = useExistingOpportunity,
+                            onClick = {
+                                useExistingOpportunity = true
+                                if (eligibleOpportunities.isEmpty() && !loadingOpportunities) loadEligibleOpportunities()
+                            },
+                        )
+                        Text("Existing Radar opportunity", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (useExistingOpportunity) {
+                        if (loadingOpportunities) {
+                            CircularProgressIndicator(modifier = Modifier.height(18.dp))
+                        } else if (eligibleOpportunities.isEmpty()) {
+                            Text("No eligible opportunities right now.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                        } else {
+                            LazyColumn(modifier = Modifier.fillMaxWidth().height(180.dp)) {
+                                items(eligibleOpportunities, key = { it.id }) { opp ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        RadioButton(
+                                            selected = selectedOpportunityId == opp.id,
+                                            onClick = { selectedOpportunityId = opp.id },
+                                        )
+                                        Text(opp.title, style = MaterialTheme.typography.bodySmall, maxLines = 2)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showCreateVideoDialog = false; showVideoConfirmDialog = true },
+                    enabled = canContinue,
+                ) { Text("Continue") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateVideoDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
+    if (showVideoConfirmDialog) {
+        val topicSummary = if (useExistingOpportunity) {
+            eligibleOpportunities.firstOrNull { it.id == selectedOpportunityId }?.title ?: "the selected opportunity"
+        } else {
+            "\"${videoTopicInput.trim()}\""
+        }
+        AlertDialog(
+            onDismissRequest = { if (!creatingVideoScript) showVideoConfirmDialog = false },
+            title = { Text("Create a real video draft?") },
+            text = {
+                Column {
+                    Text(
+                        "This uses paid LLM/render budget and creates a REAL video draft for $topicSummary.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text("• It will render on the video worker once approved.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    Text("• It will NOT post anywhere automatically.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    Text("• It lands in Approvals first -- approving it there is what starts the render.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { requestVideoScript() }, enabled = !creatingVideoScript) {
+                    Text(if (creatingVideoScript) "Creating…" else "Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showVideoConfirmDialog = false }, enabled = !creatingVideoScript) { Text("Cancel") }
+            },
+        )
     }
 }
 
@@ -341,6 +553,30 @@ private fun VideoRenderCard(
                 color = TextSecondary,
             )
         }
+        render.videoMetadata?.let { meta ->
+            Spacer(Modifier.height(10.dp))
+            VideoMetadataSection(
+                label = "YOUTUBE SHORTS",
+                copyLabel = "YouTube Shorts metadata",
+                body = listOfNotNull(
+                    "Title: ${meta.youtubeTitle}",
+                    "",
+                    meta.youtubeDescription,
+                    meta.hashtags.takeIf { it.isNotEmpty() }?.joinToString(" ") { "#$it" },
+                    meta.disclosureCta,
+                ).joinToString("\n"),
+            )
+            Spacer(Modifier.height(8.dp))
+            VideoMetadataSection(
+                label = "TIKTOK",
+                copyLabel = "TikTok metadata",
+                body = listOfNotNull(
+                    meta.tiktokCaption,
+                    meta.hashtags.takeIf { it.isNotEmpty() }?.joinToString(" ") { "#$it" },
+                    meta.disclosureCta,
+                ).joinToString("\n"),
+            )
+        }
         if (render.status == "ready") {
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -352,5 +588,32 @@ private fun VideoRenderCard(
                 Text("Download it first, then Share to TikTok or YouTube.", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
             }
         }
+    }
+}
+
+/**
+ * A copyable metadata block ("Create Fillbook Video", 2026-09-08) -- the
+ * owner pastes this straight into TikTok's/YouTube's own upload flow when
+ * they manually publish, since this app never uploads to either platform
+ * itself (see docs/EXTERNAL_WRITE_FIREWALL.md).
+ */
+@Composable
+private fun VideoMetadataSection(label: String, copyLabel: String, body: String) {
+    val context = LocalContext.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(com.fillbook.growthos.ui.theme.Background, androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+            .padding(10.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(label, style = MaterialTheme.typography.labelMedium, color = TextTertiary, modifier = Modifier.weight(1f))
+            TextButton(
+                onClick = { copyToClipboard(context, copyLabel, body) },
+                contentPadding = PaddingValues(0.dp),
+            ) { Text("Copy", style = MaterialTheme.typography.labelMedium, color = Accent) }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(body, style = MaterialTheme.typography.bodySmall, color = TextPrimary)
     }
 }

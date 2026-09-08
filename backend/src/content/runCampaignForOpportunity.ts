@@ -33,14 +33,31 @@ export interface RunCampaignDeps {
  * implementation of "run one opportunity through the pipeline and update
  * its status on success," not two that could drift apart.
  */
+export interface RunCampaignOptions {
+  /**
+   * Owner-requested video script or research (2026-09-08 / 2026-09-07):
+   * the ONLY accepted values are "video_script" and "research" -- validated
+   * by the one caller allowed to set this, api/run-campaign.ts, before it
+   * ever reaches here (see that file's own comment for why an arbitrary
+   * caller-supplied asset type is never trusted past that point). Omitted
+   * (the default, used by every existing caller -- the plain manual run
+   * and the scheduled auto-draft step) preserves the exact prior behavior:
+   * asset type and the video-vs-text writer choice both come from the
+   * opportunity's own recommended channel, nothing else.
+   */
+  assetTypeOverride?: "video_script" | "research";
+}
+
 export async function runCampaignForOpportunity(
   deps: RunCampaignDeps,
   opportunity: PipelineOpportunity,
+  options: RunCampaignOptions = {},
 ): Promise<PipelineResult> {
   const result = await runCampaignPipeline(deps.llmClient, deps.factory, deps.scoreRepo, deps.campaignRepo, opportunity, {
     brandRulesSummary: deps.brandRulesSummary,
     verifiedKnowledgeSummary: deps.verifiedKnowledgeSummary,
     recentTextsForSameTopic: deps.recentTextsForSameTopic,
+    assetTypeOverride: options.assetTypeOverride,
   });
 
   if (result.finalStage === "ready_for_owner") {

@@ -227,6 +227,54 @@ class NetworkGrowthOsRepository(
         )
     }
 
+    override suspend fun requestVideoScript(topic: String?, opportunityId: String?): CampaignRunResult {
+        val body = JSONObject().put("assetType", "video_script")
+        if (topic != null) body.put("topic", topic)
+        if (opportunityId != null) body.put("opportunityId", opportunityId)
+        val json = post("/api/run-campaign", body)
+        val result = json.getJSONObject("result")
+        return CampaignRunResult(
+            finalStage = result.getString("finalStage"),
+            blockReasons = result.optJSONArray("mechanicalBlockReasons")?.mapStrings() ?: emptyList(),
+            costUsd = json.getDouble("costUsd"),
+        )
+    }
+
+    override suspend fun requestResearch(topic: String?, opportunityId: String?): CampaignRunResult {
+        val body = JSONObject().put("assetType", "research")
+        if (topic != null) body.put("topic", topic)
+        if (opportunityId != null) body.put("opportunityId", opportunityId)
+        val json = post("/api/run-campaign", body)
+        val result = json.getJSONObject("result")
+        return CampaignRunResult(
+            finalStage = result.getString("finalStage"),
+            blockReasons = result.optJSONArray("mechanicalBlockReasons")?.mapStrings() ?: emptyList(),
+            costUsd = json.getDouble("costUsd"),
+        )
+    }
+
+    private fun JSONObject.toResearchRecord() = ResearchRecord(
+        id = getString("id"),
+        title = getString("title"),
+        question = getString("question"),
+        summary = getString("summary"),
+        findings = optJSONArray("findings")?.mapStrings() ?: emptyList(),
+        evidenceReferences = optJSONArray("evidenceReferences")?.mapStrings() ?: emptyList(),
+        caveats = optJSONArray("caveats")?.mapStrings() ?: emptyList(),
+        contentAngles = optJSONArray("contentAngles")?.mapStrings() ?: emptyList(),
+        status = getString("status"),
+        costUsd = if (isNull("costUsd")) null else getDouble("costUsd"),
+        createdAt = getString("createdAt"),
+    )
+
+    // Folded into /api/approvals (?resource=research) -- same Vercel
+    // Hobby 12-function-cap reasoning as inbound/prospecting/partnerships/
+    // video-status above.
+    override suspend fun listResearch(): List<ResearchRecord> {
+        val json = get("/api/approvals?resource=research")
+        return json.getJSONArray("items").map { it.toResearchRecord() }
+    }
+
     override suspend fun getApprovals(): List<ApprovalAsset> {
         val json = get("/api/approvals")
         return json.getJSONArray("approvals").map { item ->
@@ -784,6 +832,17 @@ class NetworkGrowthOsRepository(
         )
     }
 
+    private fun JSONObject.toVideoRenderMetadata(): VideoRenderMetadata? {
+        val meta = optJSONObject("videoMetadata") ?: return null
+        return VideoRenderMetadata(
+            youtubeTitle = meta.getString("youtubeTitle"),
+            youtubeDescription = meta.getString("youtubeDescription"),
+            tiktokCaption = meta.getString("tiktokCaption"),
+            hashtags = meta.optJSONArray("hashtags")?.mapStrings() ?: emptyList(),
+            disclosureCta = meta.optStringOrNull("disclosureCta"),
+        )
+    }
+
     private fun JSONObject.toVideoRenderStatus() = VideoRenderStatus(
         id = getString("id"),
         campaignAssetId = getString("campaignAssetId"),
@@ -793,6 +852,7 @@ class NetworkGrowthOsRepository(
         error = optStringOrNull("error"),
         createdAt = getString("createdAt"),
         updatedAt = getString("updatedAt"),
+        videoMetadata = toVideoRenderMetadata(),
     )
 
     // Folded into /api/approvals (?resource=video-status) -- same
@@ -891,6 +951,42 @@ private val ERROR_FIELD_PATTERN = Regex(""""error"\s*:\s*"((?:[^"\\]|\\.)*)"""")
 
 private fun unescapeJsonString(s: String): String =
     s.replace("\\\"", "\"").replace("\\n", "\n").replace("\\r", "\r").replace("\\t", "\t").replace("\\\\", "\\")
+
+/**
+ * "Create Fillbook Video" (2026-09-08): extracts the real, actionable
+ * error message api/run-campaign.ts's `topic`/`assetType` handling sends
+ * back -- an off-topic topic, an opportunity that doesn't read as
+ * trading-related enough, invalid topic length, or a duplicate-topic
+ * conflict. Unlike extractPartnershipActionErrorMessage (which only ever
+ * applies to a 404), this endpoint's own new validation uses 400 (bad
+ * input) and 409 (duplicate) -- both real, meaningful rejections the
+ * owner needs to see, never a "check your connection" failure.
+ */
+fun extractVideoScriptRequestErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
+    if (httpCode != 400 && httpCode != 409) return null
+    val body = networkExceptionMessage?.substringAfter(" -- ", missingDelimiterValue = "") ?: return null
+    if (body.isBlank()) return null
+    val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null
+    val error = unescapeJsonString(raw)
+    return error.takeIf { it.isNotBlank() }
+}
+
+/**
+ * Same idea as [extractVideoScriptRequestErrorMessage], for Research
+ * Lab's own use of api/run-campaign.ts's `topic`/`assetType` validation --
+ * an off-topic topic, invalid length, an opportunity that doesn't read as
+ * trading-related enough, a duplicate-topic conflict (409), or a
+ * duplicate-opportunity conflict (409, this opportunity already has
+ * non-retired research).
+ */
+fun extractResearchRequestErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
+    if (httpCode != 400 && httpCode != 409) return null
+    val body = networkExceptionMessage?.substringAfter(" -- ", missingDelimiterValue = "") ?: return null
+    if (body.isBlank()) return null
+    val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null
+    val error = unescapeJsonString(raw)
+    return error.takeIf { it.isNotBlank() }
+}
 
 fun extractPartnershipActionErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
     if (httpCode != 404) return null
