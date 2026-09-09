@@ -146,16 +146,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .limit(1);
       if (dupError) throw new Error(`Duplicate-topic check failed: ${dupError.message}`);
       if (existingDup && existingDup.length > 0) {
-        const kind = isResearchRequest ? "research report" : "video";
-        res.status(409).json({
-          error: `A ${kind} for this topic already exists (opportunity ${existingDup[0]!.id}, status: ${existingDup[0]!.status}) -- check Approvals or Radar before requesting it again.`,
-        });
-        return;
+        const existing = existingDup[0]!;
+        if (existing.status !== "open") {
+          const kind = isResearchRequest ? "research report" : "video";
+          res.status(409).json({
+            error: `A ${kind} for this topic already exists (opportunity ${existing.id}, status: ${existing.status}) -- it has already been actioned.`,
+          });
+          return;
+        }
+        // Opportunity is still open = stuck draft (failed a prior quality gate).
+        // Re-run it instead of blocking with 409 so the owner can retry.
+        const openList = await opportunityRepo.listOpen();
+        opportunity = openList.find((o) => o.id === existing.id);
+        if (!opportunity) {
+          res.status(409).json({ error: `Duplicate topic found but the opportunity is no longer accessible -- try again.` });
+          return;
+        }
+      } else {
+        opportunity = await opportunityRepo.insert(
+          isResearchRequest ? manualResearchTopicOpportunityInput(topic) : manualVideoTopicOpportunityInput(topic),
+        );
       }
-
-      opportunity = await opportunityRepo.insert(
-        isResearchRequest ? manualResearchTopicOpportunityInput(topic) : manualVideoTopicOpportunityInput(topic),
-      );
     } else {
       const openOpportunities = await opportunityRepo.listOpen();
       opportunity = opportunityId

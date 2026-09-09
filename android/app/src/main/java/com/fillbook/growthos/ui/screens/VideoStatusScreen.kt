@@ -297,8 +297,12 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                 createVideoResultMessage = extractVideoScriptRequestErrorMessage(e.httpCode, e.message)
                     ?: authErrorMessage(e)
                     ?: "Couldn't create the video script. Check your connection and try again."
+                showVideoConfirmDialog = false
+                showCreateVideoDialog = false
             } catch (e: Exception) {
                 createVideoResultMessage = "Couldn't create the video script. Check your connection and try again."
+                showVideoConfirmDialog = false
+                showCreateVideoDialog = false
             }
             creatingVideoScript = false
         }
