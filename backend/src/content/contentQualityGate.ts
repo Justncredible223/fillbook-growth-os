@@ -37,6 +37,7 @@ export class ContentQualityGate {
     }
     if (slopFindings.length > 0) {
       const details = slopFindings.map((f) => `${f.rule}: ${f.detail}`).join("; ");
+      console.error(`[quality-gate] anti-slop findings: ${details}`);
       blockReasons.push(`${slopFindings.length} anti-slop finding(s): ${details}`);
     }
     if (maxSimilarity >= ORIGINALITY_THRESHOLD) {
