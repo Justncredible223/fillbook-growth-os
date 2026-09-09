@@ -157,6 +157,13 @@ export async function dismissVideoRender(client: SupabaseClient, videoRenderId: 
   if (status !== "failed" && status !== "canceled") {
     throw new Error(`can only dismiss failed or canceled renders (got: ${status})`);
   }
+  // Delete child rows first -- video_render_notifications and
+  // video_storage_reservations both FK-reference video_renders(id) without
+  // ON DELETE CASCADE, so a direct delete of the parent throws a FK violation.
+  const { error: notifError } = await client.from("video_render_notifications").delete().eq("video_render_id", videoRenderId);
+  if (notifError) throw new Error(`dismissVideoRender notif delete failed: ${notifError.message}`);
+  const { error: reserveError } = await client.from("video_storage_reservations").delete().eq("video_render_id", videoRenderId);
+  if (reserveError) throw new Error(`dismissVideoRender reservation delete failed: ${reserveError.message}`);
   const { error: deleteError } = await client.from("video_renders").delete().eq("id", videoRenderId);
   if (deleteError) throw new Error(`dismissVideoRender delete failed: ${deleteError.message}`);
 }
