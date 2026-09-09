@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Environment
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -145,6 +146,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     // button is disabled the instant the first tap sets this true.
     var creatingVideoScript by remember { mutableStateOf(false) }
     var createVideoResultMessage by remember { mutableStateOf<String?>(null) }
+    val suggestedVideoTopics = remember { getWeeklySuggestedTopics() }
 
     suspend fun refresh() {
         try {
@@ -398,6 +400,25 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                         Text("Custom topic", style = MaterialTheme.typography.bodyMedium)
                     }
                     if (!useExistingOpportunity) {
+                        Text(
+                            "This week's topics — tap to use:",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextTertiary,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 2.dp),
+                        )
+                        LazyColumn(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+                            items(suggestedVideoTopics) { topic ->
+                                Text(
+                                    topic,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Accent,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { videoTopicInput = topic }
+                                        .padding(vertical = 5.dp),
+                                )
+                            }
+                        }
                         OutlinedTextField(
                             value = videoTopicInput,
                             onValueChange = { videoTopicInput = it },
@@ -616,4 +637,76 @@ private fun VideoMetadataSection(label: String, copyLabel: String, body: String)
         Spacer(Modifier.height(4.dp))
         Text(body, style = MaterialTheme.typography.bodySmall, color = TextPrimary)
     }
+}
+
+private val WEEKLY_TOPIC_SETS: List<List<String>> = listOf(
+    // Week set 0
+    listOf(
+        "why funded traders who journal outperform those who don't",
+        "how to build a morning trading routine that sets up winning trades",
+        "what revenge trading really costs funded account holders",
+        "how to calculate position sizing without blowing your daily loss limit",
+        "how to track your drawdown before it tracks you out of funding",
+    ),
+    // Week set 1
+    listOf(
+        "the one thing consistent prop firm traders do that others skip",
+        "how to use your trading journal to find your best setups",
+        "why your losing streak isn't random and what your trade journal reveals",
+        "how to handle a losing streak without blowing the account",
+        "what a trading plan actually needs to work for funded traders",
+    ),
+    // Week set 2
+    listOf(
+        "why most traders break their rules and how a trading journal fixes it",
+        "how to build trading habits that survive a funded account",
+        "the trading psychology mistake that kills most evaluation accounts",
+        "why your trading routine matters more than your entry strategy",
+        "how to stop strategy hopping and commit to one edge",
+    ),
+    // Week set 3
+    listOf(
+        "what separates funded traders from those who blow their accounts",
+        "how to use trade reviews to build real consistency",
+        "what every funded trader needs to know about drawdown rules",
+        "how to create a trading plan that you'll actually follow",
+        "why your best trading days tell you more than your worst",
+    ),
+    // Week set 4
+    listOf(
+        "why prop firm traders who track their trades get funded faster",
+        "how to avoid revenge trading after a tough loss",
+        "why journaling your emotions is as important as journaling your trades",
+        "how to pass a trading combine on your next attempt",
+        "how to set daily loss limits you won't break under pressure",
+    ),
+    // Week set 5
+    listOf(
+        "how a trading journal helps you stop making the same mistakes",
+        "what your trading routine should look like before the market opens",
+        "why most prop firm traders fail their second evaluation",
+        "how to identify your trading edge using historical trade data",
+        "what the best-performing funded traders have in common",
+    ),
+    // Week set 6
+    listOf(
+        "why traders who skip journaling keep repeating the same costly mistakes",
+        "how to stay consistent when your prop firm account hits max drawdown",
+        "what stop-loss discipline actually looks like for funded traders",
+        "how to use backtesting to validate your trading strategy",
+        "how to do a trade review that actually improves your win rate",
+    ),
+    // Week set 7
+    listOf(
+        "how reviewing your trading journal daily can cut your losing streak in half",
+        "what position sizing mistakes cost prop firm traders the most",
+        "how to manage risk when trading futures near your daily loss limit",
+        "why funded traders who track their psychology outperform those who don't",
+        "how to build a consistent trading routine from scratch",
+    ),
+)
+
+internal fun getWeeklySuggestedTopics(): List<String> {
+    val weekOfYear = java.time.LocalDate.now().get(java.time.temporal.WeekFields.ISO.weekOfYear())
+    return WEEKLY_TOPIC_SETS[(weekOfYear - 1) % WEEKLY_TOPIC_SETS.size]
 }
