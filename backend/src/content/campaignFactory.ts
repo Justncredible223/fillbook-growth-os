@@ -76,8 +76,9 @@ export class CampaignFactory {
     currentStage: AssetStage,
     candidateText: string,
     recentTextsForSameTopic: string[],
+    options: { isVideo?: boolean } = {},
   ): Promise<SubmitDraftResult> {
-    const result = await this.qualityGate.check(candidateText, recentTextsForSameTopic);
+    const result = await this.qualityGate.check(candidateText, recentTextsForSameTopic, options);
     if (!result.passed) {
       return { advanced: false, newStage: currentStage, blockReasons: result.blockReasons };
     }

@@ -40,19 +40,43 @@ const FAKE_URGENCY_PHRASES = [
   "last chance",
 ];
 
-export function checkAntiSlop(text: string): SlopFinding[] {
+export interface AntiSlopOptions {
+  /**
+   * When true, skips the length-sensitive and phrase-based checks (clichés,
+   * em dashes, rhetorical questions) that were calibrated for 280-char X posts.
+   * Video scripts are long-form multi-section documents reviewed by 9 LLM
+   * agents downstream — those agents are the quality gate for phrase-level
+   * issues. Only the structural extremes (hashtag spam, emoji spam, fake
+   * urgency) still apply.
+   */
+  isVideo?: boolean;
+}
+
+export function checkAntiSlop(text: string, options: AntiSlopOptions = {}): SlopFinding[] {
   const findings: SlopFinding[] = [];
   const lower = text.toLowerCase();
 
-  for (const pattern of GENERIC_OPENERS) {
-    if (pattern.test(text.trim())) {
-      findings.push({ rule: "generic_opener", detail: `matches ${pattern}` });
+  if (!options.isVideo) {
+    for (const pattern of GENERIC_OPENERS) {
+      if (pattern.test(text.trim())) {
+        findings.push({ rule: "generic_opener", detail: `matches ${pattern}` });
+      }
     }
-  }
 
-  for (const phrase of AI_CLICHE_PHRASES) {
-    if (lower.includes(phrase)) {
-      findings.push({ rule: "ai_cliche_phrase", detail: phrase });
+    for (const phrase of AI_CLICHE_PHRASES) {
+      if (lower.includes(phrase)) {
+        findings.push({ rule: "ai_cliche_phrase", detail: phrase });
+      }
+    }
+
+    const emDashCount = (text.match(/—/g) ?? []).length;
+    if (emDashCount >= 6) {
+      findings.push({ rule: "excessive_em_dashes", detail: `${emDashCount} em dashes` });
+    }
+
+    const rhetoricalQuestions = (text.match(/\?/g) ?? []).length;
+    if (rhetoricalQuestions >= 6) {
+      findings.push({ rule: "excessive_rhetorical_questions", detail: `${rhetoricalQuestions} question marks` });
     }
   }
 
@@ -60,16 +84,6 @@ export function checkAntiSlop(text: string): SlopFinding[] {
     if (lower.includes(phrase)) {
       findings.push({ rule: "fake_urgency", detail: phrase });
     }
-  }
-
-  const emDashCount = (text.match(/—/g) ?? []).length;
-  if (emDashCount >= 6) {
-    findings.push({ rule: "excessive_em_dashes", detail: `${emDashCount} em dashes` });
-  }
-
-  const rhetoricalQuestions = (text.match(/\?/g) ?? []).length;
-  if (rhetoricalQuestions >= 6) {
-    findings.push({ rule: "excessive_rhetorical_questions", detail: `${rhetoricalQuestions} question marks` });
   }
 
   const hashtagCount = (text.match(/#\w+/g) ?? []).length;

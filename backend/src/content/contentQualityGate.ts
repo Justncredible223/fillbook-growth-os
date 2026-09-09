@@ -25,9 +25,9 @@ export class ContentQualityGate {
 
   constructor(private brandConstitution: BrandConstitution) {}
 
-  async check(candidateText: string, recentTextsForSameTopic: string[]): Promise<QualityGateResult> {
+  async check(candidateText: string, recentTextsForSameTopic: string[], options: { isVideo?: boolean } = {}): Promise<QualityGateResult> {
     const vocabularyViolations = await this.brandConstitution.checkVocabulary(candidateText);
-    const slopFindings = checkAntiSlop(candidateText);
+    const slopFindings = checkAntiSlop(candidateText, { isVideo: options.isVideo });
     const similarities = this.originality.compareAgainstRecent(candidateText, recentTextsForSameTopic);
     const maxSimilarity = similarities[0]?.similarity ?? 0;
 

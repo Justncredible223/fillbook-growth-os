@@ -168,7 +168,7 @@ export async function runCampaignPipeline(
     videoScript ? { videoScript } : researchReport ? { research: researchReport } : undefined,
   );
 
-  const mechanical = await factory.submitDraft("draft", draftText, context.recentTextsForSameTopic);
+  const mechanical = await factory.submitDraft("draft", draftText, context.recentTextsForSameTopic, { isVideo });
   await campaignRepo.updateAssetStage(campaignAssetId, mechanical.newStage);
 
   if (!mechanical.advanced) {
