@@ -7,6 +7,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
 import android.os.Environment
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -177,9 +179,20 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                     val statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
                     val status = if (statusIndex >= 0) cursor.getInt(statusIndex) else DownloadManager.STATUS_FAILED
                     if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                        val uri = downloadManager.getUriForDownloadedFile(id)
-                        downloadedUris = downloadedUris + (videoRenderId to uri)
-                        scope.launch { snackbarHostState.showSnackbar("Downloaded — tap Share to send it") }
+                        val localUriIndex = cursor.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+                        val localUriStr = if (localUriIndex >= 0) cursor.getString(localUriIndex) else null
+                        val shareUri: Uri? = localUriStr?.let {
+                            runCatching {
+                                val file = File(Uri.parse(it).path!!)
+                                FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                            }.getOrNull()
+                        }
+                        if (shareUri != null) {
+                            downloadedUris = downloadedUris + (videoRenderId to shareUri)
+                            scope.launch { snackbarHostState.showSnackbar("Downloaded — tap Share to send it") }
+                        } else {
+                            scope.launch { snackbarHostState.showSnackbar("Download saved but couldn't prepare share link.") }
+                        }
                     } else {
                         // Most likely cause for THIS feature specifically: the
                         // signed URL's ~1h expiry passed between fetching status

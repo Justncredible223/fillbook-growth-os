@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Covers Environment.DIRECTORY_DOWNLOADS on the primary external volume,
+         which is where DownloadManager saves fillbook-video-*.mp4 files. -->
+    <external-path name="downloads" path="Download/" />
+</paths>
