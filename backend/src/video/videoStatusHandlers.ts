@@ -138,6 +138,29 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
   );
 }
 
+/**
+ * Deletes a failed or canceled render row so the owner can clear stuck
+ * items from the Video Status screen. Only allows dismissing terminal
+ * states (failed/canceled) -- a ready render is a deliverable and must not
+ * be deleted; a queued/rendering one is active and should not be silently
+ * dropped (cancel that via the GitHub Actions UI instead).
+ */
+export async function dismissVideoRender(client: SupabaseClient, videoRenderId: string): Promise<void> {
+  const { data, error: fetchError } = await client
+    .from("video_renders")
+    .select("status")
+    .eq("id", videoRenderId)
+    .maybeSingle();
+  if (fetchError) throw new Error(`dismissVideoRender fetch failed: ${fetchError.message}`);
+  if (!data) throw new Error(`video render not found: ${videoRenderId}`);
+  const status = (data as { status: string }).status;
+  if (status !== "failed" && status !== "canceled") {
+    throw new Error(`can only dismiss failed or canceled renders (got: ${status})`);
+  }
+  const { error: deleteError } = await client.from("video_renders").delete().eq("id", videoRenderId);
+  if (deleteError) throw new Error(`dismissVideoRender delete failed: ${deleteError.message}`);
+}
+
 /** One-way fingerprint of the app's own bearer credential -- never the credential itself -- stored alongside each device token purely for future credential-rotation cleanup (see migration 0027's doc comment on device_push_tokens). */
 export function fingerprintAppToken(appApiToken: string): string {
   return createHash("sha256").update(appApiToken).digest("hex");

@@ -868,6 +868,10 @@ class NetworkGrowthOsRepository(
         post("/api/approvals?resource=video-status", JSONObject().put("action", "register-device").put("fcmToken", fcmToken))
     }
 
+    override suspend fun dismissVideoRender(videoRenderId: String) {
+        post("/api/approvals?resource=video-status", JSONObject().put("action", "dismiss").put("videoRenderId", videoRenderId))
+    }
+
     override suspend fun getEveningReport(): EveningReport {
         val json = get("/api/summary?resource=evening-report")
         return EveningReport(

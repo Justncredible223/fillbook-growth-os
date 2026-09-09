@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.Movie
@@ -252,6 +253,17 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
         context.startActivity(Intent.createChooser(shareIntent, "Share video"))
     }
 
+    fun dismiss(render: VideoRenderStatus) {
+        scope.launch {
+            try {
+                repo.dismissVideoRender(render.id)
+                renders = renders.filter { it.id != render.id }
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar("Couldn't dismiss — try again.")
+            }
+        }
+    }
+
     fun loadEligibleOpportunities() {
         scope.launch {
             loadingOpportunities = true
@@ -382,6 +394,9 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                                     downloading = render.id in downloadingIds,
                                     onDownload = { download(render) },
                                     onShare = { share(render) },
+                                    onDismiss = if (render.status == "failed" || render.status == "canceled") {
+                                        { dismiss(render) }
+                                    } else null,
                                 )
                             }
                         }
@@ -541,6 +556,7 @@ private fun VideoRenderCard(
     downloading: Boolean,
     onDownload: () -> Unit,
     onShare: () -> Unit,
+    onDismiss: (() -> Unit)? = null,
 ) {
     val tone = statusTone(render.status)
     GrowthCard(accentBar = statusToneColor(tone)) {
@@ -560,6 +576,12 @@ private fun VideoRenderCard(
             Spacer(Modifier.weight(1f))
             relativeTime(render.updatedAt)?.let { time ->
                 Text(time, style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+            }
+            if (onDismiss != null) {
+                Spacer(Modifier.width(8.dp))
+                androidx.compose.material3.IconButton(onClick = onDismiss, modifier = Modifier.height(24.dp).width(24.dp)) {
+                    androidx.compose.material3.Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = TextTertiary, modifier = Modifier.height(16.dp).width(16.dp))
+                }
             }
         }
         Spacer(Modifier.height(10.dp))

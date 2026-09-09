@@ -194,6 +194,9 @@ interface GrowthOsRepository {
      * Video Status screen.
      */
     suspend fun getVideoRenderStatuses(): List<VideoRenderStatus>
+
+    /** Deletes a failed or canceled render from the list so the owner can clear stuck items. */
+    suspend fun dismissVideoRender(videoRenderId: String)
 }
 
 /**
@@ -1215,4 +1218,8 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     )
 
     override suspend fun getVideoRenderStatuses(): List<VideoRenderStatus> = fakeVideoRenders
+
+    override suspend fun dismissVideoRender(videoRenderId: String) {
+        // No-op in fake mode.
+    }
 }

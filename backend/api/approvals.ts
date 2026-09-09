@@ -51,7 +51,7 @@ import {
 import type { NewPartnershipProspect, PartnershipOutcomeMetric, PartnershipOutcomeSource } from "../src/partnerships/types.js";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
-import { listVideoRenderStatuses, registerDevicePushToken } from "../src/video/videoStatusHandlers.js";
+import { listVideoRenderStatuses, registerDevicePushToken, dismissVideoRender } from "../src/video/videoStatusHandlers.js";
 import { MAX_VIDEO_RENDERS_PER_MONTH } from "../src/video/videoRenderEligibility.js";
 import { listResearchRecords } from "../src/research/researchHandlers.js";
 
@@ -450,9 +450,18 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
   }
 
   try {
-    const body = req.body as { action?: string; fcmToken?: string } | undefined;
+    const body = req.body as { action?: string; fcmToken?: string; videoRenderId?: string } | undefined;
+    if (body?.action === "dismiss") {
+      if (!body.videoRenderId) {
+        res.status(400).json({ error: "Body must include { action: 'dismiss', videoRenderId: string }" });
+        return;
+      }
+      await dismissVideoRender(client, body.videoRenderId);
+      res.status(200).json({ dismissed: true });
+      return;
+    }
     if (body?.action !== "register-device" || !body.fcmToken) {
-      res.status(400).json({ error: "Body must be { action: 'register-device', fcmToken: string }" });
+      res.status(400).json({ error: "Body must be { action: 'register-device', fcmToken: string } or { action: 'dismiss', videoRenderId: string }" });
       return;
     }
     // requireAppAuth already validated this header against APP_API_TOKEN.
