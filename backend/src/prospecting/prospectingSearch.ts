@@ -13,7 +13,7 @@ import {
   runSlotsPerDay,
   selectTopicsForRun,
 } from "./prospectingEligibility.js";
-import { MAX_AGE_FOR_DAILY_SELECTION_MS } from "./prospectingFreshness.js";
+import { MAX_AGE_FOR_DAILY_SELECTION_MS, isEligibleForDailySelection } from "./prospectingFreshness.js";
 import type { ProspectingRepository } from "./types.js";
 
 export interface ProspectingRunResult {
@@ -71,8 +71,12 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
 
   // Same non-terminal pool prospectingDailySelection.ts draws "today's set"
   // from -- QUEUE_FULL_THRESHOLD is derived from that pool's real target.
+  // Only candidates still within the 72h reply window count toward capacity:
+  // stale candidates that daily selection will reject anyway must not block
+  // new fresh searches (deadlock: queue counted as full, but nothing shown).
   const backlog = await deps.repo.listByStatus(["new", "shown", "drafting", "ready"], QUEUE_FULL_THRESHOLD + 1);
-  const queueCheck = evaluateQueueCapacity(backlog.length);
+  const freshBacklogCount = backlog.filter((c) => isEligibleForDailySelection(c.postCreatedAt, now)).length;
+  const queueCheck = evaluateQueueCapacity(freshBacklogCount);
   if (!queueCheck.eligible) {
     return { skipped: true, skipReason: queueCheck.reason, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, costUsd: 0 };
   }
