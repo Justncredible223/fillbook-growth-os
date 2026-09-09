@@ -19,8 +19,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
@@ -435,8 +435,8 @@ private fun MoreSheetContent(currentDestination: androidx.navigation.NavDestinat
             color = TextPrimary,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
         )
-        LazyColumn {
-            items(moreDestinations) { destination ->
+        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            moreDestinations.forEach { destination ->
                 val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
                 MoreRow(destination.label, destination.icon, selected) { onSelect(destination.route) }
             }
