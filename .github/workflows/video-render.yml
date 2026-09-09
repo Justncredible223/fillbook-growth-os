@@ -55,6 +55,7 @@ jobs:
         working-directory: backend
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           VIDEO_RENDER_ID: ${{ github.event.client_payload.videoRenderId || inputs.videoRenderId }}
           CAMPAIGN_ASSET_ID: ${{ github.event.client_payload.campaignAssetId || inputs.campaignAssetId }}
           FIREBASE_SERVICE_ACCOUNT_JSON_PATH: /tmp/firebase-sa.json

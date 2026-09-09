@@ -48,21 +48,46 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
 
   const inputArgs: string[] = [];
   for (const scene of plan.scenes) {
-    inputArgs.push(
-      "-f",
-      "lavfi",
-      "-i",
-      `color=c=${scene.backgroundColor}:s=${WIDTH}x${HEIGHT}:d=${scene.durationSeconds.toFixed(3)}:r=${FRAME_RATE}`,
-    );
+    if (scene.clipPath) {
+      // Loop the clip to fill the scene duration exactly
+      inputArgs.push(
+        "-stream_loop", "-1",
+        "-t", scene.durationSeconds.toFixed(3),
+        "-i", renderBasename(scene.clipPath),
+      );
+    } else {
+      // Fallback: solid color lavfi source
+      inputArgs.push(
+        "-f", "lavfi",
+        "-i", `color=c=${scene.backgroundColor}:s=${WIDTH}x${HEIGHT}:d=${scene.durationSeconds.toFixed(3)}:r=${FRAME_RATE}`,
+      );
+    }
   }
   const voiceoverInputIndex = plan.scenes.length;
   const silenceInputIndex = voiceoverInputIndex + 1;
   inputArgs.push("-i", renderBasename(plan.voiceoverPath));
   inputArgs.push("-f", "lavfi", "-i", `anullsrc=r=24000:cl=mono:d=${plan.silencePadSeconds.toFixed(3)}`);
 
-  const videoConcatInputs = plan.scenes.map((_, i) => `[${i}:v]`).join("");
+  // Scale each scene clip to 1080×1920 (center-crop to fill, maintain no distortion)
+  const sceneFilterParts: string[] = [];
+  const sceneOutputLabels: string[] = [];
+  for (let i = 0; i < plan.scenes.length; i++) {
+    const scene = plan.scenes[i];
+    const label = `sv${i}`;
+    sceneOutputLabels.push(`[${label}]`);
+    if (scene.clipPath) {
+      sceneFilterParts.push(
+        `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},fps=${FRAME_RATE},setpts=PTS-STARTPTS[${label}]`,
+      );
+    } else {
+      sceneFilterParts.push(`[${i}:v]setpts=PTS-STARTPTS[${label}]`);
+    }
+  }
+
+  const concatInputs = sceneOutputLabels.join("");
   const filterComplex = [
-    `${videoConcatInputs}concat=n=${plan.scenes.length}:v=1:a=0[bgraw]`,
+    ...sceneFilterParts,
+    `${concatInputs}concat=n=${plan.scenes.length}:v=1:a=0[bgraw]`,
     `[bgraw]subtitles=${renderBasename(plan.assPath)}[v]`,
     `[${voiceoverInputIndex}:a][${silenceInputIndex}:a]concat=n=2:v=0:a=1[a]`,
   ].join(";");
@@ -72,20 +97,13 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     ...inputArgs,
     "-filter_complex",
     filterComplex,
-    "-map",
-    "[v]",
-    "-map",
-    "[a]",
-    "-c:v",
-    "libx264",
-    "-pix_fmt",
-    "yuv420p",
-    "-crf",
-    "18",
-    "-c:a",
-    "aac",
-    "-b:a",
-    "192k",
+    "-map", "[v]",
+    "-map", "[a]",
+    "-c:v", "libx264",
+    "-pix_fmt", "yuv420p",
+    "-crf", "18",
+    "-c:a", "aac",
+    "-b:a", "192k",
     "-shortest",
     renderBasename(plan.outputPath),
   ];

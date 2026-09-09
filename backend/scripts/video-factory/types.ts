@@ -48,6 +48,7 @@ export interface Scene {
   label: string;
   durationSeconds: number;
   backgroundColor: string; // ffmpeg lavfi color spec, e.g. "0x05070a"
+  clipPath?: string; // absolute path to a loopable video file; undefined falls back to solid color
 }
 
 export interface RenderPlan {

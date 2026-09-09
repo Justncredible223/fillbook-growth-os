@@ -5,7 +5,9 @@
  * uploads to Supabase Storage, sends FCM push notifications, and exits.
  * Called by .github/workflows/video-render.yml — not the polling loop.
  */
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_URL } from "../../src/lib/supabaseClient.js";
@@ -20,6 +22,7 @@ import { generateVoiceover, DEFAULT_VOICE } from "../video-factory/voiceover.js"
 import { buildCaptionCues, buildAssFile } from "../video-factory/captions.js";
 import { buildScenePlan, buildSceneLabelCues } from "../video-factory/scenes.js";
 import { renderVideo } from "../video-factory/render.js";
+import { copyClipToDir, fetchStockClip, getVideoQuery } from "../video-factory/stockFootage.js";
 import { runFfprobeJson, validateOutput } from "../video-factory/validate.js";
 import { createProcessRunner, requireExecutable } from "../video-factory/processRunner.js";
 import { sendRenderNotification } from "./pushSender.js";
@@ -28,6 +31,11 @@ import type { RenderPlan } from "../video-factory/types.js";
 const STORAGE_BUCKET = "rendered-videos";
 const SILENCE_PAD_SECONDS = 2.5;
 const WORK_DIR = process.env.VIDEO_WORKER_WORK_DIR ?? "/tmp/fillbook-video-worker";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PRODUCT_DEMO_SRC = join(__dirname, "../video-factory/assets/fillbook-product-demo.mp4");
+const PEXELS_CLIP_CACHE = join(WORK_DIR, "_pexels-cache");
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -66,6 +74,22 @@ async function main(): Promise<void> {
   const sceneLabelCues = buildSceneLabelCues(scenes);
   const assPath = join(outDir, "captions.ass");
   writeFileSync(assPath, buildAssFile(captionCues, sceneLabelCues), "utf-8");
+
+  // Assign video clip backgrounds to each scene
+  const pexelsApiKey = process.env.PEXELS_API_KEY;
+  const seed = parseInt(videoRenderId.replace(/-/g, "").slice(0, 8), 16);
+  for (let i = 0; i < scenes.length; i++) {
+    const scene = scenes[i];
+    if (scene.kind === "product") {
+      scene.clipPath = copyClipToDir(PRODUCT_DEMO_SRC, outDir);
+    } else if (pexelsApiKey) {
+      const query = getVideoQuery(scene.kind, seed + i);
+      if (query) {
+        const cached = await fetchStockClip(query, scene.durationSeconds, PEXELS_CLIP_CACHE, pexelsApiKey);
+        if (cached) scene.clipPath = copyClipToDir(cached, outDir);
+      }
+    }
+  }
 
   const outputPath = join(outDir, "final.mp4");
   const plan: RenderPlan = {
