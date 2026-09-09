@@ -323,7 +323,7 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, pen
     }
 
     if (showMore) {
-        val sheetState = rememberModalBottomSheetState()
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(
             onDismissRequest = { showMore = false },
             sheetState = sheetState,
