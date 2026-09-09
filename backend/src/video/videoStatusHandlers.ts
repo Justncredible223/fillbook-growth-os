@@ -143,24 +143,33 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
 }
 
 /**
- * Deletes a failed or canceled render row so the owner can clear stuck
- * items from the Video Status screen. Only allows dismissing terminal
- * states (failed/canceled) -- a ready render is a deliverable and must not
- * be deleted; a queued/rendering one is active and should not be silently
- * dropped (cancel that via the GitHub Actions UI instead).
+ * Deletes a render row so the owner can clear items from the Video Status
+ * screen or free a topic slot for re-rendering. Allows all terminal states
+ * (ready/failed/canceled); blocks active ones (queued/rendering) since those
+ * have an in-flight GitHub Actions job that cannot be safely orphaned here.
+ *
+ * For ready renders the stored video file is deleted from Supabase Storage
+ * first so the freed bytes are reclaimed from the user's storage cap.
  */
 export async function dismissVideoRender(client: SupabaseClient, videoRenderId: string): Promise<void> {
   const { data, error: fetchError } = await client
     .from("video_renders")
-    .select("status")
+    .select("status, storage_path")
     .eq("id", videoRenderId)
     .maybeSingle();
   if (fetchError) throw new Error(`dismissVideoRender fetch failed: ${fetchError.message}`);
   if (!data) throw new Error(`video render not found: ${videoRenderId}`);
-  const status = (data as { status: string }).status;
-  if (status !== "failed" && status !== "canceled") {
-    throw new Error(`can only dismiss failed or canceled renders (got: ${status})`);
+  const { status, storage_path: storagePath } = data as { status: string; storage_path: string | null };
+  if (status === "queued" || status === "rendering") {
+    throw new Error(`cannot dismiss an active render (status: ${status})`);
   }
+
+  // For ready renders, delete the video file from storage before removing DB rows.
+  if (status === "ready" && storagePath) {
+    const { error: storageError } = await client.storage.from("rendered-videos").remove([storagePath]);
+    if (storageError) throw new Error(`dismissVideoRender storage delete failed: ${storageError.message}`);
+  }
+
   // Delete child rows first -- video_render_notifications and
   // video_storage_reservations both FK-reference video_renders(id) without
   // ON DELETE CASCADE, so a direct delete of the parent throws a FK violation.

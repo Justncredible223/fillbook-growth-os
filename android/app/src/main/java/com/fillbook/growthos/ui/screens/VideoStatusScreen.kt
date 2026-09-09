@@ -394,7 +394,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                                     downloading = render.id in downloadingIds,
                                     onDownload = { download(render) },
                                     onShare = { share(render) },
-                                    onDismiss = if (render.status == "failed" || render.status == "canceled") {
+                                    onDismiss = if (render.status != "queued" && render.status != "rendering") {
                                         { dismiss(render) }
                                     } else null,
                                 )
