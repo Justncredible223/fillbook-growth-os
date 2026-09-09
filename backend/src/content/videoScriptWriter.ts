@@ -84,8 +84,8 @@ QUALITY BAR -- every output must clear this:
   review): "at the end of the day", "when it comes to", "game changer", "game-changer",
   "unlock your potential", "take it to the next level", "in this day and age",
   "it's important to note that", "don't miss out", "act now", "limited time", "last chance".
-  Never open with "let's dive in", "have you ever wondered", "picture this", or
-  "in today's fast-paced". Sound like the smartest trader in the room explaining something
+  Never open with "let's dive in", "have you ever wondered", "picture this",
+  "in today's fast-paced", or "in the world of". Sound like the smartest trader in the room explaining something
   to a peer, not a brand account talking at a prospect. Close every script with a natural,
   non-pushy mention of Fillbook and fillbookhq.com.
 - Shot list: filmable with a phone + screen recorder + basic title cards. One entry per script
