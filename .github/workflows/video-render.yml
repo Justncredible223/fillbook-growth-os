@@ -41,8 +41,8 @@ jobs:
         with:
           github-token: ${{ github.token }}
 
-      - name: Install uv (for edge-tts voiceover)
-        uses: astral-sh/setup-uv@v5
+      - name: Install edge-tts (voiceover)
+        run: pip install edge-tts
 
       - name: npm install
         working-directory: backend

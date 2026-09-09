@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   const runner = createProcessRunner();
   await requireExecutable(runner, "ffmpeg", ["-version"]);
   await requireExecutable(runner, "ffprobe", ["-version"]);
-  await requireExecutable(runner, "uvx", ["--version"]);
+  await requireExecutable(runner, "edge-tts", ["--version"]);
 
   await client
     .from("video_renders")

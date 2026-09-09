@@ -37,10 +37,7 @@ export async function generateVoiceover(
   const srtPath = join(outDir, "voiceover.srt");
   writeFileSync(scriptPath, scriptText, "utf-8");
 
-  const result = await runner.run("uvx", [
-    "--from",
-    "edge-tts",
-    "edge-tts",
+  const result = await runner.run("edge-tts", [
     "--voice",
     voice,
     "--file",
