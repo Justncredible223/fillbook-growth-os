@@ -490,6 +490,8 @@ data class VideoRenderMetadata(
     val hashtags: List<String>,
     /** Null when the video genuinely didn't need one -- never a fabricated filler line. */
     val disclosureCta: String?,
+    /** YouTube thumbnail concept: bold text overlay + one-sentence visual description. Null for renders predating this field. */
+    val youtubeThumbnailConcept: String?,
 )
 
 /**

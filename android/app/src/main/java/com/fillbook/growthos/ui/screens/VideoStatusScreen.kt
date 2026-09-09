@@ -587,6 +587,14 @@ private fun VideoRenderCard(
                     meta.disclosureCta,
                 ).joinToString("\n"),
             )
+            meta.youtubeThumbnailConcept?.let { concept ->
+                Spacer(Modifier.height(8.dp))
+                VideoMetadataSection(
+                    label = "YOUTUBE THUMBNAIL CONCEPT",
+                    copyLabel = "YouTube thumbnail concept",
+                    body = concept,
+                )
+            }
             Spacer(Modifier.height(8.dp))
             VideoMetadataSection(
                 label = "TIKTOK",
@@ -667,7 +675,7 @@ private val WEEKLY_TOPIC_SETS: List<List<String>> = listOf(
     // Week set 3
     listOf(
         "what separates funded traders from those who blow their accounts",
-        "how to use trade reviews to build real consistency",
+        "how to use a trade review to build real consistency as a funded trader",
         "what every funded trader needs to know about drawdown rules",
         "how to create a trading plan that you'll actually follow",
         "why your best trading days tell you more than your worst",
@@ -676,7 +684,7 @@ private val WEEKLY_TOPIC_SETS: List<List<String>> = listOf(
     listOf(
         "why prop firm traders who track their trades get funded faster",
         "how to avoid revenge trading after a tough loss",
-        "why journaling your emotions is as important as journaling your trades",
+        "why prop firm traders should track emotions, not just trades",
         "how to pass a trading combine on your next attempt",
         "how to set daily loss limits you won't break under pressure",
     ),

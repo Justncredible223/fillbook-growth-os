@@ -840,6 +840,7 @@ class NetworkGrowthOsRepository(
             tiktokCaption = meta.getString("tiktokCaption"),
             hashtags = meta.optJSONArray("hashtags")?.mapStrings() ?: emptyList(),
             disclosureCta = meta.optStringOrNull("disclosureCta"),
+            youtubeThumbnailConcept = meta.optStringOrNull("youtubeThumbnailConcept"),
         )
     }
 

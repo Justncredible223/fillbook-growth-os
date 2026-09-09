@@ -15,6 +15,7 @@ export interface VideoRenderMetadataJson {
   tiktokCaption: string;
   hashtags: string[];
   disclosureCta: string | null;
+  youtubeThumbnailConcept: string | null;
 }
 
 export interface VideoRenderStatusJson {
@@ -58,6 +59,7 @@ export function parseVideoRenderMetadata(rawMetadata: unknown): VideoRenderMetad
     tiktokCaption: v.tiktokCaption,
     hashtags: v.hashtags as string[],
     disclosureCta: typeof v.disclosureCta === "string" ? v.disclosureCta : null,
+    youtubeThumbnailConcept: typeof v.youtubeThumbnailConcept === "string" ? v.youtubeThumbnailConcept : null,
   };
 }
 
