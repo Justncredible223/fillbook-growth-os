@@ -135,7 +135,10 @@ async function main(): Promise<void> {
   const durationSeconds = Number(ffprobeResult.format.duration ?? totalDurationSeconds);
   await client
     .from("video_renders")
-    .update({ status: "ready", storage_path: storagePath, duration_seconds: durationSeconds, updated_at: new Date().toISOString() })
+    // error: null clears any stale message from a prior failed attempt on
+    // the same render row (render-single doesn't reuse rows, but belt-and-
+    // suspenders against a future retry path).
+    .update({ status: "ready", storage_path: storagePath, duration_seconds: durationSeconds, error: null, updated_at: new Date().toISOString() })
     .eq("id", videoRenderId);
 
   // Send FCM push to all non-revoked devices
@@ -159,7 +162,27 @@ async function main(): Promise<void> {
   console.log(`[render-single] done: ${videoRenderId} → ${storagePath}`);
 }
 
-main().catch((err) => {
-  console.error("[render-single] fatal:", (err as Error).message ?? err);
+main().catch(async (err) => {
+  const message = (err as Error).message ?? String(err);
+  console.error("[render-single] fatal:", message);
+  // Write the failure back to the DB so the app shows the real error instead
+  // of leaving the render stuck in "rendering" forever (the old Oracle VM
+  // worker did this; this script previously did not).
+  try {
+    const videoRenderId = process.env.VIDEO_RENDER_ID;
+    if (videoRenderId) {
+      const { createClient } = await import("@supabase/supabase-js");
+      const { SUPABASE_URL } = await import("../../src/lib/supabaseClient.js");
+      const client = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY as string, {
+        auth: { persistSession: false },
+      });
+      await client
+        .from("video_renders")
+        .update({ status: "failed", error: message, updated_at: new Date().toISOString() })
+        .eq("id", videoRenderId);
+    }
+  } catch (dbErr) {
+    console.error("[render-single] also failed to write failure to DB:", (dbErr as Error).message ?? dbErr);
+  }
   process.exitCode = 1;
 });

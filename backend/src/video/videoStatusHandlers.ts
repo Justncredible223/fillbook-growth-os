@@ -129,7 +129,11 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
         storagePath: row.storage_path,
         downloadUrl,
         durationSeconds: row.duration_seconds,
-        error: row.error,
+        // A 'ready' render's error field is always stale (left over from a
+        // prior failed attempt before the render eventually succeeded) --
+        // suppress it so the app never shows a red error banner on a
+        // successfully rendered video.
+        error: row.status === "ready" ? null : row.error,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         videoMetadata: metadataByAssetId.get(row.campaign_asset_id) ?? null,

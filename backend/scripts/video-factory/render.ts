@@ -77,7 +77,10 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     sceneOutputLabels.push(`[${label}]`);
     if (scene.clipPath) {
       sceneFilterParts.push(
-        `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},fps=${FRAME_RATE},setpts=PTS-STARTPTS[${label}]`,
+        // setsar=1:1 normalises the sample-aspect-ratio metadata that some
+      // Pexels clips carry (e.g. SAR 10240:10239) -- without it, concat
+      // rejects clips whose SAR differs even by one quantum.
+      `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},fps=${FRAME_RATE},setsar=1:1,setpts=PTS-STARTPTS[${label}]`,
       );
     } else {
       sceneFilterParts.push(`[${i}:v]setpts=PTS-STARTPTS[${label}]`);
