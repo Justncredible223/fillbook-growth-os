@@ -10,6 +10,7 @@ import type { LlmUsage } from "../content/llmClient.js";
  */
 const PRICING_PER_MILLION_TOKENS: Record<string, { input: number; output: number }> = {
   "claude-sonnet-4-5-20250929": { input: 3, output: 15 },
+  "claude-haiku-4-5-20251001": { input: 0.8, output: 4 },
 };
 const DEFAULT_PRICING = { input: 3, output: 15 };
 

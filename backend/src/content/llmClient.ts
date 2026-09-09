@@ -1,6 +1,10 @@
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
-const MODEL = "claude-sonnet-4-5-20250929";
+export const MODEL_SONNET = "claude-sonnet-4-5-20250929";
+export const MODEL_HAIKU = "claude-haiku-4-5-20251001";
+
+/** Default model for content generation (drafts, scripts). */
+const MODEL = MODEL_SONNET;
 
 /**
  * Previously there was NO per-call timeout at all -- a single hung request
@@ -44,7 +48,7 @@ export class LlmClient {
     private onUsage?: (usage: LlmUsage) => void,
   ) {}
 
-  async callTool<T>(systemPrompt: string, userMessage: string, toolName: string, toolSchema: object, timeoutMs = DEFAULT_TIMEOUT_MS, maxTokens = 1024): Promise<T> {
+  async callTool<T>(systemPrompt: string, userMessage: string, toolName: string, toolSchema: object, timeoutMs = DEFAULT_TIMEOUT_MS, maxTokens = 1024, model = MODEL): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let res: Response;
@@ -58,7 +62,7 @@ export class LlmClient {
           ...(this.workspaceId ? { "anthropic-workspace-id": this.workspaceId } : {}),
         },
         body: JSON.stringify({
-          model: MODEL,
+          model,
           max_tokens: maxTokens,
           system: systemPrompt,
           messages: [{ role: "user", content: userMessage }],
