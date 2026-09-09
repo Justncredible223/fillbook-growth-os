@@ -44,7 +44,7 @@ export class LlmClient {
     private onUsage?: (usage: LlmUsage) => void,
   ) {}
 
-  async callTool<T>(systemPrompt: string, userMessage: string, toolName: string, toolSchema: object, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
+  async callTool<T>(systemPrompt: string, userMessage: string, toolName: string, toolSchema: object, timeoutMs = DEFAULT_TIMEOUT_MS, maxTokens = 1024): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let res: Response;
@@ -59,7 +59,7 @@ export class LlmClient {
         },
         body: JSON.stringify({
           model: MODEL,
-          max_tokens: 1024,
+          max_tokens: maxTokens,
           system: systemPrompt,
           messages: [{ role: "user", content: userMessage }],
           tools: [{ name: toolName, description: `Submit your ${toolName} result`, input_schema: toolSchema }],

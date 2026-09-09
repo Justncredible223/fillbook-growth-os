@@ -152,6 +152,8 @@ export async function draftVideoScript(
     userMessage,
     "submit_video_script",
     VIDEO_SCRIPT_SCHEMA,
+    undefined,
+    4096,
   );
   return result;
 }
