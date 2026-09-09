@@ -27,7 +27,12 @@ const SCENE_QUERIES: Record<SceneKind, string[]> = {
     "financial performance data",
     "equity growth chart",
   ],
-  product: [], // handled separately — uses local Fillbook demo footage
+  product: [
+    "trading journal app screen",
+    "trader reviewing trade log",
+    "stock trading dashboard monitor",
+    "day trader analyzing trades",
+  ],
   cta: [
     "phone stock trading app",
     "trader success profit",

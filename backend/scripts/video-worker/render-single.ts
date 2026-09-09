@@ -80,9 +80,7 @@ async function main(): Promise<void> {
   const seed = parseInt(videoRenderId.replace(/-/g, "").slice(0, 8), 16);
   for (let i = 0; i < scenes.length; i++) {
     const scene = scenes[i];
-    if (scene.kind === "product") {
-      scene.clipPath = copyClipToDir(PRODUCT_DEMO_SRC, outDir);
-    } else if (pexelsApiKey) {
+    if (pexelsApiKey) {
       const query = getVideoQuery(scene.kind, seed + i);
       if (query) {
         const cached = await fetchStockClip(query, scene.durationSeconds, PEXELS_CLIP_CACHE, pexelsApiKey);
