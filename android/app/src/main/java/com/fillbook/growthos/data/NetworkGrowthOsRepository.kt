@@ -957,14 +957,13 @@ private fun unescapeJsonString(s: String): String =
  * "Create Fillbook Video" (2026-09-08): extracts the real, actionable
  * error message api/run-campaign.ts's `topic`/`assetType` handling sends
  * back -- an off-topic topic, an opportunity that doesn't read as
- * trading-related enough, invalid topic length, or a duplicate-topic
- * conflict. Unlike extractPartnershipActionErrorMessage (which only ever
- * applies to a 404), this endpoint's own new validation uses 400 (bad
- * input) and 409 (duplicate) -- both real, meaningful rejections the
- * owner needs to see, never a "check your connection" failure.
+ * trading-related enough, invalid topic length, a duplicate-topic conflict,
+ * or a server-side generation error (500). The 500 body carries the same
+ * `{"error": "..."}` shape as 400/409, so we surface it rather than hiding
+ * it behind the generic "check your connection" fallback.
  */
 fun extractVideoScriptRequestErrorMessage(httpCode: Int?, networkExceptionMessage: String?): String? {
-    if (httpCode != 400 && httpCode != 409) return null
+    if (httpCode != 400 && httpCode != 409 && httpCode != 500) return null
     val body = networkExceptionMessage?.substringAfter(" -- ", missingDelimiterValue = "") ?: return null
     if (body.isBlank()) return null
     val raw = ERROR_FIELD_PATTERN.find(body)?.groupValues?.get(1) ?: return null
