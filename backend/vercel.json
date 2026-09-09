@@ -4,7 +4,7 @@
     { "path": "/api/daily-pipeline?group=x_feed_post", "schedule": "0 14 * * *" }
   ],
   "functions": {
-    "api/run-campaign.ts": { "maxDuration": 60 },
+    "api/run-campaign.ts": { "maxDuration": 120 },
     "api/daily-pipeline.ts": { "maxDuration": 60 },
     "api/growth-pulse.ts": { "maxDuration": 60 }
   }
