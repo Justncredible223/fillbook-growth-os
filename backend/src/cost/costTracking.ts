@@ -18,7 +18,10 @@ export function estimateCostUsd(usage: LlmUsage): number {
   const pricing = PRICING_PER_MILLION_TOKENS[usage.model] ?? DEFAULT_PRICING;
   const inputCost = (usage.inputTokens / 1_000_000) * pricing.input;
   const outputCost = (usage.outputTokens / 1_000_000) * pricing.output;
-  return inputCost + outputCost;
+  // Cache writes cost 1.25x the base input rate; cache reads cost 0.1x.
+  const cacheWriteCost = ((usage.cacheCreationInputTokens ?? 0) / 1_000_000) * pricing.input * 1.25;
+  const cacheReadCost = ((usage.cacheReadInputTokens ?? 0) / 1_000_000) * pricing.input * 0.1;
+  return inputCost + outputCost + cacheWriteCost + cacheReadCost;
 }
 
 /**

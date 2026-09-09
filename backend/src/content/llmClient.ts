@@ -29,6 +29,10 @@ export interface LlmUsage {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  /** Tokens written to the prompt cache on this call (billed at 1.25x input rate). */
+  cacheCreationInputTokens?: number;
+  /** Tokens read from the prompt cache on this call (billed at 0.1x input rate). */
+  cacheReadInputTokens?: number;
 }
 
 /**
@@ -48,10 +52,32 @@ export class LlmClient {
     private onUsage?: (usage: LlmUsage) => void,
   ) {}
 
-  async callTool<T>(systemPrompt: string, userMessage: string, toolName: string, toolSchema: object, timeoutMs = DEFAULT_TIMEOUT_MS, maxTokens = 1024, model = MODEL): Promise<T> {
+  /**
+   * @param cacheSystemPrompt - When true, marks the system prompt with
+   *   cache_control so Anthropic caches it for 5 minutes. Subsequent calls
+   *   with the same system prompt within that window pay ~10% of normal
+   *   input-token cost instead of 100%. Use for calls with large, stable
+   *   system prompts that repeat within the same Vercel invocation (e.g.
+   *   the 9 review agents on a 2-attempt pipeline run).
+   */
+  async callTool<T>(
+    systemPrompt: string,
+    userMessage: string,
+    toolName: string,
+    toolSchema: object,
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    maxTokens = 1024,
+    model = MODEL,
+    cacheSystemPrompt = false,
+  ): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let res: Response;
+
+    const systemValue = cacheSystemPrompt
+      ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
+      : systemPrompt;
+
     try {
       res = await this.fetchImpl(ANTHROPIC_API_URL, {
         method: "POST",
@@ -59,12 +85,13 @@ export class LlmClient {
           "Content-Type": "application/json",
           "x-api-key": this.apiKey,
           "anthropic-version": ANTHROPIC_VERSION,
+          "anthropic-beta": "prompt-caching-2024-07-31",
           ...(this.workspaceId ? { "anthropic-workspace-id": this.workspaceId } : {}),
         },
         body: JSON.stringify({
           model,
           max_tokens: maxTokens,
-          system: systemPrompt,
+          system: systemValue,
           messages: [{ role: "user", content: userMessage }],
           tools: [{ name: toolName, description: `Submit your ${toolName} result`, input_schema: toolSchema }],
           tool_choice: { type: "tool", name: toolName },
@@ -88,7 +115,12 @@ export class LlmClient {
     const json = (await res.json()) as {
       model: string;
       content: Array<{ type: string; name?: string; input?: unknown }>;
-      usage?: { input_tokens: number; output_tokens: number };
+      usage?: {
+        input_tokens: number;
+        output_tokens: number;
+        cache_creation_input_tokens?: number;
+        cache_read_input_tokens?: number;
+      };
     };
 
     if (json.usage && this.onUsage) {
@@ -96,6 +128,8 @@ export class LlmClient {
         model: json.model,
         inputTokens: json.usage.input_tokens,
         outputTokens: json.usage.output_tokens,
+        cacheCreationInputTokens: json.usage.cache_creation_input_tokens,
+        cacheReadInputTokens: json.usage.cache_read_input_tokens,
       });
     }
 
