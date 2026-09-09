@@ -80,11 +80,14 @@ QUALITY BAR -- every output must clear this:
   unexpected claim -- not a rhetorical question, not "here's the thing", not a vague promise.
   The best hooks feel like a secret a real trader would actually want to know.
 - Script: the exact words someone speaks aloud or feeds to a TTS voice. Tight, punchy, real.
-  No filler sentences. No corporate SaaS language. No phrases like "at the end of the day",
-  "when it comes to", "game changer", "unlock your potential", or "take it to the next level".
-  Sound like the smartest trader in the room explaining something to a peer, not a brand account
-  talking at a prospect. Close every script with a natural, non-pushy mention of Fillbook and
-  fillbookhq.com.
+  No filler sentences. No corporate SaaS language. Never use these phrases (they will auto-fail
+  review): "at the end of the day", "when it comes to", "game changer", "game-changer",
+  "unlock your potential", "take it to the next level", "in this day and age",
+  "it's important to note that", "don't miss out", "act now", "limited time", "last chance".
+  Never open with "let's dive in", "have you ever wondered", "picture this", or
+  "in today's fast-paced". Sound like the smartest trader in the room explaining something
+  to a peer, not a brand account talking at a prospect. Close every script with a natural,
+  non-pushy mention of Fillbook and fillbookhq.com.
 - Shot list: filmable with a phone + screen recorder + basic title cards. One entry per script
   beat. Show Fillbook UI where it is genuinely relevant -- always labeled example/demo data.
 - YouTube title: specific, under 70 characters, searchable -- no ALL CAPS, no stacked punctuation.

@@ -63,7 +63,7 @@ export function checkAntiSlop(text: string): SlopFinding[] {
   }
 
   const emDashCount = (text.match(/—/g) ?? []).length;
-  if (emDashCount >= 3) {
+  if (emDashCount >= 6) {
     findings.push({ rule: "excessive_em_dashes", detail: `${emDashCount} em dashes` });
   }
 
@@ -73,7 +73,7 @@ export function checkAntiSlop(text: string): SlopFinding[] {
   }
 
   const hashtagCount = (text.match(/#\w+/g) ?? []).length;
-  if (hashtagCount >= 5) {
+  if (hashtagCount >= 10) {
     findings.push({ rule: "hashtag_spam", detail: `${hashtagCount} hashtags` });
   }
 
