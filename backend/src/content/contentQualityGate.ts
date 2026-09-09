@@ -36,7 +36,8 @@ export class ContentQualityGate {
       blockReasons.push(`${vocabularyViolations.length} brand vocabulary/claim violation(s)`);
     }
     if (slopFindings.length > 0) {
-      blockReasons.push(`${slopFindings.length} anti-slop finding(s)`);
+      const details = slopFindings.map((f) => `${f.rule}: ${f.detail}`).join("; ");
+      blockReasons.push(`${slopFindings.length} anti-slop finding(s): ${details}`);
     }
     if (maxSimilarity >= ORIGINALITY_THRESHOLD) {
       blockReasons.push(`too similar to recent content (${(maxSimilarity * 100).toFixed(0)}% overlap)`);

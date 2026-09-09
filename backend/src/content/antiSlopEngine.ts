@@ -68,7 +68,7 @@ export function checkAntiSlop(text: string): SlopFinding[] {
   }
 
   const rhetoricalQuestions = (text.match(/\?/g) ?? []).length;
-  if (rhetoricalQuestions >= 3) {
+  if (rhetoricalQuestions >= 6) {
     findings.push({ rule: "excessive_rhetorical_questions", detail: `${rhetoricalQuestions} question marks` });
   }
 
