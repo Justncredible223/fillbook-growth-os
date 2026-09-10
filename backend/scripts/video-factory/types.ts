@@ -34,6 +34,20 @@ export interface VideoScriptPackage {
   approvedAt: string;
 }
 
+/** Real per-word timing from edge_tts_words.py's WordBoundary capture (see voiceover.ts). */
+export interface WordCue {
+  text: string;
+  startSeconds: number;
+  endSeconds: number;
+}
+
+/**
+ * One on-screen caption frame: `text` is already-assembled, ASS-ready
+ * markup (see captions.ts's buildWordHighlightCues) -- the full on-screen
+ * phrase with the currently-spoken word wrapped in an inline colour
+ * override tag, not plain text. buildAssFile interpolates it directly into
+ * the Dialogue line rather than re-escaping it.
+ */
 export interface CaptionCue {
   text: string;
   startSeconds: number;

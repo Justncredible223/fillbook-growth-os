@@ -1,124 +1,80 @@
-import type { CaptionCue } from "./types.js";
+import type { CaptionCue, WordCue } from "./types.js";
+
+/** A gap this long between two spoken words reads as a natural phrase boundary -- mirrors how a human captioner would chunk a sentence, not an arbitrary fixed word count. */
+const PAUSE_BREAK_SECONDS = 0.35;
+
+/** Sized so a phrase reads as one short on-screen line at 1080px/64pt, similar sizing rationale to the old sentence-splitting cap. */
+const MAX_PHRASE_CHARS = 34;
+const MAX_PHRASE_WORDS = 6;
 
 /**
- * Real per-sentence timing from edge-tts's own --write-subtitles output
- * (see docs/VIDEO_FACTORY.md's audit notes) -- preferred over any
- * duration-based guess, per the spec's "if reliable timing metadata is
- * available locally, use it." edge-tts's SRT cues are already
- * sentence-chunked in practice, which lines up naturally with comfortable
- * caption pacing without any extra work.
+ * Groups flat word-level timing into short on-screen phrases (2-6 words),
+ * breaking at natural speech pauses before falling back to a max-length
+ * cap. Each phrase becomes one stationary on-screen caption line, with
+ * word-by-word highlighting applied within it (see buildWordHighlightCues).
  */
-export interface SrtCue {
-  index: number;
-  startSeconds: number;
-  endSeconds: number;
-  text: string;
-}
+export function groupWordsIntoPhrases(words: WordCue[]): WordCue[][] {
+  const phrases: WordCue[][] = [];
+  let current: WordCue[] = [];
+  let currentChars = 0;
 
-const SRT_TIME = /(\d{2}):(\d{2}):(\d{2}),(\d{3})/;
-
-function parseSrtTime(raw: string): number {
-  const m = SRT_TIME.exec(raw);
-  if (!m) throw new Error(`Malformed SRT timestamp: "${raw}"`);
-  const [, hh, mm, ss, ms] = m;
-  return Number(hh) * 3600 + Number(mm) * 60 + Number(ss) + Number(ms) / 1000;
-}
-
-/** Parses edge-tts's --write-subtitles .srt output into cues. */
-export function parseSrt(content: string): SrtCue[] {
-  const blocks = content.replace(/\r\n/g, "\n").trim().split(/\n\n+/).filter((b) => b.trim().length > 0);
-  const cues: SrtCue[] = [];
-  for (const block of blocks) {
-    const lines = block.split("\n");
-    if (lines.length < 3) continue;
-    const index = Number(lines[0]);
-    const timeLine = lines[1] ?? "";
-    const [startRaw, endRaw] = timeLine.split("-->").map((s) => s.trim());
-    if (!startRaw || !endRaw) continue;
-    const text = lines.slice(2).join(" ").trim();
-    if (!text) continue;
-    cues.push({
-      index: Number.isFinite(index) ? index : cues.length + 1,
-      startSeconds: parseSrtTime(startRaw),
-      endSeconds: parseSrtTime(endRaw),
-      text,
-    });
-  }
-  return cues;
-}
-
-// Sized against real sentence lengths from the Day 1 script (see
-// ~/fillbookhq/docs/social/SEPT1_TIKTOK_PRODUCTION_PACKAGE.md), not
-// picked arbitrarily -- most ordinary sentences (50-70 chars) should
-// pass through as a single readable caption at 1080px/64pt; this only
-// exists to catch genuinely long run-ons.
-const MAX_CHARS_PER_CAPTION = 70;
-
-/**
- * Splits an oversized SRT cue into readable sub-segments, timed
- * proportionally to each segment's share of the cue's character count --
- * a deterministic approximation of speech rate within that cue's REAL
- * (not guessed) time window. Most cues from edge-tts are already short
- * sentences and pass through untouched; this only fires for a genuinely
- * long sentence. Splits on clause boundaries (commas) before falling back
- * to a straight word-count split, so a break never lands mid-phrase.
- */
-function splitOversizedCue(cue: SrtCue): Array<{ text: string; startSeconds: number; endSeconds: number }> {
-  if (cue.text.length <= MAX_CHARS_PER_CAPTION) {
-    return [{ text: cue.text, startSeconds: cue.startSeconds, endSeconds: cue.endSeconds }];
-  }
-
-  const clauses = cue.text.split(/(?<=,)\s+/).filter((c) => c.length > 0);
-  const segments = clauses.length > 1 ? clauses : cue.text.split(/\s+/);
-
-  const totalChars = segments.reduce((sum, s) => sum + s.length, 0);
-  const duration = cue.endSeconds - cue.startSeconds;
-  const result: Array<{ text: string; startSeconds: number; endSeconds: number }> = [];
-
-  // Group word-level segments back into ~MAX_CHARS_PER_CAPTION chunks
-  // rather than one caption per word.
-  const chunks: string[] = [];
-  let current = "";
-  for (const segment of segments) {
-    const candidate = current ? `${current} ${segment}` : segment;
-    if (candidate.length > MAX_CHARS_PER_CAPTION && current) {
-      chunks.push(current);
-      current = segment;
-    } else {
-      current = candidate;
+  for (const word of words) {
+    const prev = current[current.length - 1];
+    const gap = prev ? word.startSeconds - prev.endSeconds : 0;
+    const wouldExceed = currentChars + word.text.length + 1 > MAX_PHRASE_CHARS || current.length >= MAX_PHRASE_WORDS;
+    if (current.length > 0 && (gap >= PAUSE_BREAK_SECONDS || wouldExceed)) {
+      phrases.push(current);
+      current = [];
+      currentChars = 0;
     }
+    current.push(word);
+    currentChars += word.text.length + 1;
   }
-  if (current) chunks.push(current);
+  if (current.length > 0) phrases.push(current);
+  return phrases;
+}
 
-  let elapsed = 0;
-  for (const chunk of chunks) {
-    const share = totalChars > 0 ? chunk.length / totalChars : 1 / chunks.length;
-    const chunkDuration = duration * share;
-    result.push({
-      text: chunk.trim(),
-      startSeconds: cue.startSeconds + elapsed,
-      endSeconds: cue.startSeconds + elapsed + chunkDuration,
-    });
-    elapsed += chunkDuration;
-  }
-  return result;
+/** Brand cyan, ASS BGR (matches the old Hook style colour) -- the one highlight colour used for whichever word is currently being spoken. */
+const HIGHLIGHT_COLOR_TAG = "\\c&H00EED322&";
+/** Both styles' own PrimaryColour is white (see ASS_HEADER) -- this override switches a word back to it once it's no longer the active one. */
+const BASE_COLOR_TAG = "\\c&H00FFFFFF&";
+
+/**
+ * Builds one Dialogue line per word within a phrase: the full phrase text
+ * is shown throughout the phrase's duration, with only the
+ * currently-spoken word's colour swapped to the highlight via an inline
+ * ASS override tag -- the TikTok/CapCut "active word" caption look. One
+ * Dialogue line per word (rather than ASS's built-in \k karaoke tag) so the
+ * highlighted word is exactly and deterministically the one currently
+ * being spoken, with no dependence on how a given libass build interprets
+ * \k timing.
+ *
+ * Each word's display window is extended to the next word's start time
+ * (rather than its own real end time) so there's no blank-caption flicker
+ * during the brief natural articulation gaps between words in the same
+ * phrase.
+ */
+export function buildWordHighlightCues(phrase: WordCue[], style: "Hook" | "Caption"): CaptionCue[] {
+  const escapedWords = phrase.map((w) => escapeAssText(w.text));
+  return phrase.map((word, i) => {
+    const text = escapedWords.map((w, j) => (j === i ? `{${HIGHLIGHT_COLOR_TAG}}${w}{${BASE_COLOR_TAG}}` : w)).join(" ");
+    const start = word.startSeconds;
+    const nextWord = phrase[i + 1];
+    const end = nextWord ? nextWord.startSeconds : word.endSeconds;
+    return { text, startSeconds: start, endSeconds: end, style };
+  });
 }
 
 /**
- * Builds the final caption cue list: real SRT timing as the backbone,
- * oversized cues split deterministically, and the first cue tagged as
- * the "Hook" style. Position alone determines styling -- the hook is
- * always spoken first, by construction (videoScriptWriter puts it at
- * the start of `script`).
+ * Builds the final caption cue list from real word-level timing: words are
+ * grouped into short phrases, and the first phrase (the hook, spoken first
+ * by construction -- videoScriptWriter puts it at the start of `script`)
+ * is tagged with the larger "Hook" style.
  */
-export function buildCaptionCues(srtCues: SrtCue[]): CaptionCue[] {
-  const expanded = srtCues.flatMap(splitOversizedCue);
-  return expanded.map((seg, i) => ({
-    text: seg.text,
-    startSeconds: seg.startSeconds,
-    endSeconds: seg.endSeconds,
-    style: i === 0 ? ("Hook" as const) : ("Caption" as const),
-  }));
+export function buildCaptionCues(wordCues: WordCue[]): CaptionCue[] {
+  if (wordCues.length === 0) return [];
+  const phrases = groupWordsIntoPhrases(wordCues);
+  return phrases.flatMap((phrase, i) => buildWordHighlightCues(phrase, i === 0 ? "Hook" : "Caption"));
 }
 
 /** ASS uses centisecond precision and H:MM:SS.CC, not SRT's HH:MM:SS,mmm. */
@@ -132,23 +88,28 @@ export function secondsToAssTime(totalSeconds: number): string {
 }
 
 /**
- * Escapes text for a literal ASS Dialogue line. `{`/`}` open override
- * blocks in ASS -- stripping them (never expected in real caption text)
- * is simpler and safer than trying to escape-and-preserve them. Newlines
- * become `\N`, ASS's hard line break.
+ * Escapes a single word's text for a literal ASS Dialogue line. `{`/`}`
+ * open override blocks in ASS -- stripping them (never expected in real
+ * TTS word text) is simpler and safer than trying to escape-and-preserve
+ * them. Applied per-word, before buildWordHighlightCues wraps the active
+ * word in its own override braces, so those wrapper braces are never
+ * stripped by this call.
  */
 export function escapeAssText(text: string): string {
   return text.replace(/[{}]/g, "").replace(/\r\n|\n/g, "\\N");
 }
 
 /**
- * Known-good header from ~/fillbookhq/docs/social/VIDEO_PRODUCTION_WORKFLOW.md,
- * preserved verbatim: PlayResX/PlayResY MUST match the render resolution
- * (this is what fixed the libass clipping bug), Alignment=5 (middle-center)
- * avoids margin-from-edge ambiguity, and Hook uses brand cyan #22D3EE
- * (stored BGR in ASS: &H00EED322). A third "SceneLabel" style (see
- * scenes.ts) reuses the same subtitles-filter mechanism for on-screen
- * scene text, since drawtext segfaults on this ffmpeg build.
+ * Known-good header from ~/fillbookhq/docs/social/VIDEO_PRODUCTION_WORKFLOW.md:
+ * PlayResX/PlayResY MUST match the render resolution (this is what fixed
+ * the libass clipping bug), Alignment=5 (middle-center) avoids
+ * margin-from-edge ambiguity. Hook and Caption now share the same white
+ * PrimaryColour -- the brand-cyan pop lives entirely in the per-word
+ * override tags in buildWordHighlightCues, so "highlighted" always means
+ * the same thing regardless of which style a phrase uses; only Hook's
+ * larger fontsize sets it apart. A third "SceneLabel" style (see scenes.ts)
+ * reuses the same subtitles-filter mechanism for on-screen scene text,
+ * since drawtext segfaults on this ffmpeg build.
  */
 const ASS_HEADER = `[Script Info]
 ScriptType: v4.00+
@@ -160,7 +121,7 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Caption,Arial,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,5,0,2,80,80,160,1
-Style: Hook,Verdana,72,&H00EED322,&H00EED322,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,5,0,2,80,80,160,1
+Style: Hook,Verdana,72,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,5,0,2,80,80,160,1
 Style: SceneLabel,Verdana,48,&H00F4F6FA,&H00F4F6FA,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,4,0,8,80,80,140,1
 
 [Events]
@@ -178,11 +139,14 @@ export interface SceneLabelCue {
  * third, MarginV=140 in the SceneLabel style) so the two never overlap --
  * preserving TikTok/Shorts UI safe zones (avoids the bottom
  * caption/engagement-bar area and the very top status-bar area).
+ *
+ * A caption cue's `text` is already fully-formed ASS markup (see
+ * buildWordHighlightCues) -- interpolated directly, not re-escaped, since
+ * re-escaping would strip the inline colour override braces it depends on.
  */
 export function buildAssFile(captionCues: CaptionCue[], sceneLabelCues: SceneLabelCue[]): string {
   const captionLines = captionCues.map(
-    (cue) =>
-      `Dialogue: 0,${secondsToAssTime(cue.startSeconds)},${secondsToAssTime(cue.endSeconds)},${cue.style},,0,0,0,,${escapeAssText(cue.text)}`,
+    (cue) => `Dialogue: 0,${secondsToAssTime(cue.startSeconds)},${secondsToAssTime(cue.endSeconds)},${cue.style},,0,0,0,,${cue.text}`,
   );
   const sceneLines = sceneLabelCues.map(
     (cue) =>

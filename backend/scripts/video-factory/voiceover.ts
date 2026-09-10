@@ -1,8 +1,9 @@
 import { writeFileSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ProcessRunner } from "./processRunner.js";
 import { VideoFactoryError } from "./types.js";
-import { parseSrt, type SrtCue } from "./captions.js";
+import type { WordCue } from "./types.js";
 
 /**
  * Upgraded from the original "en-US-AndrewNeural" (Day 1 FillbookHQ TikTok
@@ -18,15 +19,21 @@ export const DEFAULT_VOICE = "en-US-AndrewMultilingualNeural";
 
 export interface VoiceoverResult {
   mp3Path: string;
-  srtCues: SrtCue[];
+  wordCues: WordCue[];
   durationSeconds: number;
 }
 
+const WORD_TIMING_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "edge_tts_words.py");
+
 /**
- * Runs edge-tts against the approved script text, via `--file` (not
- * `--text`) so arbitrary punctuation/quotes in the script never need
- * shell-escaping. Uses --write-subtitles for real per-sentence timing
- * (see captions.ts) rather than guessing caption timing from duration.
+ * Runs edge_tts_words.py against the approved script text, via a script
+ * file (not inline text) so arbitrary punctuation/quotes never need
+ * shell-escaping -- same reasoning as the old CLI-based `--file` flag.
+ * Calls the edge_tts Python library directly (through this helper script)
+ * rather than the edge-tts CLI, because only the library's WordBoundary
+ * stream gives real per-word timing -- the CLI's --write-subtitles only
+ * ever produced sentence-level SRT cues, not enough to drive word-by-word
+ * highlighted captions (see captions.ts's buildWordHighlightCues).
  */
 export async function generateVoiceover(
   scriptText: string,
@@ -36,36 +43,45 @@ export async function generateVoiceover(
 ): Promise<VoiceoverResult> {
   const scriptPath = join(outDir, "script.txt");
   const mp3Path = join(outDir, "voiceover.mp3");
-  const srtPath = join(outDir, "voiceover.srt");
+  const wordsPath = join(outDir, "voiceover.words.json");
   writeFileSync(scriptPath, scriptText, "utf-8");
 
-  const result = await runner.run("edge-tts", [
+  const result = await runner.run("python3", [
+    WORD_TIMING_SCRIPT,
     "--voice",
     voice,
     "--file",
     scriptPath,
-    "--write-media",
+    "--out-media",
     mp3Path,
-    "--write-subtitles",
-    srtPath,
+    "--out-words",
+    wordsPath,
   ]);
   if (result.exitCode !== 0) {
-    throw new VideoFactoryError(`edge-tts failed (exit ${result.exitCode}): ${result.stderr || result.stdout}`);
+    throw new VideoFactoryError(`edge-tts word-timing script failed (exit ${result.exitCode}): ${result.stderr || result.stdout}`);
   }
 
-  let srtContent: string;
+  let wordsContent: string;
   try {
-    srtContent = readFileSync(srtPath, "utf-8");
+    wordsContent = readFileSync(wordsPath, "utf-8");
   } catch (err) {
-    throw new VideoFactoryError(`edge-tts reported success but did not write subtitles to "${srtPath}": ${(err as Error).message}`);
+    throw new VideoFactoryError(
+      `edge-tts word-timing script reported success but did not write word timings to "${wordsPath}": ${(err as Error).message}`,
+    );
   }
-  const srtCues = parseSrt(srtContent);
-  if (srtCues.length === 0) {
-    throw new VideoFactoryError("edge-tts produced an empty subtitle file -- cannot time captions without it.");
+
+  let wordCues: WordCue[];
+  try {
+    wordCues = JSON.parse(wordsContent) as WordCue[];
+  } catch (err) {
+    throw new VideoFactoryError(`edge-tts word-timing script wrote invalid JSON to "${wordsPath}": ${(err as Error).message}`);
+  }
+  if (wordCues.length === 0) {
+    throw new VideoFactoryError("edge-tts produced no word timing data -- cannot time captions without it.");
   }
 
   const durationSeconds = await measureAudioDuration(mp3Path, runner);
-  return { mp3Path, srtCues, durationSeconds };
+  return { mp3Path, wordCues, durationSeconds };
 }
 
 /** ffprobe -show_format gives duration directly -- no need to decode the audio. */

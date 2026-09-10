@@ -6,10 +6,10 @@ import { generateVoiceover, measureAudioDuration, DEFAULT_VOICE } from "../../sc
 import { VideoFactoryError } from "../../scripts/video-factory/types";
 import type { ProcessRunner } from "../../scripts/video-factory/processRunner";
 
-const SAMPLE_SRT = `1
-00:00:00,050 --> 00:00:03,500
-Hello there.
-`;
+const SAMPLE_WORDS = JSON.stringify([
+  { text: "Hello", startSeconds: 0.05, endSeconds: 0.4 },
+  { text: "there.", startSeconds: 0.45, endSeconds: 0.9 },
+]);
 
 let tempDirs: string[] = [];
 function tempDir(): string {
@@ -24,13 +24,12 @@ afterEach(() => {
 });
 
 describe("generateVoiceover", () => {
-  it("writes the script to a file and invokes edge-tts with --file (never --text, to avoid shell-escaping issues)", async () => {
+  it("writes the script to a file and invokes the word-timing script via python3", async () => {
     const dir = tempDir();
     const run = vi.fn(async (command: string, args: string[]) => {
-      if (command === "uvx") {
-        // Simulate edge-tts's real side effects: write mp3 + srt.
-        writeFileSync(args[args.indexOf("--write-subtitles") + 1]!, SAMPLE_SRT);
-        writeFileSync(args[args.indexOf("--write-media") + 1]!, "");
+      if (command === "python3") {
+        writeFileSync(args[args.indexOf("--out-words") + 1]!, SAMPLE_WORDS);
+        writeFileSync(args[args.indexOf("--out-media") + 1]!, "");
         return { stdout: "", stderr: "", exitCode: 0 };
       }
       if (command === "ffprobe") {
@@ -42,22 +41,22 @@ describe("generateVoiceover", () => {
 
     const result = await generateVoiceover("Hello there.", dir, runner);
 
-    expect(run.mock.calls[0]![0]).toBe("uvx");
+    expect(run.mock.calls[0]![0]).toBe("python3");
     const args = run.mock.calls[0]![1] as string[];
     expect(args).toContain("--file");
-    expect(args).not.toContain("--text");
     expect(args[args.indexOf("--voice") + 1]).toBe(DEFAULT_VOICE);
     expect(readFileSync(join(dir, "script.txt"), "utf-8")).toBe("Hello there.");
     expect(result.durationSeconds).toBe(3.5);
-    expect(result.srtCues).toHaveLength(1);
+    expect(result.wordCues).toHaveLength(2);
+    expect(result.wordCues[0]).toEqual({ text: "Hello", startSeconds: 0.05, endSeconds: 0.4 });
   });
 
   it("respects a custom voice override", async () => {
     const dir = tempDir();
     const run = vi.fn(async (command: string, args: string[]) => {
-      if (command === "uvx") {
-        writeFileSync(args[args.indexOf("--write-subtitles") + 1]!, SAMPLE_SRT);
-        writeFileSync(args[args.indexOf("--write-media") + 1]!, "");
+      if (command === "python3") {
+        writeFileSync(args[args.indexOf("--out-words") + 1]!, SAMPLE_WORDS);
+        writeFileSync(args[args.indexOf("--out-media") + 1]!, "");
         return { stdout: "", stderr: "", exitCode: 0 };
       }
       return { stdout: JSON.stringify({ format: { duration: "3.5" } }), stderr: "", exitCode: 0 };
@@ -70,7 +69,7 @@ describe("generateVoiceover", () => {
     expect(args[args.indexOf("--voice") + 1]).toBe("en-US-JennyNeural");
   });
 
-  it("throws VideoFactoryError when edge-tts exits non-zero", async () => {
+  it("throws VideoFactoryError when the word-timing script exits non-zero", async () => {
     const dir = tempDir();
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "voice not found", exitCode: 1 });
     const runner: ProcessRunner = { run };
@@ -79,7 +78,7 @@ describe("generateVoiceover", () => {
     await expect(generateVoiceover("Hello.", dir, runner)).rejects.toThrow(/voice not found/);
   });
 
-  it("throws VideoFactoryError if edge-tts reports success but never wrote the subtitle file", async () => {
+  it("throws VideoFactoryError if the word-timing script reports success but never wrote the words file", async () => {
     const dir = tempDir();
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
     const runner: ProcessRunner = { run };
@@ -87,19 +86,34 @@ describe("generateVoiceover", () => {
     await expect(generateVoiceover("Hello.", dir, runner)).rejects.toThrow(VideoFactoryError);
   });
 
-  it("throws VideoFactoryError on an empty subtitle file", async () => {
+  it("throws VideoFactoryError on an empty word-timing array", async () => {
     const dir = tempDir();
     const run = vi.fn(async (command: string, args: string[]) => {
-      if (command === "uvx") {
-        writeFileSync(args[args.indexOf("--write-subtitles") + 1]!, "");
-        writeFileSync(args[args.indexOf("--write-media") + 1]!, "");
+      if (command === "python3") {
+        writeFileSync(args[args.indexOf("--out-words") + 1]!, "[]");
+        writeFileSync(args[args.indexOf("--out-media") + 1]!, "");
         return { stdout: "", stderr: "", exitCode: 0 };
       }
       return { stdout: "", stderr: "", exitCode: 0 };
     });
     const runner: ProcessRunner = { run };
 
-    await expect(generateVoiceover("Hello.", dir, runner)).rejects.toThrow(/empty subtitle/);
+    await expect(generateVoiceover("Hello.", dir, runner)).rejects.toThrow(/no word timing data/);
+  });
+
+  it("throws VideoFactoryError on invalid JSON in the words file", async () => {
+    const dir = tempDir();
+    const run = vi.fn(async (command: string, args: string[]) => {
+      if (command === "python3") {
+        writeFileSync(args[args.indexOf("--out-words") + 1]!, "not json");
+        writeFileSync(args[args.indexOf("--out-media") + 1]!, "");
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      return { stdout: "", stderr: "", exitCode: 0 };
+    });
+    const runner: ProcessRunner = { run };
+
+    await expect(generateVoiceover("Hello.", dir, runner)).rejects.toThrow(/invalid JSON/);
   });
 });
 

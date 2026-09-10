@@ -86,7 +86,7 @@ async function loadPackage(args: CliArgs): Promise<VideoScriptPackage> {
 async function checkPrerequisites(runner: ProcessRunner): Promise<void> {
   await requireExecutable(runner, "ffmpeg", ["-version"]);
   await requireExecutable(runner, "ffprobe", ["-version"]);
-  await requireExecutable(runner, "uvx", ["--version"]);
+  await requireExecutable(runner, "python3", ["--version"]);
 }
 
 function printSummary(report: RenderReport): void {
@@ -120,7 +120,7 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const runner = createProcessRunner();
 
-  console.log("Checking prerequisites (ffmpeg, ffprobe, uvx)...");
+  console.log("Checking prerequisites (ffmpeg, ffprobe, python3)...");
   await checkPrerequisites(runner);
 
   console.log("Loading production package...");
@@ -139,7 +139,7 @@ async function main(): Promise<void> {
   console.log(`Narration duration: ${voiceover.durationSeconds.toFixed(1)}s.`);
 
   console.log("Building captions...");
-  const captionCues = buildCaptionCues(voiceover.srtCues);
+  const captionCues = buildCaptionCues(voiceover.wordCues);
   const totalDurationSeconds = voiceover.durationSeconds + SILENCE_PAD_SECONDS;
   const scenes = buildScenePlan(pkg.videoScript.shotList, totalDurationSeconds);
   const sceneLabelCues = buildSceneLabelCues(scenes);

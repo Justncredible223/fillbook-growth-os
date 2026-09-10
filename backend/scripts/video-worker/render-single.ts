@@ -54,7 +54,7 @@ async function main(): Promise<void> {
   const runner = createProcessRunner();
   await requireExecutable(runner, "ffmpeg", ["-version"]);
   await requireExecutable(runner, "ffprobe", ["-version"]);
-  await requireExecutable(runner, "edge-tts", ["--version"]);
+  await requireExecutable(runner, "python3", ["--version"]);
 
   await client
     .from("video_renders")
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
   mkdirSync(outDir, { recursive: true });
 
   const voiceover = await generateVoiceover(pkg.videoScript.script, outDir, runner, DEFAULT_VOICE);
-  const captionCues = buildCaptionCues(voiceover.srtCues);
+  const captionCues = buildCaptionCues(voiceover.wordCues);
   const totalDurationSeconds = voiceover.durationSeconds + SILENCE_PAD_SECONDS;
   const scenes = buildScenePlan(pkg.videoScript.shotList, totalDurationSeconds);
   const sceneLabelCues = buildSceneLabelCues(scenes);
