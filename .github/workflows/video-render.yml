@@ -37,9 +37,17 @@ jobs:
           cache-dependency-path: backend/package-lock.json
 
       - name: Install ffmpeg
-        uses: FedericoCarboni/setup-ffmpeg@v3
-        with:
-          github-token: ${{ github.token }}
+        # Was FedericoCarboni/setup-ffmpeg@v3, which broke (2026-09-10):
+        # "AssertionError: Failed to read version from readme" -- that
+        # action scrapes a version number out of a GitHub README to decide
+        # what to download, and stopped parsing correctly, failing every
+        # render before it ever reached render-single.ts (so the render
+        # sat stuck at 'queued' forever -- nothing ever wrote 'failed').
+        # apt's ffmpeg on ubuntu-latest already ships with libx264/libass/
+        # libfreetype built in (verified needed for this pipeline's caption
+        # burn-in), so this avoids depending on a third-party action's own
+        # fragile version-detection logic entirely.
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Install edge-tts (voiceover)
         run: pip install edge-tts
