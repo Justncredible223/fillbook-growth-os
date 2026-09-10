@@ -35,8 +35,8 @@ describe("buildFfmpegArgs", () => {
     const args = buildFfmpegArgs(plan);
     const filterIndex = args.indexOf("-filter_complex");
     const filter = args[filterIndex + 1]!;
-    expect(filter).toContain("[0:v][1:v]concat=n=2:v=1:a=0[bgraw]");
-    expect(filter).toContain("[bgraw]subtitles=captions.ass[v]");
+    expect(filter).toContain("[sv0][sv1]concat=n=2:v=1:a=0[bgraw]");
+    expect(filter).toContain("[bgraw]subtitles=captions.ass:fontsdir=.[v]");
   });
 
   it("concatenates real voiceover audio with the silence pad", () => {
@@ -90,7 +90,7 @@ describe("host-OS independence of path handling", () => {
 
     const args = buildFfmpegArgs(posixPlan);
     expect(args.join(" ")).not.toContain("/tmp/out");
-    expect(args[args.indexOf("-filter_complex") + 1]).toContain("[bgraw]subtitles=captions.ass[v]");
+    expect(args[args.indexOf("-filter_complex") + 1]).toContain("[bgraw]subtitles=captions.ass:fontsdir=.[v]");
 
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
     await renderVideo(posixPlan, { run });

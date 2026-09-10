@@ -1,4 +1,7 @@
+import { copyFileSync, existsSync } from "node:fs";
 import { win32 as windowsPath } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ProcessRunner } from "./processRunner.js";
 import type { RenderPlan } from "./types.js";
 import { VideoFactoryError } from "./types.js";
@@ -6,6 +9,15 @@ import { VideoFactoryError } from "./types.js";
 const WIDTH = 1080;
 const HEIGHT = 1920;
 const FRAME_RATE = 30;
+
+/**
+ * Bundled caption font (Poppins ExtraBold, OFL-licensed -- see
+ * assets/fonts/OFL.txt) -- bolder and more rounded than the Arial/Verdana
+ * system fallback libass would otherwise substitute on ubuntu-latest,
+ * which has neither font installed.
+ */
+const FONT_ASSET_PATH = join(dirname(fileURLToPath(import.meta.url)), "assets", "fonts", "Poppins-ExtraBold.ttf");
+const FONT_BASENAME = "Poppins-ExtraBold.ttf";
 
 /**
  * Path helpers that understand BOTH separators regardless of the host OS.
@@ -91,7 +103,11 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
   const filterComplex = [
     ...sceneFilterParts,
     `${concatInputs}concat=n=${plan.scenes.length}:v=1:a=0[bgraw]`,
-    `[bgraw]subtitles=${renderBasename(plan.assPath)}[v]`,
+    // fontsdir=. (relative to ffmpeg's own cwd, the render's output
+    // directory -- see renderVideo) points libass at the bundled caption
+    // font copied there below, same basename-only path-safety reasoning as
+    // every other file in this filter graph.
+    `[bgraw]subtitles=${renderBasename(plan.assPath)}:fontsdir=.[v]`,
     `[${voiceoverInputIndex}:a][${silenceInputIndex}:a]concat=n=2:v=0:a=1[a]`,
   ].join(";");
 
@@ -122,8 +138,20 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
  * every host OS, not only Windows.
  */
 export async function renderVideo(plan: RenderPlan, runner: ProcessRunner): Promise<void> {
-  const args = buildFfmpegArgs(plan);
   const cwd = renderDirname(plan.outputPath);
+  // Best-effort: the bundled font is a visual nicety, not a correctness
+  // requirement -- if the output directory isn't writable/doesn't exist
+  // yet for some reason, libass just falls back to fontconfig's own
+  // substitute for "Poppins ExtraBold" rather than failing the whole
+  // render over caption styling.
+  try {
+    const fontDest = join(cwd, FONT_BASENAME);
+    if (!existsSync(fontDest)) copyFileSync(FONT_ASSET_PATH, fontDest);
+  } catch {
+    // Deliberately swallowed -- see comment above.
+  }
+
+  const args = buildFfmpegArgs(plan);
   const result = await runner.run("ffmpeg", args, { cwd });
   if (result.exitCode !== 0) {
     throw new VideoFactoryError(`ffmpeg render failed (exit ${result.exitCode}):\n${result.stderr || result.stdout}`);

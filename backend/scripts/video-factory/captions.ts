@@ -110,6 +110,15 @@ export function escapeAssText(text: string): string {
  * larger fontsize sets it apart. A third "SceneLabel" style (see scenes.ts)
  * reuses the same subtitles-filter mechanism for on-screen scene text,
  * since drawtext segfaults on this ffmpeg build.
+ *
+ * Fontname is the bundled "Poppins ExtraBold" (see render.ts's
+ * FONT_ASSET_PATH/fontsdir wiring), not Arial/Verdana -- ubuntu-latest
+ * (where every real render actually runs) has neither of those installed,
+ * so libass was silently substituting its own default sans-serif fallback
+ * before this; bundling a specific bold, rounded font makes captions look
+ * deliberately designed rather than like whatever happened to be on the
+ * rendering machine, and thicker Outline/Shadow give the text more pop
+ * against busy stock-footage backgrounds.
  */
 const ASS_HEADER = `[Script Info]
 ScriptType: v4.00+
@@ -120,9 +129,9 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,Arial,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,5,0,2,80,80,160,1
-Style: Hook,Verdana,72,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,5,0,2,80,80,160,1
-Style: SceneLabel,Verdana,48,&H00F4F6FA,&H00F4F6FA,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,4,0,8,80,80,140,1
+Style: Caption,Poppins ExtraBold,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,2,2,80,80,160,1
+Style: Hook,Poppins ExtraBold,74,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,2,2,80,80,160,1
+Style: SceneLabel,Poppins ExtraBold,48,&H00F4F6FA,&H00F4F6FA,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,5,2,8,80,80,140,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
