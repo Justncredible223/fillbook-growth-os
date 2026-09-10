@@ -45,18 +45,23 @@ building the CLI — same tools, same versions used in testing):
 | Tool | Purpose | Install (Windows) |
 |---|---|---|
 | ffmpeg (full build, with libx264/libass/libfreetype) | render, composite, caption burn-in | `winget install Gyan.FFmpeg` |
-| `uv`/`uvx` | runs `edge-tts` with no separate Python install | `winget install astral-sh.uv` |
+| Python 3 + `pip install edge-tts` | word-level narration timing (see edge_tts_words.py) | Python from python.org, then `pip install edge-tts` |
 | Node.js 18+ | runs the CLI itself | already required for the rest of this repo |
 
 No API keys, no paid tools. `edge-tts` (Microsoft neural TTS) is free and
-needs no account.
+needs no account. The CLI calls the `edge_tts` Python library directly
+(via `edge_tts_words.py`), not the `edge-tts` command-line tool, because
+only the library's `WordBoundary` stream gives real per-word timing —
+the CLI's `--write-subtitles` only ever produced sentence-level SRT,
+not enough to drive the word-by-word highlighted captions.
 
 **Check everything is installed:**
 
 ```bash
 ffmpeg -version
 ffprobe -version
-uvx --version
+python3 --version
+python3 -c "import edge_tts"
 ```
 
 The CLI itself also checks all three automatically before doing anything
@@ -89,8 +94,8 @@ there is no way to render an offline package without asserting approval
 explicitly; see "How the human-approval gate works."
 
 Optional flags: `--voice <edge-tts voice name>` (default
-`en-US-AndrewNeural`, the same voice used for the Day 1 FillbookHQ TikTok
-video), `--out-dir <path>` to override where output lands.
+`en-US-AndrewMultilingualNeural`, edge-tts's higher-quality "Multilingual"
+HD neural tier), `--out-dir <path>` to override where output lands.
 
 ## Where outputs go
 
@@ -99,7 +104,7 @@ backend/output/video-factory/<draft-id>/
   package.json       -- the loaded, validated production package (for the record)
   script.txt          -- exact text sent to edge-tts
   voiceover.mp3        -- generated narration
-  voiceover.srt         -- edge-tts's real per-sentence timing (drives captions)
+  voiceover.words.json  -- edge-tts's real per-word timing (drives word-by-word captions)
   captions.ass           -- final burned-in caption/scene-label file
   final.mp4                -- the finished, validated video
   render-report.json        -- machine-readable summary (see below)
@@ -155,7 +160,8 @@ screen first — that's the intended behavior, not a bug.
 | Error | Meaning | Fix |
 |---|---|---|
 | `"ffmpeg" was not found on PATH` | ffmpeg isn't installed / not on PATH | `winget install Gyan.FFmpeg`, restart your terminal |
-| `"uvx" was not found on PATH` | uv isn't installed | `winget install astral-sh.uv` |
+| `"python3" was not found on PATH` | Python isn't installed / not on PATH | Install Python from python.org, restart your terminal |
+| `edge-tts word-timing script failed` mentioning `ModuleNotFoundError: No module named 'edge_tts'` | the `edge-tts` package isn't installed for this Python | `pip install edge-tts` |
 | `SUPABASE_SERVICE_ROLE_KEY is not set` | no `backend/.env.local` | Copy the key from Vercel's project env vars into `backend/.env.local` |
 | `Draft "<id>" has not been approved` | campaign isn't `approved` yet | Approve it in the Approvals screen, then rerun |
 | `No campaign_assets row found with id "<id>"` | wrong/mistyped draft id | Double-check the id from the Approvals API/app |
