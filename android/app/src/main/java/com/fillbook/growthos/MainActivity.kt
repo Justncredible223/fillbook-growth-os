@@ -140,21 +140,25 @@ private sealed class Destination(val route: String, val label: String, val icon:
 }
 
 /**
- * The 4 screens worth a permanent thumb-reach slot -- everything else
+ * The 5 screens worth a permanent thumb-reach slot -- everything else
  * lives in More. Prospecting replaced Analytics here: for a new product
  * with no inbound traffic yet, proactive daily outreach is the primary
  * growth system, not a periodic check (see docs/PROSPECTING.md) --
  * Analytics is still one tap away in More, just no longer competing for
  * the habitual daily slot. Inbound later replaced Approvals for the same
  * reason: real engagement replies are now a daily habit, while Approvals
- * is a periodic review that doesn't need a permanent slot -- it's still
- * one tap away in More.
+ * was a periodic review that didn't need a permanent slot.
+ *
+ * Approvals later swapped back in for Partnerships (2026-09-09): approving
+ * drafts is now the more frequent daily action of the two, so Partnerships
+ * moved to More instead -- still one tap away, just no longer competing
+ * for the habitual slot.
  */
-private val primaryDestinations = listOf(Destination.Home, Destination.Radar, Destination.Prospecting, Destination.Inbound, Destination.Partnerships)
+private val primaryDestinations = listOf(Destination.Home, Destination.Radar, Destination.Prospecting, Destination.Inbound, Destination.Approvals)
 
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
-    Destination.Approvals,
+    Destination.Partnerships,
     Destination.Analytics,
     Destination.Campaigns,
     Destination.ContentLibrary,
