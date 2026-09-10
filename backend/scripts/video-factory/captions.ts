@@ -1,5 +1,32 @@
 import type { CaptionCue, WordCue } from "./types.js";
 
+/**
+ * voiceover.ts's respellFillbookForTts sends "Fillbook" to TTS as the two
+ * real dictionary words "Fill book" so it's pronounced correctly -- which
+ * means the raw WordBoundary stream reports "Fill" and "book" as two
+ * separate word cues. This merges any such adjacent pair back into one
+ * "Fillbook" cue (spanning both words' combined time range) before caption
+ * phrases are built, so it still displays and highlights as a single word
+ * on screen, matching what it actually is. Matches on bare letters only
+ * (strips punctuation) so a "Fill book." at a sentence end still merges.
+ */
+export function mergeBrandNameWordCues(wordCues: WordCue[]): WordCue[] {
+  const merged: WordCue[] = [];
+  for (let i = 0; i < wordCues.length; i++) {
+    const current = wordCues[i]!;
+    const next = wordCues[i + 1];
+    const currentBare = current.text.replace(/[^a-zA-Z]/g, "").toLowerCase();
+    const nextBare = next?.text.replace(/[^a-zA-Z]/g, "").toLowerCase();
+    if (next && currentBare === "fill" && nextBare === "book") {
+      merged.push({ text: "Fillbook", startSeconds: current.startSeconds, endSeconds: next.endSeconds });
+      i++;
+    } else {
+      merged.push(current);
+    }
+  }
+  return merged;
+}
+
 /** A gap this long between two spoken words reads as a natural phrase boundary -- mirrors how a human captioner would chunk a sentence, not an arbitrary fixed word count. */
 const PAUSE_BREAK_SECONDS = 0.35;
 

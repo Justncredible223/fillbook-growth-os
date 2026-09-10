@@ -11,7 +11,7 @@ import {
   loadFromSupabase,
 } from "./loadApprovedScript.js";
 import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
-import { buildCaptionCues, buildOutroCue, buildAssFile, getHookMidpointSeconds } from "./captions.js";
+import { buildCaptionCues, buildOutroCue, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "./captions.js";
 import { buildScenePlan, buildSceneLabelCues } from "./scenes.js";
 import { renderVideo, extractThumbnail } from "./render.js";
 import { runFfprobeJson, validateOutput } from "./validate.js";
@@ -140,7 +140,8 @@ async function main(): Promise<void> {
 
   console.log("Building captions...");
   const totalDurationSeconds = voiceover.durationSeconds + SILENCE_PAD_SECONDS;
-  const captionCues = [...buildCaptionCues(voiceover.wordCues), buildOutroCue(totalDurationSeconds, SILENCE_PAD_SECONDS)];
+  const wordCues = mergeBrandNameWordCues(voiceover.wordCues);
+  const captionCues = [...buildCaptionCues(wordCues), buildOutroCue(totalDurationSeconds, SILENCE_PAD_SECONDS)];
   const scenes = buildScenePlan(pkg.videoScript.shotList, totalDurationSeconds);
   const sceneLabelCues = buildSceneLabelCues(scenes);
   const assContent = buildAssFile(captionCues, sceneLabelCues);

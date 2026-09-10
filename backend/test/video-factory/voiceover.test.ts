@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateVoiceover, measureAudioDuration, DEFAULT_VOICE } from "../../scripts/video-factory/voiceover";
+import { generateVoiceover, measureAudioDuration, DEFAULT_VOICE, respellFillbookForTts } from "../../scripts/video-factory/voiceover";
 import { VideoFactoryError } from "../../scripts/video-factory/types";
 import type { ProcessRunner } from "../../scripts/video-factory/processRunner";
 
@@ -49,6 +49,23 @@ describe("generateVoiceover", () => {
     expect(result.durationSeconds).toBe(3.5);
     expect(result.wordCues).toHaveLength(2);
     expect(result.wordCues[0]).toEqual({ text: "Hello", startSeconds: 0.05, endSeconds: 0.4 });
+  });
+
+  it("respells Fillbook to Fill book in the text sent to TTS (pronunciation fix)", async () => {
+    const dir = tempDir();
+    const run = vi.fn(async (command: string, args: string[]) => {
+      if (command === "python3") {
+        writeFileSync(args[args.indexOf("--out-words") + 1]!, SAMPLE_WORDS);
+        writeFileSync(args[args.indexOf("--out-media") + 1]!, "");
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      return { stdout: JSON.stringify({ format: { duration: "3.5" } }), stderr: "", exitCode: 0 };
+    });
+    const runner: ProcessRunner = { run };
+
+    await generateVoiceover("Fillbook tracks your drawdown.", dir, runner);
+
+    expect(readFileSync(join(dir, "script.txt"), "utf-8")).toBe("Fill book tracks your drawdown.");
   });
 
   it("respects a custom voice override", async () => {
@@ -137,5 +154,31 @@ describe("measureAudioDuration", () => {
     const runner: ProcessRunner = { run };
 
     await expect(measureAudioDuration("voiceover.mp3", runner)).rejects.toThrow(VideoFactoryError);
+  });
+});
+
+describe("respellFillbookForTts", () => {
+  it("splits Fillbook into Fill book, preserving title case", () => {
+    expect(respellFillbookForTts("Fillbook tracks trades.")).toBe("Fill book tracks trades.");
+  });
+
+  it("preserves all-caps", () => {
+    expect(respellFillbookForTts("FILLBOOK IS FREE.")).toBe("FILL BOOK IS FREE.");
+  });
+
+  it("preserves lowercase", () => {
+    expect(respellFillbookForTts("check out fillbook today.")).toBe("check out fill book today.");
+  });
+
+  it("handles multiple mentions in the same text", () => {
+    expect(respellFillbookForTts("Fillbook helps. Try Fillbook now.")).toBe("Fill book helps. Try Fill book now.");
+  });
+
+  it("does not affect text with no mention of Fillbook", () => {
+    expect(respellFillbookForTts("Most traders lose money.")).toBe("Most traders lose money.");
+  });
+
+  it("does not match Fillbook as a substring of another word", () => {
+    expect(respellFillbookForTts("Fillbookish is not a real word.")).toBe("Fillbookish is not a real word.");
   });
 });

@@ -26,6 +26,25 @@ export interface VoiceoverResult {
 const WORD_TIMING_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "edge_tts_words.py");
 
 /**
+ * edge-tts mispronounces "Fillbook" as a single compound word (confirmed
+ * by ear on a real render -- it read as "fill-boo-k" instead of
+ * "fill-book"). Splitting it into the two real dictionary words it's
+ * actually made of before sending text to TTS fixes pronunciation exactly
+ * -- no TTS engine mispronounces "fill" or "book" on their own. This only
+ * affects what's SPOKEN; captions.ts's mergeBrandNameWordCues stitches the
+ * resulting two WordBoundary entries back into one "Fillbook" caption word
+ * afterward, so it still displays and highlights as a single word on
+ * screen, matching what it actually is.
+ */
+export function respellFillbookForTts(text: string): string {
+  return text.replace(/\bFillbook\b/gi, (match) => {
+    if (match === match.toUpperCase()) return "FILL BOOK";
+    if (match.charAt(0) === match.charAt(0).toUpperCase()) return "Fill book";
+    return "fill book";
+  });
+}
+
+/**
  * Runs edge_tts_words.py against the approved script text, via a script
  * file (not inline text) so arbitrary punctuation/quotes never need
  * shell-escaping -- same reasoning as the old CLI-based `--file` flag.
@@ -44,7 +63,7 @@ export async function generateVoiceover(
   const scriptPath = join(outDir, "script.txt");
   const mp3Path = join(outDir, "voiceover.mp3");
   const wordsPath = join(outDir, "voiceover.words.json");
-  writeFileSync(scriptPath, scriptText, "utf-8");
+  writeFileSync(scriptPath, respellFillbookForTts(scriptText), "utf-8");
 
   const result = await runner.run("python3", [
     WORD_TIMING_SCRIPT,
