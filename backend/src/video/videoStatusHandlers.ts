@@ -144,9 +144,11 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
 
 /**
  * Deletes a render row so the owner can clear items from the Video Status
- * screen or free a topic slot for re-rendering. Allows all terminal states
- * (ready/failed/canceled); blocks active ones (queued/rendering) since those
- * have an in-flight GitHub Actions job that cannot be safely orphaned here.
+ * screen or free a topic slot for re-rendering. Allows every status,
+ * including queued/rendering -- render-single.ts's own status-update calls
+ * (see its `.update({...}).eq("id", videoRenderId)` calls) simply match zero
+ * rows and no-op if the render is dismissed out from under an in-flight
+ * GitHub Actions job, so there is nothing to orphan by allowing this.
  *
  * For ready renders the stored video file is deleted from Supabase Storage
  * first so the freed bytes are reclaimed from the user's storage cap.
@@ -160,9 +162,6 @@ export async function dismissVideoRender(client: SupabaseClient, videoRenderId: 
   if (fetchError) throw new Error(`dismissVideoRender fetch failed: ${fetchError.message}`);
   if (!data) throw new Error(`video render not found: ${videoRenderId}`);
   const { status, storage_path: storagePath } = data as { status: string; storage_path: string | null };
-  if (status === "queued" || status === "rendering") {
-    throw new Error(`cannot dismiss an active render (status: ${status})`);
-  }
 
   // For ready renders, delete the video file from storage before removing DB rows.
   if (status === "ready" && storagePath) {
