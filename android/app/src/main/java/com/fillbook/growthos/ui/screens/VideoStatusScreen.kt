@@ -212,7 +212,19 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             }
         }
         val filter = IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)
-        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        // MUST be RECEIVER_EXPORTED, not RECEIVER_NOT_EXPORTED -- this
+        // broadcast comes from the separate Download Manager provider app,
+        // not from this app's own process. On API 33+, NOT_EXPORTED
+        // silently drops broadcasts from any sender outside this app (only
+        // "the system" itself or same-signing-cert apps get through, and
+        // the Download Manager provider is neither), which is exactly why
+        // downloads previously spun forever and Share never enabled: the
+        // completion broadcast was never actually delivered to this
+        // receiver. The onReceive body above only acts on download ids
+        // already present in our own pendingDownloads map, so exporting
+        // this receiver doesn't meaningfully widen what another app could
+        // trigger.
+        ContextCompat.registerReceiver(context, receiver, filter, ContextCompat.RECEIVER_EXPORTED)
         onDispose { context.unregisterReceiver(receiver) }
     }
 
