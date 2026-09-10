@@ -269,6 +269,36 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
         context.startActivity(Intent.createChooser(shareIntent, "Share video"))
     }
 
+    // Simpler, one-shot fire-and-forget than download()/share() above: the
+    // thumbnail is a small JPG the owner picks up from the system Downloads
+    // folder to attach in YouTube Studio's own thumbnail upload picker, so
+    // there is no in-app Share step to gate behind a completion broadcast --
+    // just get it into Downloads and tell them it's there.
+    fun downloadThumbnail(render: VideoRenderStatus) {
+        val url = render.thumbnailDownloadUrl
+        if (url == null) {
+            scope.launch { snackbarHostState.showSnackbar("No thumbnail available for this video.") }
+            return
+        }
+        val downloadManager = context.getSystemService<DownloadManager>()
+        if (downloadManager == null) {
+            scope.launch { snackbarHostState.showSnackbar("Downloads aren't available on this device.") }
+            return
+        }
+        val fileName = "fillbook-thumbnail-${render.id}.jpg"
+        val request = DownloadManager.Request(Uri.parse(url))
+            .setTitle(fileName)
+            .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+            .setMimeType("image/jpeg")
+        val id = runCatching { downloadManager.enqueue(request) }.getOrNull()
+        scope.launch {
+            snackbarHostState.showSnackbar(
+                if (id != null) "Downloading thumbnail…" else "Couldn't start the thumbnail download.",
+            )
+        }
+    }
+
     fun dismiss(render: VideoRenderStatus) {
         scope.launch {
             try {
@@ -410,6 +440,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                                     downloading = render.id in downloadingIds,
                                     onDownload = { download(render) },
                                     onShare = { share(render) },
+                                    onDownloadThumbnail = { downloadThumbnail(render) },
                                     onDismiss = { dismiss(render) },
                                 )
                             }
@@ -570,6 +601,7 @@ private fun VideoRenderCard(
     downloading: Boolean,
     onDownload: () -> Unit,
     onShare: () -> Unit,
+    onDownloadThumbnail: () -> Unit,
     onDismiss: (() -> Unit)? = null,
 ) {
     val tone = statusTone(render.status)
@@ -617,11 +649,15 @@ private fun VideoRenderCard(
         render.videoMetadata?.let { meta ->
             Spacer(Modifier.height(10.dp))
             VideoMetadataSection(
-                label = "YOUTUBE SHORTS",
-                copyLabel = "YouTube Shorts metadata",
+                label = "YOUTUBE TITLE",
+                copyLabel = "YouTube title",
+                body = meta.youtubeTitle,
+            )
+            Spacer(Modifier.height(8.dp))
+            VideoMetadataSection(
+                label = "YOUTUBE DESCRIPTION",
+                copyLabel = "YouTube description",
                 body = listOfNotNull(
-                    "Title: ${meta.youtubeTitle}",
-                    "",
                     meta.youtubeDescription,
                     meta.hashtags.takeIf { it.isNotEmpty() }?.joinToString(" ") { "#$it" },
                     meta.disclosureCta,
@@ -655,6 +691,10 @@ private fun VideoRenderCard(
             if (!alreadyDownloaded) {
                 Spacer(Modifier.height(4.dp))
                 Text("Download it first, then Share to TikTok or YouTube.", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+            }
+            if (render.thumbnailDownloadUrl != null) {
+                Spacer(Modifier.height(8.dp))
+                SecondaryButton(text = "Download Thumbnail", onClick = onDownloadThumbnail, modifier = Modifier.fillMaxWidth())
             }
         }
     }

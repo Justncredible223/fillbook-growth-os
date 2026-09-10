@@ -7,6 +7,7 @@ const STORAGE_BUCKET = "rendered-videos";
 interface VideoRenderRow {
   id: string;
   storage_path: string | null;
+  thumbnail_path: string | null;
   status: "queued" | "rendering" | "ready" | "failed" | "canceled";
 }
 
@@ -26,7 +27,7 @@ export async function pruneOldVideoRenders(client: SupabaseClient, now: Date = n
 
   const { data: candidates, error: candidatesError } = await client
     .from("video_renders")
-    .select("id, storage_path, status")
+    .select("id, storage_path, thumbnail_path, status")
     .in("status", ["ready", "failed"])
     .lt("updated_at", cutoff);
   if (candidatesError) throw new Error(`pruneOldVideoRenders failed to load candidates: ${candidatesError.message}`);
@@ -38,7 +39,8 @@ export async function pruneOldVideoRenders(client: SupabaseClient, now: Date = n
   let failedDeletes = 0;
 
   for (const row of rows) {
-    if (!row.storage_path) {
+    const pathsToDelete = [row.storage_path, row.thumbnail_path].filter((p): p is string => p !== null);
+    if (pathsToDelete.length === 0) {
       // A 'failed' render that never produced an object -- nothing to
       // delete in Storage, but the row itself and any reservation are
       // still cleaned up (a failed render still holds a reservation from
@@ -49,7 +51,7 @@ export async function pruneOldVideoRenders(client: SupabaseClient, now: Date = n
       continue;
     }
 
-    const { error: storageError } = await client.storage.from(STORAGE_BUCKET).remove([row.storage_path]);
+    const { error: storageError } = await client.storage.from(STORAGE_BUCKET).remove(pathsToDelete);
     if (storageError) {
       // Storage delete failed -- leave the row and its reservation
       // exactly as-is (still 'committed'), retry on the next run.

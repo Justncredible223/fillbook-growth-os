@@ -19,9 +19,9 @@ import {
 import { MAX_VIDEO_STORAGE_BYTES } from "../../src/video/videoRenderEligibility.js";
 import { loadFromSupabase, assertApproved } from "../video-factory/loadApprovedScript.js";
 import { generateVoiceover, DEFAULT_VOICE } from "../video-factory/voiceover.js";
-import { buildCaptionCues, buildOutroCue, buildAssFile } from "../video-factory/captions.js";
+import { buildCaptionCues, buildOutroCue, buildAssFile, getHookMidpointSeconds } from "../video-factory/captions.js";
 import { buildScenePlan, buildSceneLabelCues } from "../video-factory/scenes.js";
-import { renderVideo } from "../video-factory/render.js";
+import { renderVideo, extractThumbnail } from "../video-factory/render.js";
 import { copyClipToDir, fetchStockClip, getVideoQuery } from "../video-factory/stockFootage.js";
 import { runFfprobeJson, validateOutput } from "../video-factory/validate.js";
 import { createProcessRunner, requireExecutable } from "../video-factory/processRunner.js";
@@ -130,13 +130,39 @@ async function main(): Promise<void> {
     throw err;
   }
 
+  // Best-effort: a downloadable thumbnail is a nice-to-have on top of an
+  // already-successful video, not a correctness requirement -- a failure
+  // here (e.g. the Hook midpoint landing on a corrupt frame) never fails
+  // the whole render, it just leaves thumbnail_path null for this row.
+  let thumbnailPath: string | null = null;
+  try {
+    const hookMidpoint = getHookMidpointSeconds(captionCues) ?? 1;
+    const thumbnailLocalPath = join(outDir, "thumbnail.jpg");
+    await extractThumbnail(outputPath, hookMidpoint, thumbnailLocalPath, runner);
+    const candidatePath = `${videoRenderId}-thumbnail.jpg`;
+    const { error: thumbUploadError } = await client.storage
+      .from(STORAGE_BUCKET)
+      .upload(candidatePath, readFileSync(thumbnailLocalPath), { contentType: "image/jpeg", upsert: false });
+    if (thumbUploadError) throw new Error(`Thumbnail upload failed: ${thumbUploadError.message}`);
+    thumbnailPath = candidatePath;
+  } catch (err) {
+    console.error("[render-single] thumbnail generation failed (non-fatal):", (err as Error).message ?? err);
+  }
+
   const durationSeconds = Number(ffprobeResult.format.duration ?? totalDurationSeconds);
   await client
     .from("video_renders")
     // error: null clears any stale message from a prior failed attempt on
     // the same render row (render-single doesn't reuse rows, but belt-and-
     // suspenders against a future retry path).
-    .update({ status: "ready", storage_path: storagePath, duration_seconds: durationSeconds, error: null, updated_at: new Date().toISOString() })
+    .update({
+      status: "ready",
+      storage_path: storagePath,
+      thumbnail_path: thumbnailPath,
+      duration_seconds: durationSeconds,
+      error: null,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", videoRenderId);
 
   // Send FCM push to all non-revoked devices

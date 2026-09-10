@@ -25,6 +25,8 @@ export interface VideoRenderStatusJson {
   storagePath: string | null;
   /** A short-lived signed URL into the private rendered-videos bucket -- never a public/permanent link. Present only when status='ready' and the signing call itself succeeds; null otherwise (including a transient signing failure, which never blocks the rest of the status list). The app must treat a stale one as expired and re-fetch this endpoint for a fresh URL rather than caching it. */
   downloadUrl: string | null;
+  /** Same signed-URL contract as downloadUrl, but for the real video-frame thumbnail render-single.ts extracts alongside the video (see thumbnail_path). Null whenever thumbnail generation failed for this render (best-effort, never blocks the render itself) or the render predates this field. */
+  thumbnailDownloadUrl: string | null;
   durationSeconds: number | null;
   error: string | null;
   createdAt: string;
@@ -68,6 +70,7 @@ interface VideoRenderRow {
   campaign_asset_id: string;
   status: VideoRenderStatusJson["status"];
   storage_path: string | null;
+  thumbnail_path: string | null;
   duration_seconds: number | null;
   error: string | null;
   created_at: string;
@@ -82,7 +85,7 @@ const SIGNED_URL_TTL_SECONDS = 3600;
 export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50): Promise<VideoRenderStatusJson[]> {
   const { data, error } = await client
     .from("video_renders")
-    .select("id, campaign_asset_id, status, storage_path, duration_seconds, error, created_at, updated_at")
+    .select("id, campaign_asset_id, status, storage_path, thumbnail_path, duration_seconds, error, created_at, updated_at")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw new Error(`listVideoRenderStatuses failed: ${error.message}`);
@@ -114,6 +117,7 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
   return Promise.all(
     rows.map(async (row) => {
       let downloadUrl: string | null = null;
+      let thumbnailDownloadUrl: string | null = null;
       if (row.status === "ready" && row.storage_path) {
         // A signing failure (bucket hiccup, transient error) never fails the
         // whole status list -- this row just surfaces with no download link,
@@ -122,12 +126,17 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
         const { data: signed } = await client.storage.from(STORAGE_BUCKET).createSignedUrl(row.storage_path, SIGNED_URL_TTL_SECONDS);
         downloadUrl = signed?.signedUrl ?? null;
       }
+      if (row.status === "ready" && row.thumbnail_path) {
+        const { data: signedThumb } = await client.storage.from(STORAGE_BUCKET).createSignedUrl(row.thumbnail_path, SIGNED_URL_TTL_SECONDS);
+        thumbnailDownloadUrl = signedThumb?.signedUrl ?? null;
+      }
       return {
         id: row.id,
         campaignAssetId: row.campaign_asset_id,
         status: row.status,
         storagePath: row.storage_path,
         downloadUrl,
+        thumbnailDownloadUrl,
         durationSeconds: row.duration_seconds,
         // A 'ready' render's error field is always stale (left over from a
         // prior failed attempt before the render eventually succeeded) --
@@ -156,17 +165,25 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
 export async function dismissVideoRender(client: SupabaseClient, videoRenderId: string): Promise<void> {
   const { data, error: fetchError } = await client
     .from("video_renders")
-    .select("status, storage_path")
+    .select("status, storage_path, thumbnail_path")
     .eq("id", videoRenderId)
     .maybeSingle();
   if (fetchError) throw new Error(`dismissVideoRender fetch failed: ${fetchError.message}`);
   if (!data) throw new Error(`video render not found: ${videoRenderId}`);
-  const { status, storage_path: storagePath } = data as { status: string; storage_path: string | null };
+  const { status, storage_path: storagePath, thumbnail_path: thumbnailPath } = data as {
+    status: string;
+    storage_path: string | null;
+    thumbnail_path: string | null;
+  };
 
-  // For ready renders, delete the video file from storage before removing DB rows.
-  if (status === "ready" && storagePath) {
-    const { error: storageError } = await client.storage.from("rendered-videos").remove([storagePath]);
-    if (storageError) throw new Error(`dismissVideoRender storage delete failed: ${storageError.message}`);
+  // For ready renders, delete the video (and thumbnail, if one was ever
+  // generated) from storage before removing DB rows.
+  if (status === "ready") {
+    const pathsToDelete = [storagePath, thumbnailPath].filter((p): p is string => p !== null);
+    if (pathsToDelete.length > 0) {
+      const { error: storageError } = await client.storage.from("rendered-videos").remove(pathsToDelete);
+      if (storageError) throw new Error(`dismissVideoRender storage delete failed: ${storageError.message}`);
+    }
   }
 
   // Delete child rows first -- video_render_notifications and

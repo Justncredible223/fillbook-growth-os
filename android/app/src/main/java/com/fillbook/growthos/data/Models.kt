@@ -468,6 +468,8 @@ data class VideoRenderStatus(
      * any kind).
      */
     val downloadUrl: String?,
+    /** Same signed-URL contract as [downloadUrl], but for a real video-frame thumbnail (extracted during the Hook caption) the backend generates alongside the video. Null whenever thumbnail generation failed for this render (best-effort, never blocks the render itself) or the render predates this field. */
+    val thumbnailDownloadUrl: String?,
     val durationSeconds: Double?,
     val error: String?,
     val createdAt: String,

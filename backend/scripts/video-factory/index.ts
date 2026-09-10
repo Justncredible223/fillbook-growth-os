@@ -11,9 +11,9 @@ import {
   loadFromSupabase,
 } from "./loadApprovedScript.js";
 import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
-import { buildCaptionCues, buildOutroCue, buildAssFile } from "./captions.js";
+import { buildCaptionCues, buildOutroCue, buildAssFile, getHookMidpointSeconds } from "./captions.js";
 import { buildScenePlan, buildSceneLabelCues } from "./scenes.js";
-import { renderVideo } from "./render.js";
+import { renderVideo, extractThumbnail } from "./render.js";
 import { runFfprobeJson, validateOutput } from "./validate.js";
 import { VideoFactoryError, type RenderPlan, type RenderReport, type VideoScriptPackage } from "./types.js";
 
@@ -163,6 +163,15 @@ async function main(): Promise<void> {
   const ffprobeResult = await runFfprobeJson(outputPath, runner);
   const fileSizeBytes = statSync(outputPath).size;
   const validation = validateOutput(ffprobeResult, fileSizeBytes, totalDurationSeconds);
+
+  console.log("Extracting thumbnail (ffmpeg)...");
+  const thumbnailPath = join(outDir, "thumbnail.jpg");
+  try {
+    const hookMidpoint = getHookMidpointSeconds(captionCues) ?? 1;
+    await extractThumbnail(outputPath, hookMidpoint, thumbnailPath, runner);
+  } catch (err) {
+    console.error(`Thumbnail extraction failed (non-fatal): ${(err as Error).message}`);
+  }
 
   const videoStream = ffprobeResult.streams.find((s) => s.codec_type === "video");
   const audioStream = ffprobeResult.streams.find((s) => s.codec_type === "audio");

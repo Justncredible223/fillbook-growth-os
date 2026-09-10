@@ -157,3 +157,31 @@ export async function renderVideo(plan: RenderPlan, runner: ProcessRunner): Prom
     throw new VideoFactoryError(`ffmpeg render failed (exit ${result.exitCode}):\n${result.stderr || result.stdout}`);
   }
 }
+
+/**
+ * Extracts a single real frame from the finished video as a JPG thumbnail
+ * -- a plain -ss/-i/-frames:v invocation with no filter_complex string
+ * (unlike buildFfmpegArgs), so unlike every other ffmpeg call in this
+ * module it's safe to pass real absolute paths directly: there is no
+ * filter-graph syntax here for a Windows drive-letter colon to collide
+ * with. Callers should pick `atSeconds` to land inside the Hook caption's
+ * on-screen window so the extracted frame already has bold on-brand text
+ * on it (see captions.ts's getHookMidpointSeconds).
+ */
+export async function extractThumbnail(videoPath: string, atSeconds: number, thumbnailPath: string, runner: ProcessRunner): Promise<void> {
+  const result = await runner.run("ffmpeg", [
+    "-y",
+    "-ss",
+    Math.max(0, atSeconds).toFixed(3),
+    "-i",
+    videoPath,
+    "-frames:v",
+    "1",
+    "-q:v",
+    "2",
+    thumbnailPath,
+  ]);
+  if (result.exitCode !== 0) {
+    throw new VideoFactoryError(`ffmpeg thumbnail extraction failed (exit ${result.exitCode}):\n${result.stderr || result.stdout}`);
+  }
+}

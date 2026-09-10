@@ -78,6 +78,21 @@ export function buildCaptionCues(wordCues: WordCue[]): CaptionCue[] {
 }
 
 /**
+ * Midpoint of the Hook phrase's total on-screen window -- the moment a
+ * thumbnail frame should be pulled from (see render.ts's extractThumbnail),
+ * since it's guaranteed to show bold, on-brand caption text regardless of
+ * which specific word happens to be highlighted at that instant. Null only
+ * if buildCaptionCues was given no words at all (nothing to show).
+ */
+export function getHookMidpointSeconds(captionCues: CaptionCue[]): number | null {
+  const hookCues = captionCues.filter((c) => c.style === "Hook");
+  if (hookCues.length === 0) return null;
+  const start = Math.min(...hookCues.map((c) => c.startSeconds));
+  const end = Math.max(...hookCues.map((c) => c.endSeconds));
+  return (start + end) / 2;
+}
+
+/**
  * A brief brand card ("FILLBOOK" / "fillbookhq.com") shown during the
  * silence pad already reserved at the end of every render for the closing
  * caption to breathe (see render-single.ts/index.ts's SILENCE_PAD_SECONDS)

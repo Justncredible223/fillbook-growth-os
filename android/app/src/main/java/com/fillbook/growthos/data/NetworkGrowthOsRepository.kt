@@ -849,6 +849,7 @@ class NetworkGrowthOsRepository(
         campaignAssetId = getString("campaignAssetId"),
         status = getString("status"),
         downloadUrl = optStringOrNull("downloadUrl"),
+        thumbnailDownloadUrl = optStringOrNull("thumbnailDownloadUrl"),
         durationSeconds = if (isNull("durationSeconds")) null else getDouble("durationSeconds"),
         error = optStringOrNull("error"),
         createdAt = getString("createdAt"),
