@@ -11,7 +11,7 @@ import {
   loadFromSupabase,
 } from "./loadApprovedScript.js";
 import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
-import { buildCaptionCues, buildAssFile } from "./captions.js";
+import { buildCaptionCues, buildOutroCue, buildAssFile } from "./captions.js";
 import { buildScenePlan, buildSceneLabelCues } from "./scenes.js";
 import { renderVideo } from "./render.js";
 import { runFfprobeJson, validateOutput } from "./validate.js";
@@ -139,8 +139,8 @@ async function main(): Promise<void> {
   console.log(`Narration duration: ${voiceover.durationSeconds.toFixed(1)}s.`);
 
   console.log("Building captions...");
-  const captionCues = buildCaptionCues(voiceover.wordCues);
   const totalDurationSeconds = voiceover.durationSeconds + SILENCE_PAD_SECONDS;
+  const captionCues = [...buildCaptionCues(voiceover.wordCues), buildOutroCue(totalDurationSeconds, SILENCE_PAD_SECONDS)];
   const scenes = buildScenePlan(pkg.videoScript.shotList, totalDurationSeconds);
   const sceneLabelCues = buildSceneLabelCues(scenes);
   const assContent = buildAssFile(captionCues, sceneLabelCues);

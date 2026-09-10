@@ -77,6 +77,25 @@ export function buildCaptionCues(wordCues: WordCue[]): CaptionCue[] {
   return phrases.flatMap((phrase, i) => buildWordHighlightCues(phrase, i === 0 ? "Hook" : "Caption"));
 }
 
+/**
+ * A brief brand card ("FILLBOOK" / "fillbookhq.com") shown during the
+ * silence pad already reserved at the end of every render for the closing
+ * caption to breathe (see render-single.ts/index.ts's SILENCE_PAD_SECONDS)
+ * -- reuses that existing dead-air window rather than extending the
+ * video's total duration. Middle-centered (the "Outro" style's own
+ * Alignment=5, distinct from Caption/Hook's bottom-anchored Alignment=2)
+ * so it reads as a deliberate closing beat, not another caption line.
+ */
+export function buildOutroCue(totalDurationSeconds: number, silencePadSeconds: number): CaptionCue {
+  const text = `FILLBOOK\\N{\\fs40\\c&H00FFFFFF&}fillbookhq.com`;
+  return {
+    text,
+    startSeconds: Math.max(0, totalDurationSeconds - silencePadSeconds),
+    endSeconds: totalDurationSeconds,
+    style: "Outro",
+  };
+}
+
 /** ASS uses centisecond precision and H:MM:SS.CC, not SRT's HH:MM:SS,mmm. */
 export function secondsToAssTime(totalSeconds: number): string {
   const hours = Math.floor(totalSeconds / 3600);
@@ -132,6 +151,7 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Caption,Poppins ExtraBold,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,2,2,80,80,160,1
 Style: Hook,Poppins ExtraBold,74,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,2,2,80,80,160,1
 Style: SceneLabel,Poppins ExtraBold,48,&H00F4F6FA,&H00F4F6FA,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,5,2,8,80,80,140,1
+Style: Outro,Poppins ExtraBold,92,&H00EED322,&H00EED322,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,7,3,5,80,80,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;

@@ -3,6 +3,7 @@ import {
   groupWordsIntoPhrases,
   buildWordHighlightCues,
   buildCaptionCues,
+  buildOutroCue,
   secondsToAssTime,
   escapeAssText,
   buildAssFile,
@@ -96,6 +97,27 @@ describe("buildCaptionCues", () => {
   });
 });
 
+describe("buildOutroCue", () => {
+  it("spans exactly the trailing silence pad window", () => {
+    const cue = buildOutroCue(30, 2.5);
+    expect(cue.startSeconds).toBe(27.5);
+    expect(cue.endSeconds).toBe(30);
+    expect(cue.style).toBe("Outro");
+  });
+
+  it("includes the brand name and URL on separate lines", () => {
+    const cue = buildOutroCue(30, 2.5);
+    expect(cue.text).toContain("FILLBOOK");
+    expect(cue.text).toContain("fillbookhq.com");
+    expect(cue.text).toContain("\\N");
+  });
+
+  it("never starts before zero even if the pad exceeds total duration", () => {
+    const cue = buildOutroCue(1, 2.5);
+    expect(cue.startSeconds).toBe(0);
+  });
+});
+
 describe("secondsToAssTime", () => {
   it("formats sub-minute durations", () => {
     expect(secondsToAssTime(3.5)).toBe("0:00:03.50");
@@ -133,6 +155,7 @@ describe("buildAssFile", () => {
     expect(ass).toContain("Style: Hook,");
     expect(ass).toContain("Style: Caption,");
     expect(ass).toContain("Style: SceneLabel,");
+    expect(ass).toContain("Style: Outro,");
   });
 
   it("emits one Dialogue line per caption cue with correct style, interpolating pre-formed text verbatim", () => {

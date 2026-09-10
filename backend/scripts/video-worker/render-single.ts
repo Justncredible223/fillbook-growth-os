@@ -19,7 +19,7 @@ import {
 import { MAX_VIDEO_STORAGE_BYTES } from "../../src/video/videoRenderEligibility.js";
 import { loadFromSupabase, assertApproved } from "../video-factory/loadApprovedScript.js";
 import { generateVoiceover, DEFAULT_VOICE } from "../video-factory/voiceover.js";
-import { buildCaptionCues, buildAssFile } from "../video-factory/captions.js";
+import { buildCaptionCues, buildOutroCue, buildAssFile } from "../video-factory/captions.js";
 import { buildScenePlan, buildSceneLabelCues } from "../video-factory/scenes.js";
 import { renderVideo } from "../video-factory/render.js";
 import { copyClipToDir, fetchStockClip, getVideoQuery } from "../video-factory/stockFootage.js";
@@ -68,8 +68,8 @@ async function main(): Promise<void> {
   mkdirSync(outDir, { recursive: true });
 
   const voiceover = await generateVoiceover(pkg.videoScript.script, outDir, runner, DEFAULT_VOICE);
-  const captionCues = buildCaptionCues(voiceover.wordCues);
   const totalDurationSeconds = voiceover.durationSeconds + SILENCE_PAD_SECONDS;
+  const captionCues = [...buildCaptionCues(voiceover.wordCues), buildOutroCue(totalDurationSeconds, SILENCE_PAD_SECONDS)];
   const scenes = buildScenePlan(pkg.videoScript.shotList, totalDurationSeconds);
   const sceneLabelCues = buildSceneLabelCues(scenes);
   const assPath = join(outDir, "captions.ass");

@@ -52,7 +52,7 @@ export interface CaptionCue {
   text: string;
   startSeconds: number;
   endSeconds: number;
-  style: "Hook" | "Caption";
+  style: "Hook" | "Caption" | "Outro";
 }
 
 export type SceneKind = "hook" | "product" | "metric" | "cta" | "explanation";
