@@ -5,14 +5,16 @@ import { VideoFactoryError } from "./types.js";
 import { parseSrt, type SrtCue } from "./captions.js";
 
 /**
- * Same voice used for the Day 1 FillbookHQ TikTok video
- * (~/fillbookhq/docs/social/VIDEO_PRODUCTION_WORKFLOW.md) -- a free
- * neural voice via edge-tts, no API key, no cloned/real-person voice
- * identity per that doc's guardrail. Kept as the default so output is
- * consistent across renders; override only if you deliberately want
- * voice variety (see `edge-tts --list-voices` for other free options).
+ * Upgraded from the original "en-US-AndrewNeural" (Day 1 FillbookHQ TikTok
+ * video, ~/fillbookhq/docs/social/VIDEO_PRODUCTION_WORKFLOW.md) to the
+ * "Multilingual" HD neural tier -- same free edge-tts, no API key, no
+ * cloned/real-person voice identity per that doc's guardrail, but a
+ * noticeably more natural/expressive cadence than the standard neural
+ * voices. Kept as the default so output is consistent across renders;
+ * override only if you deliberately want voice variety (see
+ * `edge-tts --list-voices` for other free options).
  */
-export const DEFAULT_VOICE = "en-US-AndrewNeural";
+export const DEFAULT_VOICE = "en-US-AndrewMultilingualNeural";
 
 export interface VoiceoverResult {
   mp3Path: string;
