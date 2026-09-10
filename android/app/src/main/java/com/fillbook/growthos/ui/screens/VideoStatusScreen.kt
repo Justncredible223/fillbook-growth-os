@@ -149,7 +149,10 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     // button is disabled the instant the first tap sets this true.
     var creatingVideoScript by remember { mutableStateOf(false) }
     var createVideoResultMessage by remember { mutableStateOf<String?>(null) }
-    val suggestedVideoTopics = remember { getWeeklySuggestedTopics() }
+    // Keyed on dialog visibility (not a one-time remember) so reopening
+    // "Create Fillbook Video" reshuffles a fresh 5 from the full pool
+    // instead of showing the same static set for the whole session.
+    val suggestedVideoTopics = remember(showCreateVideoDialog) { getSuggestedTopics() }
 
     suspend fun refresh() {
         try {
@@ -684,6 +687,13 @@ private fun VideoMetadataSection(label: String, copyLabel: String, body: String)
     }
 }
 
+/**
+ * Grouped only for readability when editing -- getSuggestedTopics() below
+ * flattens every group into one pool and samples from across all of them,
+ * so these are no longer "week N's topics" in any functional sense (that
+ * fixed weekly-indexed rotation was the reason the same 5 kept showing on
+ * every visit within a week -- confirmed by the owner).
+ */
 private val WEEKLY_TOPIC_SETS: List<List<String>> = listOf(
     // Week set 0
     listOf(
@@ -751,7 +761,7 @@ private val WEEKLY_TOPIC_SETS: List<List<String>> = listOf(
     ),
 )
 
-internal fun getWeeklySuggestedTopics(): List<String> {
-    val weekOfYear = java.time.LocalDate.now().get(java.time.temporal.WeekFields.ISO.weekOfYear())
-    return WEEKLY_TOPIC_SETS[(weekOfYear - 1) % WEEKLY_TOPIC_SETS.size]
-}
+private val ALL_SUGGESTED_TOPICS: List<String> = WEEKLY_TOPIC_SETS.flatten()
+
+/** A fresh random sample of [count] topics from the full pool -- called with a `remember` key tied to dialog visibility (see VideoStatusScreen) so every time "Create Fillbook Video" is opened, the suggestions are shuffled again instead of staying fixed for a whole calendar week. */
+internal fun getSuggestedTopics(count: Int = 5): List<String> = ALL_SUGGESTED_TOPICS.shuffled().take(count)
