@@ -46,6 +46,7 @@ import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.ProspectingCandidate
 import com.fillbook.growthos.data.ProspectingDiagnostics
+import com.fillbook.growthos.data.ProspectingSearchRunResult
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.IconPill
@@ -97,6 +98,8 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
     var refreshing by remember { mutableStateOf(false) }
+    var searchingNow by remember { mutableStateOf(false) }
+    var lastSearchNowRun by remember { mutableStateOf<ProspectingSearchRunResult?>(null) }
     var draftingId by remember { mutableStateOf<String?>(null) }
     var busyId by remember { mutableStateOf<String?>(null) }
     // Edits the owner makes before copying -- keyed by candidate id so
@@ -121,6 +124,27 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     }
 
     LaunchedEffect(Unit) { refresh() }
+
+    // Owner-triggered "search now" -- bypasses the 08:00/13:00/18:00
+    // schedule so a tap has a real chance at surfacing something new right
+    // away, rather than re-searching whatever the next scheduled slot
+    // would already cover (see runProspectingSearchNow's own doc comment).
+    // Same shape as PartnershipsScreen's runDiscoveryRefresh: track the
+    // last run's result for the status line, then refresh() so any new
+    // candidate actually shows up in the list without a second manual pull.
+    fun runSearchNow() {
+        scope.launch {
+            searchingNow = true
+            try {
+                lastSearchNowRun = repo.runProspectingSearchNow()
+                refresh()
+                actionError = null
+            } catch (e: Exception) {
+                actionError = "Couldn't search for new candidates. Check your connection and try again."
+            }
+            searchingNow = false
+        }
+    }
 
     fun startDraft(candidate: ProspectingCandidate) {
         scope.launch {
@@ -181,6 +205,15 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
             "Real conversations worth joining -- drafted for you, posted by you.",
             kicker = if (loaded && items.isNotEmpty()) "${items.size} opportunit${if (items.size == 1) "y" else "ies"} queued" else null,
         )
+
+        Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            TextButton(onClick = { runSearchNow() }, enabled = !searchingNow, contentPadding = PaddingValues(0.dp)) {
+                Text(if (searchingNow) "Searching..." else "Search now", color = Accent)
+            }
+        }
+        searchNowStatusLine(lastSearchNowRun)?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = TextTertiary, modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
+        }
 
         (errorMessage ?: actionError)?.let { message ->
             Row(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -398,6 +431,30 @@ private fun ProspectingCard(
             TextButton(onClick = onNotRelevant, enabled = !busy) { Text("Not relevant", maxLines = 1, overflow = TextOverflow.Ellipsis) }
             TextButton(onClick = onAlreadyHandled, enabled = !busy) { Text("Handled", maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
+    }
+}
+
+/**
+ * Owner-friendly explanation of what the last "Search now" tap actually
+ * did -- mirrors PartnershipsScreen's discoveryStatusLine, translating the
+ * real skip reasons runProspectingSearch can return (system_paused,
+ * monthly_budget_reached, queue_full -- see prospectingSearch.ts) into
+ * plain language instead of surfacing the raw internal string.
+ */
+internal fun searchNowStatusLine(lastRun: ProspectingSearchRunResult?): String? {
+    if (lastRun == null) return null
+    if (lastRun.skipped) {
+        return when {
+            lastRun.skipReason?.startsWith("system_paused") == true -> "Search skipped -- Prospecting is currently paused."
+            lastRun.skipReason?.startsWith("monthly_budget_reached") == true -> "Search skipped -- this month's Prospecting budget is used up."
+            lastRun.skipReason?.startsWith("queue_full") == true -> "Search skipped -- the queue already has plenty of candidates waiting."
+            else -> lastRun.skipReason?.let { "Search skipped: $it" } ?: "Search skipped."
+        }
+    }
+    return if (lastRun.newCandidates > 0) {
+        "Found ${lastRun.newCandidates} new candidate${if (lastRun.newCandidates == 1) "" else "s"} (read ${lastRun.postsRead} posts)."
+    } else {
+        "No new candidates this search (read ${lastRun.postsRead} posts)."
     }
 }
 

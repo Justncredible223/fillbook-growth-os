@@ -128,6 +128,8 @@ interface GrowthOsRepository {
     suspend fun markProspectingSkipped(id: String, reason: String?)
     suspend fun markProspectingNotRelevant(id: String)
     suspend fun markProspectingAlreadyHandled(id: String)
+    /** Owner-triggered, immediate Prospecting search -- searches a fresh, randomized topic slice right now instead of waiting for the next 08:00/13:00/18:00 scheduled slot. Same pause/monthly-budget/queue-capacity guardrails as the scheduled run apply automatically server-side; this can't bypass them. Call getProspectingQueue() afterward to pick up any new candidates. */
+    suspend fun runProspectingSearchNow(): ProspectingSearchRunResult
 
     /** The full Partnerships pipeline -- prospect/qualify/draft/contact/pilot/outcome. Never sends anything; every write here is either a plain field edit or an explicit, human-confirmed step. Includes what the last discovery run (scheduled or owner-triggered) actually did. */
     suspend fun getPartnerships(): PartnershipsSummary
@@ -676,6 +678,49 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     override suspend fun markProspectingAlreadyHandled(id: String) {
         val index = prospectingItems.indexOfFirst { it.id == id }
         if (index >= 0) prospectingItems[index] = prospectingItems[index].copy(status = "already_handled")
+    }
+
+    /** FIXTURE-ONLY: overrides what the next runProspectingSearchNow() call returns -- lets the "Search now" status line (found/skipped) be verified on-device without a real network call. Resets to null (default "found 1" behavior) after one use. Never used by production code. */
+    var debugNextSearchNowResult: ProspectingSearchRunResult? = null
+
+    override suspend fun runProspectingSearchNow(): ProspectingSearchRunResult {
+        val forced = debugNextSearchNowResult
+        debugNextSearchNowResult = null
+        if (forced != null) return forced
+
+        val newId = "prospecting-fake-searched-${prospectingItems.size + 1}"
+        prospectingItems.add(
+            ProspectingCandidate(
+                id = newId,
+                platform = "x",
+                discoveryQuery = "too_many_trades",
+                discoveryLabel = "Overtrading",
+                replyClass = "B",
+                authorHandle = "fakeoverTrader",
+                authorFollowerCount = 340,
+                authorVerified = false,
+                postText = "anyone else feel like they're just clicking buttons at this point instead of actually trading a plan",
+                postUrl = "https://x.com/i/web/status/fake-searched-$newId",
+                postCreatedAt = "2026-09-10T12:00:00Z",
+                discoveredAt = "2026-09-10T12:05:00Z",
+                opportunityScore = 62.0,
+                scoreBreakdown = mapOf("topicRelevance" to "Direct match on overtrading"),
+                creatorCandidate = false,
+                status = "new",
+                draftReply = null,
+                replyMentionsFillbook = null,
+                replyUsedLink = null,
+            ),
+        )
+        return ProspectingSearchRunResult(
+            skipped = false,
+            skipReason = null,
+            topicsSearched = listOf("too_many_trades", "revenge_trading"),
+            postsRead = 20,
+            newCandidates = 1,
+            excludedAsSpam = 0,
+            costUsd = 0.10,
+        )
     }
 
     private val partnershipItems = mutableListOf(

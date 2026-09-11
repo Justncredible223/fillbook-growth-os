@@ -244,6 +244,17 @@ data class ProspectingQueueResult(
     val diagnostics: ProspectingDiagnostics?,
 )
 
+/** The result of one Prospecting search run (scheduled or owner-triggered "Search now") -- see backend/src/prospecting/prospectingSearch.ts's ProspectingRunResult. */
+data class ProspectingSearchRunResult(
+    val skipped: Boolean,
+    val skipReason: String?,
+    val topicsSearched: List<String>,
+    val postsRead: Int,
+    val newCandidates: Int,
+    val excludedAsSpam: Int,
+    val costUsd: Double,
+)
+
 data class ProspectingCandidate(
     val id: String,
     /** Lowercase platform key from the server ("x") -- drives which app "Copy + Open" launches and how the confirmation reads. */

@@ -531,6 +531,21 @@ class NetworkGrowthOsRepository(
         post("/api/approvals?resource=prospecting", JSONObject().put("action", "already-handled").put("id", id))
     }
 
+    private fun JSONObject.toProspectingSearchRunResult(): ProspectingSearchRunResult = ProspectingSearchRunResult(
+        skipped = optBoolean("skipped", false),
+        skipReason = optStringOrNull("skipReason"),
+        topicsSearched = optJSONArray("topicsSearched")?.mapStrings() ?: emptyList(),
+        postsRead = optInt("postsRead", 0),
+        newCandidates = optInt("newCandidates", 0),
+        excludedAsSpam = optInt("excludedAsSpam", 0),
+        costUsd = optDouble("costUsd", 0.0),
+    )
+
+    override suspend fun runProspectingSearchNow(): ProspectingSearchRunResult {
+        val json = post("/api/ingest?source=x_prospecting", JSONObject())
+        return json.getJSONObject("result").toProspectingSearchRunResult()
+    }
+
     private fun JSONObject.toPartnershipProspect(): PartnershipProspect {
         val socialLinksObj = optJSONObject("socialLinks")
         val socialLinks = mutableMapOf<String, String>()
