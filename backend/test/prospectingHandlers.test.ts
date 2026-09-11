@@ -5,7 +5,7 @@ import {
   markProspectingReplied,
   ProspectingActionError,
 } from "../src/prospecting/prospectingHandlers";
-import type { ProspectingDraftContext } from "../src/prospecting/prospectingReplyWriter";
+import { PROSPECTING_TRACKABLE_LINK, type ProspectingDraftContext } from "../src/prospecting/prospectingReplyWriter";
 import type { NewProspectingCandidate, ProspectingCandidate, ProspectingRepository, ProspectingStatus } from "../src/prospecting/types";
 
 /** Minimal in-memory ProspectingRepository -- enough to drive the handlers without Supabase, and records every outreach call verbatim. */
@@ -282,6 +282,42 @@ describe("existing candidate review is unaffected by system pause state", () => 
 
     expect(updated.status).toBe("replied");
     expect(await repo.hasPriorOutreach("x", "9002")).toBe(true);
+  });
+});
+
+describe("draftProspectingCandidateReply -- per-reply trackable link substitution", () => {
+  const loadGrounding = async () => ({ brandRulesSummary: "rules", verifiedKnowledgeSummary: "facts" });
+
+  it("replaces the static placeholder link with a real per-candidate short link when usesLink is true", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "link-1", platform: "x", status: "shown", draftReply: null }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({
+      isRelevant: true,
+      reply: `Worth a look: ${PROSPECTING_TRACKABLE_LINK}`,
+      mentionsFillbook: true,
+      usesLink: true,
+    }));
+
+    const updated = await draftProspectingCandidateReply(fakeClient, "link-1", { repo, drafter, loadGrounding });
+
+    expect(updated.draftReply).not.toContain(PROSPECTING_TRACKABLE_LINK);
+    expect(updated.draftReply).toContain("fillbook-growth-os.vercel.app/api/ingest");
+    expect(updated.draftReply).toContain("key=prospecting%3Alink-1");
+  });
+
+  it("leaves the reply untouched when usesLink is false, even if it happens to contain the placeholder text", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "link-2", platform: "x", status: "shown", draftReply: null }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({
+      isRelevant: true,
+      reply: "No link here.",
+      mentionsFillbook: false,
+      usesLink: false,
+    }));
+
+    const updated = await draftProspectingCandidateReply(fakeClient, "link-2", { repo, drafter, loadGrounding });
+
+    expect(updated.draftReply).toBe("No link here.");
   });
 });
 

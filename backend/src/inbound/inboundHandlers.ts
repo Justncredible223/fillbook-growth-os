@@ -3,8 +3,9 @@ import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
 import { createLlmClient } from "../content/llmClient.js";
 import { recordCostEvent, estimateCostUsd } from "../cost/costTracking.js";
-import { draftInboundResponse, INBOUND_APPROVED_LINK_DOMAINS } from "./inboundResponseWriter.js";
+import { draftInboundResponse, INBOUND_APPROVED_LINK_DOMAINS, INBOUND_TRACKABLE_LINK } from "./inboundResponseWriter.js";
 import { checkReplyGuardrails, impliesContactOrLinkRequest } from "../content/xReplyGuardrails.js";
+import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
 import { SupabaseInboundRepository } from "./supabaseInboundRepository.js";
 import { ingestInboundMentions } from "./inboundIngestion.js";
 import { createXSignalAdapter } from "../signals/adapters/xAdapter.js";
@@ -174,8 +175,15 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
     throw new InboundActionError(`Draft rejected -- ${violation.reason}. Try drafting again.`);
   }
 
-  await repo.updateStatus(id, "draft_ready", { draftResponse: draft.reply, draftUsesLink: draft.usesLink });
-  return { ...row, status: "draft_ready", draftResponse: draft.reply, draftUsesLink: draft.usesLink };
+  // Swaps the model's static placeholder link for a real per-engagement
+  // short link (see trackableLinks.ts) -- same per-reply attribution this
+  // session added to Prospecting. A no-op when usesLink is false.
+  const finalReply = draft.usesLink
+    ? substituteTrackableLink(draft.reply, INBOUND_TRACKABLE_LINK, buildTrackableReplyLink(`inbound:${id}`, "inbound", id))
+    : draft.reply;
+
+  await repo.updateStatus(id, "draft_ready", { draftResponse: finalReply, draftUsesLink: draft.usesLink });
+  return { ...row, status: "draft_ready", draftResponse: finalReply, draftUsesLink: draft.usesLink };
 }
 
 /**

@@ -4,8 +4,9 @@ import { recordCostEvent } from "../cost/costTracking.js";
 import { loadGroundingContext } from "../inbound/inboundHandlers.js";
 import { selectDailyWorkingSet } from "./prospectingDailySelection.js";
 import { STALE_EXPIRY_DAYS } from "./prospectingEligibility.js";
-import { draftProspectingReply, type ProspectingDraftContext, type ProspectingDraftResult } from "./prospectingReplyWriter.js";
+import { draftProspectingReply, PROSPECTING_TRACKABLE_LINK, type ProspectingDraftContext, type ProspectingDraftResult } from "./prospectingReplyWriter.js";
 import { checkReplyGuardrails } from "../content/xReplyGuardrails.js";
+import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
 import { isPlausiblyTradingRelated } from "./prospectingRelevance.js";
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
@@ -201,8 +202,16 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
     throw new ProspectingActionError(`Draft rejected -- ${violation.reason}. Try drafting again.`);
   }
 
+  // Swaps the model's static placeholder link for a real per-candidate
+  // short link (see trackableLinks.ts) -- closes the "per-reply link
+  // attribution isn't real yet" gap. A no-op when usesLink is false (the
+  // common case), since the placeholder never appears in the reply then.
+  const finalReply = draft.usesLink
+    ? substituteTrackableLink(draft.reply, PROSPECTING_TRACKABLE_LINK, buildTrackableReplyLink(`prospecting:${id}`, "prospecting", id))
+    : draft.reply;
+
   await repo.updateStatus(id, "ready", {
-    draftReply: draft.reply,
+    draftReply: finalReply,
     replyMentionsFillbook: draft.mentionsFillbook,
     replyUsedLink: draft.usesLink,
   });

@@ -125,7 +125,13 @@ describe("draftResponseForInbound -- link handling", () => {
     const result = await draftResponseForInbound(asSupabase(client), "eng-1");
 
     expect(result.status).toBe("draft_ready");
-    expect(result.draftResponse).toContain("fillbookhq.com/go/contact");
+    // The static placeholder link the model was told to use gets swapped
+    // for a real per-engagement trackable link before persisting -- see
+    // trackableLinks.ts. The raw placeholder should never survive into the
+    // final draft.
+    expect(result.draftResponse).not.toContain("fillbookhq.com/go/contact");
+    expect(result.draftResponse).toContain("fillbook-growth-os.vercel.app/api/ingest");
+    expect(result.draftResponse).toContain("key=inbound%3Aeng-1");
     expect(result.draftUsesLink).toBe(true);
     const row = client.tables.inbound_engagements!.find((r) => r.id === "eng-1")!;
     expect(row.status).toBe("draft_ready");
