@@ -8,14 +8,30 @@ import { createSearchConsoleAdapter } from "../src/signals/adapters/searchConsol
 import { SupabaseIngestionCursorStore } from "../src/signals/adapters/ingestionCursorStore.js";
 import { ingestXMentions } from "../src/signals/adapters/xIngestion.js";
 import { ingestSearchConsoleQueries } from "../src/signals/adapters/searchConsoleIngestion.js";
-import { requireAppAuth } from "../src/lib/requireAppAuth.js";
+import { requireAppAuth, constantTimeEquals } from "../src/lib/requireAppAuth.js";
+import { runProspectingSearch } from "../src/prospecting/prospectingSearch.js";
+import { SupabaseProspectingRepository } from "../src/prospecting/supabaseProspectingRepository.js";
+import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
+import { recordSyncAttempt, recordSyncSuccess, recordSyncFailure } from "../src/lib/integrationHealth.js";
+import { recordConversionEvent } from "../src/attribution/conversionEvents.js";
+import { recordLinkClick, isAllowedRedirectTarget } from "../src/attribution/linkClicks.js";
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** The signal sources this endpoint can still trigger by hand. Exported so the contract is testable. */
-export const MANUAL_INGEST_SOURCES = ["x", "search_console"] as const;
+/**
+ * The sources this endpoint can still trigger by hand. "x" and
+ * "search_console" are Signal Graph ingestion sources; "x_prospecting" is
+ * a different pipeline (finds new outreach candidates, not signals) folded
+ * in here rather than as its own file -- see this file's own doc comment
+ * on the Vercel Hobby 12-function cap. Added to close the gap
+ * prospectingSearch.ts's ProspectingRunDeps doc comment used to name
+ * directly: growth-pulse.ts's scheduled run was the only caller, so there
+ * was no way to search for new candidates from the Android app between
+ * scheduled slots.
+ */
+export const MANUAL_INGEST_SOURCES = ["x", "search_console", "x_prospecting"] as const;
 export type ManualIngestSource = (typeof MANUAL_INGEST_SOURCES)[number];
 
 export function isManualIngestSource(value: unknown): value is ManualIngestSource {
@@ -23,15 +39,17 @@ export function isManualIngestSource(value: unknown): value is ManualIngestSourc
 }
 
 /**
- * Manual single-source ingestion trigger -- POST /api/ingest?source=x |
- * search_console. Consolidated from separate endpoint files
+ * Manual single-source trigger -- POST /api/ingest?source=x | search_console
+ * | x_prospecting. Consolidated from separate endpoint files
  * (ingest-x-mentions.ts, ingest-search-console.ts) into one, because
  * Vercel's Hobby plan caps serverless functions per deployment at 12 and
  * this project hit it. The scheduled jobs (api/daily-pipeline.ts for
- * Search Console, api/growth-pulse.ts for X) run these automatically;
- * this endpoint stays for triggering just one source by hand (debugging,
- * or re-running after fixing an issue with one adapter without waiting
- * for the others).
+ * Search Console, api/growth-pulse.ts for X mentions/inbound/prospecting)
+ * run all three sources automatically; this endpoint stays for triggering
+ * just one by hand -- debugging, re-running after fixing an issue with one
+ * adapter without waiting for the others, or (x_prospecting specifically)
+ * the owner deliberately wanting fresh candidates right now instead of
+ * waiting for the next 08:00/13:00/18:00 slot.
  *
  * YouTube and TikTok are gone from here for good, not just from the
  * schedule: the owner distributes video through Fliki, neither source
@@ -42,14 +60,115 @@ export function isManualIngestSource(value: unknown): value is ManualIngestSourc
  * with this change; the `youtube_video`/`tiktok_video` signal source
  * values remain valid for the historical rows already in the database.
  */
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!requireAppAuth(req, res)) return;
+/**
+ * Public, unauthenticated short-link redirect -- GET /api/ingest?source=click
+ * &key=<linkKey>&to=<targetUrl>. Has to stay reachable with no Authorization
+ * header at all: the person clicking it is a stranger on X or a
+ * partnership contact's inbox, not this project's own Android app.
+ * `to` is checked against isAllowedRedirectTarget's strict host allowlist
+ * before every redirect, so this can never become an open redirect. A
+ * failure to log the click never blocks the redirect itself -- the
+ * clicker still needs to land on FillbookHQ even if this project's own DB
+ * write fails.
+ */
+async function handleLinkClickRedirect(req: VercelRequest, res: VercelResponse): Promise<void> {
+  if (req.method !== "GET") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  const linkKey = typeof req.query.key === "string" ? req.query.key : null;
+  const target = typeof req.query.to === "string" ? req.query.to : null;
+  if (!linkKey || !target || !isAllowedRedirectTarget(target)) {
+    res.status(400).json({ error: "Missing or invalid 'key'/'to' query params" });
+    return;
+  }
+
+  try {
+    const client = getServiceClient();
+    await recordLinkClick(client, {
+      linkKey,
+      targetUrl: target,
+      referer: typeof req.headers.referer === "string" ? req.headers.referer : null,
+      userAgent: typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : null,
+    });
+  } catch {
+    // See doc comment above -- logging failures must never block the redirect.
+  }
+
+  res.writeHead(302, { Location: target });
+  res.end();
+}
+
+/**
+ * Server-to-server webhook from FillbookHQ's own signup flow -- POST
+ * /api/ingest?source=fillbook_signup, called fire-and-forget from the
+ * browser right after a real signup completes (see
+ * fillbook/frontend/src/lib/growthOs.ts). Gated by FILLBOOK_WEBHOOK_SECRET,
+ * a *different* credential than APP_API_TOKEN because the caller is a web
+ * app's client-side bundle, not this project's own Android app -- the
+ * secret is visible to anyone who opens devtools on fillbookhq.com, same
+ * fundamental limitation requireAppAuth's own doc comment notes for a
+ * compiled-in Android token. Accepted here because the entire blast radius
+ * of an abused secret is "someone can insert fake rows into this project's
+ * own conversion_events table" -- never a read or write into FillbookHQ's
+ * database (see docs/ARCHITECTURE.md's isolation goal), and never any PII:
+ * only utm_*, referral_code, and a timestamp are ever accepted, no email.
+ */
+async function handleFillbookSignupWebhook(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
 
+  const secret = process.env.FILLBOOK_WEBHOOK_SECRET;
+  if (!secret) {
+    res.status(500).json({ error: "FILLBOOK_WEBHOOK_SECRET is not configured on the server" });
+    return;
+  }
+  const header = req.headers.authorization;
+  if (!header || !constantTimeEquals(header, `Bearer ${secret}`)) {
+    res.status(401).json({ error: "Missing or invalid Authorization header" });
+    return;
+  }
+
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const str = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);
+
+  try {
+    const client = getServiceClient();
+    await recordConversionEvent(client, {
+      source: "fillbook_signup",
+      utmSource: str(body.utm_source),
+      utmMedium: str(body.utm_medium),
+      utmCampaign: str(body.utm_campaign),
+      utmContent: str(body.utm_content),
+      referralCode: str(body.referral_code),
+      occurredAt: str(body.occurred_at) ?? new Date().toISOString(),
+    });
+    res.status(200).json({ recorded: true });
+  } catch (err) {
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   const source = req.query.source;
+
+  if (source === "click") {
+    await handleLinkClickRedirect(req, res);
+    return;
+  }
+  if (source === "fillbook_signup") {
+    await handleFillbookSignupWebhook(req, res);
+    return;
+  }
+
+  if (!requireAppAuth(req, res)) return;
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
   if (!isManualIngestSource(source)) {
     res.status(400).json({ error: `Query param 'source' must be one of: ${MANUAL_INGEST_SOURCES.join(", ")}` });
     return;
@@ -66,6 +185,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const signals = await ingestXMentions(adapter, signalGraph, cursorStore, userId);
       res.status(200).json({ ingested: signals.length });
       return;
+    }
+
+    if (source === "x_prospecting") {
+      await recordSyncAttempt(client, "prospecting");
+      try {
+        const adapter = createXSignalAdapter(client);
+        const repo = new SupabaseProspectingRepository(client);
+        const now = new Date();
+        const result = await runProspectingSearch({
+          adapter,
+          repo,
+          client,
+          getMonthSpendUsd: () => getProspectingMonthSpendUsd(client),
+          isPaused: async () => {
+            const { data } = await client.from("system_settings").select("paused").eq("id", true).single();
+            return data?.paused ?? false;
+          },
+          now,
+          // Manual trigger: pick a topic slice independent of the current
+          // scheduled slot so hitting "search now" right before/after a
+          // scheduled run still has a real chance of surfacing something
+          // new instead of re-running the exact same 2 topics.
+          runIndexOverride: Math.floor(Math.random() * 1_000_000),
+        });
+        if (result.skipped) {
+          await recordSyncSuccess(client, "prospecting", `manual run skipped -- ${result.skipReason}`);
+        } else {
+          await recordSyncSuccess(client, "prospecting", `manual run: ${result.newCandidates} new, ${result.postsRead} read`);
+        }
+        res.status(200).json({ result });
+        return;
+      } catch (err) {
+        await recordSyncFailure(client, "prospecting", errorMessage(err));
+        throw err;
+      }
     }
 
     // source === "search_console"

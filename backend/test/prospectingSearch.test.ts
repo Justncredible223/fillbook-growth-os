@@ -231,6 +231,20 @@ describe("runProspectingSearch", () => {
     expect(adapter.searchRecentPosts).not.toHaveBeenCalled();
   });
 
+  it("runIndexOverride picks a topic slice independent of now's schedule slot, for manual 'search now' runs", async () => {
+    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([]) };
+    const repo = new FakeProspectingRepo();
+
+    await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, runIndexOverride: 0 });
+    const queriesAtZero = adapter.searchRecentPosts.mock.calls.map((c) => c[0]);
+
+    adapter.searchRecentPosts.mockClear();
+    await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now, runIndexOverride: 1 });
+    const queriesAtOne = adapter.searchRecentPosts.mock.calls.map((c) => c[0]);
+
+    expect(queriesAtZero).not.toEqual(queriesAtOne);
+  });
+
   it("scores a previously-engaged author's post higher via the prior-outreach bonus", async () => {
     const post = searchResult({ id: "1", text: "how do you actually review trades weekly?", authorId: "known-author" });
     const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([post]) };

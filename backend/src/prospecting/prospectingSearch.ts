@@ -45,6 +45,15 @@ export interface ProspectingRunDeps {
    */
   isPaused?: () => Promise<boolean>;
   now?: Date;
+  /**
+   * Overrides which run-index's topic slice gets searched, bypassing the
+   * normal day/schedule-slot rotation. Used by the owner-triggered manual
+   * "search now" path (api/ingest.ts?source=x_prospecting) so a manual run
+   * doesn't just re-search whatever the next scheduled slot would already
+   * cover -- the scheduled caller (growth-pulse.ts) never passes this, so
+   * its rotation is completely unaffected.
+   */
+  runIndexOverride?: number;
 }
 
 /**
@@ -88,7 +97,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   // topic-list cycling behavior as before the 3x/day split, just
   // finer-grained.
   const dayIndex = Math.floor(now.getTime() / (24 * 60 * 60 * 1000));
-  const runIndex = dayIndex * runSlotsPerDay() + currentRunSlot(now);
+  const runIndex = deps.runIndexOverride ?? dayIndex * runSlotsPerDay() + currentRunSlot(now);
   const topics: ProspectingTopic[] = selectTopicsForRun(PROSPECTING_TOPICS, runIndex, TOPICS_PER_SEARCH_RUN);
 
   let postsRead = 0;
