@@ -148,6 +148,15 @@ interface GrowthOsRepository {
     suspend fun generatePartnershipDraft(id: String): PartnershipProspect
     /** The ONLY action that ever moves a prospect to 'contacted' -- never inferred from copying/opening a channel. [finalText] is the actual text sent, which may differ from the draft after an edit. */
     suspend fun markPartnershipContacted(id: String, channel: String, finalText: String): PartnershipProspect
+    /**
+     * Sends the pitch directly via Resend instead of copy+mailto -- only
+     * offered for a prospect whose contactRoute is an email address. Same
+     * approved-draft precondition as markPartnershipContacted server-side,
+     * and marks the prospect contacted the same way on success. Throws
+     * with a clear reason (not an email contact, RESEND_API_KEY not
+     * configured yet) rather than silently no-op-ing.
+     */
+    suspend fun sendPartnershipEmail(id: String, subject: String, finalText: String): PartnershipProspect
     suspend fun recordPartnershipReply(id: String, summary: String): PartnershipProspect
     suspend fun startPartnershipPilot(id: String, termsAgreed: String, startDate: String): PartnershipProspect
     suspend fun activatePartnership(id: String): PartnershipProspect
@@ -1059,6 +1068,17 @@ class FakeGrowthOsRepository : GrowthOsRepository {
 
     override suspend fun markPartnershipContacted(id: String, channel: String, finalText: String): PartnershipProspect =
         updatePartnershipItem(id) { it.copy(stage = PartnershipStage.CONTACTED, contactedChannel = channel, contactedAt = "2026-09-05T20:00:00Z") }
+
+    override suspend fun sendPartnershipEmail(id: String, subject: String, finalText: String): PartnershipProspect {
+        val prospect = partnershipItems.first { it.id == id }
+        if (prospect.contactRoute?.startsWith("email", ignoreCase = true) != true) {
+            // Reuses PartnershipDraftRejectedException purely for its "show
+            // this short reason directly, no generic connectivity message"
+            // UI treatment -- not actually about a rejected draft here.
+            throw PartnershipDraftRejectedException("Cannot send email: this prospect's contact route isn't an email address.")
+        }
+        return updatePartnershipItem(id) { it.copy(stage = PartnershipStage.CONTACTED, contactedChannel = "email", contactedAt = "2026-09-05T20:00:00Z") }
+    }
 
     override suspend fun recordPartnershipReply(id: String, summary: String): PartnershipProspect =
         updatePartnershipItem(id) { it.copy(stage = PartnershipStage.REPLIED) }

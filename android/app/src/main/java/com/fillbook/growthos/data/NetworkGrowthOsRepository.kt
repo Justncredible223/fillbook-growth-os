@@ -687,6 +687,19 @@ class NetworkGrowthOsRepository(
     override suspend fun markPartnershipContacted(id: String, channel: String, finalText: String): PartnershipProspect =
         post("/api/approvals?resource=partnerships", JSONObject().put("action", "mark-contacted").put("id", id).put("channel", channel).put("finalText", finalText)).toPartnershipProspect()
 
+    override suspend fun sendPartnershipEmail(id: String, subject: String, finalText: String): PartnershipProspect =
+        try {
+            post("/api/approvals?resource=partnerships", JSONObject().put("action", "send-email").put("id", id).put("subject", subject).put("finalText", finalText)).toPartnershipProspect()
+        } catch (e: NetworkException) {
+            // Same 404-with-real-reason pattern as generatePartnershipDraft above --
+            // "not an email contact" and "RESEND_API_KEY not configured yet" are
+            // real, actionable reasons the owner needs to see, not a generic
+            // connectivity message.
+            val parsedError = extractPartnershipActionErrorMessage(e.httpCode, e.message)
+            if (parsedError != null) throw PartnershipDraftRejectedException(shortReason = parsedError)
+            throw e
+        }
+
     override suspend fun recordPartnershipReply(id: String, summary: String): PartnershipProspect =
         post("/api/approvals?resource=partnerships", JSONObject().put("action", "record-reply").put("id", id).put("summary", summary)).toPartnershipProspect()
 

@@ -13,6 +13,7 @@ import {
   qualifyPartnership,
   recordPartnershipOutcome,
   recordPartnershipReply,
+  sendPartnershipEmail,
   startPartnershipPilot,
 } from "../src/partnerships/partnershipsHandlers";
 import type { NewPartnershipProspect } from "../src/partnerships/types";
@@ -544,6 +545,69 @@ describe("markPartnershipContacted -- requires an actual approved draft, never i
     expect(contacted.contactedAt).not.toBeNull();
 
     global.fetch = originalFetch;
+  });
+});
+
+describe("sendPartnershipEmail -- Resend-backed alternative to the copy/mailto flow", () => {
+  const originalResendKey = process.env.RESEND_API_KEY;
+  const originalFromEmail = process.env.OUTREACH_FROM_EMAIL;
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    process.env.RESEND_API_KEY = originalResendKey;
+    process.env.OUTREACH_FROM_EMAIL = originalFromEmail;
+    global.fetch = originalFetch;
+  });
+
+  it("refuses when there is no approved draft yet -- same precondition as markPartnershipContacted", async () => {
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect({ contactRoute: "email:coach@example.com" }));
+    await qualifyPartnership(asSupabase(client), prospect.id, "ok");
+    await expect(sendPartnershipEmail(asSupabase(client), prospect.id, "Subject", "Hi there")).rejects.toThrow(/Cannot send email/);
+  });
+
+  it("refuses when the prospect's contact route isn't an email address", async () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    global.fetch = sequenceFetch([draftResponse(GOOD_DRAFT), ...verdicts(true)]) as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect({ contactRoute: "x:@examplecoach" }));
+    await qualifyPartnership(asSupabase(client), prospect.id, "ok");
+    await generateDraftForPartnership(asSupabase(client), prospect.id);
+
+    await expect(sendPartnershipEmail(asSupabase(client), prospect.id, "Subject", GOOD_DRAFT)).rejects.toThrow(/isn't an email address/);
+  });
+
+  it("refuses when RESEND_API_KEY/OUTREACH_FROM_EMAIL aren't configured, rather than silently no-op-ing", async () => {
+    delete process.env.RESEND_API_KEY;
+    delete process.env.OUTREACH_FROM_EMAIL;
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    global.fetch = sequenceFetch([draftResponse(GOOD_DRAFT), ...verdicts(true)]) as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect({ contactRoute: "email:coach@example.com" }));
+    await qualifyPartnership(asSupabase(client), prospect.id, "ok");
+    await generateDraftForPartnership(asSupabase(client), prospect.id);
+
+    await expect(sendPartnershipEmail(asSupabase(client), prospect.id, "Subject", GOOD_DRAFT)).rejects.toThrow(/not configured/);
+  });
+
+  it("sends via Resend and marks the prospect contacted, once configured with an approved draft and an email contact route", async () => {
+    process.env.RESEND_API_KEY = "re_test";
+    process.env.OUTREACH_FROM_EMAIL = "growth@fillbookhq.com";
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    global.fetch = sequenceFetch([draftResponse(GOOD_DRAFT), ...verdicts(true)]) as unknown as typeof fetch;
+
+    const client = buildClient();
+    const { prospect } = await createPartnership(asSupabase(client), newProspect({ contactRoute: "email:coach@example.com" }));
+    await qualifyPartnership(asSupabase(client), prospect.id, "ok");
+    await generateDraftForPartnership(asSupabase(client), prospect.id);
+
+    const sent = await sendPartnershipEmail(asSupabase(client), prospect.id, "A partnership idea", GOOD_DRAFT);
+
+    expect(sent.stage).toBe("contacted");
+    expect(sent.contactedChannel).toBe("email");
+    expect(sent.contactedAt).not.toBeNull();
   });
 });
 

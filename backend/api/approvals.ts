@@ -44,6 +44,7 @@ import {
   qualifyPartnership,
   recordPartnershipOutcome,
   recordPartnershipReply,
+  sendPartnershipEmail,
   startPartnershipPilot,
   toPartnershipJson,
   updatePartnership,
@@ -278,6 +279,7 @@ async function handlePartnerships(req: VercelRequest, res: VercelResponse): Prom
           id?: string;
           channel?: string;
           finalText?: string;
+          subject?: string;
           reason?: string;
           summary?: string;
           rationale?: string;
@@ -344,6 +346,13 @@ async function handlePartnerships(req: VercelRequest, res: VercelResponse): Prom
           return;
         }
         res.status(200).json(toPartnershipJson(await markPartnershipContacted(client, id, body.channel, body.finalText)));
+        return;
+      case "send-email":
+        if (!body?.finalText) {
+          res.status(400).json({ error: "send-email requires { subject?: string, finalText: string }" });
+          return;
+        }
+        res.status(200).json(toPartnershipJson(await sendPartnershipEmail(client, id, body.subject ?? "A partnership idea from Fillbook", body.finalText)));
         return;
       case "record-reply":
         res.status(200).json(toPartnershipJson(await recordPartnershipReply(client, id, body?.summary ?? "Reply received.")));

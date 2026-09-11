@@ -108,6 +108,13 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
     var pilotDialogProspectId by rememberSaveable { mutableStateOf<String?>(null) }
     var pilotDialogError by remember { mutableStateOf<String?>(null) }
     var pilotDialogBusy by remember { mutableStateOf(false) }
+    // Extra confirmation gate specifically for "Send email": unlike Copy +
+    // Open (which still requires the owner to physically hit send in their
+    // own mail app), this is a real one-click send via Resend -- same
+    // id-keyed pattern as pilotDialogProspectId, see its own comment.
+    var sendEmailDialogProspectId by rememberSaveable { mutableStateOf<String?>(null) }
+    var sendEmailDialogError by remember { mutableStateOf<String?>(null) }
+    var sendEmailDialogBusy by remember { mutableStateOf(false) }
     // Owner edits to the generated pitch before it's sent -- keyed by
     // prospect id, never persisted until "Mark contacted" is tapped.
     val editedDrafts = remember { mutableStateMapOf<String, String>() }
@@ -317,6 +324,9 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                             onQualify = { runAction(prospect) { repo.qualifyPartnership(prospect.id, "Owner-reviewed: futures-relevant audience, no competing journal found.") } },
                             onGenerateDraft = { runAction(prospect) { repo.generatePartnershipDraft(prospect.id) } },
                             onCopyAndOpen = { copyAndOpen(prospect) },
+                            onSendEmail = if (prospect.contactRoute?.startsWith("email", ignoreCase = true) == true) {
+                                { sendEmailDialogProspectId = prospect.id }
+                            } else null,
                             onMarkContacted = {
                                 val finalText = editedDrafts[prospect.id] ?: prospect.previewText.orEmpty()
                                 runAction(prospect) { repo.markPartnershipContacted(prospect.id, channelForRoute(prospect.contactRoute), finalText) }
@@ -354,6 +364,9 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                                 onQualify = { runAction(prospect) { repo.qualifyPartnership(prospect.id, "Owner-reviewed: futures-relevant audience, no competing journal found.") } },
                                 onGenerateDraft = { runAction(prospect) { repo.generatePartnershipDraft(prospect.id) } },
                                 onCopyAndOpen = { copyAndOpen(prospect) },
+                                onSendEmail = if (prospect.contactRoute?.startsWith("email", ignoreCase = true) == true) {
+                                    { sendEmailDialogProspectId = prospect.id }
+                                } else null,
                                 onMarkContacted = {
                                     val finalText = editedDrafts[prospect.id] ?: prospect.previewText.orEmpty()
                                     runAction(prospect) { repo.markPartnershipContacted(prospect.id, channelForRoute(prospect.contactRoute), finalText) }
@@ -379,6 +392,9 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
                                 onQualify = { runAction(prospect) { repo.qualifyPartnership(prospect.id, "Owner-reviewed: futures-relevant audience, no competing journal found.") } },
                                 onGenerateDraft = { runAction(prospect) { repo.generatePartnershipDraft(prospect.id) } },
                                 onCopyAndOpen = { copyAndOpen(prospect) },
+                                onSendEmail = if (prospect.contactRoute?.startsWith("email", ignoreCase = true) == true) {
+                                    { sendEmailDialogProspectId = prospect.id }
+                                } else null,
                                 onMarkContacted = {
                                     val finalText = editedDrafts[prospect.id] ?: prospect.previewText.orEmpty()
                                     runAction(prospect) { repo.markPartnershipContacted(prospect.id, channelForRoute(prospect.contactRoute), finalText) }
@@ -441,6 +457,58 @@ fun PartnershipsScreen(repo: GrowthOsRepository) {
             },
         )
     }
+
+    items.firstOrNull { it.id == sendEmailDialogProspectId }?.let { prospect ->
+        SendPartnershipEmailDialog(
+            organizationName = prospect.organizationName,
+            recipient = prospect.contactRoute?.substringAfter(":")?.trim().orEmpty(),
+            busy = sendEmailDialogBusy,
+            errorMessage = sendEmailDialogError,
+            onDismiss = { sendEmailDialogProspectId = null; sendEmailDialogError = null },
+            onConfirm = {
+                scope.launch {
+                    sendEmailDialogBusy = true
+                    try {
+                        val finalText = editedDrafts[prospect.id] ?: prospect.previewText.orEmpty()
+                        repo.sendPartnershipEmail(prospect.id, "A partnership idea from Fillbook", finalText)
+                        refresh()
+                        sendEmailDialogProspectId = null
+                        sendEmailDialogError = null
+                    } catch (e: PartnershipDraftRejectedException) {
+                        sendEmailDialogError = e.shortReason
+                    } catch (e: Exception) {
+                        sendEmailDialogError = "Couldn't send the email. Check your connection and try again."
+                    }
+                    sendEmailDialogBusy = false
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun SendPartnershipEmailDialog(organizationName: String, recipient: String, busy: Boolean, errorMessage: String?, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text("Send email to $organizationName?") },
+        text = {
+            Column {
+                Text(
+                    "This sends the pitch directly to $recipient via Fillbook's own email -- unlike Copy + Open, there's no further review step after this. Make sure the draft above is exactly what you want sent.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextSecondary,
+                )
+                errorMessage?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = Danger)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm, enabled = !busy) { Text(if (busy) "Sending..." else "Send email") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !busy) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -631,6 +699,8 @@ private fun PartnershipCard(
     onGenerateDraft: () -> Unit,
     onCopyAndOpen: () -> Unit,
     onMarkContacted: () -> Unit,
+    /** Null when this prospect's contactRoute isn't an email address -- the button is simply not offered, rather than shown disabled with no explanation. */
+    onSendEmail: (() -> Unit)?,
     onRecordReply: () -> Unit,
     onStartPilot: () -> Unit,
     onArchive: () -> Unit,
@@ -749,6 +819,10 @@ private fun PartnershipCard(
             PartnershipStage.DRAFT_READY -> {
                 if (draft != null) {
                     PrimaryButton(text = "Copy + Open ${prospect.contactRoute?.let { if (it.startsWith("email", true)) "Email" else "X" } ?: "channel"}", onClick = onCopyAndOpen, enabled = !busy, modifier = Modifier.fillMaxWidth())
+                    if (onSendEmail != null) {
+                        Spacer(Modifier.height(6.dp))
+                        TextButton(onClick = onSendEmail, enabled = !busy) { Text("Send email now (skips Copy + Open)") }
+                    }
                     Spacer(Modifier.height(6.dp))
                     TextButton(onClick = onMarkContacted, enabled = !busy) { Text(if (busy) "Marking..." else "Mark contacted") }
                 } else {

@@ -13,6 +13,7 @@ import { hasSufficientEvidenceForPitch, hasConcretePartnershipBasis } from "./di
 import { canMarkContacted, isValidTransition } from "./stageTransitions.js";
 import { normalizeDomain, normalizeHandle, findExistingMatches, type ExistingMatch } from "./dedup.js";
 import { SupabasePartnershipRepository } from "./supabasePartnershipRepository.js";
+import { sendOutreachEmail } from "../email/emailClient.js";
 import type { NewPartnershipProspect, PartnerCategory, PartnershipOutcomeMetric, PartnershipOutcomeSource, PartnershipProspect, PartnershipStage } from "./types.js";
 
 export const PARTNERSHIP_ASSET_TYPE = "partnership_pitch";
@@ -406,6 +407,61 @@ export async function markPartnershipContacted(
   const now = new Date().toISOString();
   await repo.recordContact(id, channel, now);
   return repo.transitionStage(id, "contacted", { interactionType: "contacted", summary: `Contacted via ${channel}: ${finalText}` });
+}
+
+/**
+ * Extracts a plain email address from a contactRoute of the shape
+ * "email:someone@example.com" (see PartnershipCard's own channelForRoute/
+ * copyAndOpen logic on the Android side, which parses the same shape for
+ * the existing mailto: flow). Returns null for any other shape (an X
+ * handle, an unset route) -- sendPartnershipEmail treats that as "this
+ * prospect isn't an email contact," not an error to guess around.
+ */
+function extractEmailAddress(contactRoute: string | null): string | null {
+  if (!contactRoute?.toLowerCase().startsWith("email")) return null;
+  const address = contactRoute.split(":").slice(1).join(":").trim();
+  return address.length > 0 ? address : null;
+}
+
+/**
+ * Sends a partnership pitch directly via Resend, as an alternative to the
+ * existing "copy pitch, open mailto:" flow (still available and unchanged
+ * -- this is an addition, not a replacement). Requires the SAME
+ * approved-draft precondition as markPartnershipContacted (canMarkContacted)
+ * so a real send can't happen without a reviewed draft behind it, and
+ * marks the prospect contacted exactly the same way on success -- from the
+ * pipeline's perspective, a Resend send and a manual mailto: send are the
+ * same real-world action, just a different delivery mechanism.
+ *
+ * Deliberately NOT wired to any automatic trigger -- this function only
+ * ever runs when the owner explicitly taps "Send email" on a specific,
+ * already-reviewed draft (see docs discussion 2026-09-10: every other
+ * outreach channel in this app requires the same explicit human send
+ * action, and email -- unlike X, which has no programmatic DM/reply API --
+ * is the one channel actually capable of sending itself, so keeping this
+ * gate is a deliberate consistency choice, not a technical necessity).
+ */
+export async function sendPartnershipEmail(client: SupabaseClient, id: string, subject: string, finalText: string): Promise<PartnershipProspect> {
+  const repo = new SupabasePartnershipRepository(client);
+  const prospect = await requireProspect(repo, id);
+  if (!canMarkContacted(prospect.stage, prospect.approvedCampaignAssetId)) {
+    throw new PartnershipActionError(
+      `Cannot send email: prospect must be 'draft_ready' with an approved draft (currently '${prospect.stage}', approvedCampaignAssetId=${prospect.approvedCampaignAssetId ?? "null"})`,
+    );
+  }
+  const to = extractEmailAddress(prospect.contactRoute);
+  if (!to) {
+    throw new PartnershipActionError(`Cannot send email: contactRoute "${prospect.contactRoute ?? "(none)"}" isn't an email address -- use Copy & Open instead.`);
+  }
+
+  const result = await sendOutreachEmail({ to, subject, body: finalText });
+  if (!result.sent) {
+    throw new PartnershipActionError(`Cannot send email: ${result.skippedReason ?? "email sending isn't configured yet"}.`);
+  }
+
+  const now = new Date().toISOString();
+  await repo.recordContact(id, "email", now);
+  return repo.transitionStage(id, "contacted", { interactionType: "contacted", summary: `Emailed directly via Resend (${result.providerId ?? "sent"}): ${finalText}` });
 }
 
 export async function recordPartnershipReply(client: SupabaseClient, id: string, summary: string): Promise<PartnershipProspect> {
