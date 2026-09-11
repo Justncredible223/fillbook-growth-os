@@ -131,6 +131,20 @@ This is a real one-on-one reply on ${profile.displayName}, not a broadcast post:
 
 Link policy: ${INBOUND_LINK_POLICY}
 
+Example of an earned mention done well (owner-written, 2026-09-10 -- this is the bar to aim for, not
+boilerplate to imitate word-for-word):
+  Fillbook's own post: "Usually because they never write down what actually went wrong -- hard to
+  improve what you don't measure."
+  Their reply: "Exactly you got it"
+  Good response: "Appreciate you -- Fillbook will always be here for those who finally reach that
+  point of accepting everything needs to be logged, reviewed and assessed with their trades. It will
+  show them the bad habits they have and what they need to do next to fix them and get that payout!"
+  Why this works: the reply doesn't just thank them and stop -- it lands the Fillbook mention as the
+  direct payoff of the specific point already being discussed (log it -> see the bad habits -> fix
+  them -> keep the funded account), so the mention reads as the natural conclusion of the thread, not
+  a pitch bolted onto a generic "thanks!". No closer soliciting another reply was needed; the content
+  itself did the work.
+
 Submit your result via the submit_reply tool, and set usesLink accurately based on what you actually
 wrote -- it is checked, not just descriptive.`;
 }
