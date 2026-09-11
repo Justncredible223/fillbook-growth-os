@@ -180,6 +180,16 @@ export function escapeAssText(text: string): string {
  * deliberately designed rather than like whatever happened to be on the
  * rendering machine, and thicker Outline/Shadow give the text more pop
  * against busy stock-footage backgrounds.
+ *
+ * Caption/Hook MarginV=320 (2026-09-10, raised from 160): owner-confirmed
+ * on a real TikTok upload -- at 160 (only ~8% of the 1920px canvas), the
+ * burned-in caption sat directly behind TikTok's own post
+ * description/username text, which TikTok renders in that same bottom
+ * strip regardless of what the video itself contains. 320px (~17%) clears
+ * that UI band with real margin to spare; verified against TikTok's own
+ * safe-zone guidance for that region. SceneLabel (top-anchored, MarginV=140)
+ * and Outro (middle-centered) are unaffected -- neither sits in TikTok's
+ * bottom UI strip.
  */
 const ASS_HEADER = `[Script Info]
 ScriptType: v4.00+
@@ -190,8 +200,8 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,Poppins ExtraBold,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,2,2,80,80,160,1
-Style: Hook,Poppins ExtraBold,74,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,2,2,80,80,160,1
+Style: Caption,Poppins ExtraBold,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,2,2,80,80,320,1
+Style: Hook,Poppins ExtraBold,74,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,2,2,80,80,320,1
 Style: SceneLabel,Poppins ExtraBold,48,&H00F4F6FA,&H00F4F6FA,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,5,2,8,80,80,140,1
 Style: Outro,Poppins ExtraBold,92,&H00EED322,&H00EED322,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,7,3,5,80,80,0,1
 
@@ -206,7 +216,7 @@ export interface SceneLabelCue {
 
 /**
  * Assembles the full .ass file: caption dialogue (bottom-safe, per
- * MarginV=80 in the Caption/Hook styles) plus scene-label dialogue (top
+ * MarginV=320 in the Caption/Hook styles) plus scene-label dialogue (top
  * third, MarginV=140 in the SceneLabel style) so the two never overlap --
  * preserving TikTok/Shorts UI safe zones (avoids the bottom
  * caption/engagement-bar area and the very top status-bar area).
