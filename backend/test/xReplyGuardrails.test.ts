@@ -107,6 +107,12 @@ describe("containsBannedGenericPhrase", () => {
     expect(containsBannedGenericPhrase("Journaling every loss taught me more about my own patterns than any course did.")).toBeNull();
   });
 
+  it("catches engagement-bait closers (owner-flagged 2026-09-10, real Inbound draft: \"Appreciate you -- let's keep the conversation going.\")", () => {
+    expect(containsBannedGenericPhrase("Appreciate you -- let's keep the conversation going.")).not.toBeNull();
+    expect(containsBannedGenericPhrase("Would love to hear more about your setup!")).not.toBeNull();
+    expect(containsBannedGenericPhrase("What are your thoughts on that?")).not.toBeNull();
+  });
+
   it("KNOWN LIMITATION: this is literal substring matching, not phrase-boundary-aware -- ordinary text that happens to contain an exact banned phrase as a substring is still flagged. Documented, not silently papered over: a false positive here just means a genuinely fine reply gets a rejection message and needs a light edit or a manual override, which is a far safer failure mode than a promotional phrase slipping through.", () => {
     expect(containsBannedGenericPhrase("I learn more about my own trading every time I journal a loss.")).not.toBeNull();
   });

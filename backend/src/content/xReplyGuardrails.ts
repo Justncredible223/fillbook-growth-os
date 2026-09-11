@@ -13,7 +13,26 @@
  * no cost and every match is traceable to an exact phrase.
  */
 
-const BANNED_GENERIC_PHRASES = ["check out our platform", "check out our product", "learn more", "dm me", "dm us", "sign up today", "click here", "link in bio"];
+const BANNED_GENERIC_PHRASES = [
+  "check out our platform",
+  "check out our product",
+  "learn more",
+  "dm me",
+  "dm us",
+  "sign up today",
+  "click here",
+  "link in bio",
+  // Engagement-bait closers (owner-flagged 2026-09-10, from a real Inbound
+  // draft reading as a reply-farming tactic rather than a genuine
+  // response): content-free lines whose only job is soliciting another
+  // reply, not adding anything to what the person actually said.
+  "let's keep the conversation going",
+  "keep the conversation going",
+  "let's continue the conversation",
+  "would love to hear more",
+  "let me know your thoughts",
+  "what are your thoughts",
+];
 
 export interface GuardrailViolation {
   reason: string;
