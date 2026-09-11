@@ -88,6 +88,21 @@ data class HomeSummary(
     val systemPaused: Boolean,
     val analytics: AnalyticsBreakdown,
     val todayXPost: TodayXPost = TodayXPost(TodayXPostState.EMPTY, null, null, null, null, null, false),
+    val attribution: AttributionSummary = AttributionSummary(0, null),
+)
+
+/**
+ * How many real FillbookHQ signups this project's own outreach can be
+ * tied to, over the last 7 days -- backed by the conversion_events table
+ * the FillbookHQ signup webhook writes to (see backend/src/attribution/).
+ * Surfaced on Home so the attribution loop is actually visible instead of
+ * a table nobody queries. [topSource] is null when there's simply been no
+ * conversion_events activity yet (a genuine "nothing to report" state, not
+ * a data gap) -- never fabricated as "none" or "unknown".
+ */
+data class AttributionSummary(
+    val signupsLast7Days: Int,
+    val topSource: String?,
 )
 
 enum class TodayXPostState { EMPTY, RUNNING, READY, HANDED_OFF, POSTED, FAILED }

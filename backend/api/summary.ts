@@ -606,7 +606,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const autoDraftRunRepo = new SupabaseAutoDraftRunRepository(client);
 
     const now = new Date();
-    const [signalsToday, openOpportunities, readyAssetsAwaitingDecision, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftSpendUsd, todayXPost, todaySpendUsd] =
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const [signalsToday, openOpportunities, readyAssetsAwaitingDecision, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftSpendUsd, todayXPost, todaySpendUsd, recentConversions] =
       await Promise.all([
         client.from("signals").select("id", { count: "exact", head: true }).gte("observed_at", startOfToday.toISOString()),
         client.from("opportunities").select("id", { count: "exact", head: true }).eq("status", "open"),
@@ -631,6 +632,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         autoDraftRunRepo.getMonthSpendUsd(yearMonth),
         computeTodayXPostView(client, now),
         getTodaySpendUsd(client),
+        // Attribution loop this session closed (see backend/src/attribution/):
+        // FillbookHQ's signup webhook writes here. Surfaced on Home so the
+        // loop is actually visible instead of a table nobody queries.
+        client.from("conversion_events").select("utm_source, utm_medium, utm_content").gte("occurred_at", sevenDaysAgo.toISOString()),
       ]);
 
     const countBy = (rows: Array<Record<string, string>> | null, key: string): Record<string, number> => {
@@ -643,6 +648,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
     const totalCostUsd = (costRows.data ?? []).reduce((sum: number, r: { cost_usd: number }) => sum + Number(r.cost_usd), 0);
 
+    // Ranks by whichever of utm_source/utm_medium is present, per row (a
+    // signup can legitimately have neither -- a direct visit with no UTM
+    // tag -- which is real information, not a data gap, so it's excluded
+    // from the ranking rather than counted as an "unknown" source).
+    const conversionRows = (recentConversions.data ?? []) as Array<{ utm_source: string | null; utm_medium: string | null; utm_content: string | null }>;
+    const sourceCounts = countBy(
+      conversionRows.filter((r) => r.utm_source || r.utm_medium).map((r) => ({ source: (r.utm_source || r.utm_medium)! })),
+      "source",
+    );
+    const topSource = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
     res.status(200).json({
       todayXPost,
       signalsAnalyzedToday: signalsToday.count ?? 0,
@@ -652,6 +668,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // guarantees Home and Approvals always agree on "how many."
       pendingReview: readyAssetsAwaitingDecision.count ?? 0,
       systemPaused: settings.data?.paused ?? false,
+      attribution: {
+        signupsLast7Days: conversionRows.length,
+        topSource,
+      },
       analytics: {
         totalSignals: (signalsBySource.data ?? []).length,
         signalsBySource: countBy(signalsBySource.data as Array<Record<string, string>>, "source"),

@@ -148,6 +148,12 @@ class NetworkGrowthOsRepository(
                 },
             ),
             todayXPost = json.optJSONObject("todayXPost").toTodayXPost(),
+            attribution = json.optJSONObject("attribution")?.let { attr ->
+                AttributionSummary(
+                    signupsLast7Days = attr.optInt("signupsLast7Days", 0),
+                    topSource = attr.optStringOrNull("topSource"),
+                )
+            } ?: AttributionSummary(0, null),
         )
     }
 

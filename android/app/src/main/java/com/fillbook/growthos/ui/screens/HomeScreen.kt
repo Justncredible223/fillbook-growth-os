@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.fillbook.growthos.data.AttributionSummary
 import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.HealthItem
@@ -282,6 +283,9 @@ fun HomeScreen(repo: GrowthOsRepository, onNavigate: (String) -> Unit) {
                         }
                     }
                 }
+
+                item { Box20 { SectionHeader("Attribution") } }
+                item { Box20 { AttributionCard(s.attribution) } }
 
                 item { Box20 { SectionHeader("Recent activity") } }
                 item { Box20 { RecentActivity(s, health) } }
@@ -562,6 +566,35 @@ private data class NextAction(
     val route: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
 )
+
+/**
+ * Whether real FillbookHQ signups can be tied back to this project's own
+ * outreach -- backed by conversion_events, which the FillbookHQ signup
+ * webhook writes to (see backend/src/attribution/). Added so that loop is
+ * actually visible on Home instead of a table nobody queries. Zero
+ * signups is a genuine, expected early state (the webhook only just
+ * started reporting) -- shown plainly rather than hidden, same as this
+ * screen's other "nothing yet" states.
+ */
+@Composable
+private fun AttributionCard(attribution: AttributionSummary) {
+    GrowthCard {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column {
+                Text(
+                    "${attribution.signupsLast7Days} signup${if (attribution.signupsLast7Days == 1) "" else "s"} (last 7 days)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimary,
+                )
+                Text(
+                    attribution.topSource?.let { "Top source: $it" } ?: "No attributed signups yet",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextTertiary,
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun RecentActivity(summary: HomeSummary, health: List<HealthItem>) {
