@@ -22,7 +22,7 @@ import { generateVoiceover, DEFAULT_VOICE } from "../video-factory/voiceover.js"
 import { buildCaptionCues, buildOutroCue, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "../video-factory/captions.js";
 import { buildScenePlan, buildSceneLabelCues } from "../video-factory/scenes.js";
 import { renderVideo, extractThumbnail } from "../video-factory/render.js";
-import { copyClipToDir, fetchStockClip, getVideoQuery } from "../video-factory/stockFootage.js";
+import { copyClipToDir, fetchStockClip, getVideoQuery, type StockFootageCredentials } from "../video-factory/stockFootage.js";
 import { runFfprobeJson, validateOutput } from "../video-factory/validate.js";
 import { createProcessRunner, requireExecutable } from "../video-factory/processRunner.js";
 import { sendRenderNotification } from "./pushSender.js";
@@ -35,7 +35,9 @@ const WORK_DIR = process.env.VIDEO_WORKER_WORK_DIR ?? "/tmp/fillbook-video-worke
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PRODUCT_DEMO_SRC = join(__dirname, "../video-factory/assets/fillbook-product-demo.mp4");
-const PEXELS_CLIP_CACHE = join(WORK_DIR, "_pexels-cache");
+// Directory name kept generic (not "_shutterstock-cache") so a future
+// provider swap doesn't orphan an already-downloaded clip library.
+const STOCK_CLIP_CACHE = join(WORK_DIR, "_stock-footage-cache");
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -76,15 +78,22 @@ async function main(): Promise<void> {
   const assPath = join(outDir, "captions.ass");
   writeFileSync(assPath, buildAssFile(captionCues, sceneLabelCues), "utf-8");
 
-  // Assign video clip backgrounds to each scene
-  const pexelsApiKey = process.env.PEXELS_API_KEY;
+  // Assign video clip backgrounds to each scene -- searches Pexels and
+  // Pixabay together (either key may be unset; fetchStockClip just skips
+  // whichever provider has none), so the effective clip pool is the union
+  // of both free libraries rather than one at a time.
+  const stockCredentials: StockFootageCredentials = {
+    pexelsApiKey: process.env.PEXELS_API_KEY ?? null,
+    pixabayApiKey: process.env.PIXABAY_API_KEY ?? null,
+  };
+  const hasAnyStockProvider = Boolean(stockCredentials.pexelsApiKey || stockCredentials.pixabayApiKey);
   const seed = parseInt(videoRenderId.replace(/-/g, "").slice(0, 8), 16);
   for (let i = 0; i < scenes.length; i++) {
     const scene = scenes[i];
-    if (pexelsApiKey) {
+    if (hasAnyStockProvider) {
       const query = getVideoQuery(scene.kind, seed + i);
       if (query) {
-        const cached = await fetchStockClip(query, scene.durationSeconds, PEXELS_CLIP_CACHE, pexelsApiKey);
+        const cached = await fetchStockClip(query, scene.durationSeconds, STOCK_CLIP_CACHE, stockCredentials);
         if (cached) scene.clipPath = copyClipToDir(cached, outDir);
       }
     }
