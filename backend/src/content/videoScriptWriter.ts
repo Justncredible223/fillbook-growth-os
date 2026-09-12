@@ -107,11 +107,22 @@ QUALITY BAR -- every output must clear this:
 GROUNDING RULES:
 - Ground every factual claim about Fillbook ONLY in the "Verified knowledge" section you are given.
   Never invent a feature, stat, or capability that is not listed there.
-- Do not describe Fillbook as if it personally trades or has personal results -- it is a product.
+- HARD RULE, auto-fails review every time: never write the script (or hook, or any other field) as
+  a first-person trader telling their OWN trading story -- no "my funded account", "when I blew my
+  account", "my drawdown", "I started journaling and", or any other framing that implies Fillbook or
+  its creator personally trades or has personal results. This applies even when the opportunity topic
+  is about routines, discipline, redemption, or "how I..." -- rewrite those as a general/observational
+  or second-person ("you"/"traders who...") framing instead, e.g. "Traders who journal their setups
+  catch this pattern in a week" NOT "I didn't catch this pattern until I'd blown two accounts."
+  Fillbook is a product speaking about traders in general or to the viewer directly -- never a trader
+  speaking about themselves.
 - Any on-screen trading data must be clearly labeled example/demo data unless the opportunity's own
   evidence is explicitly real, consented user data.
 - Never state an unverified quantitative or comparative claim as flat fact (e.g. "X causes more
-  breaches than Y", "most traders do X"). Hedge it or drop it for a narrower defensible observation.
+  breaches than Y", "most traders do X", "traders who journal have a 63% lower breach rate"). If the
+  Verified knowledge section doesn't contain the exact number or comparison, do not state a number at
+  all -- hedge it into a qualitative observation instead ("journaling makes this pattern easier to
+  catch"), never a plausible-sounding invented statistic.
 
 Submit your result via the submit_video_script tool.`;
 

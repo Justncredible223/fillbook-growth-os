@@ -223,14 +223,32 @@ class NetworkGrowthOsRepository(
         return json.getString("draft")
     }
 
-    override suspend fun runCampaignForOpportunity(opportunityId: String): CampaignRunResult {
-        val json = post("/api/run-campaign", JSONObject().put("opportunityId", opportunityId))
-        val result = json.getJSONObject("result")
+    /**
+     * A rejection can come from either gate: the mechanical gate (banned
+     * phrases/duplicates -- `mechanicalBlockReasons`) or the nine-agent deep
+     * review (`deepReview.blockReasons`, e.g. "brand_guardian: ..."). Before
+     * this, only mechanicalBlockReasons was surfaced, so a deep-review
+     * rejection (the far more common case in practice) showed the owner a
+     * bare "Didn't clear review (Final Draft)." with no indication of what
+     * actually needs to change -- confirmed against real production video
+     * requests that failed brand_guardian/skeptic for a personal-trading
+     * narrative the owner had no way to see without querying the database
+     * directly.
+     */
+    private fun JSONObject.toCampaignRunResult(): CampaignRunResult {
+        val result = getJSONObject("result")
+        val mechanicalReasons = result.optJSONArray("mechanicalBlockReasons")?.mapStrings() ?: emptyList()
+        val deepReviewReasons = result.optJSONObject("deepReview")?.optJSONArray("blockReasons")?.mapStrings() ?: emptyList()
         return CampaignRunResult(
             finalStage = result.getString("finalStage"),
-            blockReasons = result.optJSONArray("mechanicalBlockReasons")?.mapStrings() ?: emptyList(),
-            costUsd = json.getDouble("costUsd"),
+            blockReasons = mechanicalReasons + deepReviewReasons,
+            costUsd = getDouble("costUsd"),
         )
+    }
+
+    override suspend fun runCampaignForOpportunity(opportunityId: String): CampaignRunResult {
+        val json = post("/api/run-campaign", JSONObject().put("opportunityId", opportunityId))
+        return json.toCampaignRunResult()
     }
 
     override suspend fun requestVideoScript(topic: String?, opportunityId: String?): CampaignRunResult {
@@ -238,12 +256,7 @@ class NetworkGrowthOsRepository(
         if (topic != null) body.put("topic", topic)
         if (opportunityId != null) body.put("opportunityId", opportunityId)
         val json = post("/api/run-campaign", body)
-        val result = json.getJSONObject("result")
-        return CampaignRunResult(
-            finalStage = result.getString("finalStage"),
-            blockReasons = result.optJSONArray("mechanicalBlockReasons")?.mapStrings() ?: emptyList(),
-            costUsd = json.getDouble("costUsd"),
-        )
+        return json.toCampaignRunResult()
     }
 
     override suspend fun requestResearch(topic: String?, opportunityId: String?): CampaignRunResult {
@@ -251,12 +264,7 @@ class NetworkGrowthOsRepository(
         if (topic != null) body.put("topic", topic)
         if (opportunityId != null) body.put("opportunityId", opportunityId)
         val json = post("/api/run-campaign", body)
-        val result = json.getJSONObject("result")
-        return CampaignRunResult(
-            finalStage = result.getString("finalStage"),
-            blockReasons = result.optJSONArray("mechanicalBlockReasons")?.mapStrings() ?: emptyList(),
-            costUsd = json.getDouble("costUsd"),
-        )
+        return json.toCampaignRunResult()
     }
 
     private fun JSONObject.toResearchRecord() = ResearchRecord(
