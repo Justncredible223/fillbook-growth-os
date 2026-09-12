@@ -53,7 +53,7 @@ import type { NewPartnershipProspect, PartnershipOutcomeMetric, PartnershipOutco
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
 import { listVideoRenderStatuses, registerDevicePushToken, dismissVideoRender } from "../src/video/videoStatusHandlers.js";
-import { MAX_VIDEO_RENDERS_PER_MONTH } from "../src/video/videoRenderEligibility.js";
+import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "../src/video/videoRenderEligibility.js";
 import { listResearchRecords } from "../src/research/researchHandlers.js";
 
 /**
@@ -625,6 +625,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { data: enqueueData, error: enqueueError } = await client.rpc("enqueue_video_render", {
           p_campaign_asset_id: campaignAssetId,
           p_monthly_cap: MAX_VIDEO_RENDERS_PER_MONTH,
+          p_daily_cap: MAX_VIDEO_RENDERS_PER_DAY,
         });
         if (enqueueError) throw enqueueError;
         const row = (Array.isArray(enqueueData) ? enqueueData[0] : enqueueData) as

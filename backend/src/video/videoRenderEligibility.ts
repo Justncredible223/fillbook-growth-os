@@ -19,6 +19,20 @@
 export const MAX_VIDEO_RENDERS_PER_MONTH = 30;
 
 /**
+ * Hard daily ceiling on how many renders can be QUEUED, added 2026-09-12
+ * after a real incident: the monthly cap alone let the reconciliation
+ * sweep (videoRenderReconciliation.ts) enqueue 8 renders in under a
+ * second when it found 8 approved-but-never-rendered scripts at once --
+ * technically within the monthly budget, but far more than the owner
+ * wants to post in a single day (2/platform/day, owner-stated policy).
+ * Enforced inside enqueue_video_render's own transaction (same lock as
+ * the monthly cap), so it can never be bypassed by a caller that forgets
+ * to check it -- including both the manual "Create Fillbook Video" button
+ * and the reconciliation sweep.
+ */
+export const MAX_VIDEO_RENDERS_PER_DAY = 2;
+
+/**
  * Hard total-bytes ceiling on committed video Storage usage -- half of
  * Supabase Free tier's 1GB Storage allowance, leaving real headroom for
  * the rest of the project (which shares the same overall Free-tier
@@ -42,6 +56,14 @@ export interface EligibilityCheckResult {
 export function evaluateVideoRenderMonthlyCap(rendersThisMonth: number, cap: number = MAX_VIDEO_RENDERS_PER_MONTH): EligibilityCheckResult {
   if (rendersThisMonth >= cap) {
     return { eligible: false, reason: `monthly_render_cap_reached (${rendersThisMonth} renders this month, cap is ${cap})` };
+  }
+  return { eligible: true };
+}
+
+/** Pure helper mirroring the same daily-cap math enqueue_video_render's SQL performs, exposed for direct unit testing without a live database. */
+export function evaluateVideoRenderDailyCap(rendersToday: number, cap: number = MAX_VIDEO_RENDERS_PER_DAY): EligibilityCheckResult {
+  if (rendersToday >= cap) {
+    return { eligible: false, reason: `daily_render_cap_reached (${rendersToday} renders today, cap is ${cap})` };
   }
   return { eligible: true };
 }

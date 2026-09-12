@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { MAX_VIDEO_RENDERS_PER_MONTH } from "./videoRenderEligibility.js";
+import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "./videoRenderEligibility.js";
 
 interface EnqueueResultRow {
   video_render_id: string | null;
@@ -18,7 +18,11 @@ interface EnqueueResultRow {
  * idempotent RPC used by the live approval path, so there is exactly one
  * "is this a duplicate" implementation, not two to keep in sync.
  */
-export async function reconcileVideoRenders(client: SupabaseClient, monthlyCap: number = MAX_VIDEO_RENDERS_PER_MONTH): Promise<string> {
+export async function reconcileVideoRenders(
+  client: SupabaseClient,
+  monthlyCap: number = MAX_VIDEO_RENDERS_PER_MONTH,
+  dailyCap: number = MAX_VIDEO_RENDERS_PER_DAY,
+): Promise<string> {
   const { data: assets, error: assetsError } = await client
     .from("campaign_assets")
     .select("id, asset_type, campaigns(status)")
@@ -46,6 +50,7 @@ export async function reconcileVideoRenders(client: SupabaseClient, monthlyCap: 
     const { data, error } = await client.rpc("enqueue_video_render", {
       p_campaign_asset_id: campaignAssetId,
       p_monthly_cap: monthlyCap,
+      p_daily_cap: dailyCap,
     });
     if (error) throw new Error(`enqueue_video_render failed for ${campaignAssetId}: ${error.message}`);
     const row = (Array.isArray(data) ? data[0] : data) as EnqueueResultRow | undefined;
@@ -53,5 +58,5 @@ export async function reconcileVideoRenders(client: SupabaseClient, monthlyCap: 
     else capBlocked++;
   }
 
-  return `${enqueued} enqueued, ${capBlocked} blocked by monthly cap (${missing.length} were missing a render row)`;
+  return `${enqueued} enqueued, ${capBlocked} blocked by the daily or monthly cap (${missing.length} were missing a render row)`;
 }
