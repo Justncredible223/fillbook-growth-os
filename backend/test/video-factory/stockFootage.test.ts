@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { getVideoQuery, pickRandomEligible, fetchStockClip } from "../../scripts/video-factory/stockFootage";
+import { getVideoQuery, pickRandomEligible, fetchStockClip, isLikelyTradingRelevant } from "../../scripts/video-factory/stockFootage";
 
 function jsonResponse(body: unknown) {
   return { ok: true, json: async () => body } as Response;
@@ -80,6 +80,65 @@ const PIXABAY_HIT = {
   duration: 30,
   videos: { medium: { url: "https://pixabay.example/clip-222.mp4", width: 1280 }, large: { url: "", width: 0 }, small: { url: "", width: 0 } },
 };
+
+describe("isLikelyTradingRelevant", () => {
+  it("passes text naming trading/finance/office content", () => {
+    expect(isLikelyTradingRelevant("a trader typing on a laptop")).toBe(true);
+    expect(isLikelyTradingRelevant("stock market chart close up")).toBe(true);
+    expect(isLikelyTradingRelevant("business, office, desk, computer")).toBe(true);
+  });
+
+  it("rejects text naming something with no trading/finance/office connection -- the real production bug this guards against", () => {
+    expect(isLikelyTradingRelevant("a golfer swinging a club")).toBe(false);
+    expect(isLikelyTradingRelevant("family, vacation, beach, sunset")).toBe(false);
+    expect(isLikelyTradingRelevant("people dancing at a festival")).toBe(false);
+  });
+});
+
+describe("fetchStockClip -- filters out irrelevant B-roll", () => {
+  const originalFetch = global.fetch;
+  let cacheDir: string;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    if (cacheDir) rmSync(cacheDir, { recursive: true, force: true });
+  });
+
+  it("drops a search result whose own description names something unrelated to trading (a real production incident: golf-course and generic lifestyle footage got shown in rendered videos)", async () => {
+    cacheDir = mkdtempSync(join(tmpdir(), "stock-footage-test-"));
+    const golfPexelsVideo = { ...PEXELS_VIDEO, url: "https://www.pexels.com/video/a-golfer-swinging-a-club-111/" };
+    const vacationPixabayHit = { ...PIXABAY_HIT, tags: "family, vacation, beach, sunset" };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("pexels.com")) return jsonResponse({ videos: [golfPexelsVideo] });
+      if (url.includes("pixabay.com")) return jsonResponse({ hits: [vacationPixabayHit] });
+      return downloadResponse();
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await fetchStockClip("trader at desk", 10, cacheDir, { pexelsApiKey: "pex-key", pixabayApiKey: "pix-key" });
+
+    // Both candidates were off-topic -- no clip at all (falls back to a
+    // solid-color background upstream) is the correct, safe outcome, never
+    // showing the golf/vacation footage just because something matched the query text.
+    expect(result).toBeNull();
+  });
+
+  it("keeps a relevant result and still filters out an irrelevant one from the same search", async () => {
+    cacheDir = mkdtempSync(join(tmpdir(), "stock-footage-test-"));
+    const relevantPexelsVideo = { ...PEXELS_VIDEO, id: 333, url: "https://www.pexels.com/video/a-trader-typing-on-a-laptop-333/" };
+    const golfPixabayHit = { ...PIXABAY_HIT, tags: "golf, sport, leisure" };
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("pexels.com")) return jsonResponse({ videos: [relevantPexelsVideo] });
+      if (url.includes("pixabay.com")) return jsonResponse({ hits: [golfPixabayHit] });
+      return downloadResponse();
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await fetchStockClip("trader at desk", 10, cacheDir, { pexelsApiKey: "pex-key", pixabayApiKey: "pix-key" });
+
+    expect(result).toContain("pexels-333.mp4");
+  });
+});
 
 describe("fetchStockClip -- searches Pexels and Pixabay together", () => {
   const originalFetch = global.fetch;

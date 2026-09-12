@@ -73,18 +73,18 @@ const SCENE_QUERIES: Record<SceneKind, string[]> = {
     "desk setup trading journal app",
   ],
   cta: [
-    "trader celebrating stock market win",
-    "successful stock trader desk",
-    "day trader financial success",
-    "stock market trading achievement",
-    "trader fist pump at desk",
-    "confident trader smiling at screen",
-    "trader closing laptop satisfied",
-    "successful trading desk sunset",
-    "trader shaking hands deal",
-    "trader walking away from desk confident",
-    "financial success city skyline",
-    "trader relaxed after good day",
+    "trader closing laptop trading desk",
+    "trader smiling at stock market screen",
+    "trader typing on keyboard stock charts",
+    "stock market trading desk setup",
+    "trader reviewing green candlestick chart",
+    "financial trading monitor close up",
+    "trader at multiple monitor trading desk",
+    "stock market chart on laptop screen",
+    "trading desk computer setup night",
+    "trader scrolling stock market app phone",
+    "financial data dashboard screen close up",
+    "trader working at trading desk",
   ],
 };
 
@@ -113,6 +113,13 @@ interface NormalizedVideoAsset {
   id: string;
   duration: number;
   downloadUrl: string;
+  /**
+   * Free-text description of what's actually IN the clip, per provider (see
+   * searchPexels/searchPixabay for where each comes from). Undefined/empty
+   * means the provider gave us nothing to check -- see isLikelyTradingRelevant's
+   * own doc comment for why that's treated as "allow" rather than "reject".
+   */
+  searchText?: string;
 }
 
 interface PexelsVideoFile {
@@ -123,10 +130,21 @@ interface PexelsVideoFile {
 interface PexelsVideo {
   id: number;
   duration: number;
+  /** e.g. "https://www.pexels.com/video/a-golfer-swinging-a-club-1234567/" -- Pexels' video API has no dedicated tags field, but the URL slug is a real, human-written description of the clip's actual content. */
+  url?: string;
   video_files: PexelsVideoFile[];
 }
 interface PexelsSearchResponse {
   videos: PexelsVideo[];
+}
+
+/** Turns a Pexels video URL's slug into space-separated words, e.g. ".../a-golfer-swinging-a-club-1234567/" -> "a golfer swinging a club". */
+function pexelsUrlToSearchText(url: string | undefined): string | undefined {
+  if (!url) return undefined;
+  const slug = url.replace(/\/$/, "").split("/").pop() ?? "";
+  const withoutTrailingId = slug.replace(/-\d+$/, "");
+  const words = withoutTrailingId.replace(/-/g, " ").trim();
+  return words.length > 0 ? words : undefined;
 }
 
 async function searchPexels(query: string, apiKey: string): Promise<NormalizedVideoAsset[]> {
@@ -142,7 +160,15 @@ async function searchPexels(query: string, apiKey: string): Promise<NormalizedVi
     });
     const file = sorted[0];
     if (!file) return [];
-    return [{ provider: "pexels" as const, id: String(video.id), duration: video.duration, downloadUrl: file.link }];
+    return [
+      {
+        provider: "pexels" as const,
+        id: String(video.id),
+        duration: video.duration,
+        downloadUrl: file.link,
+        searchText: pexelsUrlToSearchText(video.url),
+      },
+    ];
   });
 }
 
@@ -153,6 +179,8 @@ interface PixabayVideoRendition {
 interface PixabayVideoHit {
   id: number;
   duration: number;
+  /** Comma-separated, e.g. "golf, sport, leisure" or "trading, finance, stock market" -- Pixabay's own uploader-supplied tags for the clip's actual content. */
+  tags?: string;
   videos: { large: PixabayVideoRendition; medium: PixabayVideoRendition; small: PixabayVideoRendition };
 }
 interface PixabaySearchResponse {
@@ -170,8 +198,91 @@ async function searchPixabay(query: string, apiKey: string): Promise<NormalizedV
     // to whichever rendition actually has a URL.
     const rendition = hit.videos?.medium?.url ? hit.videos.medium : hit.videos?.large?.url ? hit.videos.large : hit.videos?.small;
     if (!rendition?.url) return [];
-    return [{ provider: "pixabay" as const, id: String(hit.id), duration: hit.duration, downloadUrl: rendition.url }];
+    return [
+      {
+        provider: "pixabay" as const,
+        id: String(hit.id),
+        duration: hit.duration,
+        downloadUrl: rendition.url,
+        searchText: hit.tags && hit.tags.trim().length > 0 ? hit.tags.replace(/,/g, " ") : undefined,
+      },
+    ];
   });
+}
+
+/**
+ * Keyword-based relevance guard, added after real production renders showed
+ * completely off-topic B-roll (a golf course, generic lifestyle/vacation
+ * footage of people with no connection to trading) -- both providers'
+ * keyword search happily returns loosely-associated "success"/"achievement"/
+ * "relaxed" stock footage for queries like "trader celebrating stock market
+ * win" or "financial success city skyline", since those words alone don't
+ * disambiguate from generic lifestyle B-roll. This is a real content-safety
+ * gate for a video meant to only ever show trading/finance/office footage,
+ * not a cosmetic filter.
+ *
+ * Deliberately an ALLOWLIST, not a blocklist: a blocklist can only ever name
+ * categories already seen going wrong (golf today, something else
+ * tomorrow), while an allowlist requires positive evidence the clip is
+ * actually about trading, finance, markets, or a plausible office/desk/
+ * screen setting before it's ever shown.
+ */
+const TRADING_RELEVANT_KEYWORDS = [
+  "trad",
+  "stock",
+  "market",
+  "financ",
+  "chart",
+  "invest",
+  "broker",
+  "forex",
+  "crypto",
+  "economy",
+  "economic",
+  "business",
+  "office",
+  "desk",
+  "laptop",
+  "computer",
+  "screen",
+  "monitor",
+  "keyboard",
+  "typing",
+  "data",
+  "graph",
+  "money",
+  "currency",
+  "dollar",
+  "candlestick",
+  "portfolio",
+  "spreadsheet",
+  "analyst",
+  "analytics",
+];
+
+/**
+ * True when `searchText` (a Pexels URL slug or Pixabay tag string -- see
+ * NormalizedVideoAsset's own doc comment) contains real, positive evidence
+ * of trading/finance/office content. Exported for direct unit testing
+ * without a live API call.
+ */
+export function isLikelyTradingRelevant(searchText: string): boolean {
+  const lower = searchText.toLowerCase();
+  return TRADING_RELEVANT_KEYWORDS.some((keyword) => lower.includes(keyword));
+}
+
+/**
+ * Applies isLikelyTradingRelevant to a full result set. An asset with no
+ * searchText at all (a provider response missing the field entirely, e.g.
+ * in tests, or a genuine gap in Pixabay's uploader-supplied tags) is kept
+ * rather than rejected -- there's no positive evidence either way, and
+ * rejecting on missing data would silently starve the pool for clips that
+ * are perfectly fine but under-tagged. An asset WITH text that names
+ * something else entirely (golf, a beach, a family gathering) is real
+ * negative evidence and is dropped.
+ */
+function filterTradingRelevant(assets: readonly NormalizedVideoAsset[]): NormalizedVideoAsset[] {
+  return assets.filter((asset) => !asset.searchText || isLikelyTradingRelevant(asset.searchText));
 }
 
 /**
@@ -215,7 +326,13 @@ export async function fetchStockClip(
       credentials.pexelsApiKey ? searchPexels(query, credentials.pexelsApiKey).catch(() => []) : Promise.resolve([]),
       credentials.pixabayApiKey ? searchPixabay(query, credentials.pixabayApiKey).catch(() => []) : Promise.resolve([]),
     ]);
-    const combined = [...pexelsResults, ...pixabayResults];
+    // Relevance-filtered BEFORE duration eligibility, and never falls back
+    // to the unfiltered pool when filtering empties it out -- an empty
+    // result here correctly returns null below, which the caller already
+    // treats as "no clip, fall back to a solid-color background" (see this
+    // function's own doc comment). That's the right outcome: no clip is
+    // strictly better than a real render showing an off-topic clip.
+    const combined = filterTradingRelevant([...pexelsResults, ...pixabayResults]);
     if (combined.length === 0) return null;
 
     const asset = pickRandomEligible(combined, minDurationSeconds);
