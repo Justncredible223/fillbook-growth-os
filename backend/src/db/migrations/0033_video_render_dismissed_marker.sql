@@ -1,0 +1,25 @@
+-- Real production bug (2026-09-13): the owner approved a video, it sat
+-- stuck at 'queued' forever (the same webhook-delivery unreliability
+-- diagnosed earlier -- the Database Webhook that's supposed to trigger the
+-- GitHub Actions dispatch occasionally never fires), so the owner deleted
+-- it from the Video Status screen and generated a fresh one, which
+-- rendered fine.
+--
+-- Dismissing a video (dismissVideoRender, either a stuck one or a
+-- completed one the owner already downloaded) deletes its video_renders
+-- row entirely -- but videoRenderReconciliation.ts's sweep (which runs
+-- 3x/day via growth-pulse) treats ANY approved video_script campaign_asset
+-- with NO video_renders row as "missing a render, crashed before it could
+-- be queued" and tries to re-enqueue it. With no way to tell "genuinely
+-- never rendered" apart from "rendered (or abandoned) and the owner
+-- already cleared it", the sweep was silently trying to re-render every
+-- dismissed video, indefinitely, competing with the owner's real daily
+-- cap for videos they'd already dealt with (confirmed live: a pulse run
+-- found 9 old dismissed videos "missing a render row" and tried to
+-- re-enqueue all of them, only blocked by the cap).
+--
+-- This column lets dismissVideoRender record "the owner explicitly
+-- cleared this, never resurrect it" before the video_renders row is gone,
+-- so the reconciliation sweep can tell the two cases apart.
+alter table campaign_assets
+  add column if not exists video_render_dismissed_at timestamptz null;

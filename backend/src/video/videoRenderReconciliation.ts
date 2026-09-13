@@ -17,6 +17,14 @@ interface EnqueueResultRow {
  * video_script asset with no video_renders row at all and calls the same
  * idempotent RPC used by the live approval path, so there is exactly one
  * "is this a duplicate" implementation, not two to keep in sync.
+ *
+ * Excludes anything with video_render_dismissed_at set (migration 0033) --
+ * a real production bug found 2026-09-13: dismissing a video (a stuck one
+ * the owner gave up on, or one they'd already downloaded) deletes its
+ * video_renders row, which otherwise looks IDENTICAL to "crashed before it
+ * could ever be queued" -- this sweep was silently re-enqueueing a brand
+ * new render for every dismissed video, indefinitely, instead of leaving
+ * deliberately-cleared ones alone.
  */
 export async function reconcileVideoRenders(
   client: SupabaseClient,
@@ -25,12 +33,14 @@ export async function reconcileVideoRenders(
 ): Promise<string> {
   const { data: assets, error: assetsError } = await client
     .from("campaign_assets")
-    .select("id, asset_type, campaigns(status)")
+    .select("id, asset_type, video_render_dismissed_at, campaigns(status)")
     .eq("asset_type", "video_script");
   if (assetsError) throw new Error(`reconcileVideoRenders failed to load campaign_assets: ${assetsError.message}`);
 
-  const approvedAssetIds = ((assets ?? []) as unknown as Array<{ id: string; campaigns: { status: string } | null }>)
-    .filter((a) => a.campaigns?.status === "approved")
+  const approvedAssetIds = (
+    (assets ?? []) as unknown as Array<{ id: string; video_render_dismissed_at: string | null; campaigns: { status: string } | null }>
+  )
+    .filter((a) => a.campaigns?.status === "approved" && !a.video_render_dismissed_at)
     .map((a) => a.id);
   if (approvedAssetIds.length === 0) return "0 approved video_script assets found";
 

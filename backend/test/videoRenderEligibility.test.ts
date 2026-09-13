@@ -19,14 +19,14 @@ describe("evaluateVideoRenderDailyCap", () => {
     expect(evaluateVideoRenderDailyCap(1, 2).eligible).toBe(true);
   });
 
-  it("is ineligible once at the cap -- real incident regression: 2 renders/day is the owner's actual posting limit", () => {
+  it("is ineligible once at the cap -- real incident regression: the owner's actual posting limit is enforced exactly, not loosely", () => {
     const result = evaluateVideoRenderDailyCap(2, 2);
     expect(result.eligible).toBe(false);
     expect(result.reason).toMatch(/daily_render_cap_reached/);
   });
 
-  it("defaults to MAX_VIDEO_RENDERS_PER_DAY (2) when no cap is given", () => {
-    expect(evaluateVideoRenderDailyCap(1).eligible).toBe(true);
+  it("defaults to MAX_VIDEO_RENDERS_PER_DAY (1) when no cap is given", () => {
+    expect(evaluateVideoRenderDailyCap(0).eligible).toBe(true);
     expect(evaluateVideoRenderDailyCap(MAX_VIDEO_RENDERS_PER_DAY).eligible).toBe(false);
   });
 });

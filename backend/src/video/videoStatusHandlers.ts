@@ -161,16 +161,34 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
  *
  * For ready renders the stored video file is deleted from Supabase Storage
  * first so the freed bytes are reclaimed from the user's storage cap.
+ *
+ * Also stamps campaign_assets.video_render_dismissed_at (migration 0033) on
+ * the way out -- a real production bug this closes: once this delete
+ * removes the video_renders row, an approved video_script campaign_asset
+ * with no video_renders row looks IDENTICAL to
+ * videoRenderReconciliation.ts's own "crashed before it could be queued"
+ * case, so its 3x/day sweep was silently re-enqueueing a fresh render for
+ * every dismissed video (a stuck one the owner gave up on, or one they'd
+ * already downloaded and cleared) forever, competing with the owner's real
+ * daily cap for videos they'd already dealt with. This marker lets that
+ * sweep tell "genuinely never rendered" apart from "the owner dismissed
+ * this on purpose, never bring it back."
  */
 export async function dismissVideoRender(client: SupabaseClient, videoRenderId: string): Promise<void> {
   const { data, error: fetchError } = await client
     .from("video_renders")
-    .select("status, storage_path, thumbnail_path")
+    .select("campaign_asset_id, status, storage_path, thumbnail_path")
     .eq("id", videoRenderId)
     .maybeSingle();
   if (fetchError) throw new Error(`dismissVideoRender fetch failed: ${fetchError.message}`);
   if (!data) throw new Error(`video render not found: ${videoRenderId}`);
-  const { status, storage_path: storagePath, thumbnail_path: thumbnailPath } = data as {
+  const {
+    campaign_asset_id: campaignAssetId,
+    status,
+    storage_path: storagePath,
+    thumbnail_path: thumbnailPath,
+  } = data as {
+    campaign_asset_id: string;
     status: string;
     storage_path: string | null;
     thumbnail_path: string | null;
@@ -195,6 +213,12 @@ export async function dismissVideoRender(client: SupabaseClient, videoRenderId: 
   if (reserveError) throw new Error(`dismissVideoRender reservation delete failed: ${reserveError.message}`);
   const { error: deleteError } = await client.from("video_renders").delete().eq("id", videoRenderId);
   if (deleteError) throw new Error(`dismissVideoRender delete failed: ${deleteError.message}`);
+
+  const { error: markError } = await client
+    .from("campaign_assets")
+    .update({ video_render_dismissed_at: new Date().toISOString() })
+    .eq("id", campaignAssetId);
+  if (markError) throw new Error(`dismissVideoRender dismissed-marker update failed: ${markError.message}`);
 }
 
 /** One-way fingerprint of the app's own bearer credential -- never the credential itself -- stored alongside each device token purely for future credential-rotation cleanup (see migration 0027's doc comment on device_push_tokens). */

@@ -24,13 +24,14 @@ export const MAX_VIDEO_RENDERS_PER_MONTH = 30;
  * sweep (videoRenderReconciliation.ts) enqueue 8 renders in under a
  * second when it found 8 approved-but-never-rendered scripts at once --
  * technically within the monthly budget, but far more than the owner
- * wants to post in a single day (2/platform/day, owner-stated policy).
+ * wants to post in a single day. Lowered from 2 to 1 on 2026-09-13 per the
+ * owner's own explicit correction (1 video/day, not 2/platform/day).
  * Enforced inside enqueue_video_render's own transaction (same lock as
  * the monthly cap), so it can never be bypassed by a caller that forgets
  * to check it -- including both the manual "Create Fillbook Video" button
  * and the reconciliation sweep.
  */
-export const MAX_VIDEO_RENDERS_PER_DAY = 2;
+export const MAX_VIDEO_RENDERS_PER_DAY = 1;
 
 /**
  * Hard total-bytes ceiling on committed video Storage usage -- half of
