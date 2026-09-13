@@ -133,6 +133,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cursorStore = new SupabaseIngestionCursorStore(client);
   const results: StepResult[] = [];
 
+  // Connection warm-up (2026-09-13): three separate scheduled runs in a row
+  // (2026-09-12T22:00, plus the 2026-09-13T01:00 slot GitHub's own
+  // scheduler silently skipped, then the manual catch-up run at 05:50) all
+  // saw x_mentions/x_inbound -- always the FIRST real DB queries this
+  // handler makes -- fail with a Supabase "Gateway Timeout", while every
+  // later step in the exact same request (prospecting, partnerships, video
+  // reconciliation) succeeded on the same client. That's the signature of
+  // a cold connection/pooler warm-up cost landing on whichever query
+  // happens to go first, not a real data problem -- a throwaway query here
+  // absorbs that cost before the steps that actually matter run. Swallowed
+  // on failure: if even this one times out, x_mentions/x_inbound below
+  // will surface their own real errors exactly as before, unblocked.
+  try {
+    await client.from("system_settings").select("paused").eq("id", true).maybeSingle();
+  } catch {
+    // Best-effort only -- see comment above.
+  }
+
   if (runX) {
     results.push(
       await runStep("x_mentions", async () => {
