@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { LlmClient } from "../src/content/llmClient";
+import { LlmClient, MODEL_HAIKU } from "../src/content/llmClient";
 import {
   draftProspectingReply,
+  checkRelevanceCheap,
   buildProspectingSystemPrompt,
   prospectingPlatformProfile,
   PROSPECTING_TRACKABLE_LINK,
@@ -74,6 +75,15 @@ describe("draftProspectingReply", () => {
     expect(system).toContain("Never include a link by default");
     expect(system).toContain("check out our platform");
     expect(system).toContain("Never impersonate an individual trader or conceal");
+  });
+
+  it("includes a worked example of what an earned Fillbook mention looks like, so the model has a concrete shape to follow instead of just abstract rules", async () => {
+    const { system } = await capturePrompt("x");
+
+    expect(system).toMatch(/worked example of an earned mention/i);
+    expect(system).toContain("Blew up my funded account again revenge trading after a red day.");
+    expect(system).toContain("which is part\nof why we built Fillbook around it.");
+    expect(system).toMatch(/never copy this verbatim/i);
   });
 
   it("an unrecognized platform also keeps the conservative default, never X's more structured one", async () => {
@@ -171,5 +181,60 @@ describe("draftProspectingReply", () => {
         expect(buildProspectingSystemPrompt(profile)).toContain(PROSPECTING_TRACKABLE_LINK);
       }
     });
+  });
+});
+
+/**
+ * checkRelevanceCheap is a cheap (MODEL_HAIKU), relevance-only precheck
+ * that runs before the expensive full draftProspectingReply call -- it
+ * asks the same "is this genuinely relevant" question alone, with no
+ * reply drafted, so a candidate that turns out irrelevant is rejected for
+ * a fraction of the cost of a full draft.
+ */
+describe("checkRelevanceCheap", () => {
+  function relevanceResponse(isRelevant: boolean) {
+    return jsonResponse({ content: [{ type: "tool_use", name: "submit_relevance", input: { isRelevant } }] });
+  }
+
+  it("calls the Claude API on MODEL_HAIKU, not the default drafting model", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(relevanceResponse(true));
+    const llmClient = new LlmClient("test-key", fetchMock);
+
+    await checkRelevanceCheap(llmClient, { platform: "x", authorHandle: "someone", postText: "does trailing drawdown reset daily?", discoveryQuery: "trailing_drawdown" });
+
+    const [, options] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse((options as { body: string }).body);
+    expect(body.model).toBe(MODEL_HAIKU);
+  });
+
+  it("returns true when the model judges the post relevant", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(relevanceResponse(true));
+    const llmClient = new LlmClient("test-key", fetchMock);
+
+    const result = await checkRelevanceCheap(llmClient, { platform: "x", authorHandle: "someone", postText: "Been trading MNQ futures for two years.", discoveryQuery: "futures" });
+
+    expect(result).toBe(true);
+  });
+
+  it("returns false when the model judges the post irrelevant, without ever drafting a reply", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(relevanceResponse(false));
+    const llmClient = new LlmClient("test-key", fetchMock);
+
+    const result = await checkRelevanceCheap(llmClient, { platform: "x", authorHandle: "someone", postText: "a sci-fi story about an algorithm and a civilization", discoveryQuery: "hesitation_trading" });
+
+    expect(result).toBe(false);
+  });
+
+  it("passes the post text and discovery topic into the prompt, but never sends brand rules or verified knowledge (kept minimal on purpose)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(relevanceResponse(true));
+    const llmClient = new LlmClient("test-key", fetchMock);
+
+    await checkRelevanceCheap(llmClient, { platform: "x", authorHandle: "someone", postText: "does trailing drawdown reset daily?", discoveryQuery: "trailing_drawdown" });
+
+    const [, options] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse((options as { body: string }).body);
+    expect(body.messages[0].content).toContain("does trailing drawdown reset daily?");
+    expect(body.messages[0].content).toContain("trailing_drawdown");
+    expect(body.max_tokens).toBeLessThanOrEqual(256);
   });
 });

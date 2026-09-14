@@ -1,4 +1,16 @@
-import type { LlmClient } from "../content/llmClient.js";
+import { MODEL_HAIKU, type LlmClient } from "../content/llmClient.js";
+
+const CHEAP_RELEVANCE_SCHEMA = {
+  type: "object",
+  properties: {
+    isRelevant: {
+      type: "boolean",
+      description:
+        "True only if this post is genuinely about futures/markets trading, prop-firm trading, or trader psychology/discipline/journaling -- false if it only superficially matched the search (a story, a meme, unrelated news, or a search word used in a non-trading sense). Judge honestly; false is the expected, correct answer for most candidates that reach this check.",
+    },
+  },
+  required: ["isRelevant"],
+};
 
 const DRAFT_SCHEMA = {
   type: "object",
@@ -74,6 +86,16 @@ apply; this is not a rigid template to fill in mechanically:
 4. Only once steps 1-3 already made a real, earned connection to that problem, you MAY optionally
    note that Fillbook is built around it.
 5. A soft invitation is fine when it's earned -- for example: "That's one of the things we're trying to make easier with Fillbook." Never a link, never a call to action, never "check it out."
+
+Worked example of an earned mention (write your own, specific to the actual post in front of you --
+never copy this verbatim):
+Their post: "Blew up my funded account again revenge trading after a red day."
+A reply that earns the mention: "The urge to make it back same-day is exactly when most drawdown
+violations happen. What's helped some traders is logging the losing trade the second it closes,
+before opening anything else -- that's the pause that's hardest to build on your own, which is part
+of why we built Fillbook around it." Notice steps 1-3 already did the real work (specific response,
+one concrete insight, an earned connection to drawdown discipline) before step 4's mention shows up
+almost as an aside, not the point of the reply.
 
 Hard rules, no exceptions:
 - Never add a Fillbook mention when it doesn't logically fit the conversation -- when genuinely
@@ -249,4 +271,45 @@ export async function draftProspectingReply(
   ].join("\n");
 
   return client.callTool<ProspectingDraftResult>(buildProspectingSystemPrompt(profile), userMessage, "submit_reply", DRAFT_SCHEMA);
+}
+
+const CHEAP_RELEVANCE_SYSTEM_PROMPT = `You are a fast relevance filter for a trading-journal company's outreach queue. A post matched an
+automated search for a trading-related topic, but that match can be imprecise (a search word used in
+an unrelated sense, a post that only superficially resembles trading content, a meme, a story, unrelated
+news, etc.).
+
+Judge ONE thing: is this post genuinely about futures/markets trading, prop-firm trading, or trader
+psychology/discipline/journaling? Answer honestly and quickly -- you are not writing a reply, only
+screening. A confident "not relevant" is the correct, expected answer for most posts that reach this
+check.`;
+
+/**
+ * Cheap ($0.80/mTok in, MODEL_HAIKU) relevance precheck -- runs AFTER the
+ * free regex pre-filter (prospectingRelevance.ts) but BEFORE the expensive
+ * full drafting call (draftProspectingReply, MODEL_SONNET). Closes a real,
+ * confirmed cost bug: candidates that clear the mechanical regex filter
+ * but that the model later judges irrelevant (draft.isRelevant === false)
+ * previously paid for a full drafting call -- system prompt, brand rules,
+ * verified knowledge, and a drafted reply -- for content that was never
+ * going to be used. This asks the same relevance question alone, with a
+ * short prompt and a tiny max_tokens, on the cheaper model, so a rejection
+ * here costs a small fraction of a full draft. Only isRelevant=true from
+ * this check proceeds to draftProspectingReply; isRelevant=false is
+ * treated exactly like the regex pre-filter and the drafter's own
+ * isRelevant=false -- the candidate is moved to 'not_relevant' and no
+ * expensive call is made.
+ */
+export async function checkRelevanceCheap(client: LlmClient, context: ProspectingDraftContext): Promise<boolean> {
+  const userMessage = [`Platform: ${context.platform}`, `Why this post surfaced: matched the "${context.discoveryQuery}" topic.`, "", "Their post:", context.postText].join("\n");
+
+  const { isRelevant } = await client.callTool<{ isRelevant: boolean }>(
+    CHEAP_RELEVANCE_SYSTEM_PROMPT,
+    userMessage,
+    "submit_relevance",
+    CHEAP_RELEVANCE_SCHEMA,
+    undefined,
+    128,
+    MODEL_HAIKU,
+  );
+  return isRelevant;
 }

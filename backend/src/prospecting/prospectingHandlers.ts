@@ -4,7 +4,7 @@ import { recordCostEvent } from "../cost/costTracking.js";
 import { loadGroundingContext } from "../inbound/inboundHandlers.js";
 import { selectDailyWorkingSet } from "./prospectingDailySelection.js";
 import { STALE_EXPIRY_DAYS } from "./prospectingEligibility.js";
-import { draftProspectingReply, PROSPECTING_TRACKABLE_LINK, type ProspectingDraftContext, type ProspectingDraftResult } from "./prospectingReplyWriter.js";
+import { checkRelevanceCheap, draftProspectingReply, PROSPECTING_TRACKABLE_LINK, type ProspectingDraftContext, type ProspectingDraftResult } from "./prospectingReplyWriter.js";
 import { checkReplyGuardrails } from "../content/xReplyGuardrails.js";
 import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
 import { isPlausiblyTradingRelated } from "./prospectingRelevance.js";
@@ -25,6 +25,8 @@ export interface ProspectingHandlerDeps {
   repo?: ProspectingRepository;
   drafter?: (context: ProspectingDraftContext, brandRulesSummary: string, verifiedKnowledgeSummary: string) => Promise<ProspectingDraftResult>;
   loadGrounding?: (client: SupabaseClient) => Promise<{ brandRulesSummary: string; verifiedKnowledgeSummary: string }>;
+  /** Cheap (MODEL_HAIKU) relevance precheck -- see prospectingReplyWriter.ts's checkRelevanceCheap. Overridable so tests never make a live LLM call. */
+  cheapRelevanceCheck?: (context: ProspectingDraftContext) => Promise<boolean>;
 }
 
 function repoFor(client: SupabaseClient, deps: ProspectingHandlerDeps): ProspectingRepository {
@@ -138,16 +140,20 @@ export async function listProspectingHistory(client: SupabaseClient, limit = 100
  * before the owner even reads it. The candidate's own platform selects
  * the prompt profile.
  *
- * Two independent relevance gates close a real, confirmed bug (Prospecting
- * surfacing content with zero connection to futures/trading, and drafts
- * that admitted as much in their own reply text instead of refusing):
- * (1) prospectingRelevance.ts's mechanical, $0 pre-filter runs first --
- * an obviously irrelevant candidate never reaches the LLM at all; (2) the
- * model's own isRelevant flag (prospectingReplyWriter.ts) catches content
- * that slips past the keyword filter. Either gate failing moves the
- * candidate to 'not_relevant' (the same terminal status the owner's own
- * "Irrelevant" button sets) and throws before any draft is persisted or
- * returned -- the owner never sees a draft that says the post is
+ * Three relevance gates, cheapest first, close a real, confirmed problem:
+ * Prospecting surfacing content with zero connection to futures/trading,
+ * AND paying for a full MODEL_SONNET drafting call every time content that
+ * slipped past the free filter turned out not to be relevant anyway.
+ * (1) prospectingRelevance.ts's mechanical, $0 regex pre-filter runs first
+ * -- an obviously irrelevant candidate never reaches the LLM at all;
+ * (2) checkRelevanceCheap (prospectingReplyWriter.ts), a MODEL_HAIKU-only
+ * relevance question with no reply drafted, catches content that slips
+ * past the regex without paying for a full draft; (3) the drafter's own
+ * isRelevant flag is a final, independent check on the actual drafted
+ * content for anything that still slips through. Any gate failing moves
+ * the candidate to 'not_relevant' (the same terminal status the owner's
+ * own "Irrelevant" button sets) and throws before any draft is persisted
+ * or returned -- the owner never sees a draft that says the post is
  * unrelated.
  */
 export async function draftProspectingCandidateReply(client: SupabaseClient, id: string, deps: ProspectingHandlerDeps = {}): Promise<ProspectingCandidate> {
@@ -162,6 +168,30 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
     );
   }
 
+  const draftContext: ProspectingDraftContext = {
+    platform: row.platform,
+    authorHandle: row.authorHandle,
+    postText: row.postText,
+    discoveryQuery: row.discoveryQuery,
+  };
+
+  const cheapRelevanceCheck =
+    deps.cheapRelevanceCheck ??
+    ((context: ProspectingDraftContext) => {
+      const llmClient = createLlmClient(process.env, (usage) => {
+        void recordCostEvent(client, usage, { prospectingCandidateId: id, endpoint: "prospecting-relevance-check" }, "prospecting_llm_call");
+      });
+      return checkRelevanceCheap(llmClient, context);
+    });
+
+  // Second, cheap (MODEL_HAIKU) relevance gate -- runs before the expensive
+  // drafting call below so a post that clears the free regex filter but
+  // isn't actually relevant gets rejected without paying for a full draft.
+  if (!(await cheapRelevanceCheck(draftContext))) {
+    await repo.updateStatus(id, "not_relevant");
+    throw new ProspectingActionError("Not eligible for drafting -- a quick relevance check judged this post isn't genuinely relevant to futures/trading.");
+  }
+
   const { brandRulesSummary, verifiedKnowledgeSummary } = await (deps.loadGrounding ?? loadGroundingContext)(client);
   const drafter =
     deps.drafter ??
@@ -172,22 +202,13 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
       return draftProspectingReply(llmClient, context, brandRules, knowledge);
     });
 
-  const draft = await drafter(
-    {
-      platform: row.platform,
-      authorHandle: row.authorHandle,
-      postText: row.postText,
-      discoveryQuery: row.discoveryQuery,
-    },
-    brandRulesSummary,
-    verifiedKnowledgeSummary,
-  );
+  const draft = await drafter(draftContext, brandRulesSummary, verifiedKnowledgeSummary);
 
-  // Second, independent relevance gate -- the model's own honest judgment,
-  // for content that slipped past the mechanical pre-filter above (e.g. a
-  // post that uses real trading vocabulary but in a fundamentally
-  // different, still-irrelevant context). Same terminal status and no
-  // persisted draft as the pre-filter case.
+  // Third, independent relevance gate -- the model's own honest judgment,
+  // for content that slipped past both the mechanical pre-filter and the
+  // cheap Haiku check above (e.g. a post that uses real trading vocabulary
+  // but in a fundamentally different, still-irrelevant context). Same
+  // terminal status and no persisted draft as the earlier gates.
   if (!draft.isRelevant) {
     await repo.updateStatus(id, "not_relevant");
     throw new ProspectingActionError("Not eligible for drafting -- the model judged this post isn't genuinely relevant to futures/trading.");

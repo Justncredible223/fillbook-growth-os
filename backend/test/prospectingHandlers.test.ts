@@ -262,13 +262,14 @@ describe("markProspectingReplied -- outreach is recorded in the candidate's own 
  */
 describe("existing candidate review is unaffected by system pause state", () => {
   const loadGrounding = async () => ({ brandRulesSummary: "rules", verifiedKnowledgeSummary: "facts" });
+  const cheapRelevanceCheck = async () => true;
 
   it("draftProspectingCandidateReply succeeds with no isPaused dependency in play", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(candidate({ id: "paused-1", platform: "x", status: "shown", draftReply: null }));
     const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "EOD for most firms.", mentionsFillbook: false, usesLink: false }));
 
-    const updated = await draftProspectingCandidateReply(fakeClient, "paused-1", { repo, drafter, loadGrounding });
+    const updated = await draftProspectingCandidateReply(fakeClient, "paused-1", { repo, drafter, loadGrounding, cheapRelevanceCheck });
 
     expect(updated.status).toBe("ready");
     expect(updated.draftReply).toBe("EOD for most firms.");
@@ -287,6 +288,7 @@ describe("existing candidate review is unaffected by system pause state", () => 
 
 describe("draftProspectingCandidateReply -- per-reply trackable link substitution", () => {
   const loadGrounding = async () => ({ brandRulesSummary: "rules", verifiedKnowledgeSummary: "facts" });
+  const cheapRelevanceCheck = async () => true;
 
   it("replaces the static placeholder link with a real per-candidate short link when usesLink is true", async () => {
     const repo = new InMemoryProspectingRepository();
@@ -298,7 +300,7 @@ describe("draftProspectingCandidateReply -- per-reply trackable link substitutio
       usesLink: true,
     }));
 
-    const updated = await draftProspectingCandidateReply(fakeClient, "link-1", { repo, drafter, loadGrounding });
+    const updated = await draftProspectingCandidateReply(fakeClient, "link-1", { repo, drafter, loadGrounding, cheapRelevanceCheck });
 
     expect(updated.draftReply).not.toContain(PROSPECTING_TRACKABLE_LINK);
     expect(updated.draftReply).toContain("fillbook-growth-os.vercel.app/api/ingest");
@@ -315,7 +317,7 @@ describe("draftProspectingCandidateReply -- per-reply trackable link substitutio
       usesLink: false,
     }));
 
-    const updated = await draftProspectingCandidateReply(fakeClient, "link-2", { repo, drafter, loadGrounding });
+    const updated = await draftProspectingCandidateReply(fakeClient, "link-2", { repo, drafter, loadGrounding, cheapRelevanceCheck });
 
     expect(updated.draftReply).toBe("No link here.");
   });
@@ -323,13 +325,14 @@ describe("draftProspectingCandidateReply -- per-reply trackable link substitutio
 
 describe("draftProspectingCandidateReply -- the candidate's platform reaches the drafter", () => {
   const loadGrounding = async () => ({ brandRulesSummary: "rules", verifiedKnowledgeSummary: "facts" });
+  const cheapRelevanceCheck = async () => true;
 
   it("an X candidate is drafted with platform=x", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(candidate({ id: "x-1", platform: "x", status: "shown", draftReply: null }));
     const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "EOD for most firms.", mentionsFillbook: false, usesLink: false }));
 
-    const updated = await draftProspectingCandidateReply(fakeClient, "x-1", { repo, drafter, loadGrounding });
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-1", { repo, drafter, loadGrounding, cheapRelevanceCheck });
 
     expect(drafter).toHaveBeenCalledTimes(1);
     expect(drafter.mock.calls[0]![0]).toMatchObject({ platform: "x" });
@@ -348,7 +351,7 @@ describe("draftProspectingCandidateReply -- the candidate's platform reaches the
       usesLink: false,
     }));
 
-    await expect(draftProspectingCandidateReply(fakeClient, "x-2", { repo, drafter, loadGrounding })).rejects.toThrow(/banned generic phrase/);
+    await expect(draftProspectingCandidateReply(fakeClient, "x-2", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(/banned generic phrase/);
 
     const row = await repo.getById("x-2");
     expect(row!.status).toBe("shown"); // never advanced to 'ready' -- the rejected draft was never persisted
@@ -365,7 +368,7 @@ describe("draftProspectingCandidateReply -- the candidate's platform reaches the
       usesLink: false,
     }));
 
-    await expect(draftProspectingCandidateReply(fakeClient, "x-3", { repo, drafter, loadGrounding })).rejects.toThrow(ProspectingActionError);
+    await expect(draftProspectingCandidateReply(fakeClient, "x-3", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(ProspectingActionError);
   });
 });
 
@@ -381,6 +384,7 @@ describe("draftProspectingCandidateReply -- the candidate's platform reaches the
  */
 describe("draftProspectingCandidateReply -- relevance gates", () => {
   const loadGrounding = async () => ({ brandRulesSummary: "rules", verifiedKnowledgeSummary: "facts" });
+  const cheapRelevanceCheck = async () => true;
 
   it("rejects an obviously irrelevant (sci-fi) post before ever calling the drafter -- the mechanical pre-filter", async () => {
     const repo = new InMemoryProspectingRepository();
@@ -395,7 +399,7 @@ describe("draftProspectingCandidateReply -- relevance gates", () => {
     );
     const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "should never be called", mentionsFillbook: false, usesLink: false }));
 
-    await expect(draftProspectingCandidateReply(fakeClient, "x-scifi", { repo, drafter, loadGrounding })).rejects.toThrow(/not eligible for drafting/i);
+    await expect(draftProspectingCandidateReply(fakeClient, "x-scifi", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(/not eligible for drafting/i);
 
     expect(drafter).not.toHaveBeenCalled();
     const row = await repo.getById("x-scifi");
@@ -408,7 +412,7 @@ describe("draftProspectingCandidateReply -- relevance gates", () => {
     repo.seed(candidate({ id: "x-crypto", status: "shown", draftReply: null, postText: "$USELESS locked in the profits" }));
     const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "should never be called", mentionsFillbook: false, usesLink: false }));
 
-    await expect(draftProspectingCandidateReply(fakeClient, "x-crypto", { repo, drafter, loadGrounding })).rejects.toThrow(/not eligible for drafting/i);
+    await expect(draftProspectingCandidateReply(fakeClient, "x-crypto", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(/not eligible for drafting/i);
 
     expect(drafter).not.toHaveBeenCalled();
     const row = await repo.getById("x-crypto");
@@ -428,7 +432,7 @@ describe("draftProspectingCandidateReply -- relevance gates", () => {
     );
     const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "should never be called", mentionsFillbook: false, usesLink: false }));
 
-    await expect(draftProspectingCandidateReply(fakeClient, "x-generic", { repo, drafter, loadGrounding })).rejects.toThrow(/not eligible for drafting/i);
+    await expect(draftProspectingCandidateReply(fakeClient, "x-generic", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(/not eligible for drafting/i);
     expect(drafter).not.toHaveBeenCalled();
   });
 
@@ -437,7 +441,7 @@ describe("draftProspectingCandidateReply -- relevance gates", () => {
     repo.seed(candidate({ id: "x-futures", status: "shown", draftReply: null, postText: "Been trading MNQ futures for two years, still get nervous before the open." }));
     const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "Two years in and still nervous is normal -- it means you still respect the risk.", mentionsFillbook: false, usesLink: false }));
 
-    const updated = await draftProspectingCandidateReply(fakeClient, "x-futures", { repo, drafter, loadGrounding });
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-futures", { repo, drafter, loadGrounding, cheapRelevanceCheck });
 
     expect(drafter).toHaveBeenCalledTimes(1);
     expect(updated.status).toBe("ready");
@@ -455,7 +459,7 @@ describe("draftProspectingCandidateReply -- relevance gates", () => {
     );
     const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "That rule catches a lot of people -- worth reading the fine print before the next attempt.", mentionsFillbook: false, usesLink: false }));
 
-    const updated = await draftProspectingCandidateReply(fakeClient, "x-propfirm", { repo, drafter, loadGrounding });
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-propfirm", { repo, drafter, loadGrounding, cheapRelevanceCheck });
 
     expect(drafter).toHaveBeenCalledTimes(1);
     expect(updated.status).toBe("ready");
@@ -474,11 +478,61 @@ describe("draftProspectingCandidateReply -- relevance gates", () => {
       usesLink: false,
     }));
 
-    await expect(draftProspectingCandidateReply(fakeClient, "x-modeljudged", { repo, drafter, loadGrounding })).rejects.toThrow(/not eligible for drafting/i);
+    await expect(draftProspectingCandidateReply(fakeClient, "x-modeljudged", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(/not eligible for drafting/i);
 
     expect(drafter).toHaveBeenCalledTimes(1); // pre-filter passed, so it DID reach the drafter this time
     const row = await repo.getById("x-modeljudged");
     expect(row!.status).toBe("not_relevant");
     expect(row!.draftReply).toBeNull(); // never persisted, regardless of what draft.reply contained
+  });
+});
+
+/**
+ * Coverage for the cheap (MODEL_HAIKU) relevance precheck: it sits between
+ * the free regex pre-filter and the expensive MODEL_SONNET drafting call,
+ * so a post that clears the regex but isn't actually relevant is rejected
+ * without ever paying for a full draft.
+ */
+describe("draftProspectingCandidateReply -- cheap relevance precheck", () => {
+  const loadGrounding = async () => ({ brandRulesSummary: "rules", verifiedKnowledgeSummary: "facts" });
+
+  it("rejects a post the cheap check judges irrelevant before ever calling the expensive drafter", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-cheap-reject", status: "shown", draftReply: null, postText: "Spent the whole weekend trading Pokemon cards with my kid." }));
+    const cheapRelevanceCheck = vi.fn(async (_ctx: ProspectingDraftContext) => false);
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "should never be called", mentionsFillbook: false, usesLink: false }));
+
+    await expect(draftProspectingCandidateReply(fakeClient, "x-cheap-reject", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(/not eligible for drafting/i);
+
+    expect(cheapRelevanceCheck).toHaveBeenCalledTimes(1);
+    expect(drafter).not.toHaveBeenCalled();
+    const row = await repo.getById("x-cheap-reject");
+    expect(row!.status).toBe("not_relevant");
+    expect(row!.draftReply).toBeNull();
+  });
+
+  it("proceeds to the expensive drafter once the cheap check judges the post relevant", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-cheap-pass", status: "shown", draftReply: null, postText: "Been trading MNQ futures for two years, still get nervous before the open." }));
+    const cheapRelevanceCheck = vi.fn(async (_ctx: ProspectingDraftContext) => true);
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "Nervous after two years just means you still respect the risk.", mentionsFillbook: false, usesLink: false }));
+
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-cheap-pass", { repo, drafter, loadGrounding, cheapRelevanceCheck });
+
+    expect(cheapRelevanceCheck).toHaveBeenCalledTimes(1);
+    expect(drafter).toHaveBeenCalledTimes(1);
+    expect(updated.status).toBe("ready");
+  });
+
+  it("never runs the cheap check at all for a post the free regex pre-filter already rejects", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-regex-reject", status: "shown", draftReply: null, postText: "$USELESS locked in the profits" }));
+    const cheapRelevanceCheck = vi.fn(async (_ctx: ProspectingDraftContext) => true);
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "should never be called", mentionsFillbook: false, usesLink: false }));
+
+    await expect(draftProspectingCandidateReply(fakeClient, "x-regex-reject", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(/not eligible for drafting/i);
+
+    expect(cheapRelevanceCheck).not.toHaveBeenCalled();
+    expect(drafter).not.toHaveBeenCalled();
   });
 });
