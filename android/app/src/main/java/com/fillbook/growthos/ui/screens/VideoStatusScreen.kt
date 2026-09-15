@@ -20,10 +20,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudDone
@@ -406,8 +409,24 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             }
 
             createVideoResultMessage?.let { message ->
+                // A rejected request's message is every reviewer's full
+                // objection joined together (see requestVideoScript() above)
+                // -- often several hundred words, unlike the one-line success
+                // message. Sitting in this fixed header (outside the
+                // LazyColumn below) with no height cap or scroll of its own,
+                // it used to just keep growing and push the entire rest of
+                // the screen -- including the render list and pull-to-refresh
+                // area -- off the bottom, with nothing on the page able to
+                // scroll far enough to read the rest of it. Capped height +
+                // its own vertical scroll keeps this banner readable without
+                // hiding whatever's below it.
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(message, style = MaterialTheme.typography.bodyMedium, color = TextSecondary, modifier = Modifier.weight(1f))
+                    Text(
+                        message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextSecondary,
+                        modifier = Modifier.weight(1f).heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
+                    )
                     TextButton(onClick = { createVideoResultMessage = null }) { Text("Dismiss") }
                 }
             }
