@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Movie
@@ -127,6 +128,7 @@ fun platformIcon(platform: String): ImageVector = when (platform.lowercase()) {
     "x" -> Icons.Filled.Tag
     "youtube" -> Icons.Filled.SmartDisplay
     "tiktok" -> Icons.Filled.MusicNote
+    "instagram" -> Icons.Filled.CameraAlt
     "blog" -> Icons.Filled.Article
     else -> Icons.Filled.Public
 }
@@ -158,6 +160,7 @@ fun platformDisplayName(platform: String): String = when (platform.lowercase()) 
     "x" -> "X"
     "youtube" -> "YouTube"
     "tiktok" -> "TikTok"
+    "instagram" -> "Instagram"
     else -> platform.replaceFirstChar { it.uppercase() }
 }
 
