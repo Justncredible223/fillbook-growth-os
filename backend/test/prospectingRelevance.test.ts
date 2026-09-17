@@ -92,3 +92,36 @@ describe("isPlausiblyTradingRelated -- crypto-only content", () => {
     expect(isPlausiblyTradingRelated("Locked in profits on this entry")).toBe(false);
   });
 });
+
+/**
+ * Regression coverage for a third real, confirmed leak (2026-09-16,
+ * owner-reported): crypto trading shares almost all its vocabulary with
+ * futures/prop-firm trading ("futures", "leverage", "liquidated",
+ * "stop-loss", "drawdown" apply equally to a crypto perpetual swap), so a
+ * post that matches a TRADING_RELEVANCE_PATTERNS anchor via that shared
+ * vocabulary previously passed straight through even when it was clearly
+ * crypto-only, not futures/prop-firm content -- unlike the earlier
+ * crypto-only bug above, these posts DO contain a real relevance anchor
+ * (that's exactly what let them slip past the first gate).
+ */
+describe("isPlausiblyTradingRelated -- crypto content sharing futures/trading vocabulary", () => {
+  it("rejects a crypto post that also matches a real trading-relevance anchor", () => {
+    expect(isPlausiblyTradingRelated("Bitcoin futures liquidated my whole position overnight, brutal leverage lesson")).toBe(false);
+    expect(isPlausiblyTradingRelated("My biggest drawdown ever came from an ETH perpetual futures trade")).toBe(false);
+    expect(isPlausiblyTradingRelated("Set a stop-loss on my crypto position for once, actually helped")).toBe(false);
+  });
+
+  it("rejects other crypto-specific vocabulary paired with a relevance anchor", () => {
+    expect(isPlausiblyTradingRelated("This memecoin trading strategy got me liquidated twice this week")).toBe(false);
+    expect(isPlausiblyTradingRelated("DeFi trading taught me more about risk management than anything else")).toBe(false);
+  });
+
+  it("still passes a crypto-mentioning post when it also has clear prop-firm/manual-discipline content -- same override reasoning as the automated-trading exclusion", () => {
+    expect(isPlausiblyTradingRelated("Blew up my funded account trying to revenge trade back losses from a bad crypto futures position")).toBe(true);
+    expect(isPlausiblyTradingRelated("Failed my prop firm evaluation -- was overleveraged on BTC futures and hit my daily loss limit")).toBe(true);
+  });
+
+  it("still rejects plain crypto speculation with no relevance anchor at all (unchanged baseline behavior)", () => {
+    expect(isPlausiblyTradingRelated("$DOGE about to send it, aping in with my last stack")).toBe(false);
+  });
+});

@@ -143,15 +143,74 @@ const MANUAL_DISCIPLINE_OVERRIDE_PATTERNS: RegExp[] = [
 ];
 
 /**
+ * Posts that are primarily about crypto -- real, confirmed leakage
+ * (2026-09-16, owner-reported): crypto trading shares almost all of its
+ * vocabulary with futures/prop-firm trading ("futures", "leverage",
+ * "liquidated", "stop-loss", "drawdown" all apply equally to a perpetual
+ * swap on a crypto exchange), so TRADING_RELEVANCE_PATTERNS alone let
+ * plenty of pure-crypto posts through even after the earlier
+ * crypto-vocabulary fix in isListicleOrAdFormatted's sibling gate
+ * (prospectingScoring.ts). Fillbook is a futures/prop-firm journal --
+ * broker-agnostic across NinjaTrader/Tradovate/Rithmic/CQG/IBKR, never a
+ * crypto product -- so a crypto-only post is never a real prospect
+ * regardless of how much shared vocabulary it happens to use. Same
+ * override reasoning as AUTOMATED_TRADING_EXCLUSION_PATTERNS: a post that
+ * also shows clear prop-firm/manual-discipline content survives (e.g. a
+ * trader comparing futures and crypto drawdown discipline in the same
+ * post), a crypto-only post does not.
+ */
+const CRYPTO_EXCLUSION_PATTERNS: RegExp[] = [
+  /\bcrypto\b/i,
+  /\bbitcoin\b/i,
+  /\bethereum\b/i,
+  /\baltcoins?\b/i,
+  /\b(BTC|ETH)\b/,
+  /\bperpetual (futures|swaps?)\b/i,
+  /\bDeFi\b/i,
+  /\bNFT\b/i,
+  /\bstablecoin\b/i,
+  /\b(crypto|coin) airdrop\b/i,
+  /\bmemecoin\b/i,
+];
+
+/**
+ * Deliberately a NARROWER, futures/prop-firm-SPECIFIC override list than
+ * MANUAL_DISCIPLINE_OVERRIDE_PATTERNS above -- reusing that broader list
+ * here was tried first and didn't work: generic risk-discipline vocabulary
+ * like "drawdown", "daily loss limit", or "position sizing" is exactly the
+ * shared vocabulary that let crypto posts slip through in the first place
+ * (a crypto trader talks about drawdown and position sizing too), so it
+ * can't also be what un-excludes a crypto post. Only signals that are
+ * genuinely futures/prop-firm-specific -- a real prop-firm evaluation, a
+ * funded account, or a named futures instrument -- are strong enough
+ * evidence to override the crypto exclusion.
+ */
+const FUTURES_SPECIFIC_OVERRIDE_PATTERNS: RegExp[] = [
+  /\bprop firm\b/i,
+  /\bprop trading\b/i,
+  /\bfunded (accounts?|traders?)\b/i,
+  /\bevaluation account\b/i,
+  /\btrading combine\b/i,
+  /\b(mnq|nq|es|mes)\s+futures\b/i,
+  /\b(crude oil|natural gas)\s+futures\b/i,
+  /\b(gold|silver)\s+futures\b/i,
+];
+
+/**
  * True if [postText] contains at least one distinctive futures/markets/
  * prop-trading signal AND is not primarily about automated/algorithmic
- * trading systems. Used as a pre-drafting gate in prospectingHandlers.ts.
+ * trading systems or crypto. Used as a pre-drafting gate in
+ * prospectingHandlers.ts.
  */
 export function isPlausiblyTradingRelated(postText: string): boolean {
   if (!TRADING_RELEVANCE_PATTERNS.some((p) => p.test(postText))) return false;
   if (AUTOMATED_TRADING_EXCLUSION_PATTERNS.some((p) => p.test(postText))) {
-    // Allow through only if there's also clear manual-discipline content
-    return MANUAL_DISCIPLINE_OVERRIDE_PATTERNS.some((p) => p.test(postText));
+    const hasManualDisciplineOverride = MANUAL_DISCIPLINE_OVERRIDE_PATTERNS.some((p) => p.test(postText));
+    if (!hasManualDisciplineOverride) return false;
+  }
+  if (CRYPTO_EXCLUSION_PATTERNS.some((p) => p.test(postText))) {
+    const hasFuturesSpecificOverride = FUTURES_SPECIFIC_OVERRIDE_PATTERNS.some((p) => p.test(postText));
+    if (!hasFuturesSpecificOverride) return false;
   }
   return true;
 }

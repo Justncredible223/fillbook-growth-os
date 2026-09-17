@@ -78,13 +78,16 @@ function isListicleOrAdFormatted(text: string): boolean {
 }
 
 /**
- * Pure scoring function -- multi-factor, deliberately NOT
- * follower-count-dominant per fillbookhq/docs/social/
- * MASTER_SOCIAL_STRATEGY.md ("Follower count alone does NOT determine
- * priority"). Author reach is capped at 15 of 100 possible points; topic
- * relevance, active discussion, and recency together can outweigh it, so
- * a smaller but highly relevant trader can still rank above a large but
- * generic account. No I/O, fully unit-testable.
+ * Pure scoring function -- multi-factor. Author reach's weight was raised
+ * 2026-09-16 per explicit owner direction: replies on small/random
+ * accounts get seen by almost nobody, while a reply on a larger account is
+ * what actually gets Fillbook noticed and checked out -- "it's more likely
+ * people will see our replies and check us out." This still isn't a bare
+ * follower-count ranking (log-scaled and capped, same shape as before,
+ * just a higher ceiling and steeper slope) -- a small account with a
+ * genuinely strong, relevant post can still clear the daily-set bar, per
+ * the owner's own "I know they are becoming our followers too" -- reach
+ * is weighted harder, not used to exclude anyone.
  */
 export function scoreProspectingCandidate(input: ProspectingScoreInput): ProspectingScoreResult {
   const spamMatch = SPAM_PATTERNS.find((pattern) => pattern.test(input.postText));
@@ -121,10 +124,11 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
   const discussionPoints = Math.min(Math.log10(discussionRaw + 1) * 8, 20);
   breakdown.activeDiscussion = `${replyCount} replies, ${quoteCount} quotes, ${likeCount} likes -> +${discussionPoints.toFixed(1)}`;
 
-  // Author reach -- capped, log-scaled, deliberately not dominant.
+  // Author reach -- log-scaled (never a bare follower-count ranking), but
+  // weighted harder than before -- see this function's own doc comment.
   const followers = input.authorFollowerCount ?? 0;
-  const reachPoints = Math.min(Math.log10(followers + 1) * 3, 15);
-  breakdown.authorReach = `${followers} followers -> +${reachPoints.toFixed(1)} (capped at 15)`;
+  const reachPoints = Math.min(Math.log10(followers + 1) * 6, 35);
+  breakdown.authorReach = `${followers} followers -> +${reachPoints.toFixed(1)} (capped at 35)`;
 
   // Recency -- linear decay across the 7-day search window.
   let recencyPoints = 5;

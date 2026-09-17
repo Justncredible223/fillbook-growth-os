@@ -181,4 +181,16 @@ describe("respellFillbookForTts", () => {
   it("does not match Fillbook as a substring of another word", () => {
     expect(respellFillbookForTts("Fillbookish is not a real word.")).toBe("Fillbookish is not a real word.");
   });
+
+  it("also splits FillbookHQ -- real production bug: \\bFillbook\\b alone never matched it (no word boundary between 'k' and 'H'), so every script's closing 'head to fillbookhq.com' line went to TTS completely unrespelled", () => {
+    expect(respellFillbookForTts("head to fillbookhq.com today.")).toBe("head to fill book hq.com today.");
+  });
+
+  it("preserves title case for FillbookHQ", () => {
+    expect(respellFillbookForTts("Visit FillbookHQ now.")).toBe("Visit Fill book HQ now.");
+  });
+
+  it("preserves all-caps for FILLBOOKHQ", () => {
+    expect(respellFillbookForTts("FOLLOW FILLBOOKHQ TODAY.")).toBe("FOLLOW FILL BOOK HQ TODAY.");
+  });
 });

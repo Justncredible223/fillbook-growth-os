@@ -56,14 +56,26 @@ describe("scoreProspectingCandidate", () => {
     expect(result.exclusionReason).toMatch(/spam/i);
   });
 
-  it("does not let a large follower count dominate the score", () => {
+  it("REVISED (2026-09-16, explicit owner direction): reach now weighs enough that a large quiet account can outrank a small engaged one -- 'it's more likely people will see our replies and check us out.' Still log-scaled/capped, never a bare follower-count ranking -- see the next test for the engagement gap that still isn't erased by reach alone.", () => {
     const smallButRelevant = scoreProspectingCandidate(
       baseInput({ authorFollowerCount: 200, publicMetrics: { reply_count: 10, quote_count: 2, like_count: 40 } }),
     );
     const bigButQuiet = scoreProspectingCandidate(
       baseInput({ authorFollowerCount: 500_000, publicMetrics: { reply_count: 0, quote_count: 0, like_count: 0 } }),
     );
-    expect(smallButRelevant.score).toBeGreaterThan(bigButQuiet.score);
+    expect(bigButQuiet.score).toBeGreaterThan(smallButRelevant.score);
+  });
+
+  it("a small account's own strong engagement can still close most of a reach gap against a similarly-quiet large account", () => {
+    const smallEngaged = scoreProspectingCandidate(
+      baseInput({ authorFollowerCount: 200, publicMetrics: { reply_count: 10, quote_count: 2, like_count: 40 } }),
+    );
+    const largeEngaged = scoreProspectingCandidate(
+      baseInput({ authorFollowerCount: 500_000, publicMetrics: { reply_count: 10, quote_count: 2, like_count: 40 } }),
+    );
+    // Same engagement either way -- the large account still wins on reach alone, but a small account is never locked out of a strong score.
+    expect(largeEngaged.score).toBeGreaterThan(smallEngaged.score);
+    expect(smallEngaged.score).toBeGreaterThanOrEqual(MIN_DAILY_SET_SCORE);
   });
 
   it("REFINED (2026-09-07 freshness/audience-quality review): a very-low-follower account is not hard-excluded -- a genuinely relevant, engaged post from a near-zero-follower account can still clear MIN_DAILY_SET_SCORE", () => {
@@ -78,11 +90,11 @@ describe("scoreProspectingCandidate", () => {
     expect(tinyAccount.score).toBeGreaterThanOrEqual(MIN_DAILY_SET_SCORE);
   });
 
-  it("follower count still moves the score (soft signal), just not by much -- confirms it influences ranking without dominating or excluding", () => {
+  it("follower count meaningfully moves the score -- still log-scaled and capped (never a bare follower-count ranking), but no longer a minor nudge -- see this file's REVISED reach-weight test above", () => {
     const zeroFollowers = scoreProspectingCandidate(baseInput({ authorFollowerCount: 0 }));
     const hundredKFollowers = scoreProspectingCandidate(baseInput({ authorFollowerCount: 100_000 }));
     expect(hundredKFollowers.score).toBeGreaterThan(zeroFollowers.score); // it does influence ranking...
-    expect(hundredKFollowers.score - zeroFollowers.score).toBeLessThanOrEqual(15); // ...but only ever by the capped reach-points range, never dominant
+    expect(hundredKFollowers.score - zeroFollowers.score).toBeLessThanOrEqual(35); // ...bounded by the capped reach-points range, never unlimited
   });
 
   it("caps author-reach points regardless of how large the follower count is", () => {

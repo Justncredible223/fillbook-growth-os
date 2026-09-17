@@ -35,12 +35,23 @@ const WORD_TIMING_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "edge_t
  * resulting two WordBoundary entries back into one "Fillbook" caption word
  * afterward, so it still displays and highlights as a single word on
  * screen, matching what it actually is.
+ *
+ * Also matches "FillbookHQ" (confirmed by ear on a real render too, e.g.
+ * every script's closing "head to fillbookhq.com" line) -- \bFillbook\b
+ * alone never matched it, since there's no word boundary between the "k"
+ * and the "H" ("FillbookHQ" is one unbroken run of letters), so that form
+ * was sent to TTS completely unrespelled and came out as one mangled
+ * "fill-boook-hq" word. The optional HQ group below is split out as its
+ * own word the same way, so "book" always gets the same short vowel as in
+ * "a book you read," never the compound-word blend.
  */
 export function respellFillbookForTts(text: string): string {
-  return text.replace(/\bFillbook\b/gi, (match) => {
-    if (match === match.toUpperCase()) return "FILL BOOK";
-    if (match.charAt(0) === match.charAt(0).toUpperCase()) return "Fill book";
-    return "fill book";
+  return text.replace(/\bFillbook(HQ)?\b/gi, (match, hq: string | undefined) => {
+    const isAllCaps = match === match.toUpperCase();
+    const isCapitalized = match.charAt(0) === match.charAt(0).toUpperCase();
+    const fill = isAllCaps ? "FILL" : isCapitalized ? "Fill" : "fill";
+    const book = isAllCaps ? "BOOK" : "book";
+    return hq ? `${fill} ${book} ${hq}` : `${fill} ${book}`;
   });
 }
 
