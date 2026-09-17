@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { classifyShot, buildScenePlan, buildSceneLabelCues } from "../../scripts/video-factory/scenes";
+import { classifyShot, buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "../../scripts/video-factory/scenes";
+import type { Scene } from "../../scripts/video-factory/types";
 
 describe("classifyShot", () => {
   it("always classifies the first shot as hook, regardless of text", () => {
@@ -68,5 +69,36 @@ describe("buildSceneLabelCues", () => {
     expect(cues[0]!.endSeconds).toBe(8);
     expect(cues[1]!.startSeconds).toBe(8);
     expect(cues[1]!.endSeconds).toBe(12);
+  });
+});
+
+describe("selectBestThumbnailSeconds", () => {
+  const scene = (overrides: Partial<Scene>): Scene => ({
+    kind: "explanation",
+    label: "",
+    durationSeconds: 10,
+    backgroundColor: "0x000000",
+    ...overrides,
+  });
+
+  it("falls back to the given fallback when no scene has real stock footage", () => {
+    const scenes = [scene({ kind: "hook" }), scene({ kind: "product" })];
+    expect(selectBestThumbnailSeconds(scenes, 3)).toBe(3);
+    expect(selectBestThumbnailSeconds(scenes, null)).toBeNull();
+  });
+
+  it("prefers a non-hook scene with real footage over the hook scene, even when the hook also has footage", () => {
+    const scenes = [
+      scene({ kind: "hook", clipPath: "/clips/hook.mp4" }),
+      scene({ kind: "product", clipPath: "/clips/product.mp4" }),
+    ];
+    // scene 1 (product) spans seconds 10-20 -> midpoint 15
+    expect(selectBestThumbnailSeconds(scenes, 999)).toBe(15);
+  });
+
+  it("uses the hook scene's midpoint when it's the only one with real footage", () => {
+    const scenes = [scene({ kind: "hook", clipPath: "/clips/hook.mp4" }), scene({ kind: "product" })];
+    // scene 0 (hook) spans seconds 0-10 -> midpoint 5
+    expect(selectBestThumbnailSeconds(scenes, 999)).toBe(5);
   });
 });

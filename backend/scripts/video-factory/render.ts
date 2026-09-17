@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync } from "node:fs";
+import { copyFileSync, existsSync, writeFileSync } from "node:fs";
 import { win32 as windowsPath } from "node:path";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -269,23 +269,59 @@ export async function renderVideo(plan: RenderPlan, runner: ProcessRunner): Prom
  * grabbed from it alone can easily never mention Fillbook at all.
  */
 const THUMBNAIL_SITE_TEXT = "fillbookhq.com";
+const THUMBNAIL_BRAND_ASS_BASENAME = "thumbnail-brand.ass";
+
+/**
+ * One-line .ass file for the thumbnail badge -- top-left (Alignment=7),
+ * well clear of both the bottom-anchored Hook/Caption text (MarginV=320,
+ * see captions.ts) and the top-anchored SceneLabel text (MarginV=140).
+ * BorderStyle=3 gives an opaque background box behind the text (same look
+ * the old drawtext boxcolor/boxborderw was going for); BackColour's
+ * leading byte is alpha (ASS is &HAABBGGRR), 0x73 ~= the old box@0.55
+ * opacity. PlayResX/Y match the render resolution -- same libass-clipping
+ * fix captions.ts's ASS_HEADER doc comment explains. Single Dialogue line
+ * spans well past any real thumbnail frame's timestamp (0-10s window vs.
+ * -frames:v 1 grabbing pts 0 from the already-extracted still image), so
+ * it's always active regardless of `atSeconds`.
+ */
+function buildThumbnailBrandAss(): string {
+  return `[Script Info]
+ScriptType: v4.00+
+PlayResX: ${WIDTH}
+PlayResY: ${HEIGHT}
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: ThumbnailBrand,Poppins ExtraBold,44,&H00FFFFFF,&H00FFFFFF,&H00000000,&H73000000,1,0,0,0,100,100,0,0,3,8,0,7,32,32,32,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailBrand,,0,0,0,,${THUMBNAIL_SITE_TEXT}`;
+}
 
 /**
  * Extracts a single real frame from the finished video as a JPG thumbnail,
- * then burns in a small "fillbookhq.com" badge via a second, simple
- * drawtext-only ffmpeg pass. Two separate ffmpeg calls rather than one
- * combined -ss/-i/-filter_complex invocation: the first stays a plain
- * -ss/-i/-frames:v call (as before) so it's safe to pass a real absolute
- * `videoPath` directly -- no filter-graph syntax there for a Windows
- * drive-letter colon to collide with. The second runs with cwd set to the
- * thumbnail's own directory and references it by plain basename inside
- * the drawtext filter string, same basename-only path-safety pattern
- * renderVideo already uses for the bundled caption font (see that
- * function's own doc comment) -- drawtext's `text=`/`fontfile=` params use
- * colon-delimited syntax, which a raw Windows path would collide with.
- * Callers should pick `atSeconds` to land inside the Hook caption's
- * on-screen window so the frame also has bold on-brand hook text on it
- * (see captions.ts's getHookMidpointSeconds).
+ * then burns in a small "fillbookhq.com" badge via a second ffmpeg pass.
+ * Two separate ffmpeg calls rather than one combined -ss/-i/-filter_complex
+ * invocation: the first stays a plain -ss/-i/-frames:v call (as before) so
+ * it's safe to pass a real absolute `videoPath` directly -- no filter-graph
+ * syntax there for a Windows drive-letter colon to collide with. The
+ * second runs with cwd set to the thumbnail's own directory and references
+ * files by plain basename, same basename-only path-safety pattern
+ * renderVideo already uses for the bundled caption font.
+ *
+ * The badge is burned in via the `subtitles` filter over a one-line .ass
+ * file (see THUMBNAIL_BRAND_STYLE below), NOT `drawtext` -- an earlier
+ * version of this function used drawtext directly for the badge, which
+ * never actually showed up on real renders (owner-reported 2026-09-18):
+ * drawtext reproducibly segfaults on the ffmpeg build every real render
+ * runs on (ubuntu-latest in GitHub Actions -- see captions.ts's own doc
+ * comment, which is why every OTHER piece of burned-in text, captions and
+ * scene labels alike, already goes through `subtitles` instead). This
+ * brings the thumbnail badge in line with that established, verified-
+ * working pattern instead of the one path that still used drawtext.
  */
 export async function extractThumbnail(videoPath: string, atSeconds: number, thumbnailPath: string, runner: ProcessRunner): Promise<void> {
   const cwd = renderDirname(thumbnailPath);
@@ -319,32 +355,18 @@ export async function extractThumbnail(videoPath: string, atSeconds: number, thu
     // Deliberately swallowed -- see comment above.
   }
 
-  // Top-left badge, well clear of both the bottom-anchored Hook/Caption
-  // text (MarginV=320, see captions.ts) and the top-anchored SceneLabel
-  // text (MarginV=140) -- a slim strip right at the top edge sits above
-  // where SceneLabel's own margin would ever place it. Runs with cwd set
-  // to the thumbnail's own directory and references files by plain
-  // basename inside the filter string -- same basename-only path-safety
-  // pattern as renderVideo's bundled font (see that function's own doc
-  // comment); drawtext's `text=`/`fontfile=` params use colon-delimited
-  // syntax, which a raw Windows path would collide with. Writes directly
-  // to `finalBasename` (resolving to the real `thumbnailPath` via `cwd`)
-  // so there's no extra copy-back step needed.
-  const drawtext = [
-    `text='${THUMBNAIL_SITE_TEXT}'`,
-    "fontfile=" + FONT_BASENAME,
-    "fontsize=44",
-    "fontcolor=white",
-    "x=32",
-    "y=32",
-    "box=1",
-    "boxcolor=black@0.55",
-    "boxborderw=16",
-  ].join(":");
+  const assPath = join(cwd, THUMBNAIL_BRAND_ASS_BASENAME);
+  writeFileSync(assPath, buildThumbnailBrandAss(), "utf-8");
 
+  // Runs with cwd set to the thumbnail's own directory and references
+  // files by plain basename inside the filter string -- same basename-
+  // only path-safety pattern as renderVideo's bundled font/captions (see
+  // that function's own doc comment). Writes directly to `finalBasename`
+  // (resolving to the real `thumbnailPath` via `cwd`) so there's no extra
+  // copy-back step needed.
   const brandResult = await runner.run(
     "ffmpeg",
-    ["-y", "-i", rawBasename, "-vf", `drawtext=${drawtext}`, "-frames:v", "1", "-q:v", "2", finalBasename],
+    ["-y", "-i", rawBasename, "-vf", `subtitles=${THUMBNAIL_BRAND_ASS_BASENAME}:fontsdir=.`, "-frames:v", "1", "-q:v", "2", finalBasename],
     { cwd },
   );
   if (brandResult.exitCode !== 0) {

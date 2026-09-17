@@ -20,7 +20,7 @@ import { MAX_VIDEO_STORAGE_BYTES } from "../../src/video/videoRenderEligibility.
 import { loadFromSupabase, assertApproved } from "../video-factory/loadApprovedScript.js";
 import { generateVoiceover, DEFAULT_VOICE } from "../video-factory/voiceover.js";
 import { buildCaptionCues, buildOutroCue, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "../video-factory/captions.js";
-import { buildScenePlan, buildSceneLabelCues } from "../video-factory/scenes.js";
+import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "../video-factory/scenes.js";
 import { renderVideo, extractThumbnail } from "../video-factory/render.js";
 import { copyClipToDir, fetchStockClip, getVideoQuery, type StockFootageCredentials } from "../video-factory/stockFootage.js";
 import { runFfprobeJson, validateOutput } from "../video-factory/validate.js";
@@ -148,13 +148,20 @@ async function main(): Promise<void> {
 
   // Best-effort: a downloadable thumbnail is a nice-to-have on top of an
   // already-successful video, not a correctness requirement -- a failure
-  // here (e.g. the Hook midpoint landing on a corrupt frame) never fails
+  // here (e.g. the selected frame landing on a corrupt frame) never fails
   // the whole render, it just leaves thumbnail_path null for this row.
   let thumbnailPath: string | null = null;
   try {
-    const hookMidpoint = getHookMidpointSeconds(captionCues) ?? 1;
+    // Prefers the midpoint of a scene with real stock footage (the "best
+    // shot") over always grabbing the Hook's on-screen window, which
+    // frequently landed on a flat brand-color card when no stock clip had
+    // loaded for that early scene -- see selectBestThumbnailSeconds's own
+    // doc comment. Falls back to the old Hook-midpoint behavior only when
+    // every scene rendered as a flat color card.
+    const hookMidpoint = getHookMidpointSeconds(captionCues);
+    const thumbnailSeconds = selectBestThumbnailSeconds(scenes, hookMidpoint) ?? 1;
     const thumbnailLocalPath = join(outDir, "thumbnail.jpg");
-    await extractThumbnail(outputPath, hookMidpoint, thumbnailLocalPath, runner);
+    await extractThumbnail(outputPath, thumbnailSeconds, thumbnailLocalPath, runner);
     const candidatePath = `${videoRenderId}-thumbnail.jpg`;
     const { error: thumbUploadError } = await client.storage
       .from(STORAGE_BUCKET)

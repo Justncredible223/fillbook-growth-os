@@ -12,7 +12,7 @@ import {
 } from "./loadApprovedScript.js";
 import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
 import { buildCaptionCues, buildOutroCue, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "./captions.js";
-import { buildScenePlan, buildSceneLabelCues } from "./scenes.js";
+import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "./scenes.js";
 import { renderVideo, extractThumbnail } from "./render.js";
 import { runFfprobeJson, validateOutput } from "./validate.js";
 import { VideoFactoryError, type RenderPlan, type RenderReport, type VideoScriptPackage } from "./types.js";
@@ -168,8 +168,9 @@ async function main(): Promise<void> {
   console.log("Extracting thumbnail (ffmpeg)...");
   const thumbnailPath = join(outDir, "thumbnail.jpg");
   try {
-    const hookMidpoint = getHookMidpointSeconds(captionCues) ?? 1;
-    await extractThumbnail(outputPath, hookMidpoint, thumbnailPath, runner);
+    const hookMidpoint = getHookMidpointSeconds(captionCues);
+    const thumbnailSeconds = selectBestThumbnailSeconds(scenes, hookMidpoint) ?? 1;
+    await extractThumbnail(outputPath, thumbnailSeconds, thumbnailPath, runner);
   } catch (err) {
     console.error(`Thumbnail extraction failed (non-fatal): ${(err as Error).message}`);
   }
