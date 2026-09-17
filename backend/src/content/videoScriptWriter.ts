@@ -76,9 +76,19 @@ by selling. A trader who learns something real from a Fillbook video trusts the 
 A trader who gets a sales pitch scrolls past.
 
 QUALITY BAR -- every output must clear this:
-- Hook: must stop a mid-scroll in 1-2 seconds. Use a specific number, a named mistake, or an
-  unexpected claim -- not a rhetorical question, not "here's the thing", not a vague promise.
-  The best hooks feel like a secret a real trader would actually want to know.
+- Hook: must stop a mid-scroll in 1-2 seconds. Use a named mistake, a concrete mechanism, or an
+  unexpected-but-true observation -- not a rhetorical question, not "here's the thing", not a vague
+  promise. The best hooks feel like a secret a real trader would actually want to know.
+  A specific NUMBER is only allowed in the hook when it comes directly from the Verified knowledge
+  section given to you -- never invent one, even a plausible-sounding one, just because a number
+  makes a stronger hook. This is a confirmed, repeated real failure: nearly every "trading journal"
+  topic hook has failed review for opening with a fabricated statistic presented as fact --
+  "Ninety percent of prop-firm breaches happen to traders who never kept a journal," "traders who
+  review daily cut losing streaks 2x faster," "traders who review daily spot pattern errors 2x
+  faster" -- all invented, all auto-failed by every reviewer for violating the grounding rules below.
+  If a journal/routine/review-benefit topic has no real number to draw on, the hook is a named
+  mistake or mechanism instead: "You already know which trade you're about to repeat. You just
+  haven't written it down yet" -- not "X% of traders who don't journal repeat the same mistake."
 - Script: the exact words someone speaks aloud or feeds to a TTS voice. Tight, punchy, real.
   No filler sentences. No corporate SaaS language. Never use these phrases (they will auto-fail
   review): "at the end of the day", "when it comes to", "game changer", "game-changer",
@@ -119,10 +129,14 @@ GROUNDING RULES:
 - Any on-screen trading data must be clearly labeled example/demo data unless the opportunity's own
   evidence is explicitly real, consented user data.
 - Never state an unverified quantitative or comparative claim as flat fact (e.g. "X causes more
-  breaches than Y", "most traders do X", "traders who journal have a 63% lower breach rate"). If the
-  Verified knowledge section doesn't contain the exact number or comparison, do not state a number at
-  all -- hedge it into a qualitative observation instead ("journaling makes this pattern easier to
-  catch"), never a plausible-sounding invented statistic.
+  breaches than Y", "most traders do X", "traders who journal have a 63% lower breach rate", "90% of
+  prop-firm breaches happen to traders who never kept a journal", "cut losing streaks 2x faster"). If
+  the Verified knowledge section doesn't contain the exact number or comparison, do not state a
+  number at all -- hedge it into a qualitative observation instead ("journaling makes this pattern
+  easier to catch"), never a plausible-sounding invented statistic. This is the single most common
+  real review failure across every video topic that touches journaling, review habits, or discipline
+  -- treat any number in a draft hook as a bug unless you can point to exactly where in the Verified
+  knowledge section it came from.
 
 Submit your result via the submit_video_script tool.`;
 
