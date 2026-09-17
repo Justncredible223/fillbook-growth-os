@@ -6,6 +6,13 @@ import type { Signal } from "../signals/types.js";
 
 const LOOKBACK_HOURS = 24 * 7;
 
+// Mirrors prospecting's STALE_EXPIRY_DAYS (prospectingEligibility.ts) --
+// an open opportunity nobody has actioned in this long is stale enough
+// that it's cluttering the list rather than something still worth
+// surfacing; expire it out of 'open' rather than letting it accumulate
+// forever (previously nothing ever set status='expired' at all).
+const STALE_EXPIRY_DAYS = 14;
+
 interface SignalRow {
   id: string;
   source: string;
@@ -27,6 +34,9 @@ interface SignalRow {
  * knows how to turn recent signal rows into real Opportunity rows.
  */
 export async function runGenerateOpportunities(client: SupabaseClient): Promise<GenerateOpportunitiesResult> {
+  const repo = new SupabaseOpportunityRepository(client);
+  await repo.expireStale(new Date(Date.now() - STALE_EXPIRY_DAYS * 24 * 60 * 60 * 1000));
+
   const cutoff = new Date(Date.now() - LOOKBACK_HOURS * 60 * 60 * 1000).toISOString();
 
   const { data: signalRows, error: signalsError } = await client
@@ -58,6 +68,6 @@ export async function runGenerateOpportunities(client: SupabaseClient): Promise<
     ((opportunityRows ?? []) as Array<{ signal_ids: string[] | null }>).flatMap((row) => row.signal_ids ?? []),
   );
 
-  const engine = new OpportunityEngine(new SupabaseOpportunityRepository(client));
+  const engine = new OpportunityEngine(repo);
   return generateOpportunitiesFromSignals(engine, recentSignals, alreadyCoveredSignalIds);
 }

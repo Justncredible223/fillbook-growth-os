@@ -53,6 +53,17 @@ export class SupabaseOpportunityRepository implements OpportunityRepository {
     return this.attachSourceUrls(opportunities);
   }
 
+  async expireStale(olderThan: Date): Promise<number> {
+    const { data, error } = await this.client
+      .from("opportunities")
+      .update({ status: "expired", updated_at: new Date().toISOString() })
+      .eq("status", "open")
+      .lt("created_at", olderThan.toISOString())
+      .select("id");
+    if (error) throw new Error(`expireStale failed: ${error.message}`);
+    return (data ?? []).length;
+  }
+
   /**
    * A read-time join, not a stored column -- no migration, nothing to
    * keep in sync. See opportunitySourceEnrichment.ts for the actual

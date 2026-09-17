@@ -117,8 +117,9 @@ export async function generateOpportunitiesFromSignals(
       signalIds: [signal.id],
       recommendedChannels: [platformForSource(signal.source)],
     };
-    await engine.createFromEvidence(input);
-    created++;
+    const opportunity = await engine.createFromEvidence(input);
+    if (opportunity) created++;
+    else skipped++;
   }
 
   for (const [topic, group] of byTopic) {
@@ -136,8 +137,9 @@ export async function generateOpportunitiesFromSignals(
       signalIds: group.map((s) => s.id),
       recommendedChannels: [platformForSource(latest.source)],
     };
-    await engine.createFromEvidence(input);
-    created++;
+    const opportunity = await engine.createFromEvidence(input);
+    if (opportunity) created++;
+    else skipped++;
   }
 
   return { created, skipped };

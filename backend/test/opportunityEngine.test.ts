@@ -17,9 +17,28 @@ describe("OpportunityEngine", () => {
       signalIds: ["s1", "s2"],
       recommendedChannels: ["x"],
     });
-    expect(opp.approvalClass).toBe("EXTERNAL_DRAFT");
-    expect(opp.status).toBe("open");
-    expect(opp.signalIds).toEqual(["s1", "s2"]);
-    expect(opp.score).toBeGreaterThan(0);
+    expect(opp).not.toBeNull();
+    expect(opp!.approvalClass).toBe("EXTERNAL_DRAFT");
+    expect(opp!.status).toBe("open");
+    expect(opp!.signalIds).toEqual(["s1", "s2"]);
+    expect(opp!.score).toBeGreaterThan(0);
+  });
+
+  it("skips creating an opportunity for a low-score, marginal candidate rather than letting it accumulate forever", async () => {
+    const repo = new InMemoryOpportunityRepository();
+    const engine = new OpportunityEngine(repo);
+    const opp = await engine.createFromEvidence({
+      title: "Weak, barely-relevant mention",
+      audienceRelevance: 0.1,
+      fillbookRelevance: 0.1,
+      velocity: 0,
+      confidence: 0.1,
+      daysSinceLastCoveredSameTopic: null,
+      duplicateOpenCount: 0,
+      signalIds: ["s1"],
+      recommendedChannels: ["x"],
+    });
+    expect(opp).toBeNull();
+    expect(await repo.listOpen()).toHaveLength(0);
   });
 });

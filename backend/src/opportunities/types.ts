@@ -54,4 +54,6 @@ export interface ScoringInput {
 export interface OpportunityRepository {
   insert(opportunity: Omit<Opportunity, "id" | "status" | "createdAt">): Promise<Opportunity>;
   listOpen(): Promise<Opportunity[]>;
+  /** Marks open opportunities created before `olderThan` as 'expired'. Returns the count changed. */
+  expireStale(olderThan: Date): Promise<number>;
 }
