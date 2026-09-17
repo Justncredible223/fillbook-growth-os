@@ -20,6 +20,33 @@ const FONT_ASSET_PATH = join(dirname(fileURLToPath(import.meta.url)), "assets", 
 const FONT_BASENAME = "Poppins-ExtraBold.ttf";
 
 /**
+ * Bundled background music bed (Pixabay Content License -- free for
+ * commercial use, no attribution required; see assets/music/LICENSE.txt)
+ * -- added 2026-09-17 as one of two owner-approved render-quality
+ * improvements (the other is buildFfmpegArgs's scene crossfades below).
+ * One fixed track reused across every render, same reasoning as the one
+ * fixed caption font: consistent, recognizable branding rather than a
+ * per-video pick, and no extra API/credential surface to fetch a
+ * different one each time.
+ */
+const MUSIC_ASSET_PATH = join(dirname(fileURLToPath(import.meta.url)), "assets", "music", "ambient-technology.mp3");
+const MUSIC_BASENAME = "ambient-technology.mp3";
+
+/** How quiet the background music sits under the real voiceover -- low enough to never compete with narration, audible enough to fill the silence. */
+const MUSIC_VOLUME = 0.13;
+
+/**
+ * Crossfade duration between adjacent scenes, replacing the previous hard
+ * cut -- added 2026-09-17 (owner-approved render-quality improvement) to
+ * soften the "instant scene change" feel of a plain concat. Capped at 30%
+ * of whichever adjacent scene is shorter (never more than MAX) so a short
+ * scene can never make an xfade `offset` go negative -- see
+ * buildFfmpegArgs's chained-xfade offset math for why that bound matters.
+ */
+const MAX_TRANSITION_SECONDS = 0.4;
+const TRANSITION_FRACTION_OF_SHORTER_SCENE = 0.3;
+
+/**
  * Path helpers that understand BOTH separators regardless of the host OS.
  * `node:path`'s default export follows the current platform: on Linux/
  * macOS `basename("C:\\out\\draft-1\\voiceover.mp3")` returns the whole
@@ -40,17 +67,55 @@ export function renderDirname(filePath: string): string {
 }
 
 /**
+ * Chained-xfade offset/duration math for N scene clips, factored out so
+ * it's independently unit-testable without constructing a full filter
+ * graph string. Each transition's duration is capped at both
+ * MAX_TRANSITION_SECONDS and TRANSITION_FRACTION_OF_SHORTER_SCENE of
+ * whichever ADJACENT scene is shorter -- this is what guarantees offset_i
+ * (= cumulative duration so far, minus this transition's own duration)
+ * can never go negative: cumulative after step i-1 is always >=
+ * durations[i-1], and t_i <= durations[i-1] * TRANSITION_FRACTION < durations[i-1].
+ * Returns one entry per transition (durations.length - 1 entries, empty
+ * for a single-scene plan); `cumulativeDurationSeconds` is the resulting
+ * total video length after every transition's overlap is applied.
+ */
+export interface SceneTransition {
+  durationSeconds: number;
+  offsetSeconds: number;
+}
+
+export function computeSceneTransitions(durations: number[]): { transitions: SceneTransition[]; cumulativeDurationSeconds: number } {
+  const transitions: SceneTransition[] = [];
+  if (durations.length === 0) return { transitions, cumulativeDurationSeconds: 0 };
+
+  let cumulative = durations[0]!;
+  for (let i = 1; i < durations.length; i++) {
+    const prev = durations[i - 1]!;
+    const current = durations[i]!;
+    const duration = Math.min(MAX_TRANSITION_SECONDS, TRANSITION_FRACTION_OF_SHORTER_SCENE * Math.min(prev, current));
+    const offset = cumulative - duration;
+    transitions.push({ durationSeconds: duration, offsetSeconds: offset });
+    cumulative = cumulative + current - duration;
+  }
+  return { transitions, cumulativeDurationSeconds: cumulative };
+}
+
+/**
  * Builds the ffmpeg argv for the known-good composite strategy from
  * ~/fillbookhq/docs/social/VIDEO_PRODUCTION_WORKFLOW.md, extended from a
- * single flat background to N scene-colored segments concatenated
- * end-to-end: one `color` lavfi source per scene, concatenated on the
- * video track, then the `subtitles` filter burns in captions + scene
- * labels on top of the composited result (NOT `drawtext`, which
- * reproducibly segfaults on this ffmpeg 9.0.1 build -- see captions.ts).
- * Audio is the real voiceover concatenated with a short silence pad so
- * the closing caption has room to breathe, same as the known-good
- * example. Pure function, no I/O -- render() below is the only thing
- * that actually shells out, so this is fully unit-testable.
+ * single flat background to N scene-colored segments joined with a short
+ * crossfade between each adjacent pair (see computeSceneTransitions --
+ * replaced a hard-cut `concat` 2026-09-17, an owner-approved render-
+ * quality improvement: an instant scene change reads as more "AI
+ * slideshow" than a soft dissolve), then the `subtitles` filter burns in
+ * captions + scene labels on top of the composited result (NOT
+ * `drawtext`, which reproducibly segfaults on this ffmpeg 9.0.1 build --
+ * see captions.ts). Audio is the real voiceover concatenated with a short
+ * silence pad so the closing caption has room to breathe, then mixed with
+ * a quiet bundled background music bed (also 2026-09-17, same owner
+ * approval -- see MUSIC_ASSET_PATH/MUSIC_VOLUME). Pure function, no I/O
+ * -- render() below is the only thing that actually shells out, so this
+ * is fully unit-testable.
  *
  * Every file is referenced by basename only (see renderBasename): the
  * filter graph must never see an absolute path.
@@ -77,8 +142,13 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
   }
   const voiceoverInputIndex = plan.scenes.length;
   const silenceInputIndex = voiceoverInputIndex + 1;
+  const musicInputIndex = silenceInputIndex + 1;
   inputArgs.push("-i", renderBasename(plan.voiceoverPath));
   inputArgs.push("-f", "lavfi", "-i", `anullsrc=r=24000:cl=mono:d=${plan.silencePadSeconds.toFixed(3)}`);
+  // Looped and trimmed to the full video length so a short bundled track
+  // (2:20) still covers a longer render; `-shortest` on the final output
+  // means an over-long trim here is harmless.
+  inputArgs.push("-stream_loop", "-1", "-t", plan.totalDurationSeconds.toFixed(3), "-i", MUSIC_BASENAME);
 
   // Scale each scene clip to 1080×1920 (center-crop to fill, maintain no distortion)
   const sceneFilterParts: string[] = [];
@@ -86,7 +156,7 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
   for (let i = 0; i < plan.scenes.length; i++) {
     const scene = plan.scenes[i];
     const label = `sv${i}`;
-    sceneOutputLabels.push(`[${label}]`);
+    sceneOutputLabels.push(label);
     if (scene.clipPath) {
       sceneFilterParts.push(
         // setsar=1:1 normalises the sample-aspect-ratio metadata that some
@@ -99,16 +169,34 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     }
   }
 
-  const concatInputs = sceneOutputLabels.join("");
+  // Chain xfade transitions scene-by-scene: sv0 -> xfade with sv1 -> xf1,
+  // xf1 -> xfade with sv2 -> xf2, etc. A single-scene plan has nothing to
+  // transition, so the raw scene label is the background directly.
+  const { transitions } = computeSceneTransitions(plan.scenes.map((s) => s.durationSeconds));
+  let bgLabel = sceneOutputLabels[0]!;
+  const xfadeParts: string[] = [];
+  for (let i = 0; i < transitions.length; i++) {
+    const t = transitions[i]!;
+    const nextLabel = `xf${i}`;
+    xfadeParts.push(
+      `[${bgLabel}][${sceneOutputLabels[i + 1]}]xfade=transition=fade:duration=${t.durationSeconds.toFixed(3)}:offset=${t.offsetSeconds.toFixed(3)}[${nextLabel}]`,
+    );
+    bgLabel = nextLabel;
+  }
+
   const filterComplex = [
     ...sceneFilterParts,
-    `${concatInputs}concat=n=${plan.scenes.length}:v=1:a=0[bgraw]`,
+    ...xfadeParts,
     // fontsdir=. (relative to ffmpeg's own cwd, the render's output
     // directory -- see renderVideo) points libass at the bundled caption
     // font copied there below, same basename-only path-safety reasoning as
     // every other file in this filter graph.
-    `[bgraw]subtitles=${renderBasename(plan.assPath)}:fontsdir=.[v]`,
-    `[${voiceoverInputIndex}:a][${silenceInputIndex}:a]concat=n=2:v=0:a=1[a]`,
+    `[${bgLabel}]subtitles=${renderBasename(plan.assPath)}:fontsdir=.[v]`,
+    `[${voiceoverInputIndex}:a][${silenceInputIndex}:a]concat=n=2:v=0:a=1[voice]`,
+    `[${musicInputIndex}:a]volume=${MUSIC_VOLUME}[musicvol]`,
+    // duration=first: output length follows the voice+silence track, never
+    // the (possibly much longer, now looped-to-fit) music bed.
+    `[voice][musicvol]amix=inputs=2:duration=first:dropout_transition=0[a]`,
   ].join(";");
 
   return [
@@ -147,6 +235,19 @@ export async function renderVideo(plan: RenderPlan, runner: ProcessRunner): Prom
   try {
     const fontDest = join(cwd, FONT_BASENAME);
     if (!existsSync(fontDest)) copyFileSync(FONT_ASSET_PATH, fontDest);
+  } catch {
+    // Deliberately swallowed -- see comment above.
+  }
+  // Same copy-into-cwd/basename-reference and best-effort-swallow pattern
+  // as the font above. Unlike the font, a failed copy here has no
+  // fontconfig-style automatic substitute -- ffmpeg will fail the render
+  // with its own "No such file or directory" on the music input, which is
+  // an acceptable, honest failure mode for a directory-not-writable
+  // situation this rare (the same directory already has to be writable
+  // for voiceover.mp3/captions.ass to exist there at all).
+  try {
+    const musicDest = join(cwd, MUSIC_BASENAME);
+    if (!existsSync(musicDest)) copyFileSync(MUSIC_ASSET_PATH, musicDest);
   } catch {
     // Deliberately swallowed -- see comment above.
   }

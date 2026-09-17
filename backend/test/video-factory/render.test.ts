@@ -1,5 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
-import { buildFfmpegArgs, renderBasename, renderDirname, renderVideo, extractThumbnail } from "../../scripts/video-factory/render";
+import {
+  buildFfmpegArgs,
+  renderBasename,
+  renderDirname,
+  renderVideo,
+  extractThumbnail,
+  computeSceneTransitions,
+} from "../../scripts/video-factory/render";
 import { VideoFactoryError, type RenderPlan } from "../../scripts/video-factory/types";
 import type { ProcessRunner } from "../../scripts/video-factory/processRunner";
 
@@ -31,21 +38,31 @@ describe("buildFfmpegArgs", () => {
     expect(args).toContain("color=c=0x0d1420:s=1080x1920:d=5.000:r=30");
   });
 
-  it("concatenates all scene video inputs before applying subtitles", () => {
+  it("crossfades adjacent scene video inputs (no hard cut) before applying subtitles", () => {
     const args = buildFfmpegArgs(plan);
     const filterIndex = args.indexOf("-filter_complex");
     const filter = args[filterIndex + 1]!;
-    expect(filter).toContain("[sv0][sv1]concat=n=2:v=1:a=0[bgraw]");
-    expect(filter).toContain("[bgraw]subtitles=captions.ass:fontsdir=.[v]");
+    // Both scenes are 5s -> transition duration caps at MAX_TRANSITION_SECONDS (0.4),
+    // offset = 5 - 0.4 = 4.6.
+    expect(filter).toContain("[sv0][sv1]xfade=transition=fade:duration=0.400:offset=4.600[xf0]");
+    expect(filter).toContain("[xf0]subtitles=captions.ass:fontsdir=.[v]");
   });
 
-  it("concatenates real voiceover audio with the silence pad", () => {
+  it("concatenates real voiceover audio with the silence pad, then mixes in the quiet background music bed", () => {
     const args = buildFfmpegArgs(plan);
     const filterIndex = args.indexOf("-filter_complex");
     const filter = args[filterIndex + 1]!;
-    // scenes.length = 2 -> voiceover is input 2, silence is input 3
-    expect(filter).toContain("[2:a][3:a]concat=n=2:v=0:a=1[a]");
+    // scenes.length = 2 -> voiceover is input 2, silence is input 3, music is input 4
+    expect(filter).toContain("[2:a][3:a]concat=n=2:v=0:a=1[voice]");
     expect(args).toContain("anullsrc=r=24000:cl=mono:d=2.500");
+    expect(filter).toContain("[4:a]volume=0.13[musicvol]");
+    expect(filter).toContain("[voice][musicvol]amix=inputs=2:duration=first:dropout_transition=0[a]");
+  });
+
+  it("loops and trims the bundled music track to the plan's total duration, referenced by basename", () => {
+    const args = buildFfmpegArgs(plan);
+    const joined = args.join(" ");
+    expect(joined).toContain("-stream_loop -1 -t 10.000 -i ambient-technology.mp3");
   });
 
   it("uses the known-good codec settings (h264/yuv420p/aac)", () => {
@@ -58,6 +75,51 @@ describe("buildFfmpegArgs", () => {
 
   it("throws on an empty scene list", () => {
     expect(() => buildFfmpegArgs({ ...plan, scenes: [] })).toThrow(VideoFactoryError);
+  });
+});
+
+describe("computeSceneTransitions", () => {
+  it("returns no transitions for a single scene, cumulative duration equals that scene's own duration", () => {
+    const result = computeSceneTransitions([8]);
+    expect(result.transitions).toEqual([]);
+    expect(result.cumulativeDurationSeconds).toBe(8);
+  });
+
+  it("caps transition duration at MAX_TRANSITION_SECONDS (0.4) for long scenes", () => {
+    const result = computeSceneTransitions([10, 10]);
+    expect(result.transitions).toHaveLength(1);
+    expect(result.transitions[0]!.durationSeconds).toBe(0.4);
+    expect(result.transitions[0]!.offsetSeconds).toBe(9.6);
+    // total = 10 + 10 - 0.4 (the overlap)
+    expect(result.cumulativeDurationSeconds).toBe(19.6);
+  });
+
+  it("shrinks transition duration for a short scene instead of ever producing a negative offset", () => {
+    // shorter scene is 1s -> 30% of it (0.3) is well under the 0.4 cap
+    const result = computeSceneTransitions([1, 5]);
+    expect(result.transitions[0]!.durationSeconds).toBeCloseTo(0.3, 5);
+    expect(result.transitions[0]!.offsetSeconds).toBeCloseTo(0.7, 5);
+    expect(result.transitions[0]!.offsetSeconds).toBeGreaterThanOrEqual(0);
+  });
+
+  it("never produces a negative offset even for a run of very short scenes back to back", () => {
+    const durations = [0.5, 0.4, 0.3, 0.6, 0.2];
+    const result = computeSceneTransitions(durations);
+    for (const t of result.transitions) {
+      expect(t.offsetSeconds).toBeGreaterThanOrEqual(0);
+      expect(t.durationSeconds).toBeGreaterThan(0);
+    }
+  });
+
+  it("chains offsets correctly across 3+ scenes -- each offset accounts for the previous transition's overlap", () => {
+    const result = computeSceneTransitions([10, 10, 10]);
+    expect(result.transitions).toHaveLength(2);
+    // Transition 1: cumulative starts at 10, duration 0.4 -> offset 9.6, cumulative becomes 10+10-0.4=19.6
+    expect(result.transitions[0]).toEqual({ durationSeconds: 0.4, offsetSeconds: 9.6 });
+    // Transition 2: cumulative is now 19.6, duration 0.4 -> offset 19.2
+    expect(result.transitions[1]!.durationSeconds).toBe(0.4);
+    expect(result.transitions[1]!.offsetSeconds).toBeCloseTo(19.2, 9);
+    expect(result.cumulativeDurationSeconds).toBeCloseTo(29.2, 9);
   });
 });
 
@@ -90,7 +152,7 @@ describe("host-OS independence of path handling", () => {
 
     const args = buildFfmpegArgs(posixPlan);
     expect(args.join(" ")).not.toContain("/tmp/out");
-    expect(args[args.indexOf("-filter_complex") + 1]).toContain("[bgraw]subtitles=captions.ass:fontsdir=.[v]");
+    expect(args[args.indexOf("-filter_complex") + 1]).toContain("subtitles=captions.ass:fontsdir=.[v]");
 
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
     await renderVideo(posixPlan, { run });
