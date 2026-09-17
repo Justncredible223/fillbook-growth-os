@@ -8,6 +8,7 @@ import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
 import { SupabaseIngestionCursorStore } from "../src/signals/adapters/ingestionCursorStore.js";
 import { ingestXMentions } from "../src/signals/adapters/xIngestion.js";
 import { ingestInboundMentions } from "../src/inbound/inboundIngestion.js";
+import { ingestInboundYoutubeComments } from "../src/inbound/inboundYoutubeIngestion.js";
 import { SupabaseInboundRepository } from "../src/inbound/supabaseInboundRepository.js";
 import { findCreatorIdByHandle } from "../src/creators/supabaseCreatorRepository.js";
 import { recordSyncAttempt, recordSyncSuccess, recordSyncFailure } from "../src/lib/integrationHealth.js";
@@ -16,6 +17,8 @@ import { SupabaseProspectingRepository } from "../src/prospecting/supabaseProspe
 import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 import { reconcileVideoRenders } from "../src/video/videoRenderReconciliation.js";
+import { createYoutubeCommentAdapter } from "../src/signals/adapters/youtubeAdapter.js";
+import { extractYoutubeVideoId } from "../src/video/youtubeUrl.js";
 
 interface StepResult {
   step: string;
@@ -35,6 +38,7 @@ export interface StepGroups {
   x: boolean;
   partnerships: boolean;
   videoReconciliation: boolean;
+  youtubeComments: boolean;
 }
 
 /**
@@ -49,7 +53,7 @@ export interface StepGroups {
  */
 export function resolveStepGroups(query: Record<string, unknown>): StepGroups {
   const isTrue = (v: unknown) => v === "1" || v === "true";
-  const anyFlagPresent = ["x", "partnerships", "videoReconciliation"].some((k) => k in query);
+  const anyFlagPresent = ["x", "partnerships", "videoReconciliation", "youtubeComments"].some((k) => k in query);
   return {
     x: !anyFlagPresent || isTrue(query.x),
     // discovery.ts's own SCHEDULED_CADENCE_DAYS=7 gate means most of these
@@ -62,6 +66,12 @@ export function resolveStepGroups(query: Record<string, unknown>): StepGroups {
     // plan's isolation section); a bug here can never throw into
     // x_mentions/x_inbound/x_prospecting or vice versa.
     videoReconciliation: !anyFlagPresent || isTrue(query.videoReconciliation),
+    // Same own-flag/own-try-catch isolation as videoReconciliation above.
+    // Riding the same 3x/day slots as X is fine here too -- each video's
+    // own per-video cursor (see inboundYoutubeIngestion.ts) means a run
+    // only ever fetches genuinely new comments, so there's no reason to
+    // poll more or less often than the rest of this endpoint already does.
+    youtubeComments: !anyFlagPresent || isTrue(query.youtubeComments),
   };
 }
 
@@ -125,6 +135,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     x: runX,
     partnerships: runPartnerships,
     videoReconciliation: runVideoReconciliation,
+    youtubeComments: runYoutubeComments,
   } = resolveStepGroups(req.query as Record<string, unknown>);
 
   const client = getServiceClient();
@@ -249,9 +260,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     results.push(await runStep("video_render_reconciliation", () => reconcileVideoRenders(client)));
   }
 
+  if (runYoutubeComments) {
+    results.push(
+      await runStep("youtube_comments", async () => {
+        // Not configured is a real, expected state (the owner hasn't
+        // created a Google Cloud API key yet) -- reported as a clear
+        // skip, not a step failure that'd show up as red in Health.
+        let adapter;
+        try {
+          adapter = createYoutubeCommentAdapter();
+        } catch {
+          return "skipped -- YOUTUBE_API_KEY not configured";
+        }
+
+        const { data: rows, error } = await client
+          .from("video_renders")
+          .select("published_url")
+          .eq("status", "ready")
+          .not("published_url", "is", null);
+        if (error) throw error;
+
+        const videoIds = [
+          ...new Set(
+            ((rows ?? []) as Array<{ published_url: string | null }>)
+              .map((r) => (r.published_url ? extractYoutubeVideoId(r.published_url) : null))
+              .filter((id): id is string => id !== null),
+          ),
+        ];
+        if (videoIds.length === 0) return "0 videos with a recorded YouTube URL to poll";
+
+        const repo = new SupabaseInboundRepository(client);
+        let totalFetched = 0;
+        let totalInserted = 0;
+        for (const videoId of videoIds) {
+          const result = await ingestInboundYoutubeComments({ adapter, repo }, cursorStore, videoId, now);
+          totalFetched += result.fetched;
+          totalInserted += result.inserted;
+        }
+        return `${totalInserted} new inbound across ${videoIds.length} video(s) (${totalFetched} fetched)`;
+      }),
+    );
+  }
+
   const allOk = results.every((r) => r.ok);
   res.status(allOk ? 200 : 207).json({
     results,
-    ranGroups: { x: runX, partnerships: runPartnerships, videoReconciliation: runVideoReconciliation },
+    ranGroups: { x: runX, partnerships: runPartnerships, videoReconciliation: runVideoReconciliation, youtubeComments: runYoutubeComments },
   });
 }

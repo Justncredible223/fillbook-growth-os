@@ -508,6 +508,8 @@ data class VideoRenderStatus(
      * client-side; always exactly what the backend actually stored.
      */
     val videoMetadata: VideoRenderMetadata? = null,
+    /** The real external URL the owner pasted back in after manually posting this video -- null until they do. See setVideoPublishedUrl. */
+    val publishedUrl: String? = null,
 )
 
 /** See [VideoRenderStatus.videoMetadata]'s own doc comment. */

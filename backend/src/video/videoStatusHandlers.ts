@@ -34,6 +34,8 @@ export interface VideoRenderStatusJson {
   createdAt: string;
   updatedAt: string;
   videoMetadata: VideoRenderMetadataJson | null;
+  /** The real external URL the owner pasted back in after manually posting this video (see setPublishedUrl) -- null until they do. Never inferred/guessed. */
+  publishedUrl: string | null;
 }
 
 /**
@@ -78,6 +80,7 @@ interface VideoRenderRow {
   error: string | null;
   created_at: string;
   updated_at: string;
+  published_url: string | null;
 }
 
 const STORAGE_BUCKET = "rendered-videos";
@@ -88,7 +91,7 @@ const SIGNED_URL_TTL_SECONDS = 3600;
 export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50): Promise<VideoRenderStatusJson[]> {
   const { data, error } = await client
     .from("video_renders")
-    .select("id, campaign_asset_id, status, storage_path, thumbnail_path, duration_seconds, error, created_at, updated_at")
+    .select("id, campaign_asset_id, status, storage_path, thumbnail_path, duration_seconds, error, created_at, updated_at, published_url")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw new Error(`listVideoRenderStatuses failed: ${error.message}`);
@@ -149,6 +152,7 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         videoMetadata: metadataByAssetId.get(row.campaign_asset_id) ?? null,
+        publishedUrl: row.published_url,
       };
     }),
   );
@@ -222,6 +226,37 @@ export async function dismissVideoRender(client: SupabaseClient, videoRenderId: 
     .update({ video_render_dismissed_at: new Date().toISOString() })
     .eq("id", campaignAssetId);
   if (markError) throw new Error(`dismissVideoRender dismissed-marker update failed: ${markError.message}`);
+}
+
+export class VideoStatusActionError extends Error {}
+
+/**
+ * Records the real external URL the owner pasted in after manually
+ * posting a 'ready' video -- the only thing that lets a future polling
+ * job (e.g. YouTube comment monitoring, see inboundYoutubeIngestion.ts)
+ * know which real, live URL to watch, since storage_path only ever points
+ * at the internal render file. Only allowed on a 'ready' render (nothing
+ * to post yet for any other status) and requires a real http(s) URL --
+ * never silently accepts an empty string or something unparseable.
+ */
+export async function setPublishedUrl(client: SupabaseClient, videoRenderId: string, publishedUrl: string): Promise<void> {
+  const trimmed = publishedUrl.trim();
+  if (!/^https?:\/\//i.test(trimmed)) {
+    throw new VideoStatusActionError("publishedUrl must be a real http(s) URL.");
+  }
+
+  const { data, error: fetchError } = await client.from("video_renders").select("status").eq("id", videoRenderId).maybeSingle();
+  if (fetchError) throw new Error(`setPublishedUrl fetch failed: ${fetchError.message}`);
+  if (!data) throw new VideoStatusActionError(`video render not found: ${videoRenderId}`);
+  if ((data as { status: string }).status !== "ready") {
+    throw new VideoStatusActionError("Can only record a published URL for a render that finished successfully.");
+  }
+
+  const { error } = await client
+    .from("video_renders")
+    .update({ published_url: trimmed, updated_at: new Date().toISOString() })
+    .eq("id", videoRenderId);
+  if (error) throw new Error(`setPublishedUrl update failed: ${error.message}`);
 }
 
 /** One-way fingerprint of the app's own bearer credential -- never the credential itself -- stored alongside each device token purely for future credential-rotation cleanup (see migration 0027's doc comment on device_push_tokens). */

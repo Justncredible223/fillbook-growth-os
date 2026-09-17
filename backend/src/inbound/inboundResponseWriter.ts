@@ -88,6 +88,17 @@ const INBOUND_PLATFORM_PROFILES: Record<string, InboundPlatformProfile> = {
     handlePrefix: "@",
     noPitchGuidance: X_INBOUND_NO_PITCH_GUIDANCE,
   },
+  youtube: {
+    displayName: "YouTube",
+    engagementNoun: "left a comment on one of our YouTube videos",
+    styleRules:
+      "A real YouTube comment reply is usually one to three sentences -- slightly more conversational and a bit " +
+      "longer than an X reply is fine, but still tight and specific to what they said. No hashtags.",
+    // A display name, not a real @handle -- YouTube comments don't have
+    // one (see YoutubeComment.authorDisplayName's own doc comment).
+    handlePrefix: "",
+    noPitchGuidance: CONSERVATIVE_INBOUND_NO_PITCH_GUIDANCE,
+  },
 };
 
 function inboundPlatformProfile(platform: string): InboundPlatformProfile {

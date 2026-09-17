@@ -208,6 +208,16 @@ interface GrowthOsRepository {
 
     /** Deletes a failed or canceled render from the list so the owner can clear stuck items. */
     suspend fun dismissVideoRender(videoRenderId: String)
+
+    /**
+     * Records the real external URL the owner pasted in after manually
+     * posting a 'ready' video (TikTok/YouTube/Instagram). This is what
+     * lets the backend's YouTube comment monitoring know which real, live
+     * video to poll -- see backend/src/video/videoStatusHandlers.ts's
+     * setPublishedUrl. Throws with a real backend error message (e.g. "not
+     * a real http(s) URL") on rejection -- never silently swallowed.
+     */
+    suspend fun setVideoPublishedUrl(videoRenderId: String, publishedUrl: String)
 }
 
 /**
@@ -1288,6 +1298,10 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     override suspend fun getVideoRenderStatuses(): List<VideoRenderStatus> = fakeVideoRenders
 
     override suspend fun dismissVideoRender(videoRenderId: String) {
+        // No-op in fake mode.
+    }
+
+    override suspend fun setVideoPublishedUrl(videoRenderId: String, publishedUrl: String) {
         // No-op in fake mode.
     }
 }

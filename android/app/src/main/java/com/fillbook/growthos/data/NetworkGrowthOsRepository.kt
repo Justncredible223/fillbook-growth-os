@@ -898,6 +898,7 @@ class NetworkGrowthOsRepository(
         createdAt = getString("createdAt"),
         updatedAt = getString("updatedAt"),
         videoMetadata = toVideoRenderMetadata(),
+        publishedUrl = optStringOrNull("publishedUrl"),
     )
 
     // Folded into /api/approvals (?resource=video-status) -- same
@@ -914,6 +915,13 @@ class NetworkGrowthOsRepository(
 
     override suspend fun dismissVideoRender(videoRenderId: String) {
         post("/api/approvals?resource=video-status", JSONObject().put("action", "dismiss").put("videoRenderId", videoRenderId))
+    }
+
+    override suspend fun setVideoPublishedUrl(videoRenderId: String, publishedUrl: String) {
+        post(
+            "/api/approvals?resource=video-status",
+            JSONObject().put("action", "set-published-url").put("videoRenderId", videoRenderId).put("publishedUrl", publishedUrl),
+        )
     }
 
     override suspend fun getEveningReport(): EveningReport {

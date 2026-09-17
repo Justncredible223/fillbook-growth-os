@@ -127,6 +127,9 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     // same DownloadManager non-success outcome the failure branch already
     // handles.
     var downloadingIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Same duplicate-tap guard shape as downloadingIds, for the "I posted
+    // this" save action (2026-09-18) -- see savePublishedUrl().
+    var savingPublishedUrlIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     // "Create Fillbook Video" (2026-09-08): a fresh, real video_script
     // request for either a custom topic or an existing Radar opportunity.
@@ -325,6 +328,34 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
         }
     }
 
+    /**
+     * Records the real URL the owner pasted in after manually posting a
+     * video ("I posted this", 2026-09-18) -- this is what lets the
+     * backend's YouTube comment monitoring know which real video to poll
+     * (see setPublishedUrl's own doc comment). Surfaces the backend's real
+     * rejection message (e.g. "must be a real http(s) URL") the same way
+     * requestVideoScript() does, rather than a generic failure.
+     */
+    fun savePublishedUrl(render: VideoRenderStatus, url: String) {
+        if (render.id in savingPublishedUrlIds) return
+        savingPublishedUrlIds = savingPublishedUrlIds + render.id
+        scope.launch {
+            try {
+                repo.setVideoPublishedUrl(render.id, url)
+                renders = renders.map { if (it.id == render.id) it.copy(publishedUrl = url) else it }
+                snackbarHostState.showSnackbar("Saved.")
+            } catch (e: com.fillbook.growthos.data.NetworkException) {
+                snackbarHostState.showSnackbar(
+                    extractVideoScriptRequestErrorMessage(e.httpCode, e.message) ?: "Couldn't save that link — try again.",
+                )
+            } catch (e: Exception) {
+                snackbarHostState.showSnackbar("Couldn't save that link — try again.")
+            } finally {
+                savingPublishedUrlIds = savingPublishedUrlIds - render.id
+            }
+        }
+    }
+
     fun loadEligibleOpportunities() {
         scope.launch {
             loadingOpportunities = true
@@ -469,10 +500,12 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                                     render = render,
                                     alreadyDownloaded = downloadedUris.containsKey(render.id),
                                     downloading = render.id in downloadingIds,
+                                    savingPublishedUrl = render.id in savingPublishedUrlIds,
                                     onDownload = { download(render) },
                                     onShare = { share(render) },
                                     onDownloadThumbnail = { downloadThumbnail(render) },
                                     onDismiss = { dismiss(render) },
+                                    onSavePublishedUrl = { url -> savePublishedUrl(render, url) },
                                 )
                             }
                         }
@@ -630,11 +663,15 @@ private fun VideoRenderCard(
     render: VideoRenderStatus,
     alreadyDownloaded: Boolean,
     downloading: Boolean,
+    savingPublishedUrl: Boolean,
     onDownload: () -> Unit,
     onShare: () -> Unit,
     onDownloadThumbnail: () -> Unit,
+    onSavePublishedUrl: (String) -> Unit,
     onDismiss: (() -> Unit)? = null,
 ) {
+    var showPublishedUrlInput by remember(render.id) { mutableStateOf(false) }
+    var publishedUrlInput by remember(render.id) { mutableStateOf(render.publishedUrl ?: "") }
     val tone = statusTone(render.status)
     GrowthCard(accentBar = statusToneColor(tone)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -738,6 +775,60 @@ private fun VideoRenderCard(
             if (render.thumbnailDownloadUrl != null) {
                 Spacer(Modifier.height(8.dp))
                 SecondaryButton(text = "Download Thumbnail", onClick = onDownloadThumbnail, modifier = Modifier.fillMaxWidth())
+            }
+
+            // "I posted this" (2026-09-18): the owner records the real
+            // external URL after manually posting -- this is the only
+            // thing that lets the backend's YouTube comment monitoring
+            // know which real, live video to poll (this app itself never
+            // posts anywhere, see the Download/Share copy above).
+            Spacer(Modifier.height(8.dp))
+            when {
+                showPublishedUrlInput -> {
+                    OutlinedTextField(
+                        value = publishedUrlInput,
+                        onValueChange = { publishedUrlInput = it },
+                        label = { Text("Posted URL") },
+                        placeholder = { Text("Paste the YouTube, TikTok, or Instagram link") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SecondaryButton(
+                            text = "Cancel",
+                            onClick = {
+                                publishedUrlInput = render.publishedUrl ?: ""
+                                showPublishedUrlInput = false
+                            },
+                        )
+                        PrimaryButton(
+                            text = "Save",
+                            onClick = {
+                                onSavePublishedUrl(publishedUrlInput.trim())
+                                showPublishedUrlInput = false
+                            },
+                            enabled = !savingPublishedUrl && publishedUrlInput.trim().length > 8,
+                            busy = savingPublishedUrl,
+                        )
+                    }
+                }
+                render.publishedUrl != null -> {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Posted: ${render.publishedUrl}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextTertiary,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = { showPublishedUrlInput = true }) { Text("Edit") }
+                    }
+                }
+                else -> {
+                    SecondaryButton(text = "I posted this — add the link", onClick = { showPublishedUrlInput = true }, modifier = Modifier.fillMaxWidth())
+                }
             }
         }
     }

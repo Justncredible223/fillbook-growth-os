@@ -88,6 +88,23 @@ describe("draftInboundResponse", () => {
   });
 
   it("an unrecognized platform keeps the original conservative pitch guidance, unchanged by X's refresh", async () => {
+    const { system } = await capture({ platform: "discord", authorHandle: "someone", messageText: "hi", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 });
+
+    expect(system).toContain("unless the conversation itself is");
+    expect(system).toContain("specifically about trade journaling/tracking tools");
+    expect(system).not.toContain("only earned once the reply has already added a concrete insight");
+  });
+
+  it("a YouTube engagement is framed as a YouTube comment, with no @ handle prefix (display names aren't real handles)", async () => {
+    const { system, user } = await capture({ platform: "youtube", authorHandle: "Some Trader", messageText: "hi", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 });
+
+    expect(system).toContain("left a comment on one of our YouTube videos");
+    expect(user).toContain("Platform: YouTube");
+    expect(user).toContain("From: Some Trader");
+    expect(user).not.toContain("From: @Some Trader");
+  });
+
+  it("YouTube uses the conservative pitch guidance, same as any other non-X platform", async () => {
     const { system } = await capture({ platform: "youtube", authorHandle: "someone", messageText: "hi", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 });
 
     expect(system).toContain("unless the conversation itself is");

@@ -54,12 +54,26 @@ describe("api/ingest -- YouTube/TikTok removed, X + Search Console remain manual
     });
   }
 
-  it("the scheduled entry points contain no path to YouTube/TikTok ingestion", () => {
-    for (const file of ["daily-pipeline.ts", "growth-pulse.ts"]) {
-      const source = readFileSync(join(here, "..", "api", file), "utf8");
-      const imports = source.split("\n").filter((line) => line.startsWith("import "));
-      expect(imports.some((line) => /youtube|tiktok/i.test(line))).toBe(false);
-    }
+  it("daily-pipeline.ts still contains no path to YouTube/TikTok ingestion -- that removal stands", () => {
+    const source = readFileSync(join(here, "..", "api", "daily-pipeline.ts"), "utf8");
+    const imports = source.split("\n").filter((line) => line.startsWith("import "));
+    expect(imports.some((line) => /youtube|tiktok/i.test(line))).toBe(false);
+  });
+
+  // growth-pulse.ts DOES now import YouTube-related modules (2026-09-18) --
+  // a real reversal, but a narrow, deliberate one: it's comment monitoring
+  // on the owner's OWN already-posted videos (a poll target the owner
+  // explicitly records via Video Status's "posted URL" field, see
+  // setPublishedUrl), not the old topic/content-scraping ingestion this
+  // whole describe block's title refers to as removed. TikTok gets none of
+  // this -- its comment API is research-access-only, excludes commercial
+  // use entirely (confirmed 2026-09-18), so growth-pulse.ts has no TikTok
+  // import at all, only YouTube.
+  it("growth-pulse.ts imports YouTube comment-monitoring modules, but still no TikTok import at all", () => {
+    const source = readFileSync(join(here, "..", "api", "growth-pulse.ts"), "utf8");
+    const imports = source.split("\n").filter((line) => line.startsWith("import "));
+    expect(imports.some((line) => /youtubeAdapter|youtubeUrl/i.test(line))).toBe(true);
+    expect(imports.some((line) => /tiktok/i.test(line))).toBe(false);
   });
 });
 

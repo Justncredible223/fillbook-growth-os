@@ -52,7 +52,7 @@ import {
 import type { NewPartnershipProspect, PartnershipOutcomeMetric, PartnershipOutcomeSource } from "../src/partnerships/types.js";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
-import { listVideoRenderStatuses, registerDevicePushToken, dismissVideoRender } from "../src/video/videoStatusHandlers.js";
+import { listVideoRenderStatuses, registerDevicePushToken, dismissVideoRender, setPublishedUrl, VideoStatusActionError } from "../src/video/videoStatusHandlers.js";
 import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "../src/video/videoRenderEligibility.js";
 import { listResearchRecords } from "../src/research/researchHandlers.js";
 
@@ -459,7 +459,7 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
   }
 
   try {
-    const body = req.body as { action?: string; fcmToken?: string; videoRenderId?: string } | undefined;
+    const body = req.body as { action?: string; fcmToken?: string; videoRenderId?: string; publishedUrl?: string } | undefined;
     if (body?.action === "dismiss") {
       if (!body.videoRenderId) {
         res.status(400).json({ error: "Body must include { action: 'dismiss', videoRenderId: string }" });
@@ -469,8 +469,29 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
       res.status(200).json({ dismissed: true });
       return;
     }
+    if (body?.action === "set-published-url") {
+      if (!body.videoRenderId || !body.publishedUrl) {
+        res.status(400).json({ error: "Body must include { action: 'set-published-url', videoRenderId: string, publishedUrl: string }" });
+        return;
+      }
+      try {
+        await setPublishedUrl(client, body.videoRenderId, body.publishedUrl);
+      } catch (err) {
+        if (err instanceof VideoStatusActionError) {
+          res.status(400).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
+      res.status(200).json({ saved: true });
+      return;
+    }
     if (body?.action !== "register-device" || !body.fcmToken) {
-      res.status(400).json({ error: "Body must be { action: 'register-device', fcmToken: string } or { action: 'dismiss', videoRenderId: string }" });
+      res.status(400).json({
+        error:
+          "Body must be { action: 'register-device', fcmToken: string }, { action: 'dismiss', videoRenderId: string }, " +
+          "or { action: 'set-published-url', videoRenderId: string, publishedUrl: string }",
+      });
       return;
     }
     // requireAppAuth already validated this header against APP_API_TOKEN.
