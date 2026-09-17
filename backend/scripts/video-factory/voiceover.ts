@@ -6,16 +6,22 @@ import { VideoFactoryError } from "./types.js";
 import type { WordCue } from "./types.js";
 
 /**
- * Upgraded from the original "en-US-AndrewNeural" (Day 1 FillbookHQ TikTok
- * video, ~/fillbookhq/docs/social/VIDEO_PRODUCTION_WORKFLOW.md) to the
- * "Multilingual" HD neural tier -- same free edge-tts, no API key, no
- * cloned/real-person voice identity per that doc's guardrail, but a
- * noticeably more natural/expressive cadence than the standard neural
- * voices. Kept as the default so output is consistent across renders;
+ * Reverted from "en-US-AndrewMultilingualNeural" back to the original
+ * "en-US-AndrewNeural" (2026-09-17) -- the Multilingual HD tier reads a
+ * noticeably more natural/expressive cadence, but confirmed by ear on a
+ * real render to mispronounce the plain word "book" with a long, foreign
+ * "oo" (like the "oo" in "food") instead of the short vowel in "a book
+ * you read." That looks like a real quirk of that voice's multilingual
+ * phoneme handling specifically -- "book" is about as common an English
+ * word as exists, so a standard (non-multilingual) neural voice reading
+ * it correctly is the expected case, not a coincidence. Same free
+ * edge-tts, no API key, no cloned/real-person voice identity per
+ * ~/fillbookhq/docs/social/VIDEO_PRODUCTION_WORKFLOW.md's guardrail --
  * override only if you deliberately want voice variety (see
- * `edge-tts --list-voices` for other free options).
+ * `edge-tts --list-voices` for other free options), and re-verify "book"
+ * by ear before ever switching back to a Multilingual-tier voice.
  */
-export const DEFAULT_VOICE = "en-US-AndrewMultilingualNeural";
+export const DEFAULT_VOICE = "en-US-AndrewNeural";
 
 export interface VoiceoverResult {
   mp3Path: string;
@@ -28,20 +34,14 @@ const WORD_TIMING_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "edge_t
 /**
  * edge-tts mispronounces "Fillbook" as a single compound word (confirmed
  * by ear on a real render -- it read as "fill-boo-k" instead of
- * "fill-book"). Splitting it into two words before sending text to TTS was
- * the first fix tried, but the AndrewMultilingualNeural voice ALSO
- * mispronounces the plain word "book" on its own (confirmed by ear again,
- * 2026-09-17) -- not the length TTS engines normally get right, but a
- * long, foreign-sounding "oo" (like the "oo" in "food"/German "Buch")
- * instead of the short vowel in "a book you read." This looks like a
- * real quirk of that specific multilingual-trained voice's handling of
- * the "oo" digraph, not a general TTS limitation -- so respelling with
- * "book" was never going to fix it, no matter how it's split from
- * "Fill." Respelling as "buk" instead sidesteps "oo" entirely: it shares
- * its ending with "luck"/"buck"/"duck"/"stuck", an extremely well-
- * established short-vowel grapheme pattern no English TTS voice reads
- * long, and "Fill buk" said at normal speed reads naturally as
- * "Fillbook." This only affects what's SPOKEN; captions.ts's
+ * "fill-book"). Splitting it into the two real dictionary words it's
+ * actually made of before sending text to TTS fixes the compound-word
+ * blending. (A separate issue -- the Multilingual voice tier
+ * mispronouncing the word "book" itself -- turned out to be a voice
+ * defect, not a spelling problem; fixed by switching DEFAULT_VOICE back
+ * to the standard "en-US-AndrewNeural", not by respelling "book" into
+ * something else. The word sent to TTS is the real word "book," spoken
+ * as itself.) This only affects what's SPOKEN; captions.ts's
  * mergeBrandNameWordCues stitches the resulting two WordBoundary entries
  * back into one "Fillbook" caption word afterward, so it still displays
  * and highlights as a single word on screen, matching what it actually is.
@@ -58,8 +58,8 @@ export function respellFillbookForTts(text: string): string {
     const isAllCaps = match === match.toUpperCase();
     const isCapitalized = match.charAt(0) === match.charAt(0).toUpperCase();
     const fill = isAllCaps ? "FILL" : isCapitalized ? "Fill" : "fill";
-    const buk = isAllCaps ? "BUK" : "buk";
-    return hq ? `${fill} ${buk} ${hq}` : `${fill} ${buk}`;
+    const book = isAllCaps ? "BOOK" : "book";
+    return hq ? `${fill} ${book} ${hq}` : `${fill} ${book}`;
   });
 }
 

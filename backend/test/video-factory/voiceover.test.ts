@@ -51,7 +51,7 @@ describe("generateVoiceover", () => {
     expect(result.wordCues[0]).toEqual({ text: "Hello", startSeconds: 0.05, endSeconds: 0.4 });
   });
 
-  it("respells Fillbook to Fill buk in the text sent to TTS (pronunciation fix)", async () => {
+  it("respells Fillbook to Fill book in the text sent to TTS (pronunciation fix)", async () => {
     const dir = tempDir();
     const run = vi.fn(async (command: string, args: string[]) => {
       if (command === "python3") {
@@ -65,7 +65,7 @@ describe("generateVoiceover", () => {
 
     await generateVoiceover("Fillbook tracks your drawdown.", dir, runner);
 
-    expect(readFileSync(join(dir, "script.txt"), "utf-8")).toBe("Fill buk tracks your drawdown.");
+    expect(readFileSync(join(dir, "script.txt"), "utf-8")).toBe("Fill book tracks your drawdown.");
   });
 
   it("respects a custom voice override", async () => {
@@ -158,20 +158,20 @@ describe("measureAudioDuration", () => {
 });
 
 describe("respellFillbookForTts", () => {
-  it("splits Fillbook into Fill buk, preserving title case", () => {
-    expect(respellFillbookForTts("Fillbook tracks trades.")).toBe("Fill buk tracks trades.");
+  it("splits Fillbook into Fill book, preserving title case", () => {
+    expect(respellFillbookForTts("Fillbook tracks trades.")).toBe("Fill book tracks trades.");
   });
 
   it("preserves all-caps", () => {
-    expect(respellFillbookForTts("FILLBOOK IS FREE.")).toBe("FILL BUK IS FREE.");
+    expect(respellFillbookForTts("FILLBOOK IS FREE.")).toBe("FILL BOOK IS FREE.");
   });
 
   it("preserves lowercase", () => {
-    expect(respellFillbookForTts("check out fillbook today.")).toBe("check out fill buk today.");
+    expect(respellFillbookForTts("check out fillbook today.")).toBe("check out fill book today.");
   });
 
   it("handles multiple mentions in the same text", () => {
-    expect(respellFillbookForTts("Fillbook helps. Try Fillbook now.")).toBe("Fill buk helps. Try Fill buk now.");
+    expect(respellFillbookForTts("Fillbook helps. Try Fillbook now.")).toBe("Fill book helps. Try Fill book now.");
   });
 
   it("does not affect text with no mention of Fillbook", () => {
@@ -183,14 +183,14 @@ describe("respellFillbookForTts", () => {
   });
 
   it("also splits FillbookHQ -- real production bug: \\bFillbook\\b alone never matched it (no word boundary between 'k' and 'H'), so every script's closing 'head to fillbookhq.com' line went to TTS completely unrespelled", () => {
-    expect(respellFillbookForTts("head to fillbookhq.com today.")).toBe("head to fill buk hq.com today.");
+    expect(respellFillbookForTts("head to fillbookhq.com today.")).toBe("head to fill book hq.com today.");
   });
 
   it("preserves title case for FillbookHQ", () => {
-    expect(respellFillbookForTts("Visit FillbookHQ now.")).toBe("Visit Fill buk HQ now.");
+    expect(respellFillbookForTts("Visit FillbookHQ now.")).toBe("Visit Fill book HQ now.");
   });
 
   it("preserves all-caps for FILLBOOKHQ", () => {
-    expect(respellFillbookForTts("FOLLOW FILLBOOKHQ TODAY.")).toBe("FOLLOW FILL BUK HQ TODAY.");
+    expect(respellFillbookForTts("FOLLOW FILLBOOKHQ TODAY.")).toBe("FOLLOW FILL BOOK HQ TODAY.");
   });
 });
