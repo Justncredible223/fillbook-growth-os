@@ -112,6 +112,12 @@ async function main(): Promise<void> {
 
   const ffprobeResult = await runFfprobeJson(outputPath, runner);
   const fileSizeBytes = statSync(outputPath).size;
+  // Logged plainly (not just on failure) so a future storage-upload
+  // rejection -- e.g. "The object exceeded the maximum allowed size", a
+  // real production failure this fixed 2026-09-17 by lowering CRF and
+  // adding a bitrate cap -- has an actual number in the run log to
+  // diagnose against, instead of only the opaque Supabase error message.
+  console.log(`[render-single] output size: ${(fileSizeBytes / 1024 / 1024).toFixed(1)} MB, duration: ${totalDurationSeconds.toFixed(1)}s`);
   const validation = validateOutput(ffprobeResult, fileSizeBytes, totalDurationSeconds);
   if (!validation.passed) {
     throw new Error(

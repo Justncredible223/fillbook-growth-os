@@ -47,18 +47,16 @@ describe("runPartnershipDiscoveryStep", () => {
     expect(created[0]!.approved_campaign_asset_id).toBeNull();
   });
 
-  it("surfaces a qualifying-but-thin-evidence candidate as a plain 'prospect' (not 'qualified'), never presented as ready to pitch, when no adapter is available to enrich it", async () => {
+  it("never surfaces a thin, no-concrete-basis candidate at all when no adapter is available to enrich it -- it would only ever hit a hard evidence-gap wall at draft time", async () => {
     const client = new FakeSupabaseClient({ creators: [], prospecting_candidates: [], inbound_engagements: [], partnership_prospects: [], cost_events: [] });
-    // "prop firm" alone matches a keyword but is far too short to personalize a pitch with.
+    // "prop firm" alone matches a keyword but is far too short to personalize a pitch with,
+    // and has no concrete partnership-basis phrase (no "my students", "cohort", etc.) either.
     const adapter = fakeAdapter({ "prop firm mentorship OR funded trader program": [xResult({ authorHandle: "thinacct", text: "prop firm" })] });
 
     const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW });
 
-    expect(result.newCandidates).toBe(1);
-    const created = client.tables.partnership_prospects![0]!;
-    expect(created.stage).toBe("prospect");
-    expect(created.qualification_rationale).toBeNull();
-    expect(created.futures_relevance_evidence).toContain("Needs manual research");
+    expect(result.newCandidates).toBe(0);
+    expect(client.tables.partnership_prospects).toHaveLength(0);
   });
 
   it("enriches a thin candidate with a per-handle lookup and qualifies it once real content is found", async () => {
@@ -382,11 +380,14 @@ describe("runPartnershipDiscoveryStep", () => {
     expect(openReservations).toHaveLength(0);
   });
 
-  it("FIXED: a candidate matching a topic keyword with real, sufficient evidence -- but no evidence of a concrete partnership basis -- is surfaced as a plain 'prospect', never auto-qualified", async () => {
+  it("FIXED: a candidate matching a topic keyword with real, sufficient evidence -- but no evidence of a concrete partnership basis -- is never surfaced at all, not even as a plain 'prospect'", async () => {
     const client = new FakeSupabaseClient({ creators: [], prospecting_candidates: [], inbound_engagements: [], partnership_prospects: [], cost_events: [] });
     // Real production shape: a retail trader's satisfied-customer review of
     // a prop firm -- long enough to look pitch-ready, matches "prop firm",
-    // but shows no evidence they run/offer anything themselves.
+    // but shows no evidence they run/offer anything themselves. Previously
+    // this was surfaced as a plain 'prospect' row that the owner could
+    // still select/qualify, only to hit a hard evidence-gap wall at draft
+    // time. Now discovery.ts's final surfacing gate skips it entirely.
     const adapter = fakeAdapter({
       "prop firm mentorship OR funded trader program": [
         xResult({
@@ -398,11 +399,8 @@ describe("runPartnershipDiscoveryStep", () => {
 
     const result = await runPartnershipDiscoveryStep({ client: asSupabase(client), adapter, triggeredBy: "owner", force: true, now: NOW });
 
-    expect(result.newCandidates).toBe(1);
-    const created = client.tables.partnership_prospects![0]!;
-    expect(created.stage).toBe("prospect"); // NOT 'qualified' -- no concrete partnership basis
-    expect(created.qualification_rationale).toBeNull();
-    expect(created.futures_relevance_evidence).toContain("No evidence this recipient runs or offers");
+    expect(result.newCandidates).toBe(0);
+    expect(client.tables.partnership_prospects).toHaveLength(0);
   });
 
   it("still auto-qualifies a real educator/coach candidate with a genuine partnership basis, unaffected by the new check", async () => {

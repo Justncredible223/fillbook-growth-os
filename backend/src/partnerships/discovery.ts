@@ -420,23 +420,27 @@ export async function runPartnershipDiscoveryStep(deps: PartnershipDiscoveryDeps
     const matches = await findExistingMatches(client, { domain, handle });
     if (matches.length > 0) continue; // already known somewhere -- including archived/do_not_contact rows in partnership_prospects itself
 
-    // A candidate that qualifies (real topic match, decent score,
-    // contactable) but still lacks enough of the recipient's own words
-    // after enrichment, OR lacks any concrete partnership basis (an
-    // audience/community/business/educational-offering/complementary-
-    // product this could actually attach to -- see
-    // hasConcretePartnershipBasis, added after a real production find: a
-    // retail customer's satisfied review of a prop firm was auto-
-    // qualifying purely on a topic keyword match), is surfaced as a plain
-    // 'prospect' -- visible for the owner to research further -- rather
-    // than 'qualified', which reads as "ready to pursue" and would send
-    // every such candidate straight into a doomed, budget-spending draft
-    // attempt (or, worse, a real pitch to someone who isn't actually a
-    // partnership candidate at all).
-    const readyToQualify = rec.sufficientForPitch && hasConcretePartnershipBasis(rec.candidate);
-    const basisGapNote = !hasConcretePartnershipBasis(rec.candidate)
-      ? " No evidence this recipient runs or offers an audience, community, business, educational offering, or complementary product -- only topic-relevant text, not a concrete partnership basis."
-      : "";
+    // A candidate lacking any concrete partnership basis (an audience/
+    // community/business/educational-offering/complementary-product this
+    // could actually attach to -- see hasConcretePartnershipBasis, added
+    // after a real production find: a retail customer's satisfied review
+    // of a prop firm was auto-qualifying purely on a topic keyword match)
+    // is skipped entirely here, even after enrichment has had its chance.
+    // Previously this candidate was still surfaced as a plain 'prospect'
+    // row, which let the owner select/research/qualify it before only
+    // then hitting a hard evidence-gap wall at draft-generation time
+    // (generateDraftForPartnership enforces the same check) -- wasted
+    // review effort on a candidate that was never going to be pitchable.
+    // Skipping row creation here means every row that reaches
+    // partnership_prospects at all is one this candidate has a real shot
+    // at becoming a genuine partner, not just a topic-keyword coincidence.
+    if (!hasConcretePartnershipBasis(rec.candidate)) continue;
+
+    // Every rec reaching this point already has a concrete partnership
+    // basis; whether it's ready to auto-qualify vs. surface as a plain
+    // 'prospect' for further research now depends only on whether there's
+    // enough of the recipient's own words to actually write a pitch from.
+    const readyToQualify = rec.sufficientForPitch;
     const { prospect } = await createPartnership(client, {
       organizationName: rec.candidate.organizationName,
       contactName: rec.candidate.contactName,
@@ -445,7 +449,7 @@ export async function runPartnershipDiscoveryStep(deps: PartnershipDiscoveryDeps
       contactRoute: rec.candidate.handle ? `X DM: @${rec.candidate.handle}` : null,
       contactRouteSource: rec.candidate.handle ? `Discovered via ${rec.candidate.discoveredVia}` : null,
       audienceFocus: rec.candidate.matchedTopics.length > 0 ? `Matched topics: ${rec.candidate.matchedTopics.join(", ")}` : null,
-      futuresRelevanceEvidence: readyToQualify ? rec.whyThisPartner : `${rec.whyThisPartner} ${rec.evidenceGap ?? ""}${basisGapNote}`.trim(),
+      futuresRelevanceEvidence: readyToQualify ? rec.whyThisPartner : `${rec.whyThisPartner} ${rec.evidenceGap ?? ""}`.trim(),
       sourceUrls: rec.candidate.sourceUrls,
       evidenceExcerpts: rec.candidate.rawExcerpts,
       researchDate: now.toISOString().slice(0, 10),

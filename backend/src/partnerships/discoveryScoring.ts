@@ -321,6 +321,18 @@ export function isQualifyingRecommendation(rec: RankedRecommendation): boolean {
   // account with "topics: none matched" purely on recency+category+
   // contactability. Zero real keyword evidence must never qualify,
   // regardless of how many posts were merely returned by the search.
+  //
+  // Deliberately does NOT also require hasConcretePartnershipBasis here --
+  // this function doubles as the gate for discovery.ts's FIRST-PASS
+  // ranking (which candidates are even eligible for the per-handle
+  // enrichment lookup, run BEFORE more evidence exists to judge basis
+  // from) as well as the final surfaced list. Requiring it here once
+  // broke the enrichment rescue path entirely: a thin "prop firm"-only
+  // candidate would already fail this check pre-enrichment and never get
+  // the lookup that was specifically meant to find real evidence for it.
+  // The stricter, hasConcretePartnershipBasis-aware check belongs only at
+  // the FINAL surfacing decision, downstream in discovery.ts, after
+  // enrichment has had its chance -- see that file's own comment.
   return (
     rec.scoreBreakdown.contactability > 0 &&
     rec.candidate.postsMatched >= 1 &&

@@ -84,7 +84,7 @@ describe("scoreCandidate", () => {
     const rec = scoreCandidate(candidate({ rawExcerpts: [] }), NOW);
     expect(rec.sufficientForPitch).toBe(false);
     expect(rec.evidenceGap).toBeTruthy();
-    expect(isQualifyingRecommendation(rec)).toBe(true); // still qualifies to be SURFACED -- just not presented as pitch-ready
+    expect(isQualifyingRecommendation(rec)).toBe(true); // still qualifies for the FIRST-PASS ranking (enrichment eligibility) -- see isQualifyingRecommendation's own doc comment for why hasConcretePartnershipBasis is checked later, not here
   });
 
   it("marks a candidate insufficient when its only excerpt is too short to personalize anything", () => {
@@ -185,7 +185,7 @@ describe("isQualifyingRecommendation / rankCandidates", () => {
     expect(hasConcretePartnershipBasis(rec.candidate)).toBe(true); // "educator" -- real evidence they run an educational offering
   });
 
-  it("FIXED (was an open gap, now closed): a candidate whose ONLY evidence is an individual retail trader's post ABOUT a prop firm they use -- not themselves a business, coach, or community Fillbook could realistically pitch a partnership to -- no longer has a concrete partnership basis, even though it still clears every OTHER existing check. 'pijat jogja', a real x_search-discovered row retrieved 2026-09-05 via a read-only production query (org name and excerpt text unmodified), whose entire stored evidence is one trader's satisfied-customer review of 'Trusteed Prop Firm'. isQualifyingRecommendation's existing matchedTopics/score/contactability/postsMatched gate (added for a prior crypto-spam finding, see the test above) never caught this different failure mode -- real topical evidence from a real, recent, contactable account that is nonetheless the WRONG KIND of account. hasConcretePartnershipBasis is the new, separate gate that catches it: it governs whether discovery.ts auto-QUALIFIES a candidate (and whether generateDraftForPartnership will draft for it), NOT whether it's surfaced at all -- isQualifyingRecommendation itself is deliberately unchanged.", () => {
+  it("FIXED (was an open gap, now closed): a candidate whose ONLY evidence is an individual retail trader's post ABOUT a prop firm they use -- not themselves a business, coach, or community Fillbook could realistically pitch a partnership to -- no longer has a concrete partnership basis, even though it still clears every OTHER existing check. 'pijat jogja', a real x_search-discovered row retrieved 2026-09-05 via a read-only production query (org name and excerpt text unmodified), whose entire stored evidence is one trader's satisfied-customer review of 'Trusteed Prop Firm'. isQualifyingRecommendation's existing matchedTopics/score/contactability/postsMatched gate (added for a prior crypto-spam finding, see the test above) never caught this different failure mode -- real topical evidence from a real, recent, contactable account that is nonetheless the WRONG KIND of account. hasConcretePartnershipBasis is the separate gate that catches it, applied at discovery.ts's FINAL surfacing decision (not inside isQualifyingRecommendation itself, which also gates first-pass enrichment eligibility -- see that function's own doc comment) -- so this candidate is filtered out before a partnership_prospects row is ever created, closing the gap the owner reported (2026-09-17) where it used to still surface, get manually qualified, and only THEN hit this same wall at draft time.", () => {
     const rec = scoreCandidate(
       candidate({
         organizationName: "pijat jogja",
@@ -200,9 +200,9 @@ describe("isQualifyingRecommendation / rankCandidates", () => {
       }),
       NOW,
     );
-    expect(isQualifyingRecommendation(rec)).toBe(true); // still surfaced, as a plain 'prospect' for manual research -- see discovery.ts
-    expect(rec.sufficientForPitch).toBe(true); // has enough CHARACTERS to look pitch-ready
-    expect(hasConcretePartnershipBasis(rec.candidate)).toBe(false); // but is NOT the right kind of recipient -- this is what now blocks auto-qualification and drafting
+    expect(isQualifyingRecommendation(rec)).toBe(true); // still qualifies for first-pass ranking -- see isQualifyingRecommendation's own doc comment
+    expect(rec.sufficientForPitch).toBe(true); // has enough CHARACTERS to look pitch-ready -- the length check alone was never the problem here
+    expect(hasConcretePartnershipBasis(rec.candidate)).toBe(false); // is NOT the right kind of recipient -- discovery.ts's final surfacing decision is what actually blocks this one from ever becoming a partnership_prospects row
   });
 
   it("ranks qualifying candidates highest-score-first and drops non-qualifying ones", () => {
