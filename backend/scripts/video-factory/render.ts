@@ -159,17 +159,38 @@ export async function renderVideo(plan: RenderPlan, runner: ProcessRunner): Prom
 }
 
 /**
- * Extracts a single real frame from the finished video as a JPG thumbnail
- * -- a plain -ss/-i/-frames:v invocation with no filter_complex string
- * (unlike buildFfmpegArgs), so unlike every other ffmpeg call in this
- * module it's safe to pass real absolute paths directly: there is no
- * filter-graph syntax here for a Windows drive-letter colon to collide
- * with. Callers should pick `atSeconds` to land inside the Hook caption's
- * on-screen window so the extracted frame already has bold on-brand text
- * on it (see captions.ts's getHookMidpointSeconds).
+ * Site-branding text burned onto every generated thumbnail -- added
+ * 2026-09-17 (owner request: thumbnails should carry the site, not rely
+ * on whatever the hook caption happens to say at that frame). The hook
+ * caption is about the video's content, not the brand, so a thumbnail
+ * grabbed from it alone can easily never mention Fillbook at all.
+ */
+const THUMBNAIL_SITE_TEXT = "fillbookhq.com";
+
+/**
+ * Extracts a single real frame from the finished video as a JPG thumbnail,
+ * then burns in a small "fillbookhq.com" badge via a second, simple
+ * drawtext-only ffmpeg pass. Two separate ffmpeg calls rather than one
+ * combined -ss/-i/-filter_complex invocation: the first stays a plain
+ * -ss/-i/-frames:v call (as before) so it's safe to pass a real absolute
+ * `videoPath` directly -- no filter-graph syntax there for a Windows
+ * drive-letter colon to collide with. The second runs with cwd set to the
+ * thumbnail's own directory and references it by plain basename inside
+ * the drawtext filter string, same basename-only path-safety pattern
+ * renderVideo already uses for the bundled caption font (see that
+ * function's own doc comment) -- drawtext's `text=`/`fontfile=` params use
+ * colon-delimited syntax, which a raw Windows path would collide with.
+ * Callers should pick `atSeconds` to land inside the Hook caption's
+ * on-screen window so the frame also has bold on-brand hook text on it
+ * (see captions.ts's getHookMidpointSeconds).
  */
 export async function extractThumbnail(videoPath: string, atSeconds: number, thumbnailPath: string, runner: ProcessRunner): Promise<void> {
-  const result = await runner.run("ffmpeg", [
+  const cwd = renderDirname(thumbnailPath);
+  const finalBasename = renderBasename(thumbnailPath);
+  const rawBasename = `raw-${finalBasename}`;
+  const rawPath = join(cwd, rawBasename);
+
+  const rawResult = await runner.run("ffmpeg", [
     "-y",
     "-ss",
     Math.max(0, atSeconds).toFixed(3),
@@ -179,9 +200,51 @@ export async function extractThumbnail(videoPath: string, atSeconds: number, thu
     "1",
     "-q:v",
     "2",
-    thumbnailPath,
+    rawPath,
   ]);
-  if (result.exitCode !== 0) {
-    throw new VideoFactoryError(`ffmpeg thumbnail extraction failed (exit ${result.exitCode}):\n${result.stderr || result.stdout}`);
+  if (rawResult.exitCode !== 0) {
+    throw new VideoFactoryError(`ffmpeg thumbnail extraction failed (exit ${rawResult.exitCode}):\n${rawResult.stderr || rawResult.stdout}`);
+  }
+
+  // Best-effort font copy -- same reasoning as renderVideo: a visual
+  // nicety, not a correctness requirement. Falls back to fontconfig's own
+  // substitute if the copy fails for any reason.
+  try {
+    const fontDest = join(cwd, FONT_BASENAME);
+    if (!existsSync(fontDest)) copyFileSync(FONT_ASSET_PATH, fontDest);
+  } catch {
+    // Deliberately swallowed -- see comment above.
+  }
+
+  // Top-left badge, well clear of both the bottom-anchored Hook/Caption
+  // text (MarginV=320, see captions.ts) and the top-anchored SceneLabel
+  // text (MarginV=140) -- a slim strip right at the top edge sits above
+  // where SceneLabel's own margin would ever place it. Runs with cwd set
+  // to the thumbnail's own directory and references files by plain
+  // basename inside the filter string -- same basename-only path-safety
+  // pattern as renderVideo's bundled font (see that function's own doc
+  // comment); drawtext's `text=`/`fontfile=` params use colon-delimited
+  // syntax, which a raw Windows path would collide with. Writes directly
+  // to `finalBasename` (resolving to the real `thumbnailPath` via `cwd`)
+  // so there's no extra copy-back step needed.
+  const drawtext = [
+    `text='${THUMBNAIL_SITE_TEXT}'`,
+    "fontfile=" + FONT_BASENAME,
+    "fontsize=44",
+    "fontcolor=white",
+    "x=32",
+    "y=32",
+    "box=1",
+    "boxcolor=black@0.55",
+    "boxborderw=16",
+  ].join(":");
+
+  const brandResult = await runner.run(
+    "ffmpeg",
+    ["-y", "-i", rawBasename, "-vf", `drawtext=${drawtext}`, "-frames:v", "1", "-q:v", "2", finalBasename],
+    { cwd },
+  );
+  if (brandResult.exitCode !== 0) {
+    throw new VideoFactoryError(`ffmpeg thumbnail branding failed (exit ${brandResult.exitCode}):\n${brandResult.stderr || brandResult.stdout}`);
   }
 }
