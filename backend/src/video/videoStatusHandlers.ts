@@ -13,6 +13,8 @@ export interface VideoRenderMetadataJson {
   youtubeTitle: string;
   youtubeDescription: string;
   tiktokCaption: string;
+  /** Null only for a render predating this field (2026-09-18) -- never fabricated. */
+  instagramCaption: string | null;
   hashtags: string[];
   disclosureCta: string | null;
   youtubeThumbnailConcept: string | null;
@@ -59,6 +61,7 @@ export function parseVideoRenderMetadata(rawMetadata: unknown): VideoRenderMetad
     youtubeTitle: v.youtubeTitle,
     youtubeDescription: v.youtubeDescription,
     tiktokCaption: v.tiktokCaption,
+    instagramCaption: typeof v.instagramCaption === "string" ? v.instagramCaption : null,
     hashtags: v.hashtags as string[],
     disclosureCta: typeof v.disclosureCta === "string" ? v.disclosureCta : null,
     youtubeThumbnailConcept: typeof v.youtubeThumbnailConcept === "string" ? v.youtubeThumbnailConcept : null,

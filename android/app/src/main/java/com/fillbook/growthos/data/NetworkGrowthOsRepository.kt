@@ -880,6 +880,7 @@ class NetworkGrowthOsRepository(
             youtubeTitle = meta.getString("youtubeTitle"),
             youtubeDescription = meta.getString("youtubeDescription"),
             tiktokCaption = meta.getString("tiktokCaption"),
+            instagramCaption = meta.optStringOrNull("instagramCaption"),
             hashtags = meta.optJSONArray("hashtags")?.mapStrings() ?: emptyList(),
             disclosureCta = meta.optStringOrNull("disclosureCta"),
             youtubeThumbnailConcept = meta.optStringOrNull("youtubeThumbnailConcept"),

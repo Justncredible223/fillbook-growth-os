@@ -24,8 +24,10 @@ describe("draftVideoScript", () => {
       youtubeTitle: "Why Your Funded Account Gets Pulled Even When You're Winning",
       youtubeDescription: "Trailing drawdown catches even profitable traders off guard -- here's what to watch for.",
       tiktokCaption: "Trailing drawdown explained in 30 seconds.",
+      instagramCaption: "Trailing drawdown explained -- and why it catches even winning trades.",
       hashtags: ["futurestrading", "propfirm"],
       disclosureCta: null,
+      youtubeThumbnailConcept: "Bold text 'STILL LOSING?' over a split-screen of a green trade and a drawdown alert.",
     };
     const fetchMock = vi.fn().mockResolvedValue(scriptResponse(script));
     const client = new LlmClient("test-key", fetchMock);
@@ -48,8 +50,10 @@ describe("formatVideoScriptAsText", () => {
       youtubeTitle: "The YouTube title.",
       youtubeDescription: "The YouTube description.",
       tiktokCaption: "The TikTok caption.",
+      instagramCaption: "The Instagram caption.",
       hashtags: ["futurestrading", "propfirm"],
       disclosureCta: "Example data shown for illustration only.",
+      youtubeThumbnailConcept: "Bold text overlay over a split-screen visual.",
     };
 
     const text = formatVideoScriptAsText(script);
@@ -60,6 +64,7 @@ describe("formatVideoScriptAsText", () => {
     expect(text).toContain("YOUTUBE TITLE:\nThe YouTube title.");
     expect(text).toContain("YOUTUBE DESCRIPTION:\nThe YouTube description.");
     expect(text).toContain("TIKTOK CAPTION:\nThe TikTok caption.");
+    expect(text).toContain("INSTAGRAM CAPTION:\nThe Instagram caption.");
     expect(text).toContain("HASHTAGS: #futurestrading #propfirm");
     expect(text).toContain("DISCLOSURE/CTA: Example data shown for illustration only.");
   });
@@ -72,8 +77,10 @@ describe("formatVideoScriptAsText", () => {
       youtubeTitle: "The YouTube title.",
       youtubeDescription: "The YouTube description.",
       tiktokCaption: "The TikTok caption.",
+      instagramCaption: "The Instagram caption.",
       hashtags: ["futurestrading"],
       disclosureCta: null,
+      youtubeThumbnailConcept: "Bold text overlay over a split-screen visual.",
     };
 
     const text = formatVideoScriptAsText(script);

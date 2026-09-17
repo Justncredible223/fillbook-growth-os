@@ -233,12 +233,23 @@ class VideoStatusScreenCreateVideoStructureTest {
     }
 
     @Test
-    fun `ready-with-metadata renders both a YouTube Shorts and a TikTok copyable section`() {
+    fun `ready-with-metadata renders a YouTube, a TikTok, and an Instagram copyable section`() {
         val source = screenSource()
-        check(source.contains("\"YOUTUBE SHORTS\"")) { "Expected a YouTube Shorts metadata section." }
+        check(source.contains("\"YOUTUBE TITLE\"")) { "Expected a YouTube metadata section." }
         check(source.contains("\"TIKTOK\"")) { "Expected a TikTok metadata section." }
+        check(source.contains("\"INSTAGRAM\"")) { "Expected an Instagram metadata section." }
         check(source.contains("copyToClipboard(context, copyLabel, body)")) {
             "Expected each metadata section to be copyable via copyToClipboard."
+        }
+    }
+
+    @Test
+    fun `the Instagram section is only shown when instagramCaption is present, matching a render that predates the field`() {
+        val source = screenSource()
+        val instagramIndex = source.indexOf("meta.instagramCaption?.let")
+        check(instagramIndex >= 0) {
+            "Expected the Instagram metadata section to be gated on a non-null instagramCaption, same null-tolerant " +
+                "pattern as youtubeThumbnailConcept -- never shown for a render created before this field existed."
         }
     }
 }

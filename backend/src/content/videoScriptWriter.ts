@@ -22,7 +22,11 @@ const VIDEO_SCRIPT_SCHEMA = {
       type: "string",
       description: "TikTok caption (2-3 punchy lines, platform-native tone): hook the scroll, name the pain or insight, close with a soft CTA (e.g. 'link in bio'). Distinct from both the spoken script and the YouTube description.",
     },
-    hashtags: { type: "array", items: { type: "string" }, description: "Hashtags without the # prefix, usable on either platform." },
+    instagramCaption: {
+      type: "string",
+      description: "Instagram Reels caption: similar punchy hook-first structure to the TikTok caption but Instagram tolerates (and rewards) a bit more length -- 3-5 lines, add one more sentence of real value/context after the hook line, lean on keyword-relevant phrasing (Instagram search surfaces captions), close with a soft CTA (e.g. 'link in bio'). Distinct from the spoken script, the YouTube description, and the TikTok caption -- not a copy-paste of either.",
+    },
+    hashtags: { type: "array", items: { type: "string" }, description: "Hashtags without the # prefix, usable across all three platforms." },
     disclosureCta: {
       type: ["string", "null"],
       description:
@@ -33,7 +37,7 @@ const VIDEO_SCRIPT_SCHEMA = {
       description: "YouTube Shorts thumbnail concept: one bold text overlay (under 6 words, high contrast, readable at thumbnail size) + one sentence describing the visual (e.g. 'split screen of a blown account vs a journal entry', 'trader at desk looking frustrated'). Must make someone stop scrolling.",
     },
   },
-  required: ["hook", "script", "shotList", "youtubeTitle", "youtubeDescription", "tiktokCaption", "hashtags", "disclosureCta", "youtubeThumbnailConcept"],
+  required: ["hook", "script", "shotList", "youtubeTitle", "youtubeDescription", "tiktokCaption", "instagramCaption", "hashtags", "disclosureCta", "youtubeThumbnailConcept"],
 };
 
 interface VideoScriptToolInput {
@@ -43,6 +47,7 @@ interface VideoScriptToolInput {
   youtubeTitle: string;
   youtubeDescription: string;
   tiktokCaption: string;
+  instagramCaption: string;
   hashtags: string[];
   disclosureCta: string | null;
   youtubeThumbnailConcept: string;
@@ -58,6 +63,8 @@ export interface VideoScript {
   youtubeDescription: string;
   /** TikTok caption text, distinct from both the spoken script and the YouTube description. */
   tiktokCaption: string;
+  /** Instagram Reels caption text, distinct from the TikTok caption and YouTube description -- see VIDEO_SCRIPT_SCHEMA's own description for how it differs from TikTok's. */
+  instagramCaption: string;
   hashtags: string[];
   /** Null when genuinely not needed -- never a fabricated filler line. */
   disclosureCta: string | null;
@@ -70,7 +77,7 @@ a trading journal built specifically for futures day traders and prop-firm funde
 (broker-agnostic trade import, futures-native P&L, prop-firm drawdown and rule tracking, AI coach).
 Positioned against TradeZella and TradesViz, which are broker-agnostic and stock-first.
 
-Your videos run on TikTok and YouTube Shorts. The goal of every video is to drive traders to
+Your videos run on TikTok, YouTube Shorts, and Instagram Reels. The goal of every video is to drive traders to
 fillbookhq.com to sign up -- but the method is earning that visit by being genuinely useful, not
 by selling. A trader who learns something real from a Fillbook video trusts the brand and clicks.
 A trader who gets a sales pitch scrolls past.
@@ -107,6 +114,10 @@ QUALITY BAR -- every output must clear this:
 - TikTok caption: 2-3 lines, platform-native voice, punchy. Name the pain or insight in line 1,
   deliver the value angle in line 2, close with a soft CTA ("link in bio" or similar) in line 3.
   Distinct from both the spoken script and the YouTube description.
+- Instagram caption: same punchy hook-first opening as the TikTok caption, but 3-5 lines --
+  Instagram captions are read more (and indexed by Instagram's own search), so add one more real
+  sentence of value/context after the hook before the CTA. Not a copy-paste of the TikTok caption;
+  distinct wording, same underlying insight.
 - Hashtags: 5-8 relevant tags, no stuffing, no irrelevant trending tags.
 - YouTube thumbnail concept: one bold text overlay (under 6 words, readable at thumbnail size)
   plus one sentence describing the background visual. The thumbnail alone should make someone stop
@@ -214,6 +225,9 @@ export function formatVideoScriptAsText(video: VideoScript): string {
     "",
     "TIKTOK CAPTION:",
     video.tiktokCaption,
+    "",
+    "INSTAGRAM CAPTION:",
+    video.instagramCaption,
     "",
     `HASHTAGS: ${hashtags}`,
     ...(video.disclosureCta ? ["", `DISCLOSURE/CTA: ${video.disclosureCta}`] : []),

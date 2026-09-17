@@ -93,9 +93,9 @@ import kotlinx.coroutines.launch
  * a convenience miss, never a lost video or a lost "it's ready" fact; see
  * the render-worker's own "Honest limit on exactly-once" note). Download
  * and Share here only ever hand the finished MP4 to Android's own share
- * sheet / Downloads -- this screen never uploads or posts to TikTok or
- * YouTube itself, matching docs/EXTERNAL_WRITE_FIREWALL.md exactly the
- * same way ApprovalsScreen's Copy & Share does for text.
+ * sheet / Downloads -- this screen never uploads or posts to TikTok,
+ * YouTube, or Instagram itself, matching docs/EXTERNAL_WRITE_FIREWALL.md
+ * exactly the same way ApprovalsScreen's Copy & Share does for text.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -385,7 +385,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
         Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
             ScreenHeader(
                 "Video Status",
-                "Approve a video script and it renders here — download it, then share it to TikTok or YouTube yourself.",
+                "Approve a video script and it renders here — download it, then share it to TikTok, YouTube, or Instagram Reels yourself.",
                 kicker = if (loaded && renders.isNotEmpty()) "${renders.size} render${if (renders.size == 1) "" else "s"}" else null,
             )
 
@@ -712,6 +712,18 @@ private fun VideoRenderCard(
                     meta.disclosureCta,
                 ).joinToString("\n"),
             )
+            meta.instagramCaption?.let { caption ->
+                Spacer(Modifier.height(8.dp))
+                VideoMetadataSection(
+                    label = "INSTAGRAM",
+                    copyLabel = "Instagram metadata",
+                    body = listOfNotNull(
+                        caption,
+                        meta.hashtags.takeIf { it.isNotEmpty() }?.joinToString(" ") { "#$it" },
+                        meta.disclosureCta,
+                    ).joinToString("\n"),
+                )
+            }
         }
         if (render.status == "ready") {
             Spacer(Modifier.height(10.dp))
@@ -721,7 +733,7 @@ private fun VideoRenderCard(
             }
             if (!alreadyDownloaded) {
                 Spacer(Modifier.height(4.dp))
-                Text("Download it first, then Share to TikTok or YouTube.", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+                Text("Download it first, then Share to TikTok, YouTube, or Instagram Reels.", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
             }
             if (render.thumbnailDownloadUrl != null) {
                 Spacer(Modifier.height(8.dp))
@@ -733,9 +745,9 @@ private fun VideoRenderCard(
 
 /**
  * A copyable metadata block ("Create Fillbook Video", 2026-09-08) -- the
- * owner pastes this straight into TikTok's/YouTube's own upload flow when
- * they manually publish, since this app never uploads to either platform
- * itself (see docs/EXTERNAL_WRITE_FIREWALL.md).
+ * owner pastes this straight into TikTok's/YouTube's/Instagram's own
+ * upload flow when they manually publish, since this app never uploads to
+ * any of those platforms itself (see docs/EXTERNAL_WRITE_FIREWALL.md).
  */
 @Composable
 private fun VideoMetadataSection(label: String, copyLabel: String, body: String) {

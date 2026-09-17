@@ -515,6 +515,8 @@ data class VideoRenderMetadata(
     val youtubeTitle: String,
     val youtubeDescription: String,
     val tiktokCaption: String,
+    /** Null only for a render predating this field (2026-09-18) -- never fabricated. */
+    val instagramCaption: String?,
     val hashtags: List<String>,
     /** Null when the video genuinely didn't need one -- never a fabricated filler line. */
     val disclosureCta: String?,

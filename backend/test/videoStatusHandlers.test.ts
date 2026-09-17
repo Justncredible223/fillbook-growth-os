@@ -20,8 +20,10 @@ describe("parseVideoRenderMetadata", () => {
       youtubeTitle: "A real YouTube title",
       youtubeDescription: "A real YouTube description.",
       tiktokCaption: "A real TikTok caption.",
+      instagramCaption: "A real Instagram caption.",
       hashtags: ["futurestrading", "propfirm"],
       disclosureCta: "Example data shown for illustration only.",
+      youtubeThumbnailConcept: "Bold text overlay over a split-screen visual.",
     },
   };
 
@@ -30,9 +32,18 @@ describe("parseVideoRenderMetadata", () => {
       youtubeTitle: "A real YouTube title",
       youtubeDescription: "A real YouTube description.",
       tiktokCaption: "A real TikTok caption.",
+      instagramCaption: "A real Instagram caption.",
       hashtags: ["futurestrading", "propfirm"],
       disclosureCta: "Example data shown for illustration only.",
+      youtubeThumbnailConcept: "Bold text overlay over a split-screen visual.",
     });
+  });
+
+  it("normalizes a missing/non-string instagramCaption to null rather than fabricating one -- e.g. a render predating this field", () => {
+    const { instagramCaption, ...rest } = wellFormed.videoScript;
+    void instagramCaption;
+    const result = parseVideoRenderMetadata({ videoScript: rest });
+    expect(result?.instagramCaption).toBeNull();
   });
 
   it("normalizes a missing/non-string disclosureCta to null rather than fabricating one", () => {
