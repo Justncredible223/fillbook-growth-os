@@ -16,8 +16,8 @@ function word(text: string, startSeconds: number, endSeconds: number): WordCue {
 }
 
 describe("mergeBrandNameWordCues", () => {
-  it("merges an adjacent Fill + book pair into one Fillbook cue spanning both", () => {
-    const words = [word("Try", 0, 0.1), word("Fill", 0.15, 0.35), word("book", 0.35, 0.55), word("today.", 0.6, 0.9)];
+  it("merges an adjacent Fill + buk pair into one Fillbook cue spanning both", () => {
+    const words = [word("Try", 0, 0.1), word("Fill", 0.15, 0.35), word("buk", 0.35, 0.55), word("today.", 0.6, 0.9)];
     const merged = mergeBrandNameWordCues(words);
     expect(merged).toEqual([
       word("Try", 0, 0.1),
@@ -27,18 +27,18 @@ describe("mergeBrandNameWordCues", () => {
   });
 
   it("matches case-insensitively and ignores trailing punctuation", () => {
-    const words = [word("fill", 0, 0.2), word("book.", 0.2, 0.4)];
+    const words = [word("fill", 0, 0.2), word("buk.", 0.2, 0.4)];
     expect(mergeBrandNameWordCues(words)).toEqual([{ text: "Fillbook", startSeconds: 0, endSeconds: 0.4 }]);
   });
 
   it("merges multiple separate occurrences", () => {
-    const words = [word("Fill", 0, 0.2), word("book", 0.2, 0.4), word("and", 0.4, 0.5), word("Fill", 0.5, 0.7), word("book", 0.7, 0.9)];
+    const words = [word("Fill", 0, 0.2), word("buk", 0.2, 0.4), word("and", 0.4, 0.5), word("Fill", 0.5, 0.7), word("buk", 0.7, 0.9)];
     const merged = mergeBrandNameWordCues(words);
     expect(merged.map((w) => w.text)).toEqual(["Fillbook", "and", "Fillbook"]);
   });
 
-  it("leaves words alone when Fill and book aren't adjacent", () => {
-    const words = [word("Fill", 0, 0.2), word("your", 0.2, 0.4), word("book.", 0.4, 0.6)];
+  it("leaves words alone when Fill and buk aren't adjacent", () => {
+    const words = [word("Fill", 0, 0.2), word("your", 0.2, 0.4), word("buk.", 0.4, 0.6)];
     expect(mergeBrandNameWordCues(words)).toEqual(words);
   });
 

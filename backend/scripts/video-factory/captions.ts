@@ -1,14 +1,16 @@
 import type { CaptionCue, WordCue } from "./types.js";
 
 /**
- * voiceover.ts's respellFillbookForTts sends "Fillbook" to TTS as the two
- * real dictionary words "Fill book" so it's pronounced correctly -- which
- * means the raw WordBoundary stream reports "Fill" and "book" as two
- * separate word cues. This merges any such adjacent pair back into one
- * "Fillbook" cue (spanning both words' combined time range) before caption
- * phrases are built, so it still displays and highlights as a single word
- * on screen, matching what it actually is. Matches on bare letters only
- * (strips punctuation) so a "Fill book." at a sentence end still merges.
+ * voiceover.ts's respellFillbookForTts sends "Fillbook" to TTS respelled
+ * as "Fill buk" ("buk", not "book" -- the voice mispronounced "book"
+ * itself with a long foreign-sounding "oo", see that function's own doc
+ * comment) so it's pronounced correctly -- which means the raw
+ * WordBoundary stream reports "Fill" and "buk" as two separate word cues.
+ * This merges any such adjacent pair back into one "Fillbook" cue
+ * (spanning both words' combined time range) before caption phrases are
+ * built, so it still displays and highlights as a single word on screen,
+ * matching what it actually is. Matches on bare letters only (strips
+ * punctuation) so a "Fill buk." at a sentence end still merges.
  */
 export function mergeBrandNameWordCues(wordCues: WordCue[]): WordCue[] {
   const merged: WordCue[] = [];
@@ -17,7 +19,7 @@ export function mergeBrandNameWordCues(wordCues: WordCue[]): WordCue[] {
     const next = wordCues[i + 1];
     const currentBare = current.text.replace(/[^a-zA-Z]/g, "").toLowerCase();
     const nextBare = next?.text.replace(/[^a-zA-Z]/g, "").toLowerCase();
-    if (next && currentBare === "fill" && nextBare === "book") {
+    if (next && currentBare === "fill" && nextBare === "buk") {
       merged.push({ text: "Fillbook", startSeconds: current.startSeconds, endSeconds: next.endSeconds });
       i++;
     } else {
