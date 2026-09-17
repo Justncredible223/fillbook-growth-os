@@ -125,3 +125,40 @@ describe("isPlausiblyTradingRelated -- crypto content sharing futures/trading vo
     expect(isPlausiblyTradingRelated("$DOGE about to send it, aping in with my last stack")).toBe(false);
   });
 });
+
+/**
+ * Regression coverage for two more real, confirmed leaks found live
+ * (2026-09-17, first fresh prospecting run after the crypto-exclusion
+ * fix above): \bcrypto\b never matched the single most common real-world
+ * spelling "cryptocurrency" (no word boundary between "crypto" and
+ * "currency"), and a coordinated crypto-exchange airdrop spam campaign
+ * used the literal phrase "Futures trading" in its own copy specifically
+ * to clear the relevance gate.
+ */
+describe("isPlausiblyTradingRelated -- cryptocurrency spelling and airdrop/KYC spam", () => {
+  it("rejects 'cryptocurrency' (not just bare 'crypto') paired with a relevance anchor -- the exact live post that exposed this", () => {
+    expect(isPlausiblyTradingRelated("#WEEX is a cryptocurrency exchange offering spot and futures trading.")).toBe(false);
+  });
+
+  it("rejects crypto-exchange airdrop/KYC spam even when it explicitly says 'futures trading' -- the exact live post that exposed this", () => {
+    expect(
+      isPlausiblyTradingRelated(
+        "CoinUp's Million CPX Airdrop is now live. Complete the required KYC, deposit and Futures trading tasks to earn CPX. Bring friends through your referral link and you can both unlock extra rewards.",
+      ),
+    ).toBe(false);
+    expect(
+      isPlausiblyTradingRelated(
+        "Want to earn CPX? CoinUp's Million CPX Airdrop is live from Sep 15-30. Complete KYC, deposit and Futures trading tasks, then invite qualified friends for additional rewards.",
+      ),
+    ).toBe(false);
+  });
+
+  it("bare 'airdrop' and 'KYC' alone are excluding signals even without an exchange name", () => {
+    expect(isPlausiblyTradingRelated("Futures trading airdrop live now, don't miss out")).toBe(false);
+    expect(isPlausiblyTradingRelated("Complete KYC to start futures trading on our platform")).toBe(false);
+  });
+
+  it("does not falsely exclude unrelated words that merely start with 'crypto' (e.g. cryptography)", () => {
+    expect(isPlausiblyTradingRelated("Learned some cryptography basics while building a trading journal app")).toBe(true);
+  });
+});

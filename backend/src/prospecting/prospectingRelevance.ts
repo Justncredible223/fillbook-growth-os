@@ -160,7 +160,12 @@ const MANUAL_DISCIPLINE_OVERRIDE_PATTERNS: RegExp[] = [
  * post), a crypto-only post does not.
  */
 const CRYPTO_EXCLUSION_PATTERNS: RegExp[] = [
-  /\bcrypto\b/i,
+  // \bcrypto\b alone missed "cryptocurrency"/"cryptocurrencies" (confirmed
+  // live, 2026-09-17: "#WEEX is a cryptocurrency exchange offering spot
+  // and futures trading" passed straight through) -- there's no word
+  // boundary between "crypto" and "currency", so the bare word boundary
+  // form never matched the single most common real-world spelling.
+  /\bcrypto(currency|currencies)?\b/i,
   /\bbitcoin\b/i,
   /\bethereum\b/i,
   /\baltcoins?\b/i,
@@ -170,6 +175,17 @@ const CRYPTO_EXCLUSION_PATTERNS: RegExp[] = [
   /\bNFT\b/i,
   /\bstablecoin\b/i,
   /\b(crypto|coin) airdrop\b/i,
+  // Bare "airdrop"/"KYC" (2026-09-17): a live coordinated crypto-exchange
+  // spam campaign ("CoinUp's Million CPX Airdrop... Complete the required
+  // KYC, deposit and Futures trading tasks to earn CPX") used the literal
+  // phrase "Futures trading" specifically to clear the relevance gate --
+  // sophisticated enough to defeat the narrower "(crypto|coin) airdrop"
+  // pattern above. No real futures/prop-firm trader post has a legitimate
+  // reason to use "airdrop" (a token distribution mechanism) or "KYC" (an
+  // exchange onboarding term) -- these are unambiguous crypto-exchange-
+  // promo signals on their own.
+  /\bairdrop\b/i,
+  /\bKYC\b/i,
   /\bmemecoin\b/i,
 ];
 
