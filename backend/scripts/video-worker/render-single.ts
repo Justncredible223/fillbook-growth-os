@@ -87,17 +87,33 @@ async function main(): Promise<void> {
     pixabayApiKey: process.env.PIXABAY_API_KEY ?? null,
   };
   const hasAnyStockProvider = Boolean(stockCredentials.pexelsApiKey || stockCredentials.pixabayApiKey);
+  console.log(
+    `[render-single] stock footage providers: pexels=${Boolean(stockCredentials.pexelsApiKey)} pixabay=${Boolean(stockCredentials.pixabayApiKey)}`,
+  );
   const seed = parseInt(videoRenderId.replace(/-/g, "").slice(0, 8), 16);
-  for (let i = 0; i < scenes.length; i++) {
-    const scene = scenes[i];
+  let scenesWithClip = 0;
+  for (const [i, scene] of scenes.entries()) {
     if (hasAnyStockProvider) {
       const query = getVideoQuery(scene.kind, seed + i);
       if (query) {
         const cached = await fetchStockClip(query, scene.durationSeconds, STOCK_CLIP_CACHE, stockCredentials);
-        if (cached) scene.clipPath = copyClipToDir(cached, outDir);
+        if (cached) {
+          scene.clipPath = copyClipToDir(cached, outDir);
+          scenesWithClip++;
+          console.log(`[render-single] scene ${i} (${scene.kind}): real footage for query "${query}"`);
+        } else {
+          // fetchStockClip swallows the real reason (no matching results,
+          // relevance filter rejected everything, or a network/API
+          // failure) by design -- see its own doc comment ("no clip is
+          // strictly better than an off-topic clip"). This is deliberately
+          // the one place that surfaces WHICH scenes fell back, since that
+          // was previously invisible in every render log.
+          console.log(`[render-single] scene ${i} (${scene.kind}): no clip found for query "${query}" -- falling back to solid color`);
+        }
       }
     }
   }
+  console.log(`[render-single] stock footage: ${scenesWithClip}/${scenes.length} scenes got real footage`);
 
   const outputPath = join(outDir, "final.mp4");
   const plan: RenderPlan = {
