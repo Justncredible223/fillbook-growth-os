@@ -23,6 +23,21 @@ import type { WordCue } from "./types.js";
  */
 export const DEFAULT_VOICE = "en-US-AndrewNeural";
 
+/**
+ * Voice choice re-confirmed 2026-09-19: stay on the standard AndrewNeural.
+ * It is the only voice verified by ear to say "book" (and so "Fillbook")
+ * correctly; every Multilingual-tier voice (Andrew/Brian/Ava/Emma
+ * Multilingual) shares the phoneme defect above and is ruled out for this
+ * brand. Other standard voices (Christopher, Guy, Brian, ...) are untested
+ * for "book" -- check it by ear before adopting one.
+ *
+ * The pace is what changed: edge-tts `rate` is relative to the voice's
+ * default, so "+8%" reads a touch faster without changing pronunciation.
+ * A brisker read holds attention and shortens the video (completion rate
+ * is the strongest TikTok ranking signal). Set "+0%" for the old pace.
+ */
+export const DEFAULT_RATE = "+8%";
+
 export interface VoiceoverResult {
   mp3Path: string;
   wordCues: WordCue[];
@@ -78,6 +93,7 @@ export async function generateVoiceover(
   outDir: string,
   runner: ProcessRunner,
   voice: string = DEFAULT_VOICE,
+  rate: string = DEFAULT_RATE,
 ): Promise<VoiceoverResult> {
   const scriptPath = join(outDir, "script.txt");
   const mp3Path = join(outDir, "voiceover.mp3");
@@ -88,6 +104,8 @@ export async function generateVoiceover(
     WORD_TIMING_SCRIPT,
     "--voice",
     voice,
+    "--rate",
+    rate,
     "--file",
     scriptPath,
     "--out-media",
