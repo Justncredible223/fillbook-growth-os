@@ -101,7 +101,31 @@ export function buildWordHighlightCues(phrase: WordCue[], style: "Hook" | "Capti
 export function buildCaptionCues(wordCues: WordCue[]): CaptionCue[] {
   if (wordCues.length === 0) return [];
   const phrases = groupWordsIntoPhrases(wordCues);
-  return phrases.flatMap((phrase, i) => buildWordHighlightCues(phrase, i === 0 ? "Hook" : "Caption"));
+  const hookPhraseCount = countHookPhrases(phrases);
+  return phrases.flatMap((phrase, i) => buildWordHighlightCues(phrase, i < hookPhraseCount ? "Hook" : "Caption"));
+}
+
+/** No phrase starting at or after this is ever part of the hook, even without a sentence break. */
+const HOOK_MAX_START_SECONDS = 3.2;
+/** When the word text carries no sentence punctuation, the hook is whatever phrases start inside this window. */
+const HOOK_FALLBACK_WINDOW_SECONDS = 2.4;
+
+/**
+ * How many leading phrases make up the hook -- the whole first spoken
+ * sentence, not just its first 2-6 words, so the entire hook line gets the
+ * big centered treatment for the first ~2-3 seconds. Ends at the first
+ * phrase whose last word carries sentence-ending punctuation; edge-tts word
+ * boundaries often omit punctuation, so it falls back to a time window.
+ */
+function countHookPhrases(phrases: WordCue[][]): number {
+  let count = 0;
+  for (const phrase of phrases) {
+    if (phrase[0]!.startSeconds >= HOOK_MAX_START_SECONDS) break;
+    count++;
+    if (/[.!?]["')\]]*$/.test(phrase[phrase.length - 1]!.text)) return count;
+  }
+  const inWindow = phrases.filter((p) => p[0]!.startSeconds < HOOK_FALLBACK_WINDOW_SECONDS).length;
+  return Math.max(1, inWindow);
 }
 
 /**
@@ -185,7 +209,12 @@ export function escapeAssText(text: string): string {
  * rendering machine, and thicker Outline/Shadow give the text more pop
  * against busy stock-footage backgrounds.
  *
- * Caption/Hook MarginV=320 (2026-09-10, raised from 160): owner-confirmed
+ * Hook (2026-09-19): 92pt and middle-centered (Alignment=5) instead of
+ * sharing Caption's bottom-anchored spot -- the first spoken sentence is
+ * the scroll-stopper, so it reads as a big title card in the middle of the
+ * frame for its ~2-3s, then captions drop to the bottom strip.
+ *
+ * Caption MarginV=320 (2026-09-10, raised from 160): owner-confirmed
  * on a real TikTok upload -- at 160 (only ~8% of the 1920px canvas), the
  * burned-in caption sat directly behind TikTok's own post
  * description/username text, which TikTok renders in that same bottom
@@ -205,7 +234,7 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Caption,Poppins ExtraBold,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,2,2,80,80,320,1
-Style: Hook,Poppins ExtraBold,74,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,2,2,80,80,320,1
+Style: Hook,Poppins ExtraBold,92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,8,3,5,80,80,0,1
 Style: SceneLabel,Poppins ExtraBold,48,&H00F4F6FA,&H00F4F6FA,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,5,2,8,80,80,140,1
 Style: Outro,Poppins ExtraBold,92,&H00EED322,&H00EED322,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,7,3,5,80,80,0,1
 

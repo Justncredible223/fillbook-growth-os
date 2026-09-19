@@ -42,8 +42,24 @@ const FONT_BASENAME = "Poppins-ExtraBold.ttf";
 const MUSIC_ASSET_PATH = join(dirname(fileURLToPath(import.meta.url)), "assets", "music", "ambient-technology.mp3");
 const MUSIC_BASENAME = "ambient-technology.mp3";
 
-/** How quiet the background music sits under the real voiceover -- low enough to never compete with narration, audible enough to fill the silence. */
-const MUSIC_VOLUME = 0.13;
+/**
+ * Music level BEFORE ducking, i.e. how loud it sits in the gaps between
+ * words. Higher than the old flat 0.13 because it no longer has to stay
+ * quiet enough for speech on its own -- the sidechain compressor pulls it
+ * down ~10dB while the voice is talking (threshold 0.06, ratio 4).
+ */
+const MUSIC_VOLUME = 0.2;
+const DUCK_THRESHOLD = 0.06;
+const DUCK_RATIO = 4;
+const DUCK_ATTACK_MS = 15;
+const DUCK_RELEASE_MS = 350;
+/** TikTok's playback loudness target. */
+const TARGET_LUFS = -14;
+
+/** Hook scenes push in by this fraction over HOOK_ZOOM_SECONDS, under a black scrim of HOOK_SCRIM_OPACITY. */
+const HOOK_ZOOM_AMOUNT = 0.1;
+const HOOK_ZOOM_SECONDS = 2.5;
+const HOOK_SCRIM_OPACITY = 0.35;
 
 /**
  * Crossfade duration between adjacent scenes, replacing the previous hard
@@ -225,11 +241,21 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
           `pad=${WIDTH}:${HEIGHT}:0:${UI_TOP_BAND}:color=${scene.backgroundColor},fps=${FRAME_RATE},setsar=1:1,format=yuv420p,setpts=PTS-STARTPTS[${label}]`,
       );
     } else if (scene.clipPath) {
+      // Hook scenes (the first ~2-3s, when a viewer decides to stay) get a
+      // slow push-in plus a dark scrim so the big centered hook text is
+      // legible over any stock footage. The zoom rescales every frame from
+      // its own timestamp (setpts above resets t to 0 per scene) and crops
+      // back to the canvas, so it costs nothing outside hook scenes.
+      const hookTreatment =
+        scene.kind === "hook"
+          ? `,scale=w='trunc(${WIDTH}*(1+${HOOK_ZOOM_AMOUNT}*min(t/${HOOK_ZOOM_SECONDS},1))/2)*2':h=-2:eval=frame,crop=${WIDTH}:${HEIGHT},` +
+            `drawbox=x=0:y=0:w=iw:h=ih:color=black@${HOOK_SCRIM_OPACITY}:t=fill`
+          : "";
       sceneFilterParts.push(
         // setsar=1:1 normalises the sample-aspect-ratio metadata that some
       // Pexels clips carry (e.g. SAR 10240:10239) -- without it, concat
       // rejects clips whose SAR differs even by one quantum.
-      `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},fps=${FRAME_RATE},setsar=1:1,setpts=PTS-STARTPTS[${label}]`,
+      `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},fps=${FRAME_RATE},setsar=1:1,setpts=PTS-STARTPTS${hookTreatment}[${label}]`,
       );
     } else {
       sceneFilterParts.push(`[${i}:v]setpts=PTS-STARTPTS[${label}]`);
@@ -258,11 +284,20 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     // font copied there below, same basename-only path-safety reasoning as
     // every other file in this filter graph.
     `[${bgLabel}]subtitles=${renderBasename(plan.assPath)}:fontsdir=.[v]`,
-    `[${voiceoverInputIndex}:a][${silenceInputIndex}:a]concat=n=2:v=0:a=1[voice]`,
+    `[${voiceoverInputIndex}:a][${silenceInputIndex}:a]concat=n=2:v=0:a=1[voicefull]`,
+    // The voice feeds both the mix and the ducking sidechain.
+    `[voicefull]asplit=2[voice][voicesc]`,
     `[${musicInputIndex}:a]volume=${MUSIC_VOLUME}[musicvol]`,
+    // Music ducks under speech (sidechain compression keyed on the voice)
+    // and swells back in the gaps, instead of a constant quiet bed.
+    `[musicvol][voicesc]sidechaincompress=threshold=${DUCK_THRESHOLD}:ratio=${DUCK_RATIO}:attack=${DUCK_ATTACK_MS}:release=${DUCK_RELEASE_MS}[musicduck]`,
     // duration=first: output length follows the voice+silence track, never
-    // the (possibly much longer, now looped-to-fit) music bed.
-    `[voice][musicvol]amix=inputs=2:duration=first:dropout_transition=0[a]`,
+    // the (possibly much longer, now looped-to-fit) music bed. normalize=0
+    // keeps the voice at full level (amix would otherwise halve both inputs).
+    `[voice][musicduck]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mix]`,
+    // Single-pass loudness normalisation to TikTok's ~-14 LUFS playback
+    // level, so videos aren't quieter than what's around them in the feed.
+    `[mix]loudnorm=I=${TARGET_LUFS}:TP=-1.5:LRA=11,aresample=48000[a]`,
   ].join(";");
 
   return [
