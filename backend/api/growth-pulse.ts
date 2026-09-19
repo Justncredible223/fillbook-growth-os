@@ -16,7 +16,7 @@ import { runProspectingSearch } from "../src/prospecting/prospectingSearch.js";
 import { SupabaseProspectingRepository } from "../src/prospecting/supabaseProspectingRepository.js";
 import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
-import { reconcileVideoRenders } from "../src/video/videoRenderReconciliation.js";
+import { reconcileVideoRenders, sweepStuckVideoRenderDispatches } from "../src/video/videoRenderReconciliation.js";
 import { createYoutubeCommentAdapter } from "../src/signals/adapters/youtubeAdapter.js";
 import { extractYoutubeVideoId } from "../src/video/youtubeUrl.js";
 
@@ -258,6 +258,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (runVideoReconciliation) {
     results.push(await runStep("video_render_reconciliation", () => reconcileVideoRenders(client)));
+    // Own step, own try/catch -- see sweepStuckVideoRenderDispatches's own
+    // doc comment for what this recovers from. process.env access here
+    // (rather than threading a key through) mirrors getServiceClient()'s
+    // own pattern just above; that call already having succeeded means
+    // this env var is set.
+    results.push(
+      await runStep("video_render_dispatch_sweep", () => sweepStuckVideoRenderDispatches(process.env.SUPABASE_SERVICE_ROLE_KEY as string)),
+    );
   }
 
   if (runYoutubeComments) {

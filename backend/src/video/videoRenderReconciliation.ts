@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "./videoRenderEligibility.js";
+import { SUPABASE_URL } from "../lib/supabaseClient.js";
 
 interface EnqueueResultRow {
   video_render_id: string | null;
@@ -69,4 +70,37 @@ export async function reconcileVideoRenders(
   }
 
   return `${enqueued} enqueued, ${capBlocked} blocked by the daily or monthly cap (${missing.length} were missing a render row)`;
+}
+
+/**
+ * Companion sweep to reconcileVideoRenders above, added 2026-09-19 after a
+ * real incident: a dead GH_PAT secret made the trigger-video-render Edge
+ * Function's webhook-triggered dispatch fail every time, and since nothing
+ * called this before, a failed dispatch just left its system_jobs row
+ * `pending` forever with no retry and no visible error -- the app showed
+ * "queued" indefinitely.
+ *
+ * This is the backstop: it asks trigger-video-render to run its sweep mode
+ * (POST {"sweep": true}), which claims and re-attempts every render_video
+ * job still `pending` and due (see that function's own doc comment for the
+ * full claim -> dispatch -> complete/fail lifecycle, including the
+ * backoff/dead-letter policy). All of the actual retry logic lives there,
+ * on purpose -- this function is just the periodic nudge, so GH_PAT stays
+ * the one Edge Function secret rather than something this Vercel deploy
+ * also needs to hold.
+ */
+export async function sweepStuckVideoRenderDispatches(supabaseServiceRoleKey: string): Promise<string> {
+  const resp = await fetch(`${SUPABASE_URL}/functions/v1/trigger-video-render`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${supabaseServiceRoleKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ sweep: true }),
+  });
+  const text = await resp.text();
+  if (!resp.ok) {
+    throw new Error(`trigger-video-render sweep failed ${resp.status}: ${text}`);
+  }
+  return text;
 }

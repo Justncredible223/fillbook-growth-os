@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { reconcileVideoRenders } from "../src/video/videoRenderReconciliation";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { reconcileVideoRenders, sweepStuckVideoRenderDispatches } from "../src/video/videoRenderReconciliation";
 
 interface CampaignAssetRow {
   id: string;
@@ -78,5 +78,33 @@ describe("reconcileVideoRenders", () => {
     const summary = await reconcileVideoRenders(client, 30, 1);
 
     expect(summary).toBe("0 missing renders (1 approved assets already have a row)");
+  });
+});
+
+describe("sweepStuckVideoRenderDispatches", () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("POSTs {sweep: true} to trigger-video-render, authenticated with the service role key", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({ ok: true, status: 200, text: async () => JSON.stringify({ swept: true, processed: 2 }) }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await sweepStuckVideoRenderDispatches("service-role-key-123");
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(String(url)).toContain("/functions/v1/trigger-video-render");
+    expect(init.method).toBe("POST");
+    expect(init.headers).toMatchObject({ Authorization: "Bearer service-role-key-123" });
+    expect(JSON.parse(init.body as string)).toEqual({ sweep: true });
+    expect(result).toContain("processed");
+  });
+
+  it("throws with the response body when the sweep call itself fails -- this must surface as a failed growth-pulse step, not swallow the error", async () => {
+    global.fetch = vi.fn(async () => ({ ok: false, status: 500, text: async () => '{"error":"claim_job failed: boom"}' })) as unknown as typeof fetch;
+
+    await expect(sweepStuckVideoRenderDispatches("service-role-key-123")).rejects.toThrow(/claim_job failed: boom/);
   });
 });
