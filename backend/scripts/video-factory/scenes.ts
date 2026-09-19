@@ -51,8 +51,13 @@ function labelForScene(kind: SceneKind): string {
   const label: Record<SceneKind, string> = {
     hook: "",
     explanation: "",
-    metric: "📊",
-    product: "FILLBOOK",
+    // Empty: the old "📊" emoji label rendered as a tofu box in libass
+    // (Poppins has no emoji glyph), which looked like a bug on screen.
+    metric: "",
+    // Product scenes show real app screenshots from the seeded demo
+    // account, so the label discloses that (script-prompt rule: on-screen
+    // trading data is always labeled example/demo data).
+    product: "FILLBOOK · EXAMPLE DATA",
     cta: "TRY FILLBOOK",
   };
   return label[kind];
@@ -111,7 +116,7 @@ export function buildScenePlan(shotList: string[], totalDurationSeconds: number,
   }
   const makeScene = (shotIndex: number, durationSeconds: number): Scene => {
     const kind = classifyShot(shotList[shotIndex]!, shotIndex);
-    return { kind, label: labelForScene(kind), durationSeconds, backgroundColor: SCENE_COLORS[kind] };
+    return { kind, label: labelForScene(kind), durationSeconds, backgroundColor: SCENE_COLORS[kind], shot: shotList[shotIndex]! };
   };
 
   if (!wordCues || wordCues.length === 0) {
@@ -161,7 +166,7 @@ export function selectBestThumbnailSeconds(scenes: Scene[], fallbackSeconds: num
   let elapsed = 0;
   const withFootage: Array<{ midSeconds: number; kind: SceneKind }> = [];
   for (const scene of scenes) {
-    if (scene.clipPath) {
+    if (scene.clipPath || scene.imagePath) {
       withFootage.push({ midSeconds: elapsed + scene.durationSeconds / 2, kind: scene.kind });
     }
     elapsed += scene.durationSeconds;

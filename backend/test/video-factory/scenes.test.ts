@@ -110,7 +110,7 @@ describe("buildSceneLabelCues", () => {
     const scenes = buildScenePlan(["opening", "Fillbook UI screenshot", "try Fillbook now"], 12);
     const cues = buildSceneLabelCues(scenes);
     expect(cues).toHaveLength(2);
-    expect(cues[0]!.label).toBe("FILLBOOK");
+    expect(cues[0]!.label).toBe("FILLBOOK · EXAMPLE DATA");
     expect(cues[1]!.label).toBe("TRY FILLBOOK");
     expect(cues[0]!.startSeconds).toBe(4);
     expect(cues[0]!.endSeconds).toBe(8);

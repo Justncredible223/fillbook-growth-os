@@ -84,6 +84,30 @@ describe("buildFfmpegArgs", () => {
   });
 });
 
+describe("buildFfmpegArgs with UI screenshot scenes", () => {
+  const imagePlan: RenderPlan = {
+    ...plan,
+    scenes: [
+      { kind: "hook", label: "", durationSeconds: 5, backgroundColor: "0x05070a" },
+      { kind: "product", label: "", durationSeconds: 5, backgroundColor: "0x0d1420", imagePath: "C:\\out\\draft-1\\ui-calendar.jpg" },
+    ],
+  };
+
+  it("loops the screenshot at the render frame rate for the scene's duration, referenced by basename", () => {
+    const args = buildFfmpegArgs(imagePlan);
+    expect(args.join(" ")).toContain("-loop 1 -framerate 30 -t 5.000 -i ui-calendar.jpg");
+  });
+
+  it("pans a 1080x1270 window down the screenshot between dark label/caption bands and normalises to yuv420p", () => {
+    const args = buildFfmpegArgs(imagePlan);
+    const filter = args[args.indexOf("-filter_complex") + 1]!;
+    expect(filter).toContain("[1:v]scale=1080:-2,pad=1080:'max(ih,1270)':0:0:color=0x0d1420,");
+    expect(filter).toContain("crop=1080:1270:0:'(in_h-1270)*min(t/5.000,1)',pad=1080:1920:0:230:color=0x0d1420,");
+    expect(filter).toContain("format=yuv420p,setpts=PTS-STARTPTS[sv1]");
+    expect(filter).not.toContain("C:");
+  });
+});
+
 describe("computeSceneTransitions", () => {
   it("returns no transitions for a single scene, cumulative duration equals that scene's own duration", () => {
     const result = computeSceneTransitions([8]);

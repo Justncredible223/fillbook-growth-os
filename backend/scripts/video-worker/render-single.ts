@@ -22,6 +22,7 @@ import { generateVoiceover, DEFAULT_VOICE } from "../video-factory/voiceover.js"
 import { buildCaptionCues, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "../video-factory/captions.js";
 import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "../video-factory/scenes.js";
 import { renderVideo, extractThumbnail } from "../video-factory/render.js";
+import { assignUiScreens, copyUiScreenToDir } from "../video-factory/uiScreens.js";
 import { copyClipToDir, fetchStockClip, getVideoQuery, type StockFootageCredentials } from "../video-factory/stockFootage.js";
 import { runFfprobeJson, validateOutput } from "../video-factory/validate.js";
 import { createProcessRunner, requireExecutable } from "../video-factory/processRunner.js";
@@ -94,8 +95,17 @@ async function main(): Promise<void> {
     `[render-single] stock footage providers: pexels=${Boolean(stockCredentials.pexelsApiKey)} pixabay=${Boolean(stockCredentials.pixabayApiKey)}`,
   );
   const seed = parseInt(videoRenderId.replace(/-/g, "").slice(0, 8), 16);
+  // Product scenes get a real Fillbook app screenshot (a slow vertical pan)
+  // instead of stock B-roll or a flat card.
+  assignUiScreens(scenes, seed);
+  for (const scene of scenes) {
+    if (scene.imagePath) scene.imagePath = copyUiScreenToDir(scene.imagePath, outDir);
+  }
+  console.log(`[render-single] UI screenshots: ${scenes.filter((s) => s.imagePath).length}/${scenes.length} scenes are real app screens`);
+
   let scenesWithClip = 0;
   for (const [i, scene] of scenes.entries()) {
+    if (scene.imagePath) continue;
     if (hasAnyStockProvider) {
       const query = getVideoQuery(scene.kind, seed + i);
       if (query) {

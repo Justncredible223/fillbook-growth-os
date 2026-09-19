@@ -266,13 +266,16 @@ hand-timed against the `.srt` by a human.
   completion rate); the render ends 0.3s after the voice. The script
   prompt requires 45-75 words and a last line that flows back into the
   hook, with the Fillbook mention placed mid-to-late in the body.
-- **No real product screenshots.** "Product" scenes get a distinctly
-  tinted background + a "FILLBOOK" label, not an actual app screenshot --
-  deliberately out of scope for this phase (see the original spec: "This
-  does NOT need an AI image generator in this phase"). If a real
-  screenshot asset is ever supplied, wiring it in as a background image
-  input (instead of a solid `color` source) is a natural, bounded
-  extension of `render.ts`.
+- **Product scenes use real app screenshots, but a fixed set.** Scenes the
+  shot list marks as Fillbook UI show one of 8 bundled screenshots
+  (`assets/ui/`, from the seeded demo account) as a slow vertical pan,
+  picked by keywords in the shot description (`uiScreens.ts`) and never
+  repeated until all 8 are used. They sit in a window between dark bands so
+  the "FILLBOOK · EXAMPLE DATA" label (required: the data is seeded demo
+  data) and the captions never draw over the screenshot's own text. Not
+  screen *recordings* -- no taps or live interaction -- and the set only
+  changes when someone adds files there. Screenshots showing an account
+  email or a phone status bar are deliberately not bundled.
 - **One voice, one visual style.** No per-draft customization beyond
   `--voice` yet -- not needed at current volume, easy to extend if it
   becomes worth it.
