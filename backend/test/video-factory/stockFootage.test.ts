@@ -109,6 +109,25 @@ describe("isLikelyTradingRelevant", () => {
     expect(isLikelyTradingRelevant("livestock cattle on a farm")).toBe(false);
     expect(isLikelyTradingRelevant("vacation trader stock market on the beach")).toBe(false);
   });
+
+  it("rejects food-market and street-vendor footage -- the exact real-world bug: bare 'market' was previously enough on its own to pass", () => {
+    expect(isLikelyTradingRelevant("outdoor market vendors selling goods")).toBe(false);
+    expect(isLikelyTradingRelevant("busy street market in asia")).toBe(false);
+    expect(isLikelyTradingRelevant("night market food stalls")).toBe(false);
+    expect(isLikelyTradingRelevant("colorful marketplace with merchants")).toBe(false);
+    expect(isLikelyTradingRelevant("local bazaar with fruit and spices")).toBe(false);
+    expect(isLikelyTradingRelevant("open air market crowd walking")).toBe(false);
+    // Bare "market"/"markets" with NO other finance term is never enough,
+    // even when there's no recognizable veto word either.
+    expect(isLikelyTradingRelevant("a busy market at sunset")).toBe(false);
+  });
+
+  it("still passes genuine stock/financial-market footage now that bare 'market' is no longer a strong signal on its own", () => {
+    expect(isLikelyTradingRelevant("stock market chart close up")).toBe(true);
+    expect(isLikelyTradingRelevant("financial markets analysis on screen")).toBe(true);
+    expect(isLikelyTradingRelevant("trader watching the market crash")).toBe(true);
+    expect(isLikelyTradingRelevant("wall street trading floor")).toBe(true);
+  });
 });
 
 describe("fetchStockClip -- filters out irrelevant B-roll", () => {

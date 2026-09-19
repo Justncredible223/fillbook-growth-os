@@ -221,20 +221,33 @@ async function searchPixabay(query: string, apiKey: string): Promise<NormalizedV
  * this is a real content gate, not a cosmetic filter.
  *
  * Two rules, both required:
- *   1. POSITIVE: the clip's own description must contain a strong
- *      trading/markets term (trader, stock, market, chart, candlestick,
- *      forex, futures, finance...). Generic setting words (office, desk,
- *      laptop, screen) are deliberately NOT enough on their own.
+ *   1. POSITIVE: the clip's own description must contain a strong,
+ *      unambiguous trading/finance term (trader, stock, chart, candlestick,
+ *      forex, futures, finance, nasdaq...). Generic setting words (office,
+ *      desk, laptop, screen) are deliberately NOT enough on their own, and
+ *      NEITHER is the bare word "market"/"markets" -- it's dropped from this
+ *      list on purpose (see below).
  *   2. VETO: the description must not contain a known false-friend term
- *      ("farmers market", "supermarket", "livestock", "golf", "beach"...).
- *      A strong term can't override this, since "market" and "stock" are
- *      ambiguous words.
+ *      ("farmers market", "supermarket", "street vendor", "livestock",
+ *      "golf", "beach"...). A strong term can't override this, since
+ *      "market" and "stock" are ambiguous words.
+ *
+ * "market"/"markets" was removed from the STRONG list after real renders
+ * still showed food-market and street-vendor B-roll despite this filter:
+ * "market" alone is too overloaded (farmers market, night market, flea
+ * market, marketplace vendors...) for the veto list to ever fully
+ * enumerate every non-finance phrasing. Genuine stock/futures-market
+ * footage is essentially never described with "market" as the ONLY signal
+ * word -- it's paired with "stock", "trading", "chart", "financial",
+ * "equity" etc., all of which are still in this list, so dropping bare
+ * "market" costs true positives only in the edge case where a clip's
+ * entire description is a single ambiguous word.
  */
 const STRONG_TRADING_PATTERN =
-  /\b(trad(?:e|es|er|ers|ing)|stocks?|markets?|charts?|candlesticks?|forex|futures|crypto\w*|bitcoin|invest\w*|broker\w*|financ\w*|tickers?|portfolio|profits?|equity|nasdaq|nyse|wall street|bullish|bearish)\b/;
+  /\b(trad(?:e|es|er|ers|ing)|stocks?|stock markets?|financial markets?|charts?|candlesticks?|forex|futures|crypto\w*|bitcoin|invest\w*|broker\w*|financ\w*|tickers?|portfolio|profits?|equity|equities|nasdaq|nyse|wall street|bullish|bearish)\b/;
 
 const OFF_TOPIC_VETO_PATTERN =
-  /\b(farmers?|flea|super ?markets?|grocery|groceries|fish|food|street market|market stall|livestock|cattle|golf\w*|beach|vacation|holiday|travel|tourist\w*|sunset|sunrise|nature|forest|mountain|wedding|party|dance|dancing|festival|family|kids?|children|baby|wildlife|animals?|dogs?|cats?|horses?|cooking|kitchen|fitness|gym|yoga|sports?|football|soccer|basketball|trade show|real estate|house|car|traffic|fashion|shopping|mall|casino|poker|gambling|slot)\b/;
+  /\b(farmers?|flea|super ?markets?|grocery|groceries|fish|food|street ?(market|vendor|food)|market ?stalls?|marketplace\w*|vendors?|merchants?|bazaars?|souks?|kiosks?|hawkers?|peddlers?|produce|fruits?|vegetables?|seafood|spices?|grocers?|bakery|bakeries|butcher\w*|artisan\w*|night market|wet market|open[- ]?air market|livestock|cattle|golf\w*|beach|vacation|holiday|travel|tourist\w*|sunset|sunrise|nature|forest|mountain|wedding|party|dance|dancing|festival|family|kids?|children|baby|wildlife|animals?|dogs?|cats?|horses?|cooking|kitchen|fitness|gym|yoga|sports?|football|soccer|basketball|trade show|real estate|house|car|traffic|fashion|shopping|mall|casino|poker|gambling|slot)\b/;
 
 /**
  * True only when `searchText` (a Pexels URL slug or Pixabay tag string --
