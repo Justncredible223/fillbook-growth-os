@@ -267,7 +267,7 @@ hand-timed against the `.srt` by a human.
   prompt requires 45-75 words and a last line that flows back into the
   hook, with the Fillbook mention placed mid-to-late in the body.
 - **Product scenes use real app screenshots, but a fixed set.** Scenes the
-  shot list marks as Fillbook UI show one of 8 bundled screenshots
+  shot list marks as Fillbook UI show one of 11 bundled screenshots
   (`assets/ui/`, from the seeded demo account) as a slow vertical pan,
   picked by keywords in the shot description (`uiScreens.ts`) and never
   repeated until all 8 are used. They sit in a window between dark bands so
