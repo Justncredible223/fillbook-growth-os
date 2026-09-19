@@ -169,13 +169,48 @@ async function recordDispatchFailure(client: SupabaseClient, job: SystemJobRow, 
   }
 }
 
-/** Given an already-claimed job, dispatches it and applies complete_job/fail_job. Never throws -- both outcomes are terminal handling, not something the caller needs to react to further. */
+/**
+ * Given an already-claimed job, dispatches it and applies
+ * complete_job/fail_job. Never throws -- both outcomes are terminal
+ * handling, not something the caller needs to react to further.
+ *
+ * Guards against re-dispatching a STALE job before ever calling GitHub --
+ * added 2026-09-19 after a real incident: this job queue has no TTL, and
+ * every render_video job dispatched by the pre-fix version of this
+ * function never got marked complete even on success (see this file's own
+ * top doc comment), so a whole backlog of them sat `pending` indefinitely.
+ * The first sweep run after deploying the fix claimed 10 of the OLDEST
+ * ones -- videos from days earlier that the owner had already reviewed
+ * and dismissed (dismissing DELETES the video_renders row, see
+ * videoRenderReconciliation.ts's own doc comment) -- and re-rendered and
+ * re-notified about every one of them. If the video_renders row is gone,
+ * or has already reached a terminal state (anything but 'queued'), the
+ * job is stale: complete it as a no-op instead of ever touching GitHub.
+ */
 async function dispatchAndFinish(client: SupabaseClient, job: SystemJobRow): Promise<void> {
   const payload = job.payload as Record<string, string> | null;
   const videoRenderId = payload?.videoRenderId;
   const campaignAssetId = payload?.campaignAssetId;
   if (!videoRenderId || !campaignAssetId) {
     await recordDispatchFailure(client, job, "Missing videoRenderId or campaignAssetId in job payload");
+    return;
+  }
+
+  const { data: render, error: renderError } = await client
+    .from("video_renders")
+    .select("status")
+    .eq("id", videoRenderId)
+    .maybeSingle();
+  if (renderError) {
+    await recordDispatchFailure(client, job, `Failed to check video_renders row before dispatch: ${renderError.message}`);
+    return;
+  }
+  if (!render || render.status !== "queued") {
+    console.log(
+      `[trigger-video-render] skipping stale job ${job.id} -- video_renders row is ${render ? `status='${render.status}'` : "missing (dismissed)"}, not 'queued'`,
+    );
+    const { error } = await client.rpc("complete_job", { p_job_id: job.id });
+    if (error) console.error("[trigger-video-render] complete_job (stale skip) failed:", error.message);
     return;
   }
 
