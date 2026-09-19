@@ -104,8 +104,8 @@ describe("buildFfmpegArgs with UI screenshot scenes", () => {
   it("pans a 1080x1270 window down the screenshot between dark label/caption bands and normalises to yuv420p", () => {
     const args = buildFfmpegArgs(imagePlan);
     const filter = args[args.indexOf("-filter_complex") + 1]!;
-    expect(filter).toContain("[1:v]scale=1080:-2,pad=1080:'max(ih,1270)':0:0:color=0x0d1420,");
-    expect(filter).toContain("crop=1080:1270:0:'(in_h-1270)*min(t/5.000,1)',pad=1080:1920:0:230:color=0x0d1420,");
+    expect(filter).toContain("[1:v]scale=1080:-2,pad=1080:'max(ih,1270)':0:'(oh-ih)/2':color=0x060a0d,");
+    expect(filter).toContain("crop=1080:1270:0:'(in_h-1270)*min(t/5.000,1)',pad=1080:1920:0:230:color=0x060a0d,");
     expect(filter).toContain("format=yuv420p,setpts=PTS-STARTPTS[sv1]");
     expect(filter).not.toContain("C:");
   });

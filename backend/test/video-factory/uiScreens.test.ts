@@ -39,6 +39,28 @@ describe("UI screens", () => {
     expect(new Set(a.map((s) => s.imagePath)).size).toBe(UI_SCREENS.length);
   });
 
+  it("matches the new screens from their story keywords", () => {
+    const cases: Array<[string, string]> = [
+      ["Fillbook UI: the revenge trade flagged as oversized", "trade-log-revenge.jpg"],
+      ["Fillbook UI: your biggest leak and strongest edge", "intelligence-overview.jpg"],
+      ["Fillbook UI: drawdown buffer nearly gone", "drawdown-bars.jpg"],
+      ["Fillbook UI: asking the AI coach what is dragging your win rate down", "ai-coach.jpg"],
+      ["Fillbook UI: ask anything, suggested questions", "ai-coach-prompts.jpg"],
+    ];
+    for (const [shot, file] of cases) {
+      const scenes = [scene("product", shot)];
+      assignUiScreens(scenes, 0);
+      expect(scenes[0]!.imagePath).toContain(file);
+    }
+  });
+
+  it("no longer offers the retired screens whose figures contradicted the new ones", () => {
+    const files = UI_SCREENS.map((s) => s.file);
+    expect(files).not.toContain("leaks-edge.jpg");
+    expect(files).not.toContain("daily-brief.jpg");
+    expect(files).toHaveLength(11);
+  });
+
   it("copies a screenshot into the output directory under a ui- prefixed basename", () => {
     const dir = mkdtempSync(join(tmpdir(), "ui-test-"));
     try {

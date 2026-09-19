@@ -19,6 +19,13 @@ const FRAME_RATE = 30;
 const UI_TOP_BAND = 230;
 const UI_BOTTOM_BAND = 420;
 const UI_WINDOW_HEIGHT = HEIGHT - UI_TOP_BAND - UI_BOTTOM_BAND;
+/**
+ * The app's own page background (measured: RGB 6,10,13), used for every pad
+ * around a screenshot so there's no visible seam where the image ends. A
+ * screenshot shorter than the window is centered vertically in it (padding
+ * y = (oh-ih)/2); a taller one pans instead.
+ */
+const UI_BACKGROUND = "0x060a0d";
 
 /**
  * Bundled caption font (Poppins ExtraBold, OFL-licensed -- see
@@ -242,9 +249,9 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
       // other scenes' yuv420p.
       const panSeconds = Math.max(inputDurations[i]!, 0.1).toFixed(3);
       sceneFilterParts.push(
-        `[${i}:v]scale=${WIDTH}:-2,pad=${WIDTH}:'max(ih,${UI_WINDOW_HEIGHT})':0:0:color=${scene.backgroundColor},` +
+        `[${i}:v]scale=${WIDTH}:-2,pad=${WIDTH}:'max(ih,${UI_WINDOW_HEIGHT})':0:'(oh-ih)/2':color=${UI_BACKGROUND},` +
           `crop=${WIDTH}:${UI_WINDOW_HEIGHT}:0:'(in_h-${UI_WINDOW_HEIGHT})*min(t/${panSeconds},1)',` +
-          `pad=${WIDTH}:${HEIGHT}:0:${UI_TOP_BAND}:color=${scene.backgroundColor},fps=${FRAME_RATE},setsar=1:1,format=yuv420p,setpts=PTS-STARTPTS[${label}]`,
+          `pad=${WIDTH}:${HEIGHT}:0:${UI_TOP_BAND}:color=${UI_BACKGROUND},fps=${FRAME_RATE},setsar=1:1,format=yuv420p,setpts=PTS-STARTPTS[${label}]`,
       );
     } else if (scene.clipPath) {
       // Hook scenes (the first ~2-3s, when a viewer decides to stay) get a
