@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { Scene } from "./types.js";
 
 /**
- * Real Fillbook app screenshots (phone width, 1080px) used as the
+ * Real Fillbook app screenshots (phone width, 900-1300px) used as the
  * background of "product" scenes in place of a flat tinted card. All come
  * from the seeded demo account -- example data, not a real user's trades
  * -- which is why product scenes carry an on-screen "EXAMPLE DATA" label
@@ -21,15 +21,42 @@ export interface UiScreen {
 
 const UI_SCREENS_DIR = join(dirname(fileURLToPath(import.meta.url)), "assets", "ui");
 
+/**
+ * Order matters: a shot description picks the FIRST unused screen with a
+ * matching keyword, so specific screens come before generic ones.
+ *
+ * Screens captured 2026-09-19 (phone width, 430px @ high DPR) all come from
+ * the same demo-account state, so the figures agree across them (drawdown
+ * buffer $690.50, health 68/100, EMA Pullback +1.57R, the Sep 16 revenge
+ * sequence). Two older gallery screens (leaks-edge, daily-brief) were retired
+ * because they showed different numbers for the same things (Biggest Leak
+ * -$7,301 vs -$7,571; health 81/100 and a $2,000 buffer vs 68/100 and $690.50)
+ * -- a viewer seeing both in one video would see the app contradict itself.
+ * The remaining older screens (calendar, charts, weekly-review, edge-score,
+ * top-markets, connect-source) were captured earlier from the same account
+ * and show earlier-month data; treat their totals as illustrative.
+ */
 export const UI_SCREENS: UiScreen[] = [
   { file: "connect-source.jpg", keywords: ["import", "broker", "connect", "sync", "csv", "platform"] },
   { file: "calendar.jpg", keywords: ["calendar", "month", "day by day", "daily"] },
+  {
+    file: "trade-log-revenge.jpg",
+    keywords: ["revenge", "oversiz", "tilt", "mistake", "error", "repeat", "pattern", "trade log", "trades", "loss streak", "overtrad", "sizing"],
+  },
+  {
+    file: "intelligence-overview.jpg",
+    keywords: ["leak", "stop", "insight", "intelligence", "testing", "experiment", "learn", "biggest", "strongest", "adherence"],
+  },
+  {
+    file: "drawdown-bars.jpg",
+    keywords: ["drawdown", "buffer", "trailing", "loss limit", "daily loss", "funded", "prop", "floor", "risk", "payout", "limit", "account"],
+  },
+  { file: "ai-coach.jpg", keywords: ["ai coach", "coach", "ask fillbook", "win rate", "dragging"] },
+  { file: "ai-coach-prompts.jpg", keywords: ["ask anything", "suggested", "questions", "prompt", "any language", "chatbot"] },
   { file: "charts.jpg", keywords: ["chart", "equity", "curve", "p&l", "pnl", "profit", "wins"] },
   { file: "weekly-review.jpg", keywords: ["review", "weekly", "week", "journal", "notes", "reflect"] },
-  { file: "leaks-edge.jpg", keywords: ["leak", "mistake", "stop", "error", "repeat", "pattern", "trade log", "trades"] },
   { file: "edge-score.jpg", keywords: ["score", "edge", "streak", "discipline", "consistency", "rules"] },
   { file: "top-markets.jpg", keywords: ["market", "best", "setup", "top"] },
-  { file: "daily-brief.jpg", keywords: ["brief", "drawdown", "risk", "buffer", "health", "limit", "account"] },
 ];
 
 /**
