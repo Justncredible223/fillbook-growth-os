@@ -11,6 +11,16 @@ const HEIGHT = 1920;
 const FRAME_RATE = 30;
 
 /**
+ * UI-screenshot scenes show the app in a window between two dark bands: the
+ * top one holds the SceneLabel ("FILLBOOK · EXAMPLE DATA", MarginV=140, also
+ * clear of TikTok's top UI) and the bottom one holds the burned-in captions
+ * (MarginV=320), so neither draws over the screenshot's own text.
+ */
+const UI_TOP_BAND = 230;
+const UI_BOTTOM_BAND = 420;
+const UI_WINDOW_HEIGHT = HEIGHT - UI_TOP_BAND - UI_BOTTOM_BAND;
+
+/**
  * Bundled caption font (Poppins ExtraBold, OFL-licensed -- see
  * assets/fonts/OFL.txt) -- bolder and more rounded than the Arial/Verdana
  * system fallback libass would otherwise substitute on ubuntu-latest,
@@ -154,7 +164,16 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     const scene = plan.scenes[i]!;
     // Each input runs a transition-length past its planned duration -- see computeSyncedSceneTimeline.
     const inputDuration = inputDurations[i]!;
-    if (scene.clipPath) {
+    if (scene.imagePath) {
+      // UI screenshot: a still looped at the render's frame rate for the
+      // scene's duration; the filter graph below pans down over it.
+      inputArgs.push(
+        "-loop", "1",
+        "-framerate", String(FRAME_RATE),
+        "-t", inputDuration.toFixed(3),
+        "-i", renderBasename(scene.imagePath),
+      );
+    } else if (scene.clipPath) {
       // Loop the clip to fill the scene duration exactly
       inputArgs.push(
         "-stream_loop", "-1",
@@ -189,7 +208,23 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     const scene = plan.scenes[i]!;
     const label = `sv${i}`;
     sceneOutputLabels.push(label);
-    if (scene.clipPath) {
+    if (scene.imagePath) {
+      // Fit to canvas width, pad short screenshots to the window height on
+      // the brand-dark background, then scroll a 1080xUI_WINDOW_HEIGHT window
+      // from the top of the screenshot to the bottom over the scene, and pad
+      // the result back to 1080x1920. The dark bands above/below keep the
+      // top-anchored scene label and the bottom-anchored captions off the
+      // screenshot's own text (see UI_TOP_BAND/UI_BOTTOM_BAND). Expressions are single-quoted
+      // so their commas aren't read as filter separators. format=yuv420p
+      // because JPEG decodes to yuvj420p, which xfade won't mix with the
+      // other scenes' yuv420p.
+      const panSeconds = Math.max(inputDurations[i]!, 0.1).toFixed(3);
+      sceneFilterParts.push(
+        `[${i}:v]scale=${WIDTH}:-2,pad=${WIDTH}:'max(ih,${UI_WINDOW_HEIGHT})':0:0:color=${scene.backgroundColor},` +
+          `crop=${WIDTH}:${UI_WINDOW_HEIGHT}:0:'(in_h-${UI_WINDOW_HEIGHT})*min(t/${panSeconds},1)',` +
+          `pad=${WIDTH}:${HEIGHT}:0:${UI_TOP_BAND}:color=${scene.backgroundColor},fps=${FRAME_RATE},setsar=1:1,format=yuv420p,setpts=PTS-STARTPTS[${label}]`,
+      );
+    } else if (scene.clipPath) {
       sceneFilterParts.push(
         // setsar=1:1 normalises the sample-aspect-ratio metadata that some
       // Pexels clips carry (e.g. SAR 10240:10239) -- without it, concat

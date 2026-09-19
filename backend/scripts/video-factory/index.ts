@@ -14,6 +14,7 @@ import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
 import { buildCaptionCues, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "./captions.js";
 import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "./scenes.js";
 import { renderVideo, extractThumbnail } from "./render.js";
+import { assignUiScreens, copyUiScreenToDir, seedFromId } from "./uiScreens.js";
 import { runFfprobeJson, validateOutput } from "./validate.js";
 import { VideoFactoryError, type RenderPlan, type RenderReport, type VideoScriptPackage } from "./types.js";
 
@@ -144,6 +145,10 @@ async function main(): Promise<void> {
   const wordCues = mergeBrandNameWordCues(voiceover.wordCues);
   const captionCues = buildCaptionCues(wordCues);
   const scenes = buildScenePlan(pkg.videoScript.shotList, totalDurationSeconds, wordCues);
+  assignUiScreens(scenes, seedFromId(pkg.draftId));
+  for (const scene of scenes) {
+    if (scene.imagePath) scene.imagePath = copyUiScreenToDir(scene.imagePath, outDir);
+  }
   const sceneLabelCues = buildSceneLabelCues(scenes);
   const assContent = buildAssFile(captionCues, sceneLabelCues);
   const assPath = join(outDir, "captions.ass");

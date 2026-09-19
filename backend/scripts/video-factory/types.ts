@@ -63,6 +63,8 @@ export interface Scene {
   durationSeconds: number;
   backgroundColor: string; // ffmpeg lavfi color spec, e.g. "0x05070a"
   clipPath?: string; // absolute path to a loopable video file; undefined falls back to solid color
+  imagePath?: string; // absolute path to a UI screenshot; rendered as a slow vertical pan. Takes precedence over clipPath.
+  shot?: string; // the approved shot-list description this scene came from (used to pick a matching UI screenshot)
 }
 
 export interface RenderPlan {
