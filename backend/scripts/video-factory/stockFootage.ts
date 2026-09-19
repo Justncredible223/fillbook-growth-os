@@ -22,13 +22,13 @@ const SCENE_QUERIES: Record<SceneKind, string[]> = {
     "stock market candlestick chart",
     "trader watching market charts",
     "trading floor screens close up",
-    "forex trading dashboard",
     "trader typing on keyboard charts",
     "stock ticker screen scrolling",
     "futures market data screen",
-    "trader desk night city view",
-    "financial data wall screens",
-    "trader reacting to charts",
+    "trader reacting to stock chart",
+    "trader stressed watching red chart",
+    "day trader candlestick chart monitors",
+    "stock trading screens night",
   ],
   explanation: [
     "stock market chart analysis",
@@ -37,40 +37,40 @@ const SCENE_QUERIES: Record<SceneKind, string[]> = {
     "stock market trading screen",
     "trader annotating chart on tablet",
     "candlestick chart pattern closeup",
-    "trading strategy whiteboard",
-    "financial analyst at desk",
-    "trader scrolling through data",
-    "market data spreadsheet screen",
-    "trader explaining chart to camera",
-    "risk management chart screen",
+    "trading strategy whiteboard chart",
+    "trader analyzing candlestick chart",
+    "trader scrolling through stock charts",
+    "trader explaining stock chart",
+    "risk management trading chart screen",
+    "day trader analyzing futures chart",
   ],
   metric: [
     "stock market green uptrend chart",
-    "financial profit growth chart",
+    "trading profit growth chart",
     "trading performance graph",
     "stock market gains chart",
-    "profit and loss chart closeup",
-    "equity curve chart screen",
-    "percentage gain graphic",
-    "financial growth arrow chart",
-    "win rate statistics screen",
-    "portfolio performance dashboard",
-    "trading account balance growing",
+    "profit and loss trading chart",
+    "equity curve trading chart screen",
     "green candlestick rally chart",
+    "stock market red candlestick chart falling",
+    "stock market crash red chart",
+    "trader losing money red chart",
+    "trader winning trade green chart",
+    "trading account balance chart",
   ],
   product: [
     "trader reviewing trade journal",
     "day trader analyzing trade data",
     "stock trader at desk charts",
     "futures trader monitor screens",
-    "trader writing notes at desk",
-    "laptop trading journal screen",
+    "trader writing trading journal notes",
+    "laptop trading journal stock chart",
     "trader reviewing past trades",
-    "organized trading notebook desk",
+    "trader notebook stock chart desk",
     "trader tagging trade data",
     "trading dashboard on laptop",
-    "trader filtering trade history",
-    "desk setup trading journal app",
+    "trader reviewing trade history",
+    "trader journaling trades at desk",
   ],
   cta: [
     "trader closing laptop trading desk",
@@ -78,12 +78,12 @@ const SCENE_QUERIES: Record<SceneKind, string[]> = {
     "trader typing on keyboard stock charts",
     "stock market trading desk setup",
     "trader reviewing green candlestick chart",
-    "financial trading monitor close up",
+    "stock trading monitor close up",
     "trader at multiple monitor trading desk",
     "stock market chart on laptop screen",
     "trading desk computer setup night",
     "trader scrolling stock market app phone",
-    "financial data dashboard screen close up",
+    "trader celebrating winning trade chart",
     "trader working at trading desk",
   ],
 };
@@ -116,8 +116,8 @@ interface NormalizedVideoAsset {
   /**
    * Free-text description of what's actually IN the clip, per provider (see
    * searchPexels/searchPixabay for where each comes from). Undefined/empty
-   * means the provider gave us nothing to check -- see isLikelyTradingRelevant's
-   * own doc comment for why that's treated as "allow" rather than "reject".
+   * means the provider gave us nothing to check, so the clip is rejected --
+   * see filterTradingRelevant.
    */
   searchText?: string;
 }
@@ -211,78 +211,52 @@ async function searchPixabay(query: string, apiKey: string): Promise<NormalizedV
 }
 
 /**
- * Keyword-based relevance guard, added after real production renders showed
- * completely off-topic B-roll (a golf course, generic lifestyle/vacation
- * footage of people with no connection to trading) -- both providers'
- * keyword search happily returns loosely-associated "success"/"achievement"/
- * "relaxed" stock footage for queries like "trader celebrating stock market
- * win" or "financial success city skyline", since those words alone don't
- * disambiguate from generic lifestyle B-roll. This is a real content-safety
- * gate for a video meant to only ever show trading/finance/office footage,
- * not a cosmetic filter.
+ * Relevance guard, added after real production renders showed off-topic
+ * B-roll (a golf course, generic lifestyle/vacation footage) and tightened
+ * again when generic footage kept slipping through: the first version
+ * counted words like "office", "desk", "laptop", "screen", "business" and
+ * "money" as trading evidence, so any "person typing on a laptop" clip
+ * passed, and clips with no description at all were allowed. Both providers'
+ * keyword search happily returns loosely-associated lifestyle footage, so
+ * this is a real content gate, not a cosmetic filter.
  *
- * Deliberately an ALLOWLIST, not a blocklist: a blocklist can only ever name
- * categories already seen going wrong (golf today, something else
- * tomorrow), while an allowlist requires positive evidence the clip is
- * actually about trading, finance, markets, or a plausible office/desk/
- * screen setting before it's ever shown.
+ * Two rules, both required:
+ *   1. POSITIVE: the clip's own description must contain a strong
+ *      trading/markets term (trader, stock, market, chart, candlestick,
+ *      forex, futures, finance...). Generic setting words (office, desk,
+ *      laptop, screen) are deliberately NOT enough on their own.
+ *   2. VETO: the description must not contain a known false-friend term
+ *      ("farmers market", "supermarket", "livestock", "golf", "beach"...).
+ *      A strong term can't override this, since "market" and "stock" are
+ *      ambiguous words.
  */
-const TRADING_RELEVANT_KEYWORDS = [
-  "trad",
-  "stock",
-  "market",
-  "financ",
-  "chart",
-  "invest",
-  "broker",
-  "forex",
-  "crypto",
-  "economy",
-  "economic",
-  "business",
-  "office",
-  "desk",
-  "laptop",
-  "computer",
-  "screen",
-  "monitor",
-  "keyboard",
-  "typing",
-  "data",
-  "graph",
-  "money",
-  "currency",
-  "dollar",
-  "candlestick",
-  "portfolio",
-  "spreadsheet",
-  "analyst",
-  "analytics",
-];
+const STRONG_TRADING_PATTERN =
+  /\b(trad(?:e|es|er|ers|ing)|stocks?|markets?|charts?|candlesticks?|forex|futures|crypto\w*|bitcoin|invest\w*|broker\w*|financ\w*|tickers?|portfolio|profits?|equity|nasdaq|nyse|wall street|bullish|bearish)\b/;
+
+const OFF_TOPIC_VETO_PATTERN =
+  /\b(farmers?|flea|super ?markets?|grocery|groceries|fish|food|street market|market stall|livestock|cattle|golf\w*|beach|vacation|holiday|travel|tourist\w*|sunset|sunrise|nature|forest|mountain|wedding|party|dance|dancing|festival|family|kids?|children|baby|wildlife|animals?|dogs?|cats?|horses?|cooking|kitchen|fitness|gym|yoga|sports?|football|soccer|basketball|trade show|real estate|house|car|traffic|fashion|shopping|mall|casino|poker|gambling|slot)\b/;
 
 /**
- * True when `searchText` (a Pexels URL slug or Pixabay tag string -- see
- * NormalizedVideoAsset's own doc comment) contains real, positive evidence
- * of trading/finance/office content. Exported for direct unit testing
- * without a live API call.
+ * True only when `searchText` (a Pexels URL slug or Pixabay tag string --
+ * see NormalizedVideoAsset's own doc comment) has a strong trading/markets
+ * term AND no off-topic veto term. Exported for direct unit testing without
+ * a live API call.
  */
 export function isLikelyTradingRelevant(searchText: string): boolean {
   const lower = searchText.toLowerCase();
-  return TRADING_RELEVANT_KEYWORDS.some((keyword) => lower.includes(keyword));
+  if (OFF_TOPIC_VETO_PATTERN.test(lower)) return false;
+  return STRONG_TRADING_PATTERN.test(lower);
 }
 
 /**
- * Applies isLikelyTradingRelevant to a full result set. An asset with no
- * searchText at all (a provider response missing the field entirely, e.g.
- * in tests, or a genuine gap in Pixabay's uploader-supplied tags) is kept
- * rather than rejected -- there's no positive evidence either way, and
- * rejecting on missing data would silently starve the pool for clips that
- * are perfectly fine but under-tagged. An asset WITH text that names
- * something else entirely (golf, a beach, a family gathering) is real
- * negative evidence and is dropped.
+ * Applies isLikelyTradingRelevant to a full result set. An asset with NO
+ * searchText is dropped: with no description there is no evidence the clip
+ * is about trading, and showing an unverified clip is exactly how generic
+ * off-topic footage reached rendered videos. An empty pool just means the
+ * scene falls back to a solid brand-color card, which is the safe outcome.
  */
 function filterTradingRelevant(assets: readonly NormalizedVideoAsset[]): NormalizedVideoAsset[] {
-  return assets.filter((asset) => !asset.searchText || isLikelyTradingRelevant(asset.searchText));
+  return assets.filter((asset) => !!asset.searchText && isLikelyTradingRelevant(asset.searchText));
 }
 
 /**
