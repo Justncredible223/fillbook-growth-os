@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateVoiceover, measureAudioDuration, DEFAULT_VOICE, respellFillbookForTts } from "../../scripts/video-factory/voiceover";
+import { generateVoiceover, measureAudioDuration, DEFAULT_VOICE, DEFAULT_RATE, respellFillbookForTts } from "../../scripts/video-factory/voiceover";
 import { VideoFactoryError } from "../../scripts/video-factory/types";
 import type { ProcessRunner } from "../../scripts/video-factory/processRunner";
 
@@ -45,6 +45,7 @@ describe("generateVoiceover", () => {
     const args = run.mock.calls[0]![1] as string[];
     expect(args).toContain("--file");
     expect(args[args.indexOf("--voice") + 1]).toBe(DEFAULT_VOICE);
+    expect(args[args.indexOf("--rate") + 1]).toBe(DEFAULT_RATE);
     expect(readFileSync(join(dir, "script.txt"), "utf-8")).toBe("Hello there.");
     expect(result.durationSeconds).toBe(3.5);
     expect(result.wordCues).toHaveLength(2);
@@ -66,6 +67,12 @@ describe("generateVoiceover", () => {
     await generateVoiceover("Fillbook tracks your drawdown.", dir, runner);
 
     expect(readFileSync(join(dir, "script.txt"), "utf-8")).toBe("Fill book tracks your drawdown.");
+  });
+
+  it("keeps the verified standard voice (Multilingual voices mispronounce \"book\") at a modestly faster pace", () => {
+    expect(DEFAULT_VOICE).toBe("en-US-AndrewNeural");
+    expect(DEFAULT_VOICE).not.toMatch(/Multilingual/);
+    expect(DEFAULT_RATE).toBe("+8%");
   });
 
   it("respects a custom voice override", async () => {
