@@ -62,7 +62,7 @@ describe("buildFfmpegArgs", () => {
     expect(filter).toContain("[2:a][3:a]concat=n=2:v=0:a=1[voicefull]");
     expect(args).toContain("anullsrc=r=24000:cl=mono:d=2.500");
     expect(filter).toContain("[voicefull]asplit=2[voice][voicesc]");
-    expect(filter).toContain("[4:a]volume=0.2[musicvol]");
+    expect(filter).toContain("[4:a]afade=t=in:st=0:d=0.5,volume=0.2[musicvol]");
     expect(filter).toContain("[musicvol][voicesc]sidechaincompress=threshold=0.06:ratio=4:attack=15:release=350[musicduck]");
     expect(filter).toContain("[voice][musicduck]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mix]");
     expect(filter).toContain("[mix]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[a]");
@@ -129,6 +129,21 @@ describe("buildFfmpegArgs hook treatment", () => {
   it("leaves non-hook clip scenes and flat-card hook scenes untouched", () => {
     expect(filterOf(clipPlan("explanation"))).not.toContain("eval=frame");
     expect(filterOf(plan)).not.toContain("eval=frame");
+  });
+});
+
+describe("buildFfmpegArgs music selection", () => {
+  it("seeks into the chosen track and references it by basename", () => {
+    const args = buildFfmpegArgs({ ...plan, musicFile: "C:\\assets\\music\\other-track.mp3", musicStartSeconds: 42.5 });
+    const joined = args.join(" ");
+    expect(joined).toContain("-stream_loop -1 -ss 42.5 -t 10.000 -i other-track.mp3");
+    expect(joined).not.toContain("assets");
+    expect(joined).not.toContain("ambient-technology.mp3");
+  });
+
+  it("omits -ss when the segment starts at 0 and keeps the default bed when no track is named", () => {
+    expect(buildFfmpegArgs({ ...plan, musicFile: "/m/a.mp3", musicStartSeconds: 0 }).join(" ")).toContain("-stream_loop -1 -t 10.000 -i a.mp3");
+    expect(buildFfmpegArgs(plan).join(" ")).toContain("-i ambient-technology.mp3");
   });
 });
 

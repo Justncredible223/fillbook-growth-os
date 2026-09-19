@@ -74,6 +74,9 @@ export interface RenderPlan {
   assPath: string;
   outputPath: string;
   silencePadSeconds: number;
+  /** Background music track (absolute path) and where in it to start; omitted = the renderer's default bed from the start. */
+  musicFile?: string;
+  musicStartSeconds?: number;
 }
 
 export interface FfprobeStream {

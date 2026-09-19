@@ -15,6 +15,7 @@ import { buildCaptionCues, buildAssFile, getHookMidpointSeconds, mergeBrandNameW
 import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "./scenes.js";
 import { renderVideo, extractThumbnail } from "./render.js";
 import { assignUiScreens, copyUiScreenToDir, seedFromId } from "./uiScreens.js";
+import { pickMusic } from "./music.js";
 import { runFfprobeJson, validateOutput } from "./validate.js";
 import { VideoFactoryError, type RenderPlan, type RenderReport, type VideoScriptPackage } from "./types.js";
 
@@ -154,6 +155,8 @@ async function main(): Promise<void> {
   const assPath = join(outDir, "captions.ass");
   writeFileSync(assPath, assContent, "utf-8");
 
+  const music = await pickMusic(seedFromId(pkg.draftId), totalDurationSeconds, runner);
+
   console.log("Rendering (ffmpeg)...");
   const outputPath = join(outDir, "final.mp4");
   const plan: RenderPlan = {
@@ -163,6 +166,8 @@ async function main(): Promise<void> {
     assPath,
     outputPath,
     silencePadSeconds: SILENCE_PAD_SECONDS,
+    musicFile: music?.file,
+    musicStartSeconds: music?.startSeconds,
   };
   await renderVideo(plan, runner);
 
