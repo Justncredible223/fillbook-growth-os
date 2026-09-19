@@ -120,6 +120,10 @@ export function getHookMidpointSeconds(captionCues: CaptionCue[]): number | null
 }
 
 /**
+ * NO LONGER USED by the render pipeline (retired: a silent end card is dead
+ * time that lowers completion rate and breaks looping -- videos now end on
+ * the last spoken line, which flows back into the hook). Kept for reference.
+ *
  * A brief brand card ("FILLBOOK" / "fillbookhq.com") shown during the
  * silence pad already reserved at the end of every render for the closing
  * caption to breathe (see render-single.ts/index.ts's SILENCE_PAD_SECONDS)

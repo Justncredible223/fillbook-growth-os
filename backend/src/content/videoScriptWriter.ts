@@ -4,11 +4,15 @@ const VIDEO_SCRIPT_SCHEMA = {
   type: "object",
   properties: {
     hook: { type: "string", description: "The opening line, spoken or on-screen, in the first 1-2 seconds." },
-    script: { type: "string", description: "Full voiceover/spoken script, hook through close. Plain sentences, no stage directions." },
+    script: {
+      type: "string",
+      description:
+        "Full voiceover/spoken script, hook through close. Plain sentences, no stage directions. 45-75 words (hard max 80). The last sentence must flow back into the hook so the video loops.",
+    },
     shotList: {
       type: "array",
       items: { type: "string" },
-      description: "Ordered visual beats (what's on screen for each script segment) -- e.g. 'Text card: the number', 'Fillbook UI: the trade log filtering by date'.",
+      description: "Ordered visual beats (what's on screen for each script segment, 8-12 entries, ~2-3s each) -- e.g. 'Text card: the number', 'Fillbook UI: the trade log filtering by date'.",
     },
     youtubeTitle: {
       type: "string",
@@ -103,10 +107,20 @@ QUALITY BAR -- every output must clear this:
   "it's important to note that", "don't miss out", "act now", "limited time", "last chance".
   Never open with "let's dive in", "have you ever wondered", "picture this",
   "in today's fast-paced", or "in the world of". Sound like the smartest trader in the room explaining something
-  to a peer, not a brand account talking at a prospect. Close every script with a natural,
-  non-pushy mention of Fillbook and fillbookhq.com.
-- Shot list: filmable with a phone + screen recorder + basic title cards. One entry per script
-  beat. Show Fillbook UI where it is genuinely relevant -- always labeled example/demo data.
+  to a peer, not a brand account talking at a prospect.
+- LENGTH: the script is 45-75 words, hard maximum 80 (about 18-30 seconds spoken). Short videos
+  get watched to the end, and completion rate is the strongest TikTok ranking signal. Cut any
+  sentence that doesn't earn its place; one idea, one payoff.
+- LOOP ENDING: the final sentence must flow straight back into the hook, so the video replays
+  seamlessly when it restarts -- rewatches are another strong ranking signal. Write the last line
+  so it reads as the beginning of the hook's sentence or thought (e.g. hook "You already know
+  which trade you're about to repeat" -> final line "...and that's exactly why" / "Because"),
+  never a sign-off, never "thanks for watching", never a standalone conclusion. Mention
+  Fillbook and fillbookhq.com once, naturally, in the middle-to-late body where it is relevant
+  (never as the last line) -- the video ends on the loop, not on a brand card.
+- Shot list: filmable with a phone + screen recorder + basic title cards. 8-12 entries -- one
+  per script beat of roughly 2-3 seconds, because the visuals should change that often. Show
+  Fillbook UI where it is genuinely relevant -- always labeled example/demo data.
 - YouTube title: specific, under 70 characters, searchable -- no ALL CAPS, no stacked punctuation.
 - YouTube description: 3-5 sentences. Expand the hook, name the specific problem Fillbook solves,
   close with a clear CTA pointing to fillbookhq.com. Distinct from the spoken script and the

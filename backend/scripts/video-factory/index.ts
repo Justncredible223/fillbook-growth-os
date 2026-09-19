@@ -11,7 +11,7 @@ import {
   loadFromSupabase,
 } from "./loadApprovedScript.js";
 import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
-import { buildCaptionCues, buildOutroCue, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "./captions.js";
+import { buildCaptionCues, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "./captions.js";
 import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "./scenes.js";
 import { renderVideo, extractThumbnail } from "./render.js";
 import { runFfprobeJson, validateOutput } from "./validate.js";
@@ -20,7 +20,8 @@ import { VideoFactoryError, type RenderPlan, type RenderReport, type VideoScript
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 /** backend/scripts/video-factory -> backend/ */
 const BACKEND_ROOT = resolve(SCRIPT_DIR, "..", "..");
-const SILENCE_PAD_SECONDS = 2.5;
+// Loop-friendly tail -- see video-worker/render-single.ts.
+const SILENCE_PAD_SECONDS = 0.3;
 
 /** Minimal .env.local loader -- Vercel injects env vars at runtime, but a local CLI has no such thing. Never overwrites an already-set var (e.g. from the real shell env). */
 function loadDotEnvLocal(): void {
@@ -141,8 +142,8 @@ async function main(): Promise<void> {
   console.log("Building captions...");
   const totalDurationSeconds = voiceover.durationSeconds + SILENCE_PAD_SECONDS;
   const wordCues = mergeBrandNameWordCues(voiceover.wordCues);
-  const captionCues = [...buildCaptionCues(wordCues), buildOutroCue(totalDurationSeconds, SILENCE_PAD_SECONDS)];
-  const scenes = buildScenePlan(pkg.videoScript.shotList, totalDurationSeconds);
+  const captionCues = buildCaptionCues(wordCues);
+  const scenes = buildScenePlan(pkg.videoScript.shotList, totalDurationSeconds, wordCues);
   const sceneLabelCues = buildSceneLabelCues(scenes);
   const assContent = buildAssFile(captionCues, sceneLabelCues);
   const assPath = join(outDir, "captions.ass");

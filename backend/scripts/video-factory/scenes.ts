@@ -1,5 +1,5 @@
-import type { Scene, SceneKind } from "./types.js";
-import type { SceneLabelCue } from "./captions.js";
+import type { Scene, SceneKind, WordCue } from "./types.js";
+import { groupWordsIntoPhrases, type SceneLabelCue } from "./captions.js";
 
 /**
  * Deterministic keyword classification of each approved shot-list entry
@@ -58,28 +58,77 @@ function labelForScene(kind: SceneKind): string {
   return label[kind];
 }
 
+/** Retention-driven pacing: visuals should change at least every ~3s, but never so fast a cut can't register. */
+const MAX_SCENE_SECONDS = 3;
+const MIN_SCENE_SECONDS = 1;
+/** How far a cut may move off its ideal even-spacing time to land on a phrase boundary. */
+const SNAP_WINDOW_SECONDS = 0.9;
+
 /**
- * Splits total video duration evenly across the approved shot list.
- * There's no per-shot narration timing to align against (the LLM's shot
- * list isn't time-coded, and mapping shots to specific sentences would
- * be a guess dressed up as precision) -- an even split is the honest
- * deterministic choice here, documented rather than silently assumed.
- * See docs/VIDEO_FACTORY.md's Known Limitations section.
+ * Picks `sceneCount - 1` ascending cut times. Each cut aims for even
+ * spacing across the narration, then snaps to the nearest phrase start
+ * (a natural pause/sentence break, see groupWordsIntoPhrases) within
+ * SNAP_WINDOW_SECONDS, so visuals change when the speaker moves to a new
+ * thought instead of mid-phrase. Every scene stays >= MIN_SCENE_SECONDS.
  */
-export function buildScenePlan(shotList: string[], totalDurationSeconds: number): Scene[] {
+function planCutTimes(wordCues: WordCue[], totalDurationSeconds: number, voiceEndSeconds: number, sceneCount: number): number[] {
+  const phraseStarts = groupWordsIntoPhrases(wordCues)
+    .slice(1)
+    .map((phrase) => phrase[0]!.startSeconds);
+  const cuts: number[] = [];
+  let previous = 0;
+  for (let k = 1; k < sceneCount; k++) {
+    const ideal = (k * voiceEndSeconds) / sceneCount;
+    const earliest = previous + MIN_SCENE_SECONDS;
+    const latest = totalDurationSeconds - (sceneCount - k) * MIN_SCENE_SECONDS;
+    let best: number | null = null;
+    for (const start of phraseStarts) {
+      if (start < earliest || start > latest || Math.abs(start - ideal) > SNAP_WINDOW_SECONDS) continue;
+      if (best === null || Math.abs(start - ideal) < Math.abs(best - ideal)) best = start;
+    }
+    const cut = best ?? Math.min(Math.max(ideal, earliest), latest);
+    cuts.push(cut);
+    previous = cut;
+  }
+  return cuts;
+}
+
+/**
+ * Builds the scene plan. Without word timing it splits total duration
+ * evenly across the shot list (the LLM's shot list isn't time-coded, so
+ * mapping shots to specific sentences would be a guess dressed up as
+ * precision). With word timing (the normal render path) it instead:
+ *  - paces scenes to <= MAX_SCENE_SECONDS, repeating a shot's scene kind
+ *    across several cuts when the shot list is shorter than the pacing
+ *    needs (each cut gets its own stock clip);
+ *  - places every cut on a narration phrase boundary (planCutTimes).
+ * Shot-to-narration mapping stays proportional, not semantic. See
+ * docs/VIDEO_FACTORY.md's Known Limitations section.
+ */
+export function buildScenePlan(shotList: string[], totalDurationSeconds: number, wordCues?: WordCue[]): Scene[] {
   if (shotList.length === 0) {
     throw new Error("Cannot build a scene plan from an empty shot list.");
   }
-  const perScene = totalDurationSeconds / shotList.length;
-  return shotList.map((description, i) => {
-    const kind = classifyShot(description, i);
-    return {
-      kind,
-      label: labelForScene(kind),
-      durationSeconds: perScene,
-      backgroundColor: SCENE_COLORS[kind],
-    };
-  });
+  const makeScene = (shotIndex: number, durationSeconds: number): Scene => {
+    const kind = classifyShot(shotList[shotIndex]!, shotIndex);
+    return { kind, label: labelForScene(kind), durationSeconds, backgroundColor: SCENE_COLORS[kind] };
+  };
+
+  if (!wordCues || wordCues.length === 0) {
+    const perScene = totalDurationSeconds / shotList.length;
+    return shotList.map((_, i) => makeScene(i, perScene));
+  }
+
+  const voiceEndSeconds = Math.min(wordCues[wordCues.length - 1]!.endSeconds, totalDurationSeconds);
+  const sceneCount = Math.max(
+    1,
+    Math.min(Math.max(shotList.length, Math.ceil(voiceEndSeconds / MAX_SCENE_SECONDS)), Math.floor(totalDurationSeconds / MIN_SCENE_SECONDS)),
+  );
+  const cuts = planCutTimes(wordCues, totalDurationSeconds, voiceEndSeconds, sceneCount);
+  const boundaries = [0, ...cuts, totalDurationSeconds];
+  return Array.from({ length: sceneCount }, (_, j) =>
+    makeScene(Math.floor((j * shotList.length) / sceneCount), boundaries[j + 1]! - boundaries[j]!),
+  );
 }
 
 /** Converts a scene plan into timed SceneLabel dialogue cues for the .ass file. */
