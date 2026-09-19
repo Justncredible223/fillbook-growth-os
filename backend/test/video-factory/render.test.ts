@@ -9,6 +9,7 @@ import {
   renderVideo,
   extractThumbnail,
   computeSceneTransitions,
+  computeSyncedSceneTimeline,
 } from "../../scripts/video-factory/render";
 import { VideoFactoryError, type RenderPlan } from "../../scripts/video-factory/types";
 import type { ProcessRunner } from "../../scripts/video-factory/processRunner";
@@ -37,7 +38,9 @@ describe("buildFfmpegArgs", () => {
 
   it("builds one lavfi color input per scene with the right color/duration", () => {
     const args = buildFfmpegArgs(plan);
-    expect(args).toContain("color=c=0x05070a:s=1080x1920:d=5.000:r=30");
+    // Every scene but the last runs a transition-length (0.4s) past its
+    // planned duration so the crossfade lands on the planned cut time.
+    expect(args).toContain("color=c=0x05070a:s=1080x1920:d=5.400:r=30");
     expect(args).toContain("color=c=0x0d1420:s=1080x1920:d=5.000:r=30");
   });
 
@@ -46,8 +49,8 @@ describe("buildFfmpegArgs", () => {
     const filterIndex = args.indexOf("-filter_complex");
     const filter = args[filterIndex + 1]!;
     // Both scenes are 5s -> transition duration caps at MAX_TRANSITION_SECONDS (0.4),
-    // offset = 5 - 0.4 = 4.6.
-    expect(filter).toContain("[sv0][sv1]xfade=transition=fade:duration=0.400:offset=4.600[xf0]");
+    // and the fade starts exactly at the planned cut (5.0s), not 0.4s early.
+    expect(filter).toContain("[sv0][sv1]xfade=transition=fade:duration=0.400:offset=5.000[xf0]");
     expect(filter).toContain("[xf0]subtitles=captions.ass:fontsdir=.[v]");
   });
 
@@ -123,6 +126,31 @@ describe("computeSceneTransitions", () => {
     expect(result.transitions[1]!.durationSeconds).toBe(0.4);
     expect(result.transitions[1]!.offsetSeconds).toBeCloseTo(19.2, 9);
     expect(result.cumulativeDurationSeconds).toBeCloseTo(29.2, 9);
+  });
+});
+
+describe("computeSyncedSceneTimeline", () => {
+  it("starts each transition at the planned cut time and pads each input by its outgoing transition", () => {
+    const { inputDurations, transitions } = computeSyncedSceneTimeline([2, 3, 2.5]);
+    expect(transitions.map((t) => t.offsetSeconds)).toEqual([2, 5]);
+    expect(inputDurations).toEqual([2.4, 3.4, 2.5]);
+  });
+
+  it("final video length equals the planned total: each xfade consumes exactly the padding it was given", () => {
+    const durations = [1.5, 2.5, 1, 3, 2];
+    const { inputDurations, transitions } = computeSyncedSceneTimeline(durations);
+    // Merged length after step i = previous merged + inputDurations[i] - transition i-1.
+    let merged = inputDurations[0]!;
+    transitions.forEach((t, i) => {
+      // The fade must fit inside the already-merged stream and start on the planned cut.
+      expect(t.offsetSeconds + t.durationSeconds).toBeCloseTo(merged, 9);
+      merged = merged + inputDurations[i + 1]! - t.durationSeconds;
+    });
+    expect(merged).toBeCloseTo(durations.reduce((a, b) => a + b, 0), 9);
+  });
+
+  it("returns the single scene unchanged", () => {
+    expect(computeSyncedSceneTimeline([8])).toEqual({ inputDurations: [8], transitions: [] });
   });
 });
 

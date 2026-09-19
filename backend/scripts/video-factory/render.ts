@@ -101,6 +101,30 @@ export function computeSceneTransitions(durations: number[]): { transitions: Sce
 }
 
 /**
+ * Timeline that keeps every scene cut on its intended timestamp. A plain
+ * chained xfade shortens the video by the sum of all transition overlaps
+ * (computeSceneTransitions' cumulativeDurationSeconds), so with many short
+ * scenes the visuals would drift earlier than the narration and captions
+ * and end before the audio does. Fix: extend each scene's input by the
+ * length of the transition INTO the next scene and start each transition
+ * exactly at the intended boundary (running sum of the planned durations).
+ * The final video length then equals the sum of `durations` exactly.
+ * Transition lengths use the same caps as computeSceneTransitions.
+ */
+export function computeSyncedSceneTimeline(durations: number[]): { inputDurations: number[]; transitions: SceneTransition[] } {
+  const transitions: SceneTransition[] = [];
+  const inputDurations = [...durations];
+  let boundary = 0;
+  for (let i = 1; i < durations.length; i++) {
+    boundary += durations[i - 1]!;
+    const duration = Math.min(MAX_TRANSITION_SECONDS, TRANSITION_FRACTION_OF_SHORTER_SCENE * Math.min(durations[i - 1]!, durations[i]!));
+    transitions.push({ durationSeconds: duration, offsetSeconds: boundary });
+    inputDurations[i - 1] = durations[i - 1]! + duration;
+  }
+  return { inputDurations, transitions };
+}
+
+/**
  * Builds the ffmpeg argv for the known-good composite strategy from
  * ~/fillbookhq/docs/social/VIDEO_PRODUCTION_WORKFLOW.md, extended from a
  * single flat background to N scene-colored segments joined with a short
@@ -123,20 +147,25 @@ export function computeSceneTransitions(durations: number[]): { transitions: Sce
 export function buildFfmpegArgs(plan: RenderPlan): string[] {
   if (plan.scenes.length === 0) throw new VideoFactoryError("Render plan has no scenes.");
 
+  const { inputDurations, transitions } = computeSyncedSceneTimeline(plan.scenes.map((s) => s.durationSeconds));
+
   const inputArgs: string[] = [];
-  for (const scene of plan.scenes) {
+  for (let i = 0; i < plan.scenes.length; i++) {
+    const scene = plan.scenes[i]!;
+    // Each input runs a transition-length past its planned duration -- see computeSyncedSceneTimeline.
+    const inputDuration = inputDurations[i]!;
     if (scene.clipPath) {
       // Loop the clip to fill the scene duration exactly
       inputArgs.push(
         "-stream_loop", "-1",
-        "-t", scene.durationSeconds.toFixed(3),
+        "-t", inputDuration.toFixed(3),
         "-i", renderBasename(scene.clipPath),
       );
     } else {
       // Fallback: solid color lavfi source
       inputArgs.push(
         "-f", "lavfi",
-        "-i", `color=c=${scene.backgroundColor}:s=${WIDTH}x${HEIGHT}:d=${scene.durationSeconds.toFixed(3)}:r=${FRAME_RATE}`,
+        "-i", `color=c=${scene.backgroundColor}:s=${WIDTH}x${HEIGHT}:d=${inputDuration.toFixed(3)}:r=${FRAME_RATE}`,
       );
     }
   }
@@ -154,7 +183,10 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
   const sceneFilterParts: string[] = [];
   const sceneOutputLabels: string[] = [];
   for (let i = 0; i < plan.scenes.length; i++) {
-    const scene = plan.scenes[i];
+    // Non-null: i is bounded by plan.scenes.length in the loop condition
+    // above, so this index access is always in range -- TS's
+    // noUncheckedIndexedAccess can't see that from a numeric for-loop.
+    const scene = plan.scenes[i]!;
     const label = `sv${i}`;
     sceneOutputLabels.push(label);
     if (scene.clipPath) {
@@ -172,7 +204,6 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
   // Chain xfade transitions scene-by-scene: sv0 -> xfade with sv1 -> xf1,
   // xf1 -> xfade with sv2 -> xf2, etc. A single-scene plan has nothing to
   // transition, so the raw scene label is the background directly.
-  const { transitions } = computeSceneTransitions(plan.scenes.map((s) => s.durationSeconds));
   let bgLabel = sceneOutputLabels[0]!;
   const xfadeParts: string[] = [];
   for (let i = 0; i < transitions.length; i++) {

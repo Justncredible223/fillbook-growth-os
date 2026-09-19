@@ -252,13 +252,20 @@ hand-timed against the `.srt` by a human.
 
 ## Known limitations
 
-- **Scene timing is an even split**, not aligned to specific sentences.
-  The approved shot list isn't time-coded against the script, so mapping
-  a specific shot to a specific spoken sentence would be a guess dressed
-  up as precision. An even split across the shot list's count is the
-  honest, documented choice instead. Caption timing itself, by contrast,
-  IS real (`edge-tts`'s own per-sentence `.srt` output) -- only the
-  background-scene cut points are approximated.
+- **Scene cuts are paced and phrase-aligned, but shots map to the
+  narration proportionally, not semantically.** The approved shot list
+  isn't time-coded against the script, so matching a specific shot to a
+  specific spoken sentence would be a guess dressed up as precision.
+  Instead `buildScenePlan` paces scenes to 1-3s (repeating a shot's scene
+  kind across extra cuts when the shot list is short) and snaps every cut
+  to a phrase boundary from the real word timing. `render.ts`'s
+  `computeSyncedSceneTimeline` keeps those cuts on their timestamps
+  despite crossfades. Without word timing it falls back to an even split.
+- **Videos end on the loop, not a brand card.** The 2.5s silent
+  "FILLBOOK / fillbookhq.com" end card was removed (dead time hurts
+  completion rate); the render ends 0.3s after the voice. The script
+  prompt requires 45-75 words and a last line that flows back into the
+  hook, with the Fillbook mention placed mid-to-late in the body.
 - **No real product screenshots.** "Product" scenes get a distinctly
   tinted background + a "FILLBOOK" label, not an actual app screenshot --
   deliberately out of scope for this phase (see the original spec: "This

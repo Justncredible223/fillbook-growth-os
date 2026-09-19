@@ -19,7 +19,7 @@ import {
 import { MAX_VIDEO_STORAGE_BYTES } from "../../src/video/videoRenderEligibility.js";
 import { loadFromSupabase, assertApproved } from "../video-factory/loadApprovedScript.js";
 import { generateVoiceover, DEFAULT_VOICE } from "../video-factory/voiceover.js";
-import { buildCaptionCues, buildOutroCue, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "../video-factory/captions.js";
+import { buildCaptionCues, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "../video-factory/captions.js";
 import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "../video-factory/scenes.js";
 import { renderVideo, extractThumbnail } from "../video-factory/render.js";
 import { copyClipToDir, fetchStockClip, getVideoQuery, type StockFootageCredentials } from "../video-factory/stockFootage.js";
@@ -29,7 +29,10 @@ import { sendRenderNotification } from "./pushSender.js";
 import type { RenderPlan } from "../video-factory/types.js";
 
 const STORAGE_BUCKET = "rendered-videos";
-const SILENCE_PAD_SECONDS = 2.5;
+// Just enough tail that TTS/AAC never clips the last word. No brand card or
+// dead air after the voice: the script's last line flows back into the hook,
+// so the video loops cleanly (rewatches are a strong TikTok ranking signal).
+const SILENCE_PAD_SECONDS = 0.3;
 const WORK_DIR = process.env.VIDEO_WORKER_WORK_DIR ?? "/tmp/fillbook-video-worker";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -72,8 +75,8 @@ async function main(): Promise<void> {
   const voiceover = await generateVoiceover(pkg.videoScript.script, outDir, runner, DEFAULT_VOICE);
   const totalDurationSeconds = voiceover.durationSeconds + SILENCE_PAD_SECONDS;
   const wordCues = mergeBrandNameWordCues(voiceover.wordCues);
-  const captionCues = [...buildCaptionCues(wordCues), buildOutroCue(totalDurationSeconds, SILENCE_PAD_SECONDS)];
-  const scenes = buildScenePlan(pkg.videoScript.shotList, totalDurationSeconds);
+  const captionCues = buildCaptionCues(wordCues);
+  const scenes = buildScenePlan(pkg.videoScript.shotList, totalDurationSeconds, wordCues);
   const sceneLabelCues = buildSceneLabelCues(scenes);
   const assPath = join(outDir, "captions.ass");
   writeFileSync(assPath, buildAssFile(captionCues, sceneLabelCues), "utf-8");
