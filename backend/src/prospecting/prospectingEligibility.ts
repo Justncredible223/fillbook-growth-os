@@ -3,8 +3,10 @@
  * opportunities/autoDraftEligibility.ts (pure eligibility checks, real
  * documented reasoning per threshold, no I/O). X search reads bill at the
  * general $0.005/read rate (not the cheap $0.001 Owned Reads tier used for
- * mentions), against the same shared $10 X API credit pool documented in
- * docs/PROGRESS_LEDGER.md Phase 4.
+ * mentions), drawing on the same shared $10 X API credit pool documented in
+ * docs/PROGRESS_LEDGER.md Phase 4 -- a pool shared with mentions/inbound and
+ * Partnerships discovery, and one that MONTHLY_PROSPECTING_BUDGET_USD no
+ * longer sits under; see that constant's comment.
  */
 
 import { currentScheduleSlot, getScheduleTimezone, getXProspectingSchedule } from "../config/scheduleConfig.js";
@@ -24,9 +26,12 @@ import { currentScheduleSlot, getScheduleTimezone, getXProspectingSchedule } fro
  * and the full ~35-topic list took ~14 days to cycle once. At 2/run * 3
  * runs/day = 6 topics/day, the full list cycles in under a week, and a
  * single run is no longer guaranteed to be single-topic. Cost impact: see
- * MONTHLY_PROSPECTING_BUDGET_USD's own comment -- still self-limiting,
- * still well under the shared $10 credit pool even at this run's real,
- * lower-than-ceiling read counts.
+ * MONTHLY_PROSPECTING_BUDGET_USD's own comment. At 2 topics * 10 results *
+ * 3 runs/day the search-only ceiling is $0.30/day / ~$9.00/month, which is
+ * still under the shared $10 X API credit pool -- but note the pool is
+ * shared with mentions/inbound and Partnerships, and since 2026-09-18 the
+ * prospecting cap itself ($15) sits ABOVE the pool, so it is this run-rate,
+ * not the cap, that keeps search spend inside the pool.
  */
 export const TOPICS_PER_SEARCH_RUN = 2;
 
@@ -77,14 +82,36 @@ export const QUEUE_FULL_THRESHOLD = 30; // 2 * DAILY_SET_MAX (kept as a literal 
 export const STALE_EXPIRY_DAYS = 14;
 
 /**
- * Monthly ceiling for prospecting X search spend. At TOPICS_PER_SEARCH_RUN=2
- * * RESULTS_PER_QUERY=10 * $0.005 = $0.10/run, 3 runs/day * 30 days =
- * $9.00/month theoretical max -- this cap stops real spend before the
- * shared $10 X API credit pool is exhausted (mentions ingestion uses the
- * cheaper $0.001/read tier and typically costs well under $0.50/month).
- * Using actual recorded cost_events rows, not estimates.
+ * Monthly ceiling for ALL Prospecting spend -- X search reads AND the
+ * reply-writer's LLM calls. Raised to $15.00 on 2026-09-18 at the owner's
+ * explicit instruction ("Raise the cap to $15"), after the app reported
+ * "Search skipped -- this month's Prospecting budget is used up." It was
+ * $9.00 before that (and $8.00 when Phase 20 first landed it; see
+ * docs/PROGRESS_LEDGER.md).
+ *
+ * What it measures: getProspectingMonthSpendUsd (backend/src/cost/
+ * costTracking.ts) sums real recorded `cost_events` rows -- not estimates --
+ * for event types "x_search_read" (prospecting's X searches) and
+ * "prospecting_llm_call" (the reply writer), over the current UTC calendar
+ * month. So the window resets on the 1st at 00:00 UTC, and the gate trips
+ * once that sum reaches this number.
+ *
+ * Rate math: X search reads bill at the general $0.005/read tier (not the
+ * cheap $0.001 Owned Reads tier mentions use). $15.00 / $0.005 = 3,000
+ * search reads/month if nothing else drew on the budget. Today's config --
+ * TOPICS_PER_SEARCH_RUN=2 * RESULTS_PER_QUERY=10 * 3 runs/day = 60 reads/day
+ * = $0.30/day = ~$9.00/month -- is the search-only ceiling; the reply-writer
+ * LLM calls counted under the same gate are what push real spend past it.
+ *
+ * IMPORTANT -- this cap no longer protects the X credit pool on its own.
+ * $15 is HIGHER than the shared $10 X API credit pool documented in
+ * docs/PROGRESS_LEDGER.md Phase 4 and docs/PROSPECTING.md, a pool also drawn
+ * on by mentions/inbound ingestion and by Partnerships discovery. There is no
+ * pool-level guard anywhere in the codebase: each feature caps only its own
+ * bucket. What still keeps prospecting search inside the pool is the run rate
+ * above (~$9.00/month search-only), not this ceiling.
  */
-export const MONTHLY_PROSPECTING_BUDGET_USD = 9.0;
+export const MONTHLY_PROSPECTING_BUDGET_USD = 15.0;
 
 export interface EligibilityCheckResult {
   eligible: boolean;

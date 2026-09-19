@@ -55,8 +55,10 @@ the way.
    `prospecting_candidates` (migration `0015_prospecting.sql`).
 4. Two eligibility gates run before any search happens at all
    (`prospectingEligibility.ts`): a real spend-based monthly budget cap
-   (`$8`, against the same shared $10 X API credit pool used for
-   mentions), and a queue-capacity check (skip searching if 25+ unshown
+   (`$15` as of 2026-09-18, raised from `$9`, itself raised from the
+   original `$8` — note this now EXCEEDS the shared $10 X API credit pool
+   also used for mentions and Partnerships discovery, so the cap no longer
+   protects that pool by itself), and a queue-capacity check (skip searching if 25+ unshown
    candidates are already queued — surface enough for the daily target,
    not maximum possible volume).
 5. The Android Prospecting screen (`ui/screens/ProspectingScreen.kt`, a
@@ -159,9 +161,17 @@ the authenticated user's own resource — confirmed in
 `event_type: 'x_search_read'` row per search call
 (`recordXSearchCostEvent`), and `prospecting_search_runs` logs one row per
 call (query, results, new-candidate count, estimated cost) for direct
-visibility beyond the aggregate. `MONTHLY_PROSPECTING_BUDGET_USD = $8`
-hard-stops searching for the rest of the month once real recorded spend
-(not just the theoretical daily estimate) reaches it.
+visibility beyond the aggregate. `MONTHLY_PROSPECTING_BUDGET_USD` (`$15` as
+of 2026-09-18 — originally `$8`, then `$9`) hard-stops searching for the rest
+of the month once real recorded spend (not just the theoretical daily
+estimate) reaches it. The gate sums real `cost_events` rows of type
+`x_search_read` **and** `prospecting_llm_call` (the reply writer) over the
+current UTC calendar month, so it resets on the 1st at 00:00 UTC. At
+`$15 / $0.005` that is up to 3,000 search reads/month if nothing else drew on
+the budget; today's 2 topics × 10 results × 3 runs/day = 60 reads/day =
+`$0.30/day` (~`$9.00/month`) search-only. Because `$15` is above the shared
+`$10` X API credit pool, it is that run rate — not the cap — that keeps
+prospecting search inside the pool.
 
 ## Update 2026-09-04 -- 3x/day cadence added
 

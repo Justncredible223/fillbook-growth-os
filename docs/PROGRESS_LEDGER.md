@@ -1341,3 +1341,39 @@ BUILD SUCCESSFUL.**
 - Lint: this project has no configured `lint` script in `package.json` --
   not something this pass could run or add scope for without a separate,
   deliberate decision on tooling.
+
+## Prospecting monthly budget cap raised to $15 (2026-09-18)
+
+Owner instruction, verbatim: **"Raise the cap to $15"** — given after the
+Android Prospecting screen reported *"Search skipped -- this month's
+Prospecting budget is used up."*
+
+`MONTHLY_PROSPECTING_BUDGET_USD` in
+`backend/src/prospecting/prospectingEligibility.ts` went **$9.00 -> $15.00**.
+(The Phase 20 entry above records `MONTHLY_PROSPECTING_BUDGET_USD=8.0`; that
+entry is history and is left as written. The 8.0 -> 9.0 raise was never
+recorded in this ledger — `origin/master` already read `9.0` when this change
+was made.)
+
+Arithmetic: X search reads bill at `$0.005`/read, so `$15 / $0.005` = up to
+3,000 search reads/month if nothing else drew on the budget. Today's config —
+`TOPICS_PER_SEARCH_RUN=2` × `RESULTS_PER_QUERY=10` × 3 runs/day = 60 reads/day
+= `$0.30/day`, ~`$9.00/month` — is the search-only ceiling. The gate also
+counts the reply-writer's LLM calls: `getProspectingMonthSpendUsd` sums
+`cost_events` of type `x_search_read` **and** `prospecting_llm_call` over the
+current **UTC calendar month**, so the budget resets on the 1st at 00:00 UTC.
+
+**Warning recorded deliberately:** `$15` is now HIGHER than the shared `$10`
+X API credit pool documented in Phase 4 and `docs/PROSPECTING.md`. That pool
+is also drawn on by mentions/inbound ingestion and by Partnerships discovery
+(`partnership_x_search_read`). No pool-level guard exists anywhere in the
+codebase — each feature caps only its own bucket (Prospecting `$15`;
+Partnerships `$12` shared, split `$2` discovery / `$10` generation). So this
+cap no longer protects the pool by itself; the ~`$9.00/month` search run rate
+does. Topping up the X credit, or adding a real pool-level guard, is a
+separate decision for the owner.
+
+No spend records were altered: `cost_events` rows are real history and were
+not touched. Nothing was deployed — the cap is compiled into the deployed
+bundle, so it does not take effect until this change is merged and deployed,
+which is the owner's call.
