@@ -54,15 +54,18 @@ describe("buildFfmpegArgs", () => {
     expect(filter).toContain("[xf0]subtitles=captions.ass:fontsdir=.[v]");
   });
 
-  it("concatenates real voiceover audio with the silence pad, then mixes in the quiet background music bed", () => {
+  it("concatenates voiceover + silence pad, ducks the music under the voice, mixes, then loudness-normalises", () => {
     const args = buildFfmpegArgs(plan);
     const filterIndex = args.indexOf("-filter_complex");
     const filter = args[filterIndex + 1]!;
     // scenes.length = 2 -> voiceover is input 2, silence is input 3, music is input 4
-    expect(filter).toContain("[2:a][3:a]concat=n=2:v=0:a=1[voice]");
+    expect(filter).toContain("[2:a][3:a]concat=n=2:v=0:a=1[voicefull]");
     expect(args).toContain("anullsrc=r=24000:cl=mono:d=2.500");
-    expect(filter).toContain("[4:a]volume=0.13[musicvol]");
-    expect(filter).toContain("[voice][musicvol]amix=inputs=2:duration=first:dropout_transition=0[a]");
+    expect(filter).toContain("[voicefull]asplit=2[voice][voicesc]");
+    expect(filter).toContain("[4:a]volume=0.2[musicvol]");
+    expect(filter).toContain("[musicvol][voicesc]sidechaincompress=threshold=0.06:ratio=4:attack=15:release=350[musicduck]");
+    expect(filter).toContain("[voice][musicduck]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[mix]");
+    expect(filter).toContain("[mix]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[a]");
   });
 
   it("loops and trims the bundled music track to the plan's total duration, referenced by basename", () => {
@@ -105,6 +108,27 @@ describe("buildFfmpegArgs with UI screenshot scenes", () => {
     expect(filter).toContain("crop=1080:1270:0:'(in_h-1270)*min(t/5.000,1)',pad=1080:1920:0:230:color=0x0d1420,");
     expect(filter).toContain("format=yuv420p,setpts=PTS-STARTPTS[sv1]");
     expect(filter).not.toContain("C:");
+  });
+});
+
+describe("buildFfmpegArgs hook treatment", () => {
+  const clipPlan = (kind: "hook" | "explanation"): RenderPlan => ({
+    ...plan,
+    scenes: [
+      { kind, label: "", durationSeconds: 5, backgroundColor: "0x05070a", clipPath: "C:\out\draft-1\clip0.mp4" },
+      { kind: "explanation", label: "", durationSeconds: 5, backgroundColor: "0x05070a" },
+    ],
+  });
+  const filterOf = (p: RenderPlan) => buildFfmpegArgs(p)[buildFfmpegArgs(p).indexOf("-filter_complex") + 1]!;
+
+  it("pushes in and dims stock-clip hook scenes", () => {
+    const filter = filterOf(clipPlan("hook"));
+    expect(filter).toContain("scale=w='trunc(1080*(1+0.1*min(t/2.5,1))/2)*2':h=-2:eval=frame,crop=1080:1920,drawbox=x=0:y=0:w=iw:h=ih:color=black@0.35:t=fill[sv0]");
+  });
+
+  it("leaves non-hook clip scenes and flat-card hook scenes untouched", () => {
+    expect(filterOf(clipPlan("explanation"))).not.toContain("eval=frame");
+    expect(filterOf(plan)).not.toContain("eval=frame");
   });
 });
 

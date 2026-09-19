@@ -42,6 +42,38 @@ describe("mergeBrandNameWordCues", () => {
     expect(mergeBrandNameWordCues(words)).toEqual(words);
   });
 
+  it("treats the whole first sentence as the hook when its words carry sentence punctuation", () => {
+    const words = [
+      word("You", 0, 0.2),
+      word("already", 0.25, 0.6),
+      word("know", 0.65, 0.9),
+      word("which", 1.0, 1.2),
+      word("trade", 1.25, 1.6),
+      word("repeat.", 1.65, 2.1),
+      word("It's", 2.6, 2.8),
+      word("the", 2.85, 2.95),
+      word("one", 3.0, 3.2),
+    ];
+    const cues = buildCaptionCues(words);
+    expect(cues.filter((c) => c.startSeconds < 2.2).every((c) => c.style === "Hook")).toBe(true);
+    expect(cues.filter((c) => c.startSeconds >= 2.6).every((c) => c.style === "Caption")).toBe(true);
+  });
+
+  it("falls back to a ~2.4s window when the words carry no punctuation", () => {
+    const words = [
+      word("You", 0, 0.3),
+      word("already", 0.35, 0.8),
+      word("know", 0.85, 1.2),
+      word("the", 1.9, 2.1), // pause > 0.35s -> new phrase, still inside the window
+      word("trade", 2.15, 2.4),
+      word("Log", 2.9, 3.1), // starts after the window
+      word("it", 3.15, 3.3),
+    ];
+    const cues = buildCaptionCues(words);
+    expect(cues.filter((c) => c.startSeconds < 2.4).every((c) => c.style === "Hook")).toBe(true);
+    expect(cues.filter((c) => c.startSeconds >= 2.9).every((c) => c.style === "Caption")).toBe(true);
+  });
+
   it("returns an empty list for no words", () => {
     expect(mergeBrandNameWordCues([])).toEqual([]);
   });

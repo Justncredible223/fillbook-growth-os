@@ -276,6 +276,14 @@ hand-timed against the `.srt` by a human.
   screen *recordings* -- no taps or live interaction -- and the set only
   changes when someone adds files there. Screenshots showing an account
   email or a phone status bar are deliberately not bundled.
+- **Hook and audio treatment.** The first spoken sentence (ends at
+  sentence punctuation, else a ~2.4s window) renders as a big 92pt
+  centered title card; stock-clip hook scenes get a slow push-in and a
+  35% dark scrim. Music is ducked under the voice with sidechain
+  compression (base 0.2, ~-10dB while speaking) and the final mix is
+  loudness-normalised to about -14 LUFS (single pass, so it lands within
+  ~1.5 LU; earlier renders measured about -26 LUFS). The voice itself is
+  still the single edge-tts `en-US-AndrewNeural`.
 - **One voice, one visual style.** No per-draft customization beyond
   `--voice` yet -- not needed at current volume, easy to extend if it
   becomes worth it.
