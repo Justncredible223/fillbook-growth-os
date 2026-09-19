@@ -23,6 +23,7 @@ import { buildCaptionCues, buildAssFile, getHookMidpointSeconds, mergeBrandNameW
 import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "../video-factory/scenes.js";
 import { renderVideo, extractThumbnail } from "../video-factory/render.js";
 import { assignUiScreens, copyUiScreenToDir } from "../video-factory/uiScreens.js";
+import { pickMusic } from "../video-factory/music.js";
 import { copyClipToDir, fetchStockClip, getVideoQuery, type StockFootageCredentials } from "../video-factory/stockFootage.js";
 import { runFfprobeJson, validateOutput } from "../video-factory/validate.js";
 import { createProcessRunner, requireExecutable } from "../video-factory/processRunner.js";
@@ -128,6 +129,9 @@ async function main(): Promise<void> {
   }
   console.log(`[render-single] stock footage: ${scenesWithClip}/${scenes.length} scenes got real footage`);
 
+  const music = await pickMusic(seed, totalDurationSeconds, runner);
+  if (music) console.log(`[render-single] music: ${music.file.split(/[\/]/).pop()} from ${music.startSeconds}s`);
+
   const outputPath = join(outDir, "final.mp4");
   const plan: RenderPlan = {
     scenes,
@@ -136,6 +140,8 @@ async function main(): Promise<void> {
     assPath,
     outputPath,
     silencePadSeconds: SILENCE_PAD_SECONDS,
+    musicFile: music?.file,
+    musicStartSeconds: music?.startSeconds,
   };
   await renderVideo(plan, runner);
 

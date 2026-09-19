@@ -34,10 +34,9 @@ const FONT_BASENAME = "Poppins-ExtraBold.ttf";
  * commercial use, no attribution required; see assets/music/LICENSE.txt)
  * -- added 2026-09-17 as one of two owner-approved render-quality
  * improvements (the other is buildFfmpegArgs's scene crossfades below).
- * One fixed track reused across every render, same reasoning as the one
- * fixed caption font: consistent, recognizable branding rather than a
- * per-video pick, and no extra API/credential surface to fetch a
- * different one each time.
+ * This is the DEFAULT bed (used when a plan names no track); real renders
+ * pick a track and a start offset per video via music.ts, so any .mp3 added
+ * to assets/music/ joins the rotation.
  */
 const MUSIC_ASSET_PATH = join(dirname(fileURLToPath(import.meta.url)), "assets", "music", "ambient-technology.mp3");
 const MUSIC_BASENAME = "ambient-technology.mp3";
@@ -212,7 +211,14 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
   // Looped and trimmed to the full video length so a short bundled track
   // (2:20) still covers a longer render; `-shortest` on the final output
   // means an over-long trim here is harmless.
-  inputArgs.push("-stream_loop", "-1", "-t", plan.totalDurationSeconds.toFixed(3), "-i", MUSIC_BASENAME);
+  // -ss seeks into the chosen track (see music.ts) so renders use different stretches of it.
+  const musicStart = plan.musicStartSeconds ?? 0;
+  inputArgs.push(
+    "-stream_loop", "-1",
+    ...(musicStart > 0 ? ["-ss", musicStart.toFixed(1)] : []),
+    "-t", plan.totalDurationSeconds.toFixed(3),
+    "-i", plan.musicFile ? renderBasename(plan.musicFile) : MUSIC_BASENAME,
+  );
 
   // Scale each scene clip to 1080×1920 (center-crop to fill, maintain no distortion)
   const sceneFilterParts: string[] = [];
@@ -287,7 +293,8 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     `[${voiceoverInputIndex}:a][${silenceInputIndex}:a]concat=n=2:v=0:a=1[voicefull]`,
     // The voice feeds both the mix and the ducking sidechain.
     `[voicefull]asplit=2[voice][voicesc]`,
-    `[${musicInputIndex}:a]volume=${MUSIC_VOLUME}[musicvol]`,
+    // Short fade-in so a mid-track start never opens on a hard edge.
+    `[${musicInputIndex}:a]afade=t=in:st=0:d=0.5,volume=${MUSIC_VOLUME}[musicvol]`,
     // Music ducks under speech (sidechain compression keyed on the voice)
     // and swells back in the gaps, instead of a constant quiet bed.
     `[musicvol][voicesc]sidechaincompress=threshold=${DUCK_THRESHOLD}:ratio=${DUCK_RATIO}:attack=${DUCK_ATTACK_MS}:release=${DUCK_RELEASE_MS}[musicduck]`,
@@ -349,8 +356,9 @@ export async function renderVideo(plan: RenderPlan, runner: ProcessRunner): Prom
   // situation this rare (the same directory already has to be writable
   // for voiceover.mp3/captions.ass to exist there at all).
   try {
-    const musicDest = join(cwd, MUSIC_BASENAME);
-    if (!existsSync(musicDest)) copyFileSync(MUSIC_ASSET_PATH, musicDest);
+    const musicSource = plan.musicFile ?? MUSIC_ASSET_PATH;
+    const musicDest = join(cwd, plan.musicFile ? renderBasename(plan.musicFile) : MUSIC_BASENAME);
+    if (!existsSync(musicDest)) copyFileSync(musicSource, musicDest);
   } catch {
     // Deliberately swallowed -- see comment above.
   }

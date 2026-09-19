@@ -284,6 +284,13 @@ hand-timed against the `.srt` by a human.
   loudness-normalised to about -14 LUFS (single pass, so it lands within
   ~1.5 LU; earlier renders measured about -26 LUFS). The voice itself is
   still the single edge-tts `en-US-AndrewNeural`.
+- **Music varies per render.** `music.ts` picks a track (seed mod the
+  number of `.mp3` files in `assets/music/`) and a seeded start offset
+  inside it, so the one bundled 2:20 track already yields ~5 distinct
+  stretches for a ~25s video. To add variety, drop more royalty-free `.mp3`
+  files into `assets/music/` (no code change) and record each one's source
+  and license in `assets/music/LICENSE.txt` -- only tracks whose license
+  allows commercial use without attribution.
 - **One voice, one visual style.** No per-draft customization beyond
   `--voice` yet -- not needed at current volume, easy to extend if it
   becomes worth it.
