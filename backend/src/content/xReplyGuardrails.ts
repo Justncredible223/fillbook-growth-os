@@ -22,6 +22,15 @@ const BANNED_GENERIC_PHRASES = [
   "sign up today",
   "click here",
   "link in bio",
+  // Pushy-sales phrasing (owner direction 2026-09-19: draw people in without
+  // being aggressive). Already banned in the prompts; enforced here too.
+  "check it out",
+  "check us out",
+  "give it a try",
+  "try it out",
+  "free trial",
+  "sign up now",
+  "use code",
   // Engagement-bait closers (owner-flagged 2026-09-10, from a real Inbound
   // draft reading as a reply-farming tactic rather than a genuine
   // response): content-free lines whose only job is soliciting another
@@ -109,6 +118,39 @@ export function containsUnverifiedClaim(reply: string): GuardrailViolation | nul
   return match ? { reason: match.reason } : null;
 }
 
+/**
+ * High-precision "reads like a bot" tells (owner feedback 2026-09-19: X users
+ * were calling the replies out as AI). Deliberately limited to patterns that
+ * are near-always machine-shaped in a one-to-two sentence reply; softer style
+ * guidance lives in humanReplyVoice.ts where the model can weigh it.
+ */
+const AI_TELL_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /[–—]|\s--\s|\w--\w/, reason: "uses an em/en dash (or a -- stand-in for one), a strong AI tell in a short reply" },
+  {
+    pattern:
+      /^\s*(?:(?:great|good|nice|excellent|solid|fair|valid|interesting)\s+(?:point|take|question|insight|observation|breakdown)|love\s+(?:this|that|it)\b|spot on|well said|so true|absolutely\b|this!|100%)/i,
+    reason: "opens with praise/agreement filler instead of substance",
+  },
+  { pattern: /\b(?:it|that|this)(?:'s| is) not (?:just |merely |only )?[^.!?\n]{1,60}[,;:]\s*(?:it|that|this)(?:'s| is)\b/i, reason: 'uses the "it\'s not X, it\'s Y" construction' },
+  { pattern: /\bnot (?:just|merely|only) [^.!?\n]{1,50},\s*but\b/i, reason: 'uses the "not just X, but Y" construction' },
+  { pattern: /\bless about [^.!?\n]{1,40},?\s*more about\b/i, reason: 'uses the "less about X, more about Y" construction' },
+  {
+    pattern:
+      /\b(?:delve|tapestry|landscape|at its core|here'?s the thing|let that sink in|deep dive|unpack|leverage|resonates?|mindset shift|the real question is|the key is|the truth is)\b/i,
+    reason: "uses stock AI vocabulary",
+  },
+  { pattern: /(?:\bthoughts\?|\bwhat do you think\?|\bdoes that (?:make sense|resonate)\?)\s*$/i, reason: "ends on a generic solicitation question" },
+  { pattern: /\p{Extended_Pictographic}/u, reason: "contains an emoji" },
+  { pattern: /#\w+/, reason: "contains a hashtag" },
+  { pattern: /!.*!/s, reason: "uses multiple exclamation marks" },
+];
+
+/** True (with a reason) if the reply matches one of the high-precision AI-tell patterns. Returns null for a reply that passes. */
+export function containsAiTell(reply: string): GuardrailViolation | null {
+  const match = AI_TELL_PATTERNS.find(({ pattern }) => pattern.test(reply));
+  return match ? { reason: match.reason } : null;
+}
+
 export interface ReplyGuardrailOptions {
   /**
    * When given, a link is only accepted if EVERY link-shaped match in the
@@ -136,6 +178,9 @@ export function checkReplyGuardrails(reply: string, expectsLink: boolean, option
 
   const unverifiedClaim = containsUnverifiedClaim(reply);
   if (unverifiedClaim) return unverifiedClaim;
+
+  const aiTell = containsAiTell(reply);
+  if (aiTell) return aiTell;
 
   if (!expectsLink && containsLink(reply)) {
     return { reason: "includes a link that wasn't declared as intentional (usesLink was false or absent)" };

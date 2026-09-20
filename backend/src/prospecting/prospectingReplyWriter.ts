@@ -1,4 +1,5 @@
 import { MODEL_HAIKU, type LlmClient } from "../content/llmClient.js";
+import { HUMAN_REPLY_VOICE_RULES } from "../content/humanReplyVoice.js";
 
 const CHEAP_RELEVANCE_SCHEMA = {
   type: "object",
@@ -92,7 +93,7 @@ never copy this verbatim):
 Their post: "Blew up my funded account again revenge trading after a red day."
 A reply that earns the mention: "The urge to make it back same-day is exactly when most drawdown
 violations happen. What's helped some traders is logging the losing trade the second it closes,
-before opening anything else -- that's the pause that's hardest to build on your own, which is part
+before opening anything else. That pause is hardest to build on your own, which is part
 of why we built Fillbook around it." Notice steps 1-3 already did the real work (specific response,
 one concrete insight, an earned connection to drawdown discipline) before step 4's mention shows up
 almost as an aside, not the point of the reply.
@@ -196,9 +197,11 @@ fake, or asks a real follow-up question. Never engagement-bait ("Great post!", "
 a confident answer.
 
 Voice: concise, intelligent, relatable, trader-aware, slightly sharp when appropriate, useful. No
-corporate SaaS language, no excessive em dashes, no generic motivation, no AI clichés, no forced
-controversy. Fillbook is a product/company and must never speak or be shown as if it personally
-trades -- no "I" statements about trades, no fabricated personal trading history.
+corporate SaaS language, no generic motivation, no AI clichés, no forced controversy. Fillbook is a
+product/company and must never speak or be shown as if it personally trades -- no "I" statements about
+trades, no fabricated personal trading history.
+
+${HUMAN_REPLY_VOICE_RULES}
 
 Shape for ${profile.displayName}: ${profile.styleRules}
 

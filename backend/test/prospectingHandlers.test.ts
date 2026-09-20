@@ -439,7 +439,7 @@ describe("draftProspectingCandidateReply -- relevance gates", () => {
   it("a genuine futures post passes the pre-filter and reaches the drafter", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(candidate({ id: "x-futures", status: "shown", draftReply: null, postText: "Been trading MNQ futures for two years, still get nervous before the open." }));
-    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "Two years in and still nervous is normal -- it means you still respect the risk.", mentionsFillbook: false, usesLink: false }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "Two years in and still nervous is normal. It means you still respect the risk.", mentionsFillbook: false, usesLink: false }));
 
     const updated = await draftProspectingCandidateReply(fakeClient, "x-futures", { repo, drafter, loadGrounding, cheapRelevanceCheck });
 
@@ -457,7 +457,7 @@ describe("draftProspectingCandidateReply -- relevance gates", () => {
         postText: "Failed my prop firm evaluation because of a trailing drawdown rule I didn't fully understand.",
       }),
     );
-    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "That rule catches a lot of people -- worth reading the fine print before the next attempt.", mentionsFillbook: false, usesLink: false }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "That rule catches a lot of people. Worth reading the fine print before the next attempt.", mentionsFillbook: false, usesLink: false }));
 
     const updated = await draftProspectingCandidateReply(fakeClient, "x-propfirm", { repo, drafter, loadGrounding, cheapRelevanceCheck });
 

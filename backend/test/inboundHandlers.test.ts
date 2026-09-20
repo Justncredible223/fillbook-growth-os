@@ -74,7 +74,7 @@ describe("draftResponseForInbound", () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
     global.fetch = vi
       .fn()
-      .mockResolvedValue(replyResponse("Most firms reset trailing drawdown at end of day, but a few lock it in -- worth checking your specific rulebook."));
+      .mockResolvedValue(replyResponse("Most firms reset trailing drawdown at end of day, but a few lock it in, so worth checking your specific rulebook."));
     const client = buildClient();
 
     const result = await draftResponseForInbound(asSupabase(client), "eng-1");
@@ -119,7 +119,7 @@ describe("draftResponseForInbound -- link handling", () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
     global.fetch = vi
       .fn()
-      .mockResolvedValue(replyResponse("Happy to help directly -- fillbookhq.com/go/contact", true)) as unknown as typeof fetch;
+      .mockResolvedValue(replyResponse("Happy to help directly: fillbookhq.com/go/contact", true)) as unknown as typeof fetch;
 
     const client = buildClient({}, "x", "Interesting how do I contact you though");
     const result = await draftResponseForInbound(asSupabase(client), "eng-1");
@@ -142,7 +142,7 @@ describe("draftResponseForInbound -- link handling", () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
     global.fetch = vi
       .fn()
-      .mockResolvedValue(replyResponse("Happy to help directly -- fillbookhq.com/go/contact", false)) as unknown as typeof fetch;
+      .mockResolvedValue(replyResponse("Happy to help directly: fillbookhq.com/go/contact", false)) as unknown as typeof fetch;
 
     const client = buildClient({}, "x", "Interesting how do I contact you though");
     await expect(draftResponseForInbound(asSupabase(client), "eng-1")).rejects.toThrow(/wasn't declared as intentional/);
@@ -156,7 +156,7 @@ describe("draftResponseForInbound -- link handling", () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
     global.fetch = vi
       .fn()
-      .mockResolvedValue(replyResponse("Totally -- check the details here: fillbookhq.com/go/contact", true)) as unknown as typeof fetch;
+      .mockResolvedValue(replyResponse("Totally, check the details here: fillbookhq.com/go/contact", true)) as unknown as typeof fetch;
 
     const client = buildClient({}, "x", "how does trailing drawdown work?");
     await expect(draftResponseForInbound(asSupabase(client), "eng-1")).rejects.toThrow(/never asked for contact info or a link/);

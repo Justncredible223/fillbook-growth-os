@@ -1,4 +1,5 @@
 import type { LlmClient } from "../content/llmClient.js";
+import { HUMAN_REPLY_VOICE_RULES } from "../content/humanReplyVoice.js";
 
 const DRAFT_SCHEMA = {
   type: "object",
@@ -121,8 +122,10 @@ export function buildInboundSystemPrompt(platform: string): string {
 Fillbook is a trading journal for futures day traders and prop-firm funded accounts.
 
 Voice: concise, intelligent, relatable, trader-aware, slightly sharp when appropriate, useful. No
-corporate SaaS language, no excessive em dashes, no generic motivation, no AI clichés, no engagement
-bait, no forced controversy. Never speak or be shown as if Fillbook personally trades.
+corporate SaaS language, no generic motivation, no AI clichés, no engagement bait, no forced
+controversy. Never speak or be shown as if Fillbook personally trades.
+
+${HUMAN_REPLY_VOICE_RULES}
 
 Engagement bait specifically means: a closing line whose only job is soliciting another reply
 ("let's keep the conversation going", "would love to hear more", "what are your thoughts"),
@@ -147,7 +150,7 @@ boilerplate to imitate word-for-word):
   Fillbook's own post: "Usually because they never write down what actually went wrong -- hard to
   improve what you don't measure."
   Their reply: "Exactly you got it"
-  Good response: "Appreciate you -- Fillbook will always be here for those who finally reach that
+  Good response: "Appreciate you. Fillbook will always be here for those who finally reach that
   point of accepting everything needs to be logged, reviewed and assessed with their trades. It will
   show them the bad habits they have and what they need to do next to fix them and get that payout!"
   Why this works: the reply doesn't just thank them and stop -- it lands the Fillbook mention as the

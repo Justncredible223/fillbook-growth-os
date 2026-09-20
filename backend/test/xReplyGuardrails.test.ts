@@ -1,19 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { checkReplyGuardrails, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
+import { checkReplyGuardrails, containsAiTell, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
 
 describe("checkReplyGuardrails", () => {
   it("passes a purely helpful reply where promotion would be inappropriate -- no Fillbook mention at all", () => {
-    const reply = "Trailing drawdown resets at end of day for most prop firms, but a few (like the ones running static drawdown) lock it in permanently -- worth double-checking your specific firm's rulebook before you plan around it.";
+    const reply = "Trailing drawdown resets at end of day for most prop firms, but a few (like the ones running static drawdown) lock it in permanently, but worth double-checking your specific firm's rulebook before you plan around it.";
     expect(checkReplyGuardrails(reply, false)).toBeNull();
   });
 
   it("passes a relevant post where a subtle, earned Fillbook mention fits -- soft invitation phrasing, no link, no CTA", () => {
-    const reply = "That's the classic problem with spreadsheet journaling -- you catch the pattern two weeks too late. That's one of the things we're trying to make easier with Fillbook: flagging the repeat mistake while it's still happening, not after the drawdown.";
+    const reply = "That's the classic problem with spreadsheet journaling. You catch the pattern two weeks too late. That's one of the things we're trying to make easier with Fillbook: flagging the repeat mistake while it's still happening, not after the drawdown.";
     expect(checkReplyGuardrails(reply, false)).toBeNull();
   });
 
   it("passes a post where a resource link is justified -- expectsLink=true because the conversation specifically asked for a tool", () => {
-    const reply = "Sure -- Fillbook tracks that automatically and flags it before it becomes a pattern: fillbookhq.com/go/prospecting";
+    const reply = "Sure, Fillbook tracks that automatically and flags it before it becomes a pattern: fillbookhq.com/go/prospecting";
     expect(checkReplyGuardrails(reply, true)).toBeNull();
   });
 
@@ -54,7 +54,7 @@ describe("checkReplyGuardrails", () => {
     });
 
     it("passes a link on an approved domain", () => {
-      const reply = "Happy to help directly -- fillbookhq.com/go/contact";
+      const reply = "Happy to help directly: fillbookhq.com/go/contact";
       expect(checkReplyGuardrails(reply, true, { approvedLinkDomains: ["fillbookhq.com"] })).toBeNull();
     });
 
@@ -136,5 +136,56 @@ describe("containsUnverifiedClaim", () => {
 
   it("does not flag a real, hedged, non-quantified observation", () => {
     expect(containsUnverifiedClaim("Journaling tends to help traders notice their own patterns sooner.")).toBeNull();
+  });
+});
+
+
+describe("containsAiTell -- replies that read as bot-written", () => {
+  const flagged: Array<[string, string]> = [
+    ["em dash", "Static drawdown never moves — check your rulebook."],
+    ["en dash", "Funded accounts – especially trailing ones bite."],
+    ["double-hyphen dash stand-in", "Most firms reset daily -- a few don't."],
+    ["praise opener", "Great point. Trailing drawdown catches people out."],
+    ["love this opener", "Love this take on consistency rules."],
+    ["it's not X, it's Y", "It's not about the strategy, it's about the rules you break."],
+    ["not just X, but Y", "It's not just a journal, but a mirror."],
+    ["less about X more about Y", "Trading is less about entries, more about exits."],
+    ["stock AI vocabulary", "Let's delve into how the consistency rule works."],
+    ["solicitation closer", "Trailing drawdown resets daily. Thoughts?"],
+    ["emoji", "Log it before the next trade \u{1F525}"],
+    ["hashtag", "Log every loss #futures"],
+    ["multiple exclamation marks", "Log it! Every single one!"],
+  ];
+  for (const [label, text] of flagged) {
+    it(`flags: ${label}`, () => {
+      expect(containsAiTell(text)).not.toBeNull();
+      expect(checkReplyGuardrails(text, false)).not.toBeNull();
+    });
+  }
+
+  const clean = [
+    "Topstep's trailing drawdown locks at the starting balance once you're up 2k. Check yours.",
+    "logging the loser before you take the next trade is the whole trick",
+    "Which firm? the consistency rule differs a lot between them.",
+    "That's a 3 contract stop on NQ, so about $180 a pop.",
+    "Not sure that's right. Apex resets the threshold at the end of day.",
+  ];
+  for (const text of clean) {
+    it(`passes a natural reply: "${text.slice(0, 40)}"`, () => {
+      expect(containsAiTell(text)).toBeNull();
+    });
+  }
+});
+
+describe("pushy-sales phrasing is rejected", () => {
+  for (const phrase of ["check it out", "give it a try", "free trial", "use code"]) {
+    it(`rejects "${phrase}"`, () => {
+      const violation = checkReplyGuardrails(`Logging every loss helps, so ${phrase} sometime.`, false);
+      expect(violation?.reason).toContain(phrase);
+    });
+  }
+
+  it("still allows a plain, single Fillbook mention with no pitch", () => {
+    expect(checkReplyGuardrails("Trailing drawdown locks at the starting balance once you're up 2k. We track that automatically in Fillbook.", false)).toBeNull();
   });
 });
