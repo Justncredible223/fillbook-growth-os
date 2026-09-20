@@ -189,3 +189,18 @@ describe("pushy-sales phrasing is rejected", () => {
     expect(checkReplyGuardrails("Trailing drawdown locks at the starting balance once you're up 2k. We track that automatically in Fillbook.", false)).toBeNull();
   });
 });
+
+describe("profit-promise language is rejected", () => {
+  for (const text of [
+    "Fillbook makes you profitable by showing your patterns.",
+    "Log everything and you will become profitable.",
+    "This will turn you funded in a month.",
+  ]) {
+    it(`rejects: ${text}`, () => {
+      expect(checkReplyGuardrails(text, false)?.reason).toContain("profitable");
+    });
+  }
+  it("still allows the honest behavior frame", () => {
+    expect(checkReplyGuardrails("We track that in Fillbook so you can see what you're actually doing before deciding what to change.", false)).toBeNull();
+  });
+});

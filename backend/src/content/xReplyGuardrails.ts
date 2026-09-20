@@ -110,6 +110,7 @@ const UNVERIFIED_CLAIM_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /\bi(?:'ve| have)\b[^.!?]{0,40}\b(made|earned|traded|profited)\b/i, reason: "speaks in first person about personally trading, which Fillbook (a product) must never do" },
   { pattern: /\bguarantee(d|s)?\b/i, reason: "makes a guarantee, which is never verifiable" },
   { pattern: /\bproven to\b/i, reason: "claims something is \"proven\" without grounding" },
+  { pattern: /\b(?:make|makes|making|turn|turns)\s+you\s+(?:a\s+)?(?:profitable|funded|consistent)\b|\bwill become profitable\b|\bbecome profitable\b/i, reason: "promises or implies the trader will become profitable" },
 ];
 
 /** True (with a reason) if the reply makes an unverified personal-trading, customer-result, or guarantee-style claim. Returns null for a clean reply. */
