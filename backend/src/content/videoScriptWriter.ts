@@ -197,15 +197,44 @@ export async function draftVideoScript(
     verifiedKnowledgeSummary,
   ].join("\n");
 
-  const result = await client.callTool<VideoScriptToolInput>(
-    SYSTEM_PROMPT,
-    userMessage,
-    "submit_video_script",
-    VIDEO_SCRIPT_SCHEMA,
-    45_000,
-    4096,
-  );
+  const call = (message: string) =>
+    client.callTool<VideoScriptToolInput>(SYSTEM_PROMPT, message, "submit_video_script", VIDEO_SCRIPT_SCHEMA, 45_000, 4096);
+
+  let result = await call(userMessage);
+  let words = countSpokenWords(result.script);
+  if (words > MAX_SCRIPT_WORDS) {
+    // The length rule in the prompt is only a request -- a model can exceed
+    // it (a 90+ word script renders as a ~31s video, past the ~25s target that
+    // holds completion rate). Send it back once with the exact count.
+    const retryMessage = [
+      userMessage,
+      "",
+      `LENGTH FIX REQUIRED: your previous script was ${words} words. The hard maximum is ${MAX_SCRIPT_WORDS}; the target is 45-75.`,
+      "Previous script:",
+      result.script,
+      "",
+      "Rewrite the whole package with a shorter script: cut sentences, not the idea. Keep the hook and the loop ending (the last line flows back into the hook), and keep 8-12 shot-list beats that match the shorter script.",
+    ].join("\n");
+    result = await call(retryMessage);
+    words = countSpokenWords(result.script);
+    if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
+  }
   return result;
+}
+
+/** Hard ceiling on spoken words (~27s at the render's +8% pace); the prompt asks for 45-75. */
+export const MAX_SCRIPT_WORDS = 80;
+
+export class VideoScriptTooLongError extends Error {
+  constructor(public readonly words: number) {
+    super(`Video script is ${words} words after one rewrite; the maximum is ${MAX_SCRIPT_WORDS}. Not queuing it -- a script this long renders past the target length.`);
+    this.name = "VideoScriptTooLongError";
+  }
+}
+
+/** Whitespace-separated tokens that contain a letter or digit (a stray "--" or "&" isn't a spoken word). */
+export function countSpokenWords(script: string): number {
+  return script.split(/\s+/).filter((token) => /[\p{L}\p{N}]/u.test(token)).length;
 }
 
 /**

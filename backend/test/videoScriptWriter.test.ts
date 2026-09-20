@@ -1,6 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { LlmClient } from "../src/content/llmClient";
-import { draftVideoScript, formatVideoScriptAsText, type VideoScript } from "../src/content/videoScriptWriter";
+import {
+  draftVideoScript,
+  formatVideoScriptAsText,
+  countSpokenWords,
+  MAX_SCRIPT_WORDS,
+  VideoScriptTooLongError,
+  type VideoScript,
+} from "../src/content/videoScriptWriter";
 
 function jsonResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -38,6 +45,63 @@ describe("draftVideoScript", () => {
     const [, options] = fetchMock.mock.calls[0]!;
     const body = JSON.parse((options as { body: string }).body);
     expect(body.tool_choice).toEqual({ type: "tool", name: "submit_video_script" });
+  });
+});
+
+describe("draftVideoScript length guard", () => {
+  const words = (n: number) => Array.from({ length: n }, (_, i) => `word${i}`).join(" ");
+  const withScript = (script: string): VideoScript => ({
+    hook: "The hook.",
+    script,
+    shotList: ["Text card: the hook line"],
+    youtubeTitle: "t",
+    youtubeDescription: "d",
+    tiktokCaption: "c",
+    instagramCaption: "i",
+    hashtags: ["futurestrading"],
+    disclosureCta: null,
+    youtubeThumbnailConcept: "x",
+  });
+  const bodyOf = (fetchMock: ReturnType<typeof vi.fn>, call: number) =>
+    JSON.parse((fetchMock.mock.calls[call]![1] as { body: string }).body) as { messages: Array<{ content: string }> };
+
+  it("makes a single call when the script is within the cap", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(withScript(words(MAX_SCRIPT_WORDS))));
+    const result = await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(countSpokenWords(result.script)).toBe(MAX_SCRIPT_WORDS);
+  });
+
+  it("sends an over-long script back once with its exact word count, and returns the shorter rewrite", async () => {
+    const long = words(93);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(scriptResponse(withScript(long)))
+      .mockResolvedValueOnce(scriptResponse(withScript(words(70))));
+    const result = await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const retryText = JSON.stringify(bodyOf(fetchMock, 1));
+    expect(retryText).toContain("LENGTH FIX REQUIRED");
+    expect(retryText).toContain("was 93 words");
+    expect(retryText).toContain(long);
+    expect(countSpokenWords(result.script)).toBe(70);
+  });
+
+  it("throws VideoScriptTooLongError (no third attempt) when the rewrite is still over the cap", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(withScript(words(95))));
+    const attempt = draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+    await expect(attempt).rejects.toBeInstanceOf(VideoScriptTooLongError);
+    await expect(attempt).rejects.toThrow(/95 words/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("countSpokenWords", () => {
+  it("counts words, ignoring stray punctuation-only tokens", () => {
+    expect(countSpokenWords("You already know -- which trade & you're about to repeat.")).toBe(9);
+    expect(countSpokenWords("  ")).toBe(0);
+    expect(countSpokenWords("Fillbook imports 107 trades.")).toBe(4);
   });
 });
 
