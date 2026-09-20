@@ -225,5 +225,16 @@ export async function draftInboundResponse(
     .filter((line): line is string => line !== null)
     .join("\n");
 
-  return client.callTool<InboundDraftResult>(buildInboundSystemPrompt(context.platform), userMessage, "submit_reply", DRAFT_SCHEMA);
+  // Same reasoning as the Prospecting drafter: a large, stable system prompt and drafts that arrive
+  // in bursts (about half within 5 minutes of the previous one), so cache it.
+  return client.callTool<InboundDraftResult>(
+    buildInboundSystemPrompt(context.platform),
+    userMessage,
+    "submit_reply",
+    DRAFT_SCHEMA,
+    undefined,
+    undefined,
+    undefined,
+    true,
+  );
 }

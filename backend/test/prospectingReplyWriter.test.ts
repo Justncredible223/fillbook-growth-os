@@ -8,6 +8,11 @@ import {
   PROSPECTING_TRACKABLE_LINK,
 } from "../src/prospecting/prospectingReplyWriter";
 
+/** The system value is a plain string, or an array of text blocks when prompt caching is on. */
+function systemText(system: unknown): string {
+  return Array.isArray(system) ? system.map((block: { text: string }) => block.text).join(" ") : (system as string);
+}
+
 function jsonResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
 }
@@ -22,7 +27,7 @@ async function capturePrompt(platform: string, extra: Partial<Parameters<typeof 
   await draftProspectingReply(llmClient, { platform, authorHandle: "someone", postText: "hi", discoveryQuery: "drawdown", ...extra }, "", "");
   const [, options] = fetchMock.mock.calls[0]!;
   const body = JSON.parse((options as { body: string }).body);
-  return { system: body.system as string, user: body.messages[0].content as string };
+  return { system: systemText(body.system), user: body.messages[0].content as string };
 }
 
 describe("draftProspectingReply", () => {
@@ -236,5 +241,35 @@ describe("checkRelevanceCheap", () => {
     expect(body.messages[0].content).toContain("does trailing drawdown reset daily?");
     expect(body.messages[0].content).toContain("trailing_drawdown");
     expect(body.max_tokens).toBeLessThanOrEqual(256);
+  });
+});
+
+describe("draftProspectingReply prompt caching", () => {
+  it("marks the large static system prompt for caching and leaves the post text out of it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(replyResponse("EOD for most firms.", false, false));
+    await draftProspectingReply(new LlmClient("test-key", fetchMock), { platform: "x", authorHandle: "a", postText: "UNIQUE-POST-TEXT", discoveryQuery: "drawdown" }, "rules", "facts");
+
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    expect(Array.isArray(body.system)).toBe(true);
+    expect(body.system[0].cache_control).toEqual({ type: "ephemeral" });
+    // Anything per-request in the cached block would change it every call and defeat the cache.
+    expect(body.system[0].text).not.toContain("UNIQUE-POST-TEXT");
+  });
+
+  it("sends an identical system block for two different posts, so the second call can hit the cache", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(replyResponse("EOD for most firms.", false, false));
+    const client = new LlmClient("test-key", fetchMock);
+    await draftProspectingReply(client, { platform: "x", authorHandle: "a", postText: "first post", discoveryQuery: "q1" }, "rules", "facts");
+    await draftProspectingReply(client, { platform: "x", authorHandle: "b", postText: "second post", discoveryQuery: "q2", retryFeedback: "too long" }, "rules", "facts");
+
+    const system = (i: number) => JSON.parse((fetchMock.mock.calls[i]![1] as { body: string }).body).system[0].text;
+    expect(system(0)).toBe(system(1));
+  });
+
+  it("keeps the cheap relevance check uncached", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ content: [{ type: "tool_use", name: "submit_relevance", input: { isRelevant: true } }] }));
+    await checkRelevanceCheap(new LlmClient("test-key", fetchMock), { platform: "x", authorHandle: "a", postText: "hi", discoveryQuery: "q" });
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    expect(typeof body.system).toBe("string");
   });
 });
