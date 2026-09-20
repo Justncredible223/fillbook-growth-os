@@ -1,5 +1,6 @@
 import { findRepeatedHook, formatRecentVideos, type RecentVideo } from "./videoHookVariety.js";
 import type { LlmClient } from "./llmClient.js";
+import { capitalizationProblem } from "./xReplyGuardrails.js";
 
 const VIDEO_SCRIPT_SCHEMA = {
   type: "object",
@@ -129,6 +130,9 @@ QUALITY BAR -- every output must clear this:
 - Shot list: filmable with a phone + screen recorder + basic title cards. 8-12 entries -- one
   per script beat of roughly 2-3 seconds, because the visuals should change that often. Show
   Fillbook UI where it is genuinely relevant -- always labeled example/demo data.
+- Capitalization and grammar (owner rule): the hook, script, titles, descriptions and captions all use
+  proper capitalization and grammar. Every sentence starts with a capital letter, "I" is capitalized,
+  punctuation is correct, and sentences are complete. Never write in all lowercase.
 - YouTube title: specific, under 70 characters, searchable -- no ALL CAPS, no stacked punctuation.
 - YouTube description: 3-5 sentences. Expand the hook, name the specific problem Fillbook solves,
   close with a clear CTA pointing to fillbookhq.com. Distinct from the spoken script and the
@@ -234,6 +238,23 @@ export async function draftVideoScript(
     if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
   }
 
+  // Owner rule (2026-09-20): proper capitalization and grammar in everything a viewer reads or hears.
+  // One rewrite with the field and reason named; if it is still wrong the script is kept rather than
+  // failing the whole request, since the owner reviews it before it is rendered.
+  const capitalization = videoCapitalizationProblem(result);
+  if (capitalization) {
+    result = await call(
+      [
+        userMessage,
+        "",
+        `CAPITALIZATION FIX REQUIRED: your previous package's ${capitalization.field} ${capitalization.reason}.`,
+        "Rewrite the whole package with proper capitalization and grammar in the hook, script, titles, descriptions and captions: every sentence starts with a capital letter, \"I\" is capitalized, punctuation is correct. Keep the content, the hook's idea, the loop ending and the script within the length limit.",
+      ].join("\n"),
+    );
+    words = countSpokenWords(result.script);
+    if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
+  }
+
   // The prompt asks for a fresh hook, but a model can still fall back on an opening it has
   // used before. Send a repeat back with the offending hook named, and give up (rather than
   // publish a repeat) if it still comes back the same.
@@ -255,6 +276,25 @@ export async function draftVideoScript(
     words = countSpokenWords(result.script);
     if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
   }
+}
+
+/** The first viewer-facing field of a script package that breaks the proper-capitalization rule, or null. */
+export function videoCapitalizationProblem(video: VideoScript): { field: string; reason: string } | null {
+  const fields: Array<[string, string]> = [
+    ["hook", video.hook],
+    ["script", video.script],
+    ["YouTube title", video.youtubeTitle],
+    ["YouTube description", video.youtubeDescription],
+    ["TikTok caption", video.tiktokCaption],
+    ["Instagram caption", video.instagramCaption],
+  ];
+  for (const [field, text] of fields) {
+    // A field the model left out is a schema problem, not a capitalization one.
+    if (typeof text !== "string") continue;
+    const problem = capitalizationProblem(text);
+    if (problem) return { field, reason: problem.reason };
+  }
+  return null;
 }
 
 /** How many times a repeated hook is sent back before the request fails instead. */

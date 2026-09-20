@@ -51,15 +51,15 @@ describe("draftVideoScript", () => {
 });
 
 describe("draftVideoScript length guard", () => {
-  const words = (n: number) => Array.from({ length: n }, (_, i) => `word${i}`).join(" ");
+  const words = (n: number) => Array.from({ length: n }, (_, i) => (i === 0 ? "Word0" : `word${i}`)).join(" ");
   const withScript = (script: string): VideoScript => ({
     hook: "The hook.",
     script,
     shotList: ["Text card: the hook line"],
-    youtubeTitle: "t",
-    youtubeDescription: "d",
-    tiktokCaption: "c",
-    instagramCaption: "i",
+    youtubeTitle: "Title",
+    youtubeDescription: "Description.",
+    tiktokCaption: "Caption.",
+    instagramCaption: "Caption.",
     hashtags: ["futurestrading"],
     disclosureCta: null,
     youtubeThumbnailConcept: "x",
@@ -102,12 +102,12 @@ describe("draftVideoScript length guard", () => {
 describe("draftVideoScript hook variety", () => {
   const scriptWith = (hook: string): VideoScript => ({
     hook,
-    script: Array.from({ length: 60 }, (_, i) => `word${i}`).join(" "),
+    script: Array.from({ length: 60 }, (_, i) => (i === 0 ? "Word0" : `word${i}`)).join(" "),
     shotList: ["Text card: the hook line"],
-    youtubeTitle: "t",
-    youtubeDescription: "d",
-    tiktokCaption: "c",
-    instagramCaption: "i",
+    youtubeTitle: "Title",
+    youtubeDescription: "Description.",
+    tiktokCaption: "Caption.",
+    instagramCaption: "Caption.",
     hashtags: ["futurestrading"],
     disclosureCta: null,
     youtubeThumbnailConcept: "x",
@@ -210,5 +210,62 @@ describe("formatVideoScriptAsText", () => {
     const text = formatVideoScriptAsText(script);
 
     expect(text).not.toContain("DISCLOSURE/CTA");
+  });
+});
+
+describe("draftVideoScript capitalization (owner rule 2026-09-20)", () => {
+  const package_ = (overrides: Partial<VideoScript> = {}): VideoScript => ({
+    hook: "Your loss limit doesn't care that the trade was a good one.",
+    script: Array.from({ length: 60 }, (_, i) => (i === 0 ? "Word0" : `word${i}`)).join(" "),
+    shotList: ["Text card: the hook line"],
+    youtubeTitle: "Why Your Loss Limit Ignores Good Trades",
+    youtubeDescription: "A short explainer.",
+    tiktokCaption: "Loss limits explained.",
+    instagramCaption: "Loss limits explained.",
+    hashtags: ["futurestrading"],
+    disclosureCta: null,
+    youtubeThumbnailConcept: "Bold text over a red chart.",
+    ...overrides,
+  });
+  const bodyText = (fetchMock: ReturnType<typeof vi.fn>, call: number) => (fetchMock.mock.calls[call]![1] as { body: string }).body;
+
+  it("makes one call when every viewer-facing field is properly capitalized", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(package_()));
+    await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends a lowercase package back once, naming the field, and returns the fixed one", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(scriptResponse(package_({ tiktokCaption: "loss limits explained." })))
+      .mockResolvedValueOnce(scriptResponse(package_()));
+    const result = await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(bodyText(fetchMock, 1)).toContain("CAPITALIZATION FIX REQUIRED");
+    expect(bodyText(fetchMock, 1)).toContain("TikTok caption");
+    expect(result.tiktokCaption).toBe("Loss limits explained.");
+  });
+
+  it("keeps the script after one rewrite instead of failing the request", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(package_({ youtubeTitle: "why your loss limit ignores good trades" })));
+    const result = await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.youtubeTitle).toBe("why your loss limit ignores good trades");
+  });
+
+  it("ignores hashtags and a field the model left out", async () => {
+    const partial = package_({ hashtags: ["futurestrading", "propfirm"] }) as Partial<VideoScript>;
+    delete partial.instagramCaption;
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(partial as VideoScript));
+    await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("the system prompt states the capitalization rule", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(package_()));
+    await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+    expect(bodyText(fetchMock, 0)).toContain("proper capitalization and grammar");
   });
 });

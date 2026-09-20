@@ -1,5 +1,6 @@
 import type { LlmClient } from "./llmClient.js";
 import { HUMAN_POST_VOICE_RULES, HUMAN_REPLY_VOICE_RULES } from "./humanReplyVoice.js";
+import { capitalizationProblem } from "./xReplyGuardrails.js";
 
 const DRAFT_SCHEMA = {
   type: "object",
@@ -132,6 +133,23 @@ export async function draftContent(
     .filter((line) => line !== null)
     .join("\n");
 
-  const result = await client.callTool<{ body: string }>(SYSTEM_PROMPT, userMessage, "submit_draft", DRAFT_SCHEMA);
+  const call = (message: string) => client.callTool<{ body: string }>(SYSTEM_PROMPT, message, "submit_draft", DRAFT_SCHEMA);
+  let result = await call(userMessage);
+
+  // Owner rule (2026-09-20): proper capitalization and grammar. The prompt asks for it; a draft that still
+  // comes back lowercase gets one rewrite with the reason named. If that is still wrong the draft is
+  // returned anyway -- the daily post has one shot a day, so a hard failure could mean no post at all.
+  const problem = capitalizationProblem(result.body);
+  if (problem) {
+    result = await call(
+      [
+        userMessage,
+        "",
+        `Your previous draft ${problem.reason}.`,
+        `Previous draft: ${result.body}`,
+        "Rewrite it with the same content and length, but with proper capitalization and grammar: every sentence starts with a capital letter, \"I\" is capitalized, and punctuation is correct.",
+      ].join("\n"),
+    );
+  }
   return result.body;
 }
