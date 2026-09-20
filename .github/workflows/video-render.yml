@@ -71,6 +71,26 @@ jobs:
           VIDEO_WORKER_WORK_DIR: /tmp/fillbook-renders
         run: npx tsx scripts/video-worker/render-single.ts
 
+      # Backstop for failures render-single.ts never gets to report itself: a
+      # setup step failing (apt/npm/pip), the 30-minute timeout, or a
+      # cancelled run. Without this the video_renders row stays 'queued' or
+      # 'rendering' forever, because the trigger function already marked the
+      # job done the moment it dispatched. render-single.ts writes its own
+      # real error on any failure it can catch, and this only touches a row
+      # still queued/rendering, so it never overwrites that.
+      - name: Mark render failed if the run died early
+        if: failure() || cancelled()
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VIDEO_RENDER_ID: ${{ github.event.client_payload.videoRenderId || inputs.videoRenderId }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if ! [[ "$VIDEO_RENDER_ID" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "VIDEO_RENDER_ID is not a UUID, skipping"
+            exit 0
+          fi
+          curl -sS -X PATCH             "https://aijnibayogdygtykidta.supabase.co/rest/v1/video_renders?id=eq.${VIDEO_RENDER_ID}&status=in.(queued,rendering)"             -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}"             -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}"             -H "Content-Type: application/json"             -d "{\"status\":\"failed\",\"error\":\"Render workflow stopped before it could report a result. See ${RUN_URL}\"}"
+
       - name: Cleanup secrets
         if: always()
         run: rm -f /tmp/firebase-sa.json
