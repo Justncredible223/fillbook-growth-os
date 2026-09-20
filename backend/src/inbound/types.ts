@@ -25,6 +25,8 @@ export interface InboundEngagement {
   status: InboundStatus;
   draftResponse: string | null;
   draftUsesLink: boolean | null;
+  /** The owner's own wording when they edited the draft before posting (0036). Null when posted as drafted or not yet responded. */
+  finalResponse?: string | null;
   respondedAt: string | null;
   respondedNote: string | null;
   isRepeatEngager: boolean;
@@ -53,6 +55,6 @@ export interface InboundRepository {
   updateStatus(
     id: string,
     status: InboundStatus,
-    fields?: Partial<Pick<InboundEngagement, "draftResponse" | "draftUsesLink" | "respondedAt" | "respondedNote">>,
+    fields?: Partial<Pick<InboundEngagement, "draftResponse" | "draftUsesLink" | "respondedAt" | "respondedNote" | "finalResponse">>,
   ): Promise<void>;
 }

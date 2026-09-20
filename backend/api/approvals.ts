@@ -88,7 +88,7 @@ async function handleInbound(req: VercelRequest, res: VercelResponse): Promise<v
   }
 
   try {
-    const body = req.body as { action?: string; id?: string; note?: string } | undefined;
+    const body = req.body as { action?: string; id?: string; note?: string; finalResponse?: string } | undefined;
     const action = body?.action;
 
     if (action === "backlog-recover") {
@@ -106,7 +106,7 @@ async function handleInbound(req: VercelRequest, res: VercelResponse): Promise<v
         res.status(200).json(await draftResponseForInbound(client, body.id));
         return;
       case "mark-responded":
-        await markResponded(client, body.id, body.note);
+        await markResponded(client, body.id, body.note, typeof body.finalResponse === "string" ? body.finalResponse : undefined);
         res.status(200).json({ id: body.id, status: "responded" });
         return;
       case "follow-up":

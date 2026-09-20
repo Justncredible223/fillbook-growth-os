@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeSupabaseClient, asSupabase } from "./helpers/fakeSupabase";
-import { draftResponseForInbound, InboundActionError } from "../src/inbound/inboundHandlers";
+import { draftResponseForInbound, markResponded, InboundActionError } from "../src/inbound/inboundHandlers";
 
 function jsonResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -194,5 +194,36 @@ describe("draftResponseForInbound -- link handling", () => {
     expect(row.status).toBe("new");
     expect(row.draft_response).toBeNull();
     expect(row.draft_uses_link).toBeNull();
+  });
+});
+
+describe("markResponded -- capturing the owner's edit", () => {
+  function respondedClient(draft: string | null) {
+    const c = buildClient();
+    const row = c.tables.inbound_engagements!.find((r: any) => r.id === "eng-1")!;
+    row.status = "draft_ready";
+    row.draft_response = draft;
+    return { c, row };
+  }
+
+  it("stores the owner's version when it differs from the draft", async () => {
+    const { c, row } = respondedClient("Great point. Logging helps a lot!");
+    await markResponded(asSupabase(c), "eng-1", undefined, "Same. Log the loser first.");
+    expect(row.status).toBe("responded");
+    expect(row.final_response).toBe("Same. Log the loser first.");
+  });
+
+  it("stores nothing when the owner posted the draft unchanged (only real edits are a signal)", async () => {
+    const { c, row } = respondedClient("Log the loser first.");
+    await markResponded(asSupabase(c), "eng-1", undefined, "  Log the loser first.  ");
+    expect(row.status).toBe("responded");
+    expect(row.final_response).toBeUndefined();
+  });
+
+  it("still works exactly as before when no edited text is sent (older app builds)", async () => {
+    const { c, row } = respondedClient("Log the loser first.");
+    await markResponded(asSupabase(c), "eng-1");
+    expect(row.status).toBe("responded");
+    expect(row.final_response).toBeUndefined();
   });
 });

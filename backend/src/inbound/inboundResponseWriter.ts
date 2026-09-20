@@ -1,5 +1,6 @@
 import type { LlmClient } from "../content/llmClient.js";
 import { HUMAN_REPLY_VOICE_RULES } from "../content/humanReplyVoice.js";
+import { formatStyleExamples, type StyleExample } from "../prospecting/prospectingStyleExamples.js";
 
 const DRAFT_SCHEMA = {
   type: "object",
@@ -171,6 +172,8 @@ export interface InboundDraftContext {
   inResponseToText: string | null;
   isRepeatEngager: boolean;
   priorInteractionCount: number;
+  /** Recent owner edits shown as tone examples. Optional and best-effort, see inboundStyleExamples.ts. */
+  styleExamples?: StyleExample[];
 }
 
 /**
@@ -212,7 +215,11 @@ export async function draftInboundResponse(
     "",
     "Verified knowledge (use ONLY these facts about Fillbook -- do not invent anything else):",
     verifiedKnowledgeSummary,
-  ].join("\n");
+    formatStyleExamples(context.styleExamples) ? "" : null,
+    formatStyleExamples(context.styleExamples) || null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
 
   return client.callTool<InboundDraftResult>(buildInboundSystemPrompt(context.platform), userMessage, "submit_reply", DRAFT_SCHEMA);
 }

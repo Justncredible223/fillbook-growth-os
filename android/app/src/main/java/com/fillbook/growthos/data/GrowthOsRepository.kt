@@ -111,7 +111,7 @@ interface GrowthOsRepository {
     /** Generates a reply draft via the LLM and moves the item to draft_ready -- never sends anything. */
     suspend fun draftInboundResponse(id: String): InboundEngagement
     /** The ONLY action that sets status=responded -- an explicit confirmation the owner actually replied on the platform themselves. */
-    suspend fun markInboundResponded(id: String, note: String? = null)
+    suspend fun markInboundResponded(id: String, note: String? = null, finalResponse: String? = null)
     suspend fun markInboundFollowUp(id: String)
     suspend fun closeInbound(id: String)
     /** Ignores the ingestion cursor and re-checks the recent window -- the "we found unanswered replies" recovery pass. */
@@ -560,7 +560,7 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         return updated
     }
 
-    override suspend fun markInboundResponded(id: String, note: String?) {
+    override suspend fun markInboundResponded(id: String, note: String?, finalResponse: String?) {
         val index = inboundItems.indexOfFirst { it.id == id }
         inboundItems[index] = inboundItems[index].copy(status = "responded", respondedAt = "2026-09-01T19:00:00Z")
     }

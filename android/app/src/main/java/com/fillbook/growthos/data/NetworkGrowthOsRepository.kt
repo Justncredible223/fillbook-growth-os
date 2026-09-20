@@ -474,9 +474,11 @@ class NetworkGrowthOsRepository(
         return json.toInboundEngagement()
     }
 
-    override suspend fun markInboundResponded(id: String, note: String?) {
+    override suspend fun markInboundResponded(id: String, note: String?, finalResponse: String?) {
         val body = JSONObject().put("action", "mark-responded").put("id", id)
         if (note != null) body.put("note", note)
+        // Only sent when the owner actually changed the draft -- the backend keeps it as a tone example for future drafts.
+        if (finalResponse != null) body.put("finalResponse", finalResponse)
         post("/api/approvals?resource=inbound", body)
     }
 

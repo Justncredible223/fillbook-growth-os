@@ -18,6 +18,7 @@ function fromRow(data: Record<string, any>): InboundEngagement {
     status: data.status,
     draftResponse: data.draft_response,
     draftUsesLink: data.draft_uses_link,
+    finalResponse: data.final_response ?? null,
     respondedAt: data.responded_at,
     respondedNote: data.responded_note,
     isRepeatEngager: data.is_repeat_engager,
@@ -126,13 +127,14 @@ export class SupabaseInboundRepository implements InboundRepository {
   async updateStatus(
     id: string,
     status: InboundStatus,
-    fields?: Partial<Pick<InboundEngagement, "draftResponse" | "draftUsesLink" | "respondedAt" | "respondedNote">>,
+    fields?: Partial<Pick<InboundEngagement, "draftResponse" | "draftUsesLink" | "respondedAt" | "respondedNote" | "finalResponse">>,
   ): Promise<void> {
     const update: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
     if (fields?.draftResponse !== undefined) update.draft_response = fields.draftResponse;
     if (fields?.draftUsesLink !== undefined) update.draft_uses_link = fields.draftUsesLink;
     if (fields?.respondedAt !== undefined) update.responded_at = fields.respondedAt;
     if (fields?.respondedNote !== undefined) update.responded_note = fields.respondedNote;
+    if (fields?.finalResponse !== undefined) update.final_response = fields.finalResponse;
     const { error } = await this.client.from("inbound_engagements").update(update).eq("id", id);
     if (error) throw new Error(`updateStatus failed: ${error.message}`);
   }

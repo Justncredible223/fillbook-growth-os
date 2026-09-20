@@ -35,7 +35,7 @@ export class InMemoryInboundRepository implements InboundRepository {
   async updateStatus(
     id: string,
     status: InboundStatus,
-    fields?: Partial<Pick<InboundEngagement, "draftResponse" | "draftUsesLink" | "respondedAt" | "respondedNote">>,
+    fields?: Partial<Pick<InboundEngagement, "draftResponse" | "draftUsesLink" | "respondedAt" | "respondedNote" | "finalResponse">>,
   ): Promise<void> {
     const row = this.rows.find((r) => r.id === id);
     if (!row) throw new Error(`No inbound_engagements row with id "${id}"`);
@@ -44,6 +44,7 @@ export class InMemoryInboundRepository implements InboundRepository {
     if (fields?.draftUsesLink !== undefined) row.draftUsesLink = fields.draftUsesLink;
     if (fields?.respondedAt !== undefined) row.respondedAt = fields.respondedAt;
     if (fields?.respondedNote !== undefined) row.respondedNote = fields.respondedNote;
+    if (fields?.finalResponse !== undefined) row.finalResponse = fields.finalResponse;
     row.updatedAt = new Date().toISOString();
   }
 

@@ -1,3 +1,4 @@
+import { loadInboundStyleExamples } from "./inboundStyleExamples.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
@@ -149,6 +150,7 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
       inResponseToText: row.inResponseToText,
       isRepeatEngager: row.isRepeatEngager,
       priorInteractionCount: await repo.countPriorFromAuthor(row.platform, row.authorExternalId ?? ""),
+      styleExamples: await loadInboundStyleExamples(client),
     },
     brandRulesSummary,
     verifiedKnowledgeSummary,
@@ -195,11 +197,17 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
  * owner presses "Mark responded" after actually replying on X
  * themselves, same human-does-the-real-action pattern as Copy & Share.
  */
-export async function markResponded(client: SupabaseClient, id: string, note?: string): Promise<void> {
+export async function markResponded(client: SupabaseClient, id: string, note?: string, finalResponse?: string): Promise<void> {
   const repo = new SupabaseInboundRepository(client);
   const row = await repo.getById(id);
   if (!row) throw new InboundActionError(`No inbound_engagements row with id "${id}"`);
-  await repo.updateStatus(id, "responded", { respondedAt: new Date().toISOString(), respondedNote: note?.trim() || null });
+  // Stored only when the owner actually changed the draft -- same rule as Prospecting's final_reply -- so it is a clean "AI draft vs. what I posted" signal.
+  const edited = finalResponse?.trim();
+  await repo.updateStatus(id, "responded", {
+    respondedAt: new Date().toISOString(),
+    respondedNote: note?.trim() || null,
+    finalResponse: edited && edited !== row.draftResponse?.trim() ? edited : undefined,
+  });
 }
 
 export async function markFollowUp(client: SupabaseClient, id: string): Promise<void> {

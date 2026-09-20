@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -72,7 +73,11 @@ import com.fillbook.growthos.ui.components.openExternalUrl
 import com.fillbook.growthos.ui.components.platformDisplayName
 import com.fillbook.growthos.ui.components.platformIcon
 import com.fillbook.growthos.ui.components.relativeTime
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.ui.text.style.TextAlign
 import com.fillbook.growthos.ui.theme.Accent
+import com.fillbook.growthos.ui.theme.Border
 import com.fillbook.growthos.ui.theme.Danger
 import com.fillbook.growthos.ui.theme.Surface
 import com.fillbook.growthos.ui.theme.TextPrimary
@@ -105,6 +110,8 @@ fun InboundScreen(repo: GrowthOsRepository) {
     var refreshing by remember { mutableStateOf(false) }
     var recovering by remember { mutableStateOf(false) }
     var busyId by remember { mutableStateOf<String?>(null) }
+    // The owner's in-progress edits to a draft, keyed by item id. Sent back when they tap "Responded" so the drafter can learn their wording.
+    val editedDrafts = remember { mutableStateMapOf<String, String>() }
     // Without this, a "Follow up" tap has no way back -- the item just sits
     // wherever it landed in the date-sorted list, potentially many screens
     // down once a handful of newer items arrive. Defaults to null (all
@@ -139,7 +146,7 @@ fun InboundScreen(repo: GrowthOsRepository) {
     // confirmation to match; a device with nothing able to open the link
     // gets told so instead of a silent no-op.
     fun copyAndOpen(item: InboundEngagement) {
-        val draft = item.draftResponse
+        val draft = editedDrafts[item.id] ?: item.draftResponse
         // Just the drafted reply, no auto-inserted "@handle" -- a
         // deliberate choice, not a gap: the reply-intent URL below no
         // longer pre-fills anything either (see InboundReplyLink's own
@@ -355,11 +362,13 @@ fun InboundScreen(repo: GrowthOsRepository) {
                                 InboundCard(
                                     item = item,
                                     busy = busyId == item.id,
-                                    onDraft = { runAction(item.id, "Couldn't draft a response. Check your connection and try again.") { repo.draftInboundResponse(item.id) } },
-                                    onMarkResponded = { runAction(item.id, "Couldn't mark that as responded. Check your connection and try again.") { repo.markInboundResponded(item.id) } },
+                                    onDraft = { runAction(item.id, "Couldn't draft a response. Check your connection and try again.") { editedDrafts.remove(item.id); repo.draftInboundResponse(item.id) } },
+                                    onMarkResponded = { runAction(item.id, "Couldn't mark that as responded. Check your connection and try again.") { repo.markInboundResponded(item.id, null, editedDrafts[item.id]?.takeIf { it != item.draftResponse }); editedDrafts.remove(item.id) } },
                                     onFollowUp = { runAction(item.id, "Couldn't flag that for follow-up. Check your connection and try again.") { repo.markInboundFollowUp(item.id) } },
                                     onClose = { runAction(item.id, "Couldn't close that. Check your connection and try again.") { repo.closeInbound(item.id) } },
                                     onCopyAndOpen = { copyAndOpen(item) },
+                                    editedText = editedDrafts[item.id],
+                                    onEditedTextChange = { editedDrafts[item.id] = it },
                                 )
                             }
                         }
@@ -382,6 +391,8 @@ private fun InboundCard(
     onFollowUp: () -> Unit,
     onClose: () -> Unit,
     onCopyAndOpen: () -> Unit,
+    editedText: String?,
+    onEditedTextChange: (String) -> Unit,
 ) {
     GrowthCard(accentBar = inboundPriorityColor(item.priority)) {
         Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -416,7 +427,21 @@ private fun InboundCard(
             InsetRow {
                 Text("DRAFT", style = MaterialTheme.typography.labelMedium, color = Accent)
                 Spacer(Modifier.height(2.dp))
-                Text(draft, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
+                OutlinedTextField(
+                    value = editedText ?: draft,
+                    onValueChange = onEditedTextChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = MaterialTheme.typography.bodyMedium,
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Accent, cursorColor = Accent, unfocusedBorderColor = Border),
+                )
+                val charCount = (editedText ?: draft).length
+                Text(
+                    "$charCount / 280",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (charCount > 280) Danger else TextTertiary,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.End,
+                )
             }
         }
 
