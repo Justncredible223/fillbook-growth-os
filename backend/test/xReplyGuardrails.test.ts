@@ -204,3 +204,31 @@ describe("profit-promise language is rejected", () => {
     expect(checkReplyGuardrails("We track that in Fillbook so you can see what you're actually doing before deciding what to change.", false)).toBeNull();
   });
 });
+
+describe("stock framings and essay-length replies are rejected (owner review 2026-09-20)", () => {
+  for (const [text, reason] of [
+    ["Halving size after a drawdown is the move most traders skip.", "most traders"],
+    ["The gap between the plan and the click is where it goes wrong.", "stock AI framing"],
+    ["The second you log the loss, the urge fades.", "stock AI framing"],
+    ["Same loss every time. That's the gap between a review and a vent.", "gap between"],
+    ["One. Two. Three. Four.", "too long"],
+    [`${"word ".repeat(60)}end`, "too long"],
+    ["Halving size works. What's your trigger to go back to full risk?", "ends a multi-sentence reply with a question"],
+  ] as const) {
+    it(`rejects: ${text.slice(0, 50)}`, () => {
+      expect(checkReplyGuardrails(text, false)?.reason).toContain(reason);
+    });
+  }
+
+  for (const text of [
+    "Trailing drawdown locks once you're up 2k.",
+    "What was the stop on that one?",
+    "Fair, we earned that.",
+    "appreciate it",
+    "Two contracts on a tighter stop is more risk than the three that lost. Worth checking.",
+  ]) {
+    it(`still allows: ${text}`, () => {
+      expect(checkReplyGuardrails(text, false)).toBeNull();
+    });
+  }
+});

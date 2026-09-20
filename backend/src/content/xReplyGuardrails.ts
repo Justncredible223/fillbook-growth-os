@@ -141,15 +141,39 @@ const AI_TELL_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
     reason: "uses stock AI vocabulary",
   },
   { pattern: /(?:\bthoughts\?|\bwhat do you think\?|\bdoes that (?:make sense|resonate)\?)\s*$/i, reason: "ends on a generic solicitation question" },
+  // Owner review 2026-09-20: after the dash and filler fixes, the drafts still
+  // read as machine-written because they lean on the same few framings.
+  { pattern: /\bmost (?:traders|people|funded traders|retail traders|prop traders)\b/i, reason: 'generalizes about "most traders", a stock AI framing' },
+  { pattern: /^\s*(?:the gap between|the second you|the hard part|the difference between|what separates)\b/i, reason: "opens with a stock AI framing instead of a specific point" },
+  { pattern: /\bthat'?s the (?:gap|difference) between\b/i, reason: 'closes with a tidy "that\'s the gap between" takeaway line' },
   { pattern: /\p{Extended_Pictographic}/u, reason: "contains an emoji" },
   { pattern: /#\w+/, reason: "contains a hashtag" },
   { pattern: /!.*!/s, reason: "uses multiple exclamation marks" },
 ];
 
+/** A real X reply is one or two sentences; three is the ceiling before it reads like an essay. */
+const MAX_REPLY_SENTENCES = 3;
+const MAX_REPLY_CHARS = 260;
+
+function sentenceCount(text: string): number {
+  return text.split(/[.!?]+(?:\s|$)/).filter((part) => part.trim().length > 0).length;
+}
+
 /** True (with a reason) if the reply matches one of the high-precision AI-tell patterns. Returns null for a reply that passes. */
 export function containsAiTell(reply: string): GuardrailViolation | null {
   const match = AI_TELL_PATTERNS.find(({ pattern }) => pattern.test(reply));
-  return match ? { reason: match.reason } : null;
+  if (match) return { reason: match.reason };
+
+  const sentences = sentenceCount(reply);
+  if (sentences > MAX_REPLY_SENTENCES || reply.length > MAX_REPLY_CHARS) {
+    return { reason: `is too long for an X reply (${sentences} sentences, ${reply.length} characters)` };
+  }
+  // A question is fine as the whole reply or mid-reply; tacked onto the end of a statement it is the
+  // "engagement question" shape the voice rules already ask the writer to avoid.
+  if (sentences >= 2 && /\?\s*$/.test(reply)) {
+    return { reason: "ends a multi-sentence reply with a question" };
+  }
+  return null;
 }
 
 export interface ReplyGuardrailOptions {
