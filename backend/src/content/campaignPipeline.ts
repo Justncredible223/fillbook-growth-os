@@ -4,6 +4,7 @@ import type { ContentScoreRepository } from "./contentScoreRepository.js";
 import type { DeepReviewResult } from "./deepReviewGate.js";
 import { draftContent } from "./contentWriter.js";
 import { draftVideoScript, formatVideoScriptAsText, type VideoScript } from "./videoScriptWriter.js";
+import type { RecentVideo } from "./videoHookVariety.js";
 import { draftResearch, formatResearchAsText, type ResearchReport } from "./researchWriter.js";
 
 /**
@@ -42,6 +43,8 @@ export interface PipelineContext {
   brandRulesSummary: string;
   verifiedKnowledgeSummary: string;
   recentTextsForSameTopic: string[];
+  /** Hooks and titles of recently made videos, so a new script does not repeat them. Optional: omitted means no history to avoid. */
+  recentVideos?: RecentVideo[];
   /**
    * Overrides the asset_type this run creates -- defaults to the
    * existing "video_script" (video platforms) / "post" (everything
@@ -133,7 +136,7 @@ export async function runCampaignPipeline(
     researchReport = await draftResearch(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
     draftText = formatResearchAsText(researchReport);
   } else if (isVideo) {
-    videoScript = await draftVideoScript(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
+    videoScript = await draftVideoScript(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary, context.recentVideos);
     draftText = formatVideoScriptAsText(videoScript);
   } else {
     draftText = await draftContent(

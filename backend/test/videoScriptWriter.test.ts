@@ -6,6 +6,8 @@ import {
   countSpokenWords,
   MAX_SCRIPT_WORDS,
   VideoScriptTooLongError,
+  VideoHookRepeatError,
+  MAX_HOOK_REWRITES,
   type VideoScript,
 } from "../src/content/videoScriptWriter";
 
@@ -94,6 +96,64 @@ describe("draftVideoScript length guard", () => {
     await expect(attempt).rejects.toBeInstanceOf(VideoScriptTooLongError);
     await expect(attempt).rejects.toThrow(/95 words/);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("draftVideoScript hook variety", () => {
+  const scriptWith = (hook: string): VideoScript => ({
+    hook,
+    script: Array.from({ length: 60 }, (_, i) => `word${i}`).join(" "),
+    shotList: ["Text card: the hook line"],
+    youtubeTitle: "t",
+    youtubeDescription: "d",
+    tiktokCaption: "c",
+    instagramCaption: "i",
+    hashtags: ["futurestrading"],
+    disclosureCta: null,
+    youtubeThumbnailConcept: "x",
+  });
+  const recentVideos = [{ hook: "You already know which trade you're about to repeat.", title: "Trade review" }];
+  const bodyText = (fetchMock: ReturnType<typeof vi.fn>, call: number) => (fetchMock.mock.calls[call]![1] as { body: string }).body;
+
+  it("shows the recent hooks to the writer and makes one call when the hook is fresh", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(scriptWith("Your loss limit doesn't care that the trade was good.")));
+    await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts", recentVideos);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(bodyText(fetchMock, 0)).toContain("RECENT VIDEOS");
+    expect(bodyText(fetchMock, 0)).toContain("You already know which trade you're about to repeat.");
+  });
+
+  it("sends a repeated hook back with the hook it repeats, and returns the fresh rewrite", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(scriptResponse(scriptWith("You already know which trade you're about to blow up.")))
+      .mockResolvedValueOnce(scriptResponse(scriptWith("Copy-trading five accounts means one mistake gets made five times.")));
+    const result = await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts", recentVideos);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(bodyText(fetchMock, 1)).toContain("HOOK REPEATS A RECENT VIDEO");
+    expect(bodyText(fetchMock, 1)).toContain("You already know which trade you're about to repeat.");
+    expect(result.hook).toContain("Copy-trading");
+  });
+
+  it("throws VideoHookRepeatError after MAX_HOOK_REWRITES rewrites instead of returning a repeat", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(scriptWith("You already know which trade you're about to blow up.")));
+    const attempt = draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts", recentVideos);
+    await expect(attempt).rejects.toBeInstanceOf(VideoHookRepeatError);
+    expect(fetchMock).toHaveBeenCalledTimes(1 + MAX_HOOK_REWRITES);
+  });
+
+  it("does no hook checking and adds no history section when there are no recent videos", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(scriptWith("You already know which trade you're about to repeat.")));
+    await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(bodyText(fetchMock, 0)).not.toContain("RECENT VIDEOS (already published");
+  });
+
+  it("the system prompt no longer teaches the repeated hook as its own example", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(scriptWith("Something else entirely.")));
+    await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+    const body = JSON.parse(bodyText(fetchMock, 0)) as { system: unknown };
+    expect(JSON.stringify(body.system)).not.toContain("You already know which trade you're about to repeat");
   });
 });
 

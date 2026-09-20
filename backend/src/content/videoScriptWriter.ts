@@ -1,3 +1,4 @@
+import { findRepeatedHook, formatRecentVideos, type RecentVideo } from "./videoHookVariety.js";
 import type { LlmClient } from "./llmClient.js";
 
 const VIDEO_SCRIPT_SCHEMA = {
@@ -98,8 +99,15 @@ QUALITY BAR -- every output must clear this:
   review daily cut losing streaks 2x faster," "traders who review daily spot pattern errors 2x
   faster" -- all invented, all auto-failed by every reviewer for violating the grounding rules below.
   If a journal/routine/review-benefit topic has no real number to draw on, the hook is a named
-  mistake or mechanism instead: "You already know which trade you're about to repeat. You just
-  haven't written it down yet" -- not "X% of traders who don't journal repeat the same mistake."
+  mistake or mechanism instead, e.g. "Copy-trading five funded accounts means one mistake gets made
+  five times" or "Your loss limit doesn't care that the trade was a good one" -- not "X% of traders
+  who don't journal repeat the same mistake."
+- Build every hook fresh for THIS topic. The request lists RECENT VIDEOS: never reuse or echo any of
+  those openings, and never open with "You already know...". Our best-performing videos so far were
+  about one specific prop-firm rule or mechanic with a surprising consequence (copy-trading several
+  accounts against drawdown rules, inconsistent position sizing, the two drawdown numbers a prop firm
+  tracks). The weakest were generic "a journal remembers your mistakes" hooks. Prefer a concrete rule,
+  mechanic or scenario plus its consequence, without inventing a statistic.
 - Script: the exact words someone speaks aloud or feeds to a TTS voice. Tight, punchy, real.
   No filler sentences. No corporate SaaS language. Never use these phrases (they will auto-fail
   review): "at the end of the day", "when it comes to", "game changer", "game-changer",
@@ -113,8 +121,8 @@ QUALITY BAR -- every output must clear this:
   sentence that doesn't earn its place; one idea, one payoff.
 - LOOP ENDING: the final sentence must flow straight back into the hook, so the video replays
   seamlessly when it restarts -- rewatches are another strong ranking signal. Write the last line
-  so it reads as the beginning of the hook's sentence or thought (e.g. hook "You already know
-  which trade you're about to repeat" -> final line "...and that's exactly why" / "Because"),
+  so it reads as the beginning of the hook's sentence or thought (e.g. hook "Your loss limit
+  doesn't care that the trade was a good one" -> final line "...and that's exactly why" / "Because"),
   never a sign-off, never "thanks for watching", never a standalone conclusion. Mention
   Fillbook and fillbookhq.com once, naturally, in the middle-to-late body where it is relevant
   (never as the last line) -- the video ends on the loop, not on a brand card.
@@ -185,7 +193,9 @@ export async function draftVideoScript(
   opportunity: { title: string; rationale: string },
   brandRulesSummary: string,
   verifiedKnowledgeSummary: string,
+  recentVideos: readonly RecentVideo[] = [],
 ): Promise<VideoScript> {
+  const recentSection = formatRecentVideos(recentVideos);
   const userMessage = [
     `Opportunity: ${opportunity.title}`,
     `Rationale: ${opportunity.rationale}`,
@@ -195,7 +205,11 @@ export async function draftVideoScript(
     "",
     "Verified knowledge (use ONLY these facts about Fillbook -- do not invent anything else):",
     verifiedKnowledgeSummary,
-  ].join("\n");
+    recentSection ? "" : null,
+    recentSection || null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
 
   const call = (message: string) =>
     client.callTool<VideoScriptToolInput>(SYSTEM_PROMPT, message, "submit_video_script", VIDEO_SCRIPT_SCHEMA, 45_000, 4096);
@@ -219,7 +233,41 @@ export async function draftVideoScript(
     words = countSpokenWords(result.script);
     if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
   }
-  return result;
+
+  // The prompt asks for a fresh hook, but a model can still fall back on an opening it has
+  // used before. Send a repeat back with the offending hook named, and give up (rather than
+  // publish a repeat) if it still comes back the same.
+  const recentHooks = recentVideos.map((video) => video.hook);
+  for (let attempt = 1; ; attempt++) {
+    const repeated = findRepeatedHook(result.hook, recentHooks);
+    if (!repeated) return result;
+    if (attempt > MAX_HOOK_REWRITES) throw new VideoHookRepeatError(result.hook, repeated);
+    result = await call(
+      [
+        userMessage,
+        "",
+        "HOOK REPEATS A RECENT VIDEO -- REWRITE REQUIRED:",
+        `Your hook: ${result.hook}`,
+        `Recent hook it repeats: ${repeated}`,
+        "Write the whole package again with a different opening, a different mechanic or consequence for this topic, and a loop ending that flows into the NEW hook. Keep the script within the length limit.",
+      ].join("\n"),
+    );
+    words = countSpokenWords(result.script);
+    if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
+  }
+}
+
+/** How many times a repeated hook is sent back before the request fails instead. */
+export const MAX_HOOK_REWRITES = 2;
+
+export class VideoHookRepeatError extends Error {
+  constructor(
+    public readonly hook: string,
+    public readonly repeatedHook: string,
+  ) {
+    super(`Video hook still repeats a recent video after ${MAX_HOOK_REWRITES} rewrites ("${hook}" vs "${repeatedHook}"). Not queuing it -- try the request again or pick a different topic.`);
+    this.name = "VideoHookRepeatError";
+  }
 }
 
 /** Hard ceiling on spoken words (~27s at the render's +8% pace); the prompt asks for 45-75. */

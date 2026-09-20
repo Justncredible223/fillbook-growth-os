@@ -1,3 +1,4 @@
+import type { RecentVideo } from "./videoHookVariety.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
@@ -19,6 +20,8 @@ export interface RunCampaignDeps {
   brandRulesSummary: string;
   verifiedKnowledgeSummary: string;
   recentTextsForSameTopic: string[];
+  /** Hooks and titles of recently made videos, passed to the video script writer so it avoids repeating them. */
+  recentVideos?: RecentVideo[];
   /** Called only when the pipeline reaches ready_for_owner -- never otherwise. */
   markOpportunityActioned: (opportunityId: string) => Promise<void>;
   /** Called only when the pipeline reaches ready_for_owner. Sets 'in_review', NOT 'approved' -- AI review is not human approval. */
@@ -57,6 +60,7 @@ export async function runCampaignForOpportunity(
     brandRulesSummary: deps.brandRulesSummary,
     verifiedKnowledgeSummary: deps.verifiedKnowledgeSummary,
     recentTextsForSameTopic: deps.recentTextsForSameTopic,
+    recentVideos: deps.recentVideos,
     assetTypeOverride: options.assetTypeOverride,
   });
 
@@ -118,6 +122,20 @@ export async function buildSupabaseRunCampaignDeps(
     .limit(10);
   const recentTextsForSameTopic = (recentVersions ?? []).map((row: { body: string }) => row.body);
 
+  // Recent video hooks and titles (from the stored script package), so a new video script does not
+  // reuse an opening the channel already ran.
+  const { data: recentVideoRows } = await client
+    .from("content_versions")
+    .select("metadata")
+    .not("metadata", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(60);
+  const recentVideos: RecentVideo[] = [];
+  for (const row of (recentVideoRows ?? []) as Array<{ metadata: { videoScript?: { hook?: string; youtubeTitle?: string } } | null }>) {
+    const script = row.metadata?.videoScript;
+    if (script?.hook) recentVideos.push({ hook: script.hook, title: script.youtubeTitle ?? "" });
+  }
+
   const usage = createUsageTracker();
   const llmClient = createLlmClient(process.env, (u: LlmUsage) => {
     usage.usages.push(u);
@@ -132,6 +150,7 @@ export async function buildSupabaseRunCampaignDeps(
     brandRulesSummary,
     verifiedKnowledgeSummary,
     recentTextsForSameTopic,
+    recentVideos,
     markOpportunityActioned: async (id) => {
       await client.from("opportunities").update({ status: "actioned", updated_at: new Date().toISOString() }).eq("id", id);
     },
