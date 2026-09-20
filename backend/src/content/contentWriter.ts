@@ -1,4 +1,5 @@
 import type { LlmClient } from "./llmClient.js";
+import { HUMAN_POST_VOICE_RULES, HUMAN_REPLY_VOICE_RULES } from "./humanReplyVoice.js";
 
 const DRAFT_SCHEMA = {
   type: "object",
@@ -16,6 +17,8 @@ TradeZella/TradesViz (broker-agnostic/stock-first).
 Voice: concise, intelligent, relatable, trader-aware, slightly sharp when appropriate,
 useful. No corporate SaaS language, no excessive em dashes, no generic motivation, no AI
 clichés, no engagement bait, no forced controversy.
+
+${HUMAN_POST_VOICE_RULES}
 
 Write exactly ONE platform-native post responding to the given opportunity. Ground every
 factual claim about Fillbook ONLY in the "Verified knowledge" section you're given --
@@ -98,6 +101,8 @@ export async function draftContent(
           `This replies to a real X user${replyTo.authorHandle ? ` (@${replyTo.authorHandle})` : ""} who mentioned Fillbook.`,
           "Write ONLY the reply text, addressed naturally to them, continuing the conversation.",
           "Do not write standalone-post hook copy -- this is read with their original post as context, not mid-scroll on its own.",
+          "",
+          HUMAN_REPLY_VOICE_RULES,
         ].join("\n")
       : null,
     pitchContext
