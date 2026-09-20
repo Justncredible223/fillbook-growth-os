@@ -358,6 +358,43 @@ describe("draftProspectingCandidateReply -- the candidate's platform reaches the
     expect(row!.draftReply).toBeNull();
   });
 
+  it("regenerates a guardrail-rejected draft with the reason fed back, and saves the fixed one", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-retry", platform: "x", status: "shown", draftReply: null }));
+    const longDraft = { isRelevant: true, reply: "One. Two. Three. Four.", mentionsFillbook: false, usesLink: false };
+    const goodDraft = { isRelevant: true, reply: "EOD for most firms.", mentionsFillbook: false, usesLink: false };
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => (drafter.mock.calls.length === 1 ? longDraft : goodDraft));
+
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-retry", { repo, drafter, loadGrounding, cheapRelevanceCheck });
+
+    expect(drafter).toHaveBeenCalledTimes(2);
+    expect(drafter.mock.calls[0]![0].retryFeedback).toBeUndefined();
+    expect(drafter.mock.calls[1]![0].retryFeedback).toMatch(/too long/);
+    expect(drafter.mock.calls[1]![0].retryFeedback).toContain("One. Two. Three. Four.");
+    expect(updated.status).toBe("ready");
+    expect(updated.draftReply).toBe("EOD for most firms.");
+  });
+
+  it("gives up after MAX_DRAFT_ATTEMPTS and still never persists a violating draft", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-giveup", platform: "x", status: "shown", draftReply: null }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "One. Two. Three. Four.", mentionsFillbook: false, usesLink: false }));
+
+    await expect(draftProspectingCandidateReply(fakeClient, "x-giveup", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(/too long/);
+
+    expect(drafter).toHaveBeenCalledTimes(3);
+    expect((await repo.getById("x-giveup"))!.draftReply).toBeNull();
+  });
+
+  it("does not retry when the model says the post is not relevant", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-irrelevant", platform: "x", status: "shown", draftReply: null }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: false, reply: "", mentionsFillbook: false, usesLink: false }));
+
+    await expect(draftProspectingCandidateReply(fakeClient, "x-irrelevant", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(/relevant/);
+    expect(drafter).toHaveBeenCalledTimes(1);
+  });
+
   it("REFINED: rejects a draft with an unsupported customer-result claim", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(candidate({ id: "x-3", platform: "x", status: "shown", draftReply: null }));

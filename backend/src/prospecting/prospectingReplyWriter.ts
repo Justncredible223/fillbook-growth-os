@@ -224,6 +224,8 @@ export interface ProspectingDraftContext {
   discoveryQuery: string;
   /** Recent owner edits, shown as tone examples. Optional and best-effort, see prospectingStyleExamples.ts. */
   styleExamples?: StyleExample[];
+  /** Set on a retry: why the previous draft was rejected, so the model fixes it. See xReplyGuardrails.ts's buildRetryFeedback. */
+  retryFeedback?: string;
 }
 
 export interface ProspectingDraftResult {
@@ -276,6 +278,8 @@ export async function draftProspectingReply(
     verifiedKnowledgeSummary,
     formatStyleExamples(context.styleExamples) ? "" : null,
     formatStyleExamples(context.styleExamples) || null,
+    context.retryFeedback ? "" : null,
+    context.retryFeedback ?? null,
   ]
     .filter((line): line is string => line !== null)
     .join("\n");

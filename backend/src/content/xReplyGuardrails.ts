@@ -220,3 +220,13 @@ export function checkReplyGuardrails(reply: string, expectsLink: boolean, option
 
   return null;
 }
+
+/** How many times a draft that trips a mechanical guardrail is regenerated (with the reason fed back) before the owner sees an error. */
+export const MAX_DRAFT_ATTEMPTS = 3;
+
+/** The note appended to the next attempt's prompt so the model fixes the specific problem instead of rolling the dice again. */
+export function buildRetryFeedback(rejectedReply: string, reason: string): string {
+  return `Your previous draft was rejected because it ${reason}.
+Rejected draft: "${rejectedReply}"
+Write a NEW reply that fixes exactly that. Keep it to one or two short sentences.`;
+}
