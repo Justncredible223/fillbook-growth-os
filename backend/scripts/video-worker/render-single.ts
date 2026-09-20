@@ -24,7 +24,7 @@ import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from 
 import { renderVideo, extractThumbnail } from "../video-factory/render.js";
 import { assignUiScreens, copyUiScreenToDir } from "../video-factory/uiScreens.js";
 import { pickMusic } from "../video-factory/music.js";
-import { copyClipToDir, fetchStockClip, getVideoQuery, type StockFootageCredentials } from "../video-factory/stockFootage.js";
+import { copyClipToDir, fetchStockClip, getSceneQuery, getVideoQuery, type StockFootageCredentials } from "../video-factory/stockFootage.js";
 import { runFfprobeJson, validateOutput } from "../video-factory/validate.js";
 import { createProcessRunner, requireExecutable } from "../video-factory/processRunner.js";
 import { sendRenderNotification } from "./pushSender.js";
@@ -108,9 +108,17 @@ async function main(): Promise<void> {
   for (const [i, scene] of scenes.entries()) {
     if (scene.imagePath) continue;
     if (hasAnyStockProvider) {
-      const query = getVideoQuery(scene.kind, seed + i);
+      // Prefer footage that matches what is being said over this scene; if that search
+      // comes back empty, fall back to the scene kind's generic rotation before giving up.
+      const query = getSceneQuery(scene, seed + i);
       if (query) {
-        const cached = await fetchStockClip(query, scene.durationSeconds, STOCK_CLIP_CACHE, stockCredentials);
+        let cached = await fetchStockClip(query, scene.durationSeconds, STOCK_CLIP_CACHE, stockCredentials);
+        if (!cached) {
+          const fallbackQuery = getVideoQuery(scene.kind, seed + i);
+          if (fallbackQuery && fallbackQuery !== query) {
+            cached = await fetchStockClip(fallbackQuery, scene.durationSeconds, STOCK_CLIP_CACHE, stockCredentials);
+          }
+        }
         if (cached) {
           scene.clipPath = copyClipToDir(cached, outDir);
           scenesWithClip++;

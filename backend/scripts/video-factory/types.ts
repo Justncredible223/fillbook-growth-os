@@ -65,6 +65,7 @@ export interface Scene {
   clipPath?: string; // absolute path to a loopable video file; undefined falls back to solid color
   imagePath?: string; // absolute path to a UI screenshot; rendered as a slow vertical pan. Takes precedence over clipPath.
   shot?: string; // the approved shot-list description this scene came from (used to pick a matching UI screenshot)
+  narration?: string; // the words spoken while this scene is on screen (used to pick footage that matches what is being said)
 }
 
 export interface RenderPlan {

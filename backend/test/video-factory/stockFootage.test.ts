@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { getVideoQuery, pickRandomEligible, fetchStockClip, isLikelyTradingRelevant } from "../../scripts/video-factory/stockFootage";
+import { getSceneQuery, getVideoQuery, pickRandomEligible, fetchStockClip, isLikelyTradingRelevant } from "../../scripts/video-factory/stockFootage";
 
 function jsonResponse(body: unknown) {
   return { ok: true, json: async () => body } as Response;
@@ -35,6 +35,43 @@ describe("getVideoQuery", () => {
     const kinds: Array<Parameters<typeof getVideoQuery>[0]> = ["hook", "explanation", "metric", "product", "cta"];
     for (const kind of kinds) {
       expect(getVideoQuery(kind, 0)).not.toBeNull();
+    }
+  });
+});
+
+describe("getSceneQuery", () => {
+  const kind = "explanation" as const;
+
+  it("matches footage to what is being said, not just the scene kind", () => {
+    expect(getSceneQuery({ kind, narration: "you revenge traded after a loss", shot: "Trader at desk" }, 0)).toMatch(/red|stress|losing|crash|frustrat/);
+    expect(getSceneQuery({ kind, narration: "a winning streak and a payout", shot: "" }, 0)).toMatch(/win|green|gain|profit/);
+    expect(getSceneQuery({ kind, narration: "log every trade and review the pattern", shot: "" }, 0)).toMatch(/journal|review|notebook/);
+  });
+
+  it("falls back to the scene kind's rotation when nothing specific is being said", () => {
+    expect(getSceneQuery({ kind, narration: "and that is exactly why", shot: "Text card" }, 3)).toBe(getVideoQuery(kind, 3));
+    expect(getSceneQuery({ kind }, 5)).toBe(getVideoQuery(kind, 5));
+  });
+
+  it("checks the more specific emotional concepts before the generic chart ones", () => {
+    expect(getSceneQuery({ kind, narration: "staring at the screen after a loss", shot: "" }, 0)).toMatch(/red|stress|losing|crash|frustrat/);
+  });
+
+  it("is deterministic and rotates with the seed", () => {
+    const text = { kind, narration: "review the pattern", shot: "" };
+    expect(getSceneQuery(text, 2)).toBe(getSceneQuery(text, 2));
+    const seen = new Set([0, 1, 2, 3].map((seed) => getSceneQuery(text, seed)));
+    expect(seen.size).toBeGreaterThan(1);
+  });
+
+  it("does not treat a word merely containing a keyword as a match", () => {
+    expect(getSceneQuery({ kind, narration: "a stopwatch and a fossil", shot: "" }, 0)).toBe(getVideoQuery(kind, 0));
+  });
+
+  it("every concept query would pass the trading-relevance filter's own vocabulary", () => {
+    for (const narration of ["revenge loss", "winning payout", "journal review", "rules plan", "position size risk", "entry setup"]) {
+      const query = getSceneQuery({ kind, narration }, 0)!;
+      expect(isLikelyTradingRelevant(query)).toBe(true);
     }
   });
 });

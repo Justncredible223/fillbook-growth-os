@@ -27,6 +27,16 @@ describe("classifyShot", () => {
   });
 });
 
+describe("buildScenePlan narration", () => {
+  it("attaches the words spoken during each scene", () => {
+    const words = "you revenge traded after a loss and sized up".split(" ");
+    const wordCues = words.map((text, i) => ({ text, startSeconds: i * 0.5, endSeconds: i * 0.5 + 0.4 }));
+    const scenes = buildScenePlan(["hook shot", "explain", "cta"], 5, wordCues);
+    expect(scenes.map((s) => s.narration).join(" ").trim()).toBe(words.join(" "));
+    expect(scenes.every((s) => typeof s.narration === "string")).toBe(true);
+  });
+});
+
 describe("buildScenePlan", () => {
   it("splits total duration evenly across all shots", () => {
     const scenes = buildScenePlan(["hook shot", "explain", "cta"], 30);

@@ -1,7 +1,7 @@
 import { createWriteStream, mkdirSync, statSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
-import type { SceneKind } from "./types.js";
+import type { Scene, SceneKind } from "./types.js";
 
 /**
  * Rotating stock-footage search queries per scene kind. Broadened
@@ -93,6 +93,54 @@ export function getVideoQuery(kind: SceneKind, seed: number): string | null {
   const queries = SCENE_QUERIES[kind];
   if (!queries || queries.length === 0) return null;
   return queries[seed % queries.length] ?? null;
+}
+
+/**
+ * What a scene is ABOUT, read from the words spoken over it and its shot-list
+ * line, mapped to footage searches. Before this, footage was picked from the
+ * scene's generic kind alone, so a line about revenge trading could get a calm
+ * "trader at desk" clip and a line about a winning streak a red chart. Checked
+ * in order, first match wins, so the more specific emotional/behavioral
+ * concepts come before the generic chart ones. Every query keeps a
+ * trader/chart/stock word in it so results still pass isLikelyTradingRelevant.
+ */
+const CONCEPT_QUERIES: Array<{ pattern: RegExp; queries: string[] }> = [
+  {
+    pattern: /\b(revenge|blew|blown|blow up|loss(?:es)?|losing|lost|drawdown|breach(?:ed)?|panic|fear|stress\w*|frustrat\w*|tilt|red day|wipe[sd]? out)\b/,
+    queries: ["trader stressed watching red chart", "trader losing money red chart", "stock market crash red chart", "trader frustrated at desk stock chart"],
+  },
+  {
+    pattern: /\b(win(?:s|ning)?|green|profit\w*|payout|gains?|rally|funded|passed)\b/,
+    queries: ["trader winning trade green chart", "green candlestick rally chart", "stock market gains chart", "trading profit growth chart"],
+  },
+  {
+    pattern: /\b(journal\w*|log(?:ged|ging)?|review\w*|replay|notes?|tag(?:s|ged)?|written|write|pattern\w*|memory)\b/,
+    queries: ["trader writing trading journal notes", "trader reviewing past trades", "trader reviewing trade history", "trader notebook stock chart desk"],
+  },
+  {
+    pattern: /\b(rules?|plan|discipline|stop|system|checklist|routine|process|strategy)\b/,
+    queries: ["trading strategy whiteboard chart", "trader annotating chart on tablet", "trader analyzing candlestick chart"],
+  },
+  {
+    pattern: /\b(size[sd]?|sizing|risk|contracts?|position|leverage)\b/,
+    queries: ["risk management trading chart screen", "day trader analyzing futures chart", "trading account balance chart"],
+  },
+  {
+    pattern: /\b(entry|entries|setup|chase[sd]?|chasing|hesitat\w*|staring|watching|waiting|signal)\b/,
+    queries: ["trader watching market charts", "trader typing on keyboard charts", "day trader candlestick chart monitors"],
+  },
+];
+
+/**
+ * Footage search for one scene: a concept query when the narration or shot
+ * line is clearly about something specific, otherwise the scene kind's generic
+ * rotation. Deterministic for a given seed, like getVideoQuery.
+ */
+export function getSceneQuery(scene: Pick<Scene, "kind" | "narration" | "shot">, seed: number): string | null {
+  const text = `${scene.narration ?? ""} ${scene.shot ?? ""}`.toLowerCase();
+  const concept = CONCEPT_QUERIES.find(({ pattern }) => pattern.test(text));
+  if (concept) return concept.queries[seed % concept.queries.length] ?? null;
+  return getVideoQuery(scene.kind, seed);
 }
 
 /**
