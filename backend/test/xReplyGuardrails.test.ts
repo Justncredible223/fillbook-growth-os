@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { checkReplyGuardrails, checkReplySoftStyle, draftWithRetries, MAX_DRAFT_ATTEMPTS, MAX_SOFT_ATTEMPTS, containsAiTell, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
+import { capitalizationProblem, checkReplyGuardrails, checkReplySoftStyle, draftWithRetries, MAX_DRAFT_ATTEMPTS, MAX_SOFT_ATTEMPTS, containsAiTell, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
 
 describe("checkReplyGuardrails", () => {
   it("passes a purely helpful reply where promotion would be inappropriate -- no Fillbook mention at all", () => {
@@ -165,8 +165,8 @@ describe("containsAiTell -- replies that read as bot-written", () => {
 
   const clean = [
     "Topstep's trailing drawdown locks at the starting balance once you're up 2k. Check yours.",
-    "logging the loser before you take the next trade is the whole trick",
-    "Which firm? the consistency rule differs a lot between them.",
+    "Logging the loser before you take the next trade is the whole trick",
+    "Which firm? The consistency rule differs a lot between them.",
     "That's a 3 contract stop on NQ, so about $180 a pop.",
     "Not sure that's right. Apex resets the threshold at the end of day.",
   ];
@@ -212,7 +212,7 @@ describe("hard length limit vs soft style tells (owner review 2026-09-20)", () =
   });
 
   it("accepts a reply right at the limit", () => {
-    expect(checkReplyGuardrails("a".repeat(280), false)).toBeNull();
+    expect(checkReplyGuardrails("A".repeat(280), false)).toBeNull();
   });
 
   for (const text of [
@@ -325,5 +325,49 @@ describe("draftWithRetries", () => {
       }),
     ).rejects.toThrow("irrelevant");
     expect(generate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("proper capitalization and grammar (owner rule 2026-09-20)", () => {
+  const draftFromTheApp =
+    "fees are the silent killer. every spread, every sweep that should've been a limit order, the Friday half-size trade that still cost a full commission.";
+
+  it("rejects an all-lowercase draft like the one that reached the Inbound screen", () => {
+    expect(checkReplyGuardrails(draftFromTheApp, false)?.reason).toContain("lowercase");
+  });
+
+  for (const [text, reason] of [
+    ["appreciate it", "starts with a lowercase letter"],
+    ["Fees add up. every spread counts.", "starts a sentence with a lowercase letter"],
+    ["Is that right? we thought so too.", "starts a sentence with a lowercase letter"],
+    ["Honestly that was my mistake and i fixed it.", 'pronoun "I" in lowercase'],
+    ["Yeah, i'm the same way about stops.", 'pronoun "I" in lowercase'],
+  ] as const) {
+    it(`rejects: ${text}`, () => {
+      expect(checkReplyGuardrails(text, false)?.reason).toContain(reason);
+    });
+  }
+
+  for (const text of [
+    "Appreciate it.",
+    "Fees add up. Every spread counts.",
+    "Is that right? We thought so too.",
+    "I fixed it after the second stop got moved.",
+    "2 contracts on a tighter stop is more risk than the 3 that lost.",
+    "MNQ and ES behave differently on the open.",
+    "Wait... what was the stop on that one?",
+    "Most firms count e.g. the profit target differently than the buffer.",
+    "Use \"quotes\" fine. Then continue.",
+    "Loss limits are checked vs. the high-water mark, not the start.",
+    "Check the rule in your firm's rulebook, not a forum post.",
+    "Tagging @someone here. The rule is simple.",
+  ]) {
+    it(`accepts properly capitalized text: ${text.slice(0, 50)}`, () => {
+      expect(checkReplyGuardrails(text, false)).toBeNull();
+    });
+  }
+
+  it("feeds a clear reason back to the writer on retry so it fixes the capitalization", () => {
+    expect(capitalizationProblem("appreciate it")?.reason).toMatch(/proper capitalization and grammar/);
   });
 });

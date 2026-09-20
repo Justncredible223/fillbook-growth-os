@@ -165,6 +165,37 @@ export function containsAiTell(reply: string): GuardrailViolation | null {
   if (reply.length > MAX_REPLY_CHARS) {
     return { reason: `is too long to post on X (${reply.length} characters, the limit is ${MAX_REPLY_CHARS})` };
   }
+  return capitalizationProblem(reply);
+}
+
+/** Abbreviations whose trailing period does not end a sentence, so a lowercase word after them is fine. */
+const NON_TERMINAL_ABBREVIATION = /(?:\be\.g|\bi\.e|\bvs|\betc|\bapprox|\bno|\bmr|\bmrs|\bdr|\bst)\.$/i;
+
+/**
+ * Owner rule (2026-09-20): replies and posts use proper capitalization and grammar -- no all-lowercase
+ * "casual" drafts. Deliberately narrow so it stays high-precision: the first word, the start of each
+ * later sentence, and a bare pronoun "i". An ellipsis or an abbreviation like "e.g." does not count as
+ * ending a sentence.
+ */
+export function capitalizationProblem(reply: string): GuardrailViolation | null {
+  const text = reply.trim();
+
+  const first = /^[^\p{L}\p{N}]*(\p{L})/u.exec(text);
+  if (first && first[1] !== first[1]!.toUpperCase()) {
+    return { reason: "starts with a lowercase letter -- use proper capitalization and grammar" };
+  }
+
+  const sentenceStart = /([.!?]+)["')\]]*\s+(\p{Ll})/gu;
+  for (const match of text.matchAll(sentenceStart)) {
+    if (match[1]!.length > 1 && match[1]!.startsWith(".")) continue; // ellipsis
+    const before = text.slice(0, match.index! + match[1]!.length);
+    if (NON_TERMINAL_ABBREVIATION.test(before)) continue;
+    return { reason: "starts a sentence with a lowercase letter -- use proper capitalization and grammar" };
+  }
+
+  if (/(^|[^\p{L}\p{N}'’_@#/.-])i(?=\s|,|!|\?|;|:|'|’|$)/u.test(text)) {
+    return { reason: 'writes the pronoun "I" in lowercase -- use proper capitalization and grammar' };
+  }
   return null;
 }
 
