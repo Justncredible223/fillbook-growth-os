@@ -146,6 +146,30 @@ class NetworkGrowthOsRepository(
                         monthBudgetUsd = ad.getDouble("monthBudgetUsd"),
                     )
                 },
+                growthLoop = analytics.optJSONObject("growthLoop")?.let { gl ->
+                    GrowthLoopSummary(
+                        windowDays = gl.getInt("windowDays"),
+                        publishedContentCount = gl.getInt("publishedContentCount"),
+                        trackedLinkClicks = gl.getInt("trackedLinkClicks"),
+                        funnelConnected = gl.getString("funnelConnectionStatus") == "connected",
+                        signups = gl.getInt("signups"),
+                        activated = gl.getInt("activated"),
+                        firstPaidConversions = gl.getInt("firstPaidConversions"),
+                        contentProductionCostUsd = gl.getDouble("contentProductionCostUsd"),
+                        costPerSignup = if (gl.isNull("costPerSignup")) null else gl.getDouble("costPerSignup"),
+                        activeSubscriptionsUnavailableReason = gl.getJSONObject("activeSubscriptions").getString("reason"),
+                        byChannel = gl.getJSONArray("byChannel").map { ch ->
+                            GrowthLoopChannelBreakdown(
+                                channel = ch.getString("channel"),
+                                publishedContentCount = ch.getInt("publishedContentCount"),
+                                signups = ch.getInt("signups"),
+                                activated = ch.getInt("activated"),
+                                firstPaidConversions = ch.getInt("firstPaidConversions"),
+                            )
+                        },
+                        attributionNote = gl.getString("attributionNote"),
+                    )
+                },
             ),
             todayXPost = json.optJSONObject("todayXPost").toTodayXPost(),
             attribution = json.optJSONObject("attribution")?.let { attr ->

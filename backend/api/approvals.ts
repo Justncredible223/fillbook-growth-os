@@ -4,6 +4,7 @@ import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 import { buildUtmParams, utmQueryString } from "../src/attribution/utmBuilder.js";
+import { recordOwnerPublication, getOrCreateDestinationLink } from "../src/attribution/contentPublications.js";
 import {
   InboundActionError,
   closeInbound,
@@ -579,7 +580,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === "POST") {
     try {
-      const body = req.body as { campaignAssetId?: string; action?: string; decidedBy?: string } | undefined;
+      const body = req.body as
+        | { campaignAssetId?: string; action?: string; decidedBy?: string; channel?: string; actualUrl?: string; ownerReportedPublishedAt?: string }
+        | undefined;
       const campaignAssetId = body?.campaignAssetId;
       const action = body?.action;
 
@@ -590,6 +593,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         const result = await handOffAsset(client, campaignAssetId);
         res.status(200).json(result);
+        return;
+      }
+
+      // Growth loop (2026-09-18): the generalized "I posted this" action --
+      // extends Video Status's setPublishedUrl (see videoStatusHandlers.ts)
+      // to X posts/replies and Partnerships outreach, the two other
+      // content types the growth loop needs published-outcome data for.
+      // Body: { campaignAssetId, action: "mark-published", channel,
+      // actualUrl?, ownerReportedPublishedAt? }. actualUrl is optional --
+      // a plain X reply has no separately copyable "post page" the way a
+      // YouTube upload does, so omitting it still records a real
+      // owner-confirmed publication (evidence_type:
+      // 'owner_confirmed_no_url'), just without a URL. Never itself posts
+      // anything -- purely a database write of what the owner reports,
+      // same EXTERNAL_DRAFT-only guarantee as every other action here.
+      if (action === "mark-published") {
+        const channel = typeof body?.channel === "string" ? body.channel : null;
+        if (!campaignAssetId || !channel) {
+          res.status(400).json({ error: "Body must include { campaignAssetId: string, action: 'mark-published', channel: string }" });
+          return;
+        }
+        try {
+          const row = await recordOwnerPublication(client, {
+            campaignAssetId,
+            channel,
+            actualUrl: typeof body?.actualUrl === "string" ? body.actualUrl : null,
+            ownerReportedPublishedAt: typeof body?.ownerReportedPublishedAt === "string" ? body.ownerReportedPublishedAt : null,
+          });
+          res.status(200).json({ recorded: true, publication: row });
+        } catch (err) {
+          res.status(400).json({ error: errorMessage(err) });
+        }
+        return;
+      }
+
+      // Get-or-create the trackable destination link independent of
+      // publish state -- "Copy tracking link" must work on an approved
+      // draft that hasn't been posted yet. Body: { campaignAssetId,
+      // action: "get-destination-link", channel }.
+      if (action === "get-destination-link") {
+        const channel = typeof body?.channel === "string" ? body.channel : null;
+        if (!campaignAssetId || !channel) {
+          res.status(400).json({ error: "Body must include { campaignAssetId: string, action: 'get-destination-link', channel: string }" });
+          return;
+        }
+        try {
+          const { data: asset, error: assetErr } = await client
+            .from("campaign_assets")
+            .select("campaigns(thesis)")
+            .eq("id", campaignAssetId)
+            .single();
+          if (assetErr) throw assetErr;
+          const destinationLink = await getOrCreateDestinationLink(client, {
+            campaignAssetId,
+            channel,
+            campaignThesis: (asset as any)?.campaigns?.thesis ?? "campaign",
+          });
+          res.status(200).json({ destinationLink });
+        } catch (err) {
+          res.status(400).json({ error: errorMessage(err) });
+        }
         return;
       }
 
@@ -718,6 +782,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         const campaignTitle = asset.campaigns?.thesis ?? "(untitled campaign)";
         const utmParams = buildUtmParams(asset.id, asset.platform, campaignTitle);
+        // Best-effort: a failure generating/reading the destination link
+        // must never block the approvals list itself from loading.
+        const destinationLink = await getOrCreateDestinationLink(client, {
+          campaignAssetId: asset.id,
+          channel: asset.platform,
+          campaignThesis: campaignTitle,
+        }).catch(() => null);
 
         return {
           id: asset.id,
@@ -737,6 +808,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // click/signup tracking (which needs access this project
           // doesn't have).
           trackingQuery: utmQueryString(utmParams),
+          destinationLink,
         };
       }),
     );

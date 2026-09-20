@@ -52,11 +52,19 @@ import kotlinx.coroutines.launch
  * Real internal-system analytics -- signal/opportunity/campaign counts
  * and real LLM spend, all derived from the same tables every other
  * screen reads, shown as proportional bars instead of a wall of numbers.
- * NOT attribution/conversion analytics: FillbookHQ's own UTM tracking
- * for TikTok/X is broken/unconfirmed (see docs/ARCHITECTURE.md), so this
- * screen deliberately doesn't build on that signal, and there's no
- * historical table behind these counts to draw a real trend line from --
- * a snapshot bar is honest, a fabricated sparkline would not be.
+ * There's no historical table behind these counts to draw a real trend
+ * line from -- a snapshot bar is honest, a fabricated sparkline would
+ * not be.
+ *
+ * Growth loop section (2026-09-18): published-content-to-customer-outcome
+ * data, now real -- FillbookHQ's own server-side sync
+ * (frontend/api/_lib/growthOsSync.ts) delivers signup/activation/
+ * first-trade/first-paid events here (see backend's
+ * growthLoopAnalytics.ts for exactly what each number can and cannot
+ * honestly claim). [GrowthLoopSummary.funnelConnected] distinguishes
+ * "genuinely zero this window" from "that sync has never delivered
+ * anything at all" -- rendered as two different messages, never a bare
+ * 0 for both cases.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -149,24 +157,77 @@ fun AnalyticsScreen(repo: GrowthOsRepository) {
                     item { BreakdownChart("Signals by source", data.signalsBySource, ::signalSourceDisplayName) }
                     item { BreakdownChart("Opportunities by status", data.opportunitiesByStatus, ::opportunityStatusDisplayName) }
                     item { BreakdownChart("Campaign assets by stage", data.campaignAssetsByStage, ::assetStageDisplayName) }
-                    item {
-                        Column(modifier = Modifier.padding(top = 4.dp, bottom = 20.dp)) {
-                            InsetRow {
-                                Text("NOT SHOWN YET", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
-                                Spacer(Modifier.height(4.dp))
-                                Text(
-                                    "Attribution / conversion analytics is blocked on FillbookHQ's own UTM tracking " +
-                                        "(currently broken/unconfirmed for TikTok/X traffic).",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = TextTertiary,
-                                )
-                            }
-                        }
-                    }
+                    item { GrowthLoopSection(data.growthLoop) }
                 }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun GrowthLoopSection(growthLoop: com.fillbook.growthos.data.GrowthLoopSummary?) {
+    GrowthCard {
+        Text("Published content -> customer outcomes", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(2.dp))
+        if (growthLoop == null) {
+            Text("Not available in this build yet.", style = MaterialTheme.typography.bodyMedium, color = TextTertiary)
+            return@GrowthCard
+        }
+        Text("Last ${growthLoop.windowDays} days", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+        Spacer(Modifier.height(8.dp))
+
+        if (!growthLoop.funnelConnected) {
+            InsetRow {
+                Text("NOT YET CONNECTED", style = MaterialTheme.typography.labelMedium, color = Warning)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "FillbookHQ hasn't delivered any signup/activation/trade/paid events yet -- this is different from a genuine zero. Once its sync runs at least once, real counts appear here.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextTertiary,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MetricTile("Published", growthLoop.publishedContentCount.toString(), Icons.Filled.Inbox, modifier = Modifier.weight(1f))
+            MetricTile("Tracked-link clicks", growthLoop.trackedLinkClicks.toString(), Icons.Filled.Radar, modifier = Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            MetricTile("Signups", growthLoop.signups.toString(), Icons.Filled.Inbox, modifier = Modifier.weight(1f))
+            MetricTile("Activated", growthLoop.activated.toString(), Icons.Filled.Inbox, modifier = Modifier.weight(1f))
+            MetricTile("First paid", growthLoop.firstPaidConversions.toString(), Icons.Filled.Payments, modifier = Modifier.weight(1f))
+        }
+        Spacer(Modifier.height(10.dp))
+        MetricTile(
+            "Cost per signup",
+            growthLoop.costPerSignup?.let { "$%.2f".format(it) } ?: "N/A (0 signups)",
+            Icons.Filled.AttachMoney,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        if (growthLoop.byChannel.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Text("By channel", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+            Spacer(Modifier.height(4.dp))
+            growthLoop.byChannel.forEach { ch ->
+                Text(
+                    "${ch.channel}: ${ch.publishedContentCount} published, ${ch.signups} signups, ${ch.activated} activated, ${ch.firstPaidConversions} paid",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+        InsetRow {
+            Text("ACTIVE SUBSCRIPTIONS", style = MaterialTheme.typography.labelMedium, color = TextTertiary)
+            Spacer(Modifier.height(4.dp))
+            Text(growthLoop.activeSubscriptionsUnavailableReason, style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(growthLoop.attributionNote, style = MaterialTheme.typography.bodySmall, color = TextTertiary)
     }
 }
 

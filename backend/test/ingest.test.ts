@@ -3,8 +3,11 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-const recordConversionEvent = vi.fn().mockResolvedValue(undefined);
-vi.mock("../src/attribution/conversionEvents.js", () => ({ recordConversionEvent }));
+const recordConversionEvent = vi.fn().mockResolvedValue({ inserted: true });
+vi.mock("../src/attribution/conversionEvents.js", () => ({
+  recordConversionEvent,
+  CONVERSION_EVENT_TYPES: ["signup", "activation", "first_trade", "first_paid"],
+}));
 // The redirect path's own recordLinkClick call is left un-mocked and will
 // throw against this fake client -- intentional, since the redirect
 // handler's whole point is that a logging failure must never block the
@@ -125,6 +128,72 @@ describe("api/ingest?source=fillbook_signup -- webhook from FillbookHQ's signup 
     const res = mockRes();
     await handler({ method: "GET", headers: { authorization: "Bearer webhook-secret" }, query: { source: "fillbook_signup" } } as any, res);
     expect(res.status).toHaveBeenCalledWith(405);
+  });
+
+  // Growth loop (2026-09-18): the funnel extension -- event_type,
+  // external_event_id (dedup key), subject_hash (pseudonymous per-user
+  // correlation), and event-touch UTM distinct from signup-touch UTM.
+  it("defaults event_type to 'signup' for a body that predates this extension (backward compatible)", async () => {
+    const res = mockRes();
+    await handler(
+      { method: "POST", headers: { authorization: "Bearer webhook-secret" }, query: { source: "fillbook_signup" }, body: { utm_source: "x" } } as any,
+      res,
+    );
+    expect(recordConversionEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ eventType: "signup" }));
+  });
+
+  it("rejects an unrecognized event_type by falling back to 'signup' rather than passing through an arbitrary string", async () => {
+    const res = mockRes();
+    await handler(
+      {
+        method: "POST",
+        headers: { authorization: "Bearer webhook-secret" },
+        query: { source: "fillbook_signup" },
+        body: { event_type: "not_a_real_stage" },
+      } as any,
+      res,
+    );
+    expect(recordConversionEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ eventType: "signup" }));
+  });
+
+  it("passes through event_type, external_event_id, subject_hash, and event-touch UTM", async () => {
+    const res = mockRes();
+    await handler(
+      {
+        method: "POST",
+        headers: { authorization: "Bearer webhook-secret" },
+        query: { source: "fillbook_signup" },
+        body: {
+          event_type: "first_paid",
+          external_event_id: "evt_abc123",
+          subject_hash: "a1b2c3",
+          event_touch_utm_source: "newsletter",
+          event_touch_utm_campaign: "spring_promo",
+        },
+      } as any,
+      res,
+    );
+    expect(recordConversionEvent).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        eventType: "first_paid",
+        externalEventId: "evt_abc123",
+        subjectHash: "a1b2c3",
+        eventTouchUtmSource: "newsletter",
+        eventTouchUtmCampaign: "spring_promo",
+      }),
+    );
+  });
+
+  it("returns inserted:false transparently when recordConversionEvent reports a duplicate", async () => {
+    recordConversionEvent.mockResolvedValueOnce({ inserted: false });
+    const res = mockRes();
+    await handler(
+      { method: "POST", headers: { authorization: "Bearer webhook-secret" }, query: { source: "fillbook_signup" }, body: { external_event_id: "evt_dup" } } as any,
+      res,
+    );
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({ recorded: true, inserted: false });
   });
 });
 

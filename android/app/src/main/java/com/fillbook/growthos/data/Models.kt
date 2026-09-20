@@ -78,6 +78,38 @@ data class AnalyticsBreakdown(
     /** Properly date-scoped (today, all providers) -- see backend's getTodaySpendUsd. Use this for any "today" spend display; totalCostUsd is lifetime. */
     val todaySpendUsd: Double,
     val autoDraft: AutoDraftStatus,
+    val growthLoop: GrowthLoopSummary? = null,
+)
+
+/**
+ * "Published content -> customer outcomes" growth loop (2026-09-18) --
+ * see backend/src/attribution/growthLoopAnalytics.ts's own header comment
+ * for exactly what each field can and cannot honestly claim. [activeSubscriptionsUnavailableReason]
+ * is always non-null: this project has no access to FillbookHQ's own
+ * billing database (isolated by design), so "current active
+ * subscriptions" is never computed, only explained as unavailable.
+ */
+data class GrowthLoopSummary(
+    val windowDays: Int,
+    val publishedContentCount: Int,
+    val trackedLinkClicks: Int,
+    val funnelConnected: Boolean,
+    val signups: Int,
+    val activated: Int,
+    val firstPaidConversions: Int,
+    val contentProductionCostUsd: Double,
+    val costPerSignup: Double?,
+    val activeSubscriptionsUnavailableReason: String,
+    val byChannel: List<GrowthLoopChannelBreakdown>,
+    val attributionNote: String,
+)
+
+data class GrowthLoopChannelBreakdown(
+    val channel: String,
+    val publishedContentCount: Int,
+    val signups: Int,
+    val activated: Int,
+    val firstPaidConversions: Int,
 )
 
 data class HomeSummary(

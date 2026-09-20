@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildUtmParams, utmQueryString } from "../src/attribution/utmBuilder";
+import { buildUtmParams, utmQueryString, buildDestinationUrl } from "../src/attribution/utmBuilder";
 
 describe("buildUtmParams", () => {
   it("builds consistent params from platform, thesis, and asset id", () => {
@@ -37,5 +37,30 @@ describe("utmQueryString", () => {
       utm_content: "asset-1",
     });
     expect(qs).toBe("utm_source=x&utm_medium=organic_social&utm_campaign=test%20campaign&utm_content=asset-1");
+  });
+});
+
+describe("buildDestinationUrl", () => {
+  it("builds a full, ready-to-copy URL on the approved host, defaulting to the homepage", () => {
+    const url = buildDestinationUrl("asset-1", "x", "Trailing drawdown confuses traders");
+    expect(url).toBe(
+      "https://www.fillbookhq.com/?utm_source=x&utm_medium=organic_social&utm_campaign=trailing_drawdown_confuses_traders&utm_content=asset-1",
+    );
+  });
+
+  it("supports an explicit approved path", () => {
+    const url = buildDestinationUrl("asset-1", "x", "topic", "/pricing");
+    expect(url.startsWith("https://www.fillbookhq.com/pricing?")).toBe(true);
+  });
+
+  it("rejects a path outside the small approved allowlist -- never an open redirect to an arbitrary path", () => {
+    expect(() => buildDestinationUrl("asset-1", "x", "topic", "/admin")).toThrow(/not an approved/);
+    expect(() => buildDestinationUrl("asset-1", "x", "topic", "https://evil.example.com/")).toThrow(/not an approved/);
+  });
+
+  it("every generated destination is on the real fillbookhq.com host", () => {
+    const url = buildDestinationUrl("asset-1", "tiktok", "topic");
+    expect(new URL(url).hostname).toBe("www.fillbookhq.com");
+    expect(new URL(url).protocol).toBe("https:");
   });
 });

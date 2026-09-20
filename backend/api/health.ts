@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
+import { createSearchConsoleAdapter } from "../src/signals/adapters/searchConsoleAdapter.js";
 
 interface HealthItem {
   label: string;
@@ -143,10 +144,51 @@ async function checkProspectingSync(client: SupabaseClient): Promise<HealthItem>
   }
 }
 
+/**
+ * Growth loop item 8 (2026-09-18): a real, bounded, read-only probe of
+ * Search Console -- checkSearchConsole() above only ever looks at whether
+ * a `signals` row exists from some PAST ingestion, never actually calls
+ * the live API. This calls it right now: resolves the verified property,
+ * pulls the last 7 days' top queries (rowLimit small and fixed -- this is
+ * a verification probe, not a real ingestion run), and reports exactly
+ * what happened. Read-only by construction (SearchConsoleAdapter has no
+ * write method at all) -- never rotates the OAuth token's scope or
+ * touches property permissions, only refreshes the access token via the
+ * normal OAuth refresh flow if it's expired, same as every other call.
+ */
+export async function verifySearchConsoleLive(client: SupabaseClient): Promise<Record<string, unknown>> {
+  const startedAt = new Date();
+  try {
+    const adapter = createSearchConsoleAdapter(client);
+    const property = await adapter.resolveSiteUrl(startedAt);
+    const endDate = startedAt.toISOString().slice(0, 10);
+    const startDate = new Date(startedAt.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const rows = await adapter.fetchTopQueries(property, startDate, endDate, 10, startedAt);
+    return {
+      status: "HEALTHY",
+      property,
+      startDate,
+      endDate,
+      rowCount: rows.length,
+      freshness: `queried through ${endDate}`,
+      checkedAt: startedAt.toISOString(),
+    };
+  } catch (err) {
+    return { status: "DOWN", error: errorMessage(err), checkedAt: startedAt.toISOString() };
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res)) return;
   if (req.method !== "GET") {
     res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+
+  if (req.query.verify === "search_console") {
+    const client = getServiceClient();
+    const result = await verifySearchConsoleLive(client);
+    res.status(200).json(result);
     return;
   }
 

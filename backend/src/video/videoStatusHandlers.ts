@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { recordOwnerPublication } from "../attribution/contentPublications.js";
+import { extractYoutubeVideoId } from "./youtubeUrl.js";
 
 /**
  * The platform-specific publishing metadata generated alongside the video
@@ -239,13 +241,26 @@ export class VideoStatusActionError extends Error {}
  * to post yet for any other status) and requires a real http(s) URL --
  * never silently accepts an empty string or something unparseable.
  */
+/** Best-effort guess at which platform a pasted URL is for, purely to pick a `channel` label for content_publications -- never used for anything security/access-relevant. Falls back to "other" for a URL this doesn't recognize, still recorded rather than rejected. */
+function detectChannelFromUrl(url: string): string {
+  if (extractYoutubeVideoId(url)) return "youtube";
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    if (host === "tiktok.com" || host.endsWith(".tiktok.com")) return "tiktok";
+    if (host === "instagram.com" || host.endsWith(".instagram.com")) return "instagram";
+  } catch {
+    // Already validated as a real URL by the caller -- fall through to "other".
+  }
+  return "other";
+}
+
 export async function setPublishedUrl(client: SupabaseClient, videoRenderId: string, publishedUrl: string): Promise<void> {
   const trimmed = publishedUrl.trim();
   if (!/^https?:\/\//i.test(trimmed)) {
     throw new VideoStatusActionError("publishedUrl must be a real http(s) URL.");
   }
 
-  const { data, error: fetchError } = await client.from("video_renders").select("status").eq("id", videoRenderId).maybeSingle();
+  const { data, error: fetchError } = await client.from("video_renders").select("status, campaign_asset_id").eq("id", videoRenderId).maybeSingle();
   if (fetchError) throw new Error(`setPublishedUrl fetch failed: ${fetchError.message}`);
   if (!data) throw new VideoStatusActionError(`video render not found: ${videoRenderId}`);
   if ((data as { status: string }).status !== "ready") {
@@ -257,6 +272,26 @@ export async function setPublishedUrl(client: SupabaseClient, videoRenderId: str
     .update({ published_url: trimmed, updated_at: new Date().toISOString() })
     .eq("id", videoRenderId);
   if (error) throw new Error(`setPublishedUrl update failed: ${error.message}`);
+
+  // Growth loop (2026-09-18): also record it in the generalized
+  // content_publications table (migration 0035) alongside the
+  // video_renders column above -- kept in sync, never a replacement, so
+  // any code still reading video_renders.published_url (e.g. this same
+  // file's YouTube-comment-monitoring callers) keeps working unchanged.
+  // Best-effort: a failure here must never undo the write above, which is
+  // the one video_renders callers actually depend on.
+  const campaignAssetId = (data as { campaign_asset_id: string | null }).campaign_asset_id;
+  if (campaignAssetId) {
+    try {
+      await recordOwnerPublication(client, {
+        campaignAssetId,
+        channel: detectChannelFromUrl(trimmed),
+        actualUrl: trimmed,
+      });
+    } catch (err) {
+      console.warn(`setPublishedUrl: content_publications sync failed for ${videoRenderId}, video_renders row still updated`, err);
+    }
+  }
 }
 
 /** One-way fingerprint of the app's own bearer credential -- never the credential itself -- stored alongside each device token purely for future credential-rotation cleanup (see migration 0027's doc comment on device_push_tokens). */

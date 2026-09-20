@@ -13,7 +13,7 @@ import { runProspectingSearch } from "../src/prospecting/prospectingSearch.js";
 import { SupabaseProspectingRepository } from "../src/prospecting/supabaseProspectingRepository.js";
 import { getProspectingMonthSpendUsd } from "../src/cost/costTracking.js";
 import { recordSyncAttempt, recordSyncSuccess, recordSyncFailure } from "../src/lib/integrationHealth.js";
-import { recordConversionEvent } from "../src/attribution/conversionEvents.js";
+import { recordConversionEvent, CONVERSION_EVENT_TYPES, type ConversionEventType } from "../src/attribution/conversionEvents.js";
 import { recordLinkClick, isAllowedRedirectTarget } from "../src/attribution/linkClicks.js";
 
 function isoDate(d: Date): string {
@@ -100,20 +100,31 @@ async function handleLinkClickRedirect(req: VercelRequest, res: VercelResponse):
   res.end();
 }
 
+function isConversionEventType(v: unknown): v is ConversionEventType {
+  return typeof v === "string" && (CONVERSION_EVENT_TYPES as string[]).includes(v);
+}
+
 /**
- * Server-to-server webhook from FillbookHQ's own signup flow -- POST
- * /api/ingest?source=fillbook_signup, called fire-and-forget from the
- * browser right after a real signup completes (see
- * fillbook/frontend/src/lib/growthOs.ts). Gated by FILLBOOK_WEBHOOK_SECRET,
- * a *different* credential than APP_API_TOKEN because the caller is a web
- * app's client-side bundle, not this project's own Android app -- the
- * secret is visible to anyone who opens devtools on fillbookhq.com, same
- * fundamental limitation requireAppAuth's own doc comment notes for a
- * compiled-in Android token. Accepted here because the entire blast radius
- * of an abused secret is "someone can insert fake rows into this project's
- * own conversion_events table" -- never a read or write into FillbookHQ's
- * database (see docs/ARCHITECTURE.md's isolation goal), and never any PII:
- * only utm_*, referral_code, and a timestamp are ever accepted, no email.
+ * Server-to-server webhook from FillbookHQ -- POST
+ * /api/ingest?source=fillbook_signup, body `{ event_type, external_event_id,
+ * subject_hash, utm_*, event_touch_utm_*, referral_code, occurred_at }`.
+ *
+ * Growth loop (2026-09-18): now called from FillbookHQ's own SERVER-side
+ * sync cron (`frontend/src/lib/growthOsSync.ts` + its Vercel Cron endpoint
+ * on FillbookHQ's project), not a client-side fetch -- the previous
+ * client-beacon approach (growthOs.ts's notifyGrowthOsSignup, now removed)
+ * shipped FILLBOOK_WEBHOOK_SECRET in FillbookHQ's browser bundle, which a
+ * server-side caller no longer needs to. Every event_type
+ * (signup/activation/first_trade/first_paid) shares this one endpoint
+ * rather than four, same "one authenticated boundary" reasoning as
+ * api/approvals.ts's ?resource= dispatch.
+ *
+ * Gated by FILLBOOK_WEBHOOK_SECRET -- the entire blast radius of an
+ * abused secret is "someone can insert fake rows into this project's own
+ * conversion_events table," never a read or write into FillbookHQ's
+ * database (see docs/ARCHITECTURE.md's isolation goal), and never any
+ * PII: only utm_*, referral_code, a pseudonymous subject_hash, and a
+ * timestamp are ever accepted, no email/user_id.
  */
 async function handleFillbookSignupWebhook(req: VercelRequest, res: VercelResponse): Promise<void> {
   if (req.method !== "POST") {
@@ -134,19 +145,27 @@ async function handleFillbookSignupWebhook(req: VercelRequest, res: VercelRespon
 
   const body = (req.body ?? {}) as Record<string, unknown>;
   const str = (v: unknown): string | null => (typeof v === "string" && v.length > 0 ? v : null);
+  const eventType = isConversionEventType(body.event_type) ? body.event_type : "signup";
 
   try {
     const client = getServiceClient();
-    await recordConversionEvent(client, {
+    const result = await recordConversionEvent(client, {
       source: "fillbook_signup",
+      eventType,
+      externalEventId: str(body.external_event_id),
+      subjectHash: str(body.subject_hash),
       utmSource: str(body.utm_source),
       utmMedium: str(body.utm_medium),
       utmCampaign: str(body.utm_campaign),
       utmContent: str(body.utm_content),
+      eventTouchUtmSource: str(body.event_touch_utm_source),
+      eventTouchUtmMedium: str(body.event_touch_utm_medium),
+      eventTouchUtmCampaign: str(body.event_touch_utm_campaign),
+      eventTouchUtmContent: str(body.event_touch_utm_content),
       referralCode: str(body.referral_code),
       occurredAt: str(body.occurred_at) ?? new Date().toISOString(),
     });
-    res.status(200).json({ recorded: true });
+    res.status(200).json({ recorded: true, inserted: result.inserted });
   } catch (err) {
     res.status(500).json({ error: errorMessage(err) });
   }

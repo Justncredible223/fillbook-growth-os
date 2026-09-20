@@ -16,6 +16,7 @@ import { deriveTodayXPostView, runDailyXFeedPostStep, feedPostTopicLabel, type T
 import { buildXFeedPostStepDeps } from "../src/content/buildXFeedPostStepDeps.js";
 import { SupabaseXFeedPostRunRepository } from "../src/content/xFeedPostRunRepository.js";
 import { getOperatingDate, getScheduleTimezone } from "../src/config/scheduleConfig.js";
+import { computeGrowthLoopSummary, type GrowthLoopPublicationRow, type GrowthLoopConversionRow } from "../src/attribution/growthLoopAnalytics.js";
 
 /**
  * `?resource=strategy` handles Strategy Evolution -- a read of the latest
@@ -607,8 +608,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const [signalsToday, openOpportunities, readyAssetsAwaitingDecision, settings, signalsBySource, opportunitiesByStatus, assetsByStage, costRows, lastAutoDraftRun, monthAutoDraftSpendUsd, todayXPost, todaySpendUsd, recentConversions] =
-      await Promise.all([
+    const [
+      signalsToday,
+      openOpportunities,
+      readyAssetsAwaitingDecision,
+      settings,
+      signalsBySource,
+      opportunitiesByStatus,
+      assetsByStage,
+      costRows,
+      lastAutoDraftRun,
+      monthAutoDraftSpendUsd,
+      todayXPost,
+      todaySpendUsd,
+      recentConversions,
+      recentPublications,
+      recentLinkClicks,
+      recentAllConversions,
+      recentCostEvents,
+      anyConversionEventEver,
+    ] = await Promise.all([
         client.from("signals").select("id", { count: "exact", head: true }).gte("observed_at", startOfToday.toISOString()),
         client.from("opportunities").select("id", { count: "exact", head: true }).eq("status", "open"),
         // Same filter as GET /api/approvals: ready_for_owner AND the
@@ -635,7 +654,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Attribution loop this session closed (see backend/src/attribution/):
         // FillbookHQ's signup webhook writes here. Surfaced on Home so the
         // loop is actually visible instead of a table nobody queries.
-        client.from("conversion_events").select("utm_source, utm_medium, utm_content").gte("occurred_at", sevenDaysAgo.toISOString()),
+        // event_type filter added 2026-09-18 when conversion_events grew
+        // activation/first_trade/first_paid rows alongside signup (see
+        // migration 0035) -- without it, this count would silently inflate
+        // with every non-signup funnel event once FillbookHQ starts
+        // sending them, since the original query counted every row in the
+        // table as a signup.
+        client
+          .from("conversion_events")
+          .select("utm_source, utm_medium, utm_content")
+          .eq("event_type", "signup")
+          .gte("occurred_at", sevenDaysAgo.toISOString()),
+        // Growth loop (2026-09-18), Analytics item 4 -- see
+        // growthLoopAnalytics.ts's own header comment for exactly what
+        // each of these can and cannot honestly claim.
+        client.from("content_publications").select("channel, owner_reported_published_at").gte("recorded_at", sevenDaysAgo.toISOString()),
+        client.from("link_clicks").select("id", { count: "exact", head: true }).gte("clicked_at", sevenDaysAgo.toISOString()),
+        client.from("conversion_events").select("event_type, utm_source, occurred_at").gte("occurred_at", sevenDaysAgo.toISOString()),
+        client.from("cost_events").select("cost_usd").gte("created_at", sevenDaysAgo.toISOString()),
+        // Existence check only (head:true, limit irrelevant) -- has
+        // FillbookHQ's sync EVER delivered anything, any event_type, any
+        // time -- distinguishes "genuinely zero this window" from "never
+        // connected at all." Deliberately NOT scoped to this window.
+        client.from("conversion_events").select("id", { count: "exact", head: true }),
       ]);
 
     const countBy = (rows: Array<Record<string, string>> | null, key: string): Record<string, number> => {
@@ -658,6 +699,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       "source",
     );
     const topSource = Object.entries(sourceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+    const publicationRows: GrowthLoopPublicationRow[] = ((recentPublications.data ?? []) as Array<{ channel: string; owner_reported_published_at: string | null }>).map((r) => ({
+      channel: r.channel,
+      ownerReportedPublishedAt: r.owner_reported_published_at,
+    }));
+    const conversionRowsAllTypes: GrowthLoopConversionRow[] = ((recentAllConversions.data ?? []) as Array<{ event_type: string; utm_source: string | null; occurred_at: string }>).map((r) => ({
+      eventType: r.event_type,
+      utmSource: r.utm_source,
+      occurredAt: r.occurred_at,
+    }));
+    const recentCostUsd = ((recentCostEvents.data ?? []) as Array<{ cost_usd: number }>).reduce((s, r) => s + Number(r.cost_usd ?? 0), 0);
+    const growthLoop = computeGrowthLoopSummary({
+      windowDays: 7,
+      publications: publicationRows,
+      linkClickCount: recentLinkClicks.count ?? 0,
+      conversions: conversionRowsAllTypes,
+      contentProductionCostUsd: recentCostUsd,
+      fillbookSyncHasEverDelivered: (anyConversionEventEver.count ?? 0) > 0,
+    });
 
     res.status(200).json({
       todayXPost,
@@ -694,6 +754,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           monthSpendUsd: Number(monthAutoDraftSpendUsd.toFixed(6)),
           monthBudgetUsd: MONTHLY_AUTO_DRAFT_BUDGET_USD,
         },
+        growthLoop,
       },
     });
   } catch (err) {

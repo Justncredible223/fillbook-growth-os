@@ -44,3 +44,27 @@ export function utmQueryString(params: UtmParams): string {
     .map(([key, value]) => `${key}=${encodeURIComponent(value)}`)
     .join("&");
 }
+
+/**
+ * Growth loop (2026-09-18): a full, ready-to-copy destination URL rather
+ * than just a query-string suffix the owner has to remember to append by
+ * hand. Restricted to a small, explicit allowlist of real FillbookHQ pages
+ * -- same reasoning as linkClicks.ts's ALLOWED_REDIRECT_HOSTS, just at
+ * path granularity too, since this returns the URL directly rather than
+ * going through the ingest.ts?source=click redirect (deliberately no
+ * shortener/redirect hop here: a plain tagged URL is simpler, and "avoid
+ * unnecessary URL-shortener infrastructure" is an explicit requirement --
+ * the click-counted short-link path in linkClicks.ts stays reserved for
+ * the per-reply/per-contact case that genuinely needs a click count,
+ * e.g. partnership outreach).
+ */
+const ALLOWED_DESTINATION_PATHS = new Set(["/", "/pricing"]);
+const DESTINATION_HOST = "https://www.fillbookhq.com";
+
+export function buildDestinationUrl(campaignAssetId: string, platform: string, campaignThesis: string, path: string = "/"): string {
+  if (!ALLOWED_DESTINATION_PATHS.has(path)) {
+    throw new Error(`buildDestinationUrl: "${path}" is not an approved Fillbook destination path`);
+  }
+  const params = buildUtmParams(campaignAssetId, platform, campaignThesis);
+  return `${DESTINATION_HOST}${path}?${utmQueryString(params)}`;
+}
