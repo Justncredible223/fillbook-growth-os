@@ -8,6 +8,7 @@ import { checkRelevanceCheap, draftProspectingReply, PROSPECTING_TRACKABLE_LINK,
 import { checkReplyGuardrails } from "../content/xReplyGuardrails.js";
 import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
 import { isPlausiblyTradingRelated } from "./prospectingRelevance.js";
+import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
 import type { ProspectingCandidate, ProspectingRepository } from "./types.js";
@@ -27,6 +28,8 @@ export interface ProspectingHandlerDeps {
   loadGrounding?: (client: SupabaseClient) => Promise<{ brandRulesSummary: string; verifiedKnowledgeSummary: string }>;
   /** Cheap (MODEL_HAIKU) relevance precheck -- see prospectingReplyWriter.ts's checkRelevanceCheap. Overridable so tests never make a live LLM call. */
   cheapRelevanceCheck?: (context: ProspectingDraftContext) => Promise<boolean>;
+  /** Recent owner-edited replies for tone examples. Overridable so tests never touch the database. */
+  loadStyleExamples?: (client: SupabaseClient) => Promise<StyleExample[]>;
 }
 
 function repoFor(client: SupabaseClient, deps: ProspectingHandlerDeps): ProspectingRepository {
@@ -202,6 +205,7 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
       return draftProspectingReply(llmClient, context, brandRules, knowledge);
     });
 
+  draftContext.styleExamples = await (deps.loadStyleExamples ?? loadStyleExamples)(client);
   const draft = await drafter(draftContext, brandRulesSummary, verifiedKnowledgeSummary);
 
   // Third, independent relevance gate -- the model's own honest judgment,

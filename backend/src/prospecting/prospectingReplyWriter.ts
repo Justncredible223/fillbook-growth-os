@@ -1,5 +1,6 @@
 import { MODEL_HAIKU, type LlmClient } from "../content/llmClient.js";
 import { HUMAN_REPLY_VOICE_RULES } from "../content/humanReplyVoice.js";
+import { formatStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
 
 const CHEAP_RELEVANCE_SCHEMA = {
   type: "object",
@@ -221,6 +222,8 @@ export interface ProspectingDraftContext {
   authorHandle: string | null;
   postText: string;
   discoveryQuery: string;
+  /** Recent owner edits, shown as tone examples. Optional and best-effort, see prospectingStyleExamples.ts. */
+  styleExamples?: StyleExample[];
 }
 
 export interface ProspectingDraftResult {
@@ -271,7 +274,11 @@ export async function draftProspectingReply(
     "",
     "Verified knowledge (use ONLY these facts about Fillbook -- do not invent anything else):",
     verifiedKnowledgeSummary,
-  ].join("\n");
+    formatStyleExamples(context.styleExamples) ? "" : null,
+    formatStyleExamples(context.styleExamples) || null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
 
   return client.callTool<ProspectingDraftResult>(buildProspectingSystemPrompt(profile), userMessage, "submit_reply", DRAFT_SCHEMA);
 }

@@ -447,6 +447,20 @@ describe("draftProspectingCandidateReply -- relevance gates", () => {
     expect(updated.status).toBe("ready");
   });
 
+  it("hands the owner's recent edits to the drafter as style examples, and a failed lookup never blocks drafting", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-style", status: "shown", draftReply: null, postText: "Been trading MNQ futures for two years, still get nervous before the open." }));
+    const examples = [{ theirPost: "p", aiDraft: "Great point!", ownerFinal: "Same. Log the loser first." }];
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: "Nervous before the open is normal. Respect the risk.", mentionsFillbook: false, usesLink: false }));
+
+    await draftProspectingCandidateReply(fakeClient, "x-style", { repo, drafter, loadGrounding, cheapRelevanceCheck, loadStyleExamples: async () => examples });
+    expect(drafter.mock.calls[0]![0].styleExamples).toEqual(examples);
+
+    repo.seed(candidate({ id: "x-style2", status: "shown", draftReply: null, postText: "Been trading MNQ futures for two years, still get nervous before the open." }));
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-style2", { repo, drafter, loadGrounding, cheapRelevanceCheck, loadStyleExamples: async () => [] });
+    expect(updated.status).toBe("ready");
+  });
+
   it("a genuine prop-firm/drawdown post (no 'futures' word at all) passes the pre-filter and reaches the drafter", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(
