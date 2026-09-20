@@ -143,17 +143,15 @@ const AI_TELL_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   { pattern: /(?:\bthoughts\?|\bwhat do you think\?|\bdoes that (?:make sense|resonate)\?)\s*$/i, reason: "ends on a generic solicitation question" },
   // Owner review 2026-09-20: after the dash and filler fixes, the drafts still
   // read as machine-written because they lean on the same few framings.
-  { pattern: /\bmost (?:traders|people|funded traders|retail traders|prop traders)\b/i, reason: 'generalizes about "most traders", a stock AI framing' },
-  { pattern: /^\s*(?:the gap between|the second you|the hard part|the difference between|what separates)\b/i, reason: "opens with a stock AI framing instead of a specific point" },
-  { pattern: /\bthat'?s the (?:gap|difference) between\b/i, reason: 'closes with a tidy "that\'s the gap between" takeaway line' },
   { pattern: /\p{Extended_Pictographic}/u, reason: "contains an emoji" },
   { pattern: /#\w+/, reason: "contains a hashtag" },
   { pattern: /!.*!/s, reason: "uses multiple exclamation marks" },
 ];
 
-/** A real X reply is one or two sentences; three is the ceiling before it reads like an essay. */
+/** X's own reply limit. Over this the reply cannot be posted as written, so it is a hard rejection. */
+const MAX_REPLY_CHARS = 280;
+/** A real X reply is one or two sentences; more than three reads like an essay (a soft signal, see checkReplySoftStyle). */
 const MAX_REPLY_SENTENCES = 3;
-const MAX_REPLY_CHARS = 260;
 
 function sentenceCount(text: string): number {
   return text.split(/[.!?]+(?:\s|$)/).filter((part) => part.trim().length > 0).length;
@@ -164,13 +162,37 @@ export function containsAiTell(reply: string): GuardrailViolation | null {
   const match = AI_TELL_PATTERNS.find(({ pattern }) => pattern.test(reply));
   if (match) return { reason: match.reason };
 
+  if (reply.length > MAX_REPLY_CHARS) {
+    return { reason: `is too long to post on X (${reply.length} characters, the limit is ${MAX_REPLY_CHARS})` };
+  }
+  return null;
+}
+
+/**
+ * Style tells that make a reply read as machine-written but are judgment calls, not objective
+ * errors (owner review 2026-09-20). Run against 323 saved Prospecting drafts these matched about
+ * 70% of what the model naturally writes, so treating them as hard rejections made drafting fail
+ * or retry constantly. They steer ONE retry (see draftWithRetries) and the best attempt is then
+ * shown to the owner, who edits every reply before posting anyway.
+ */
+const SOFT_STYLE_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
+  { pattern: /\bmost (?:traders|people|funded traders|retail traders|prop traders)\b/i, reason: 'generalizes about "most traders", a stock AI framing' },
+  { pattern: /^\s*(?:the gap between|the second you|the hard part|the difference between|what separates)\b/i, reason: "opens with a stock AI framing instead of a specific point" },
+  { pattern: /\bthat'?s the (?:gap|difference) between\b/i, reason: 'closes with a tidy "that\'s the gap between" takeaway line' },
+];
+
+/** True (with a reason) if the reply has a soft style tell. Never a reason to refuse to show a draft. */
+export function checkReplySoftStyle(reply: string): GuardrailViolation | null {
+  const match = SOFT_STYLE_PATTERNS.find(({ pattern }) => pattern.test(reply));
+  if (match) return { reason: match.reason };
+
   const sentences = sentenceCount(reply);
-  if (sentences > MAX_REPLY_SENTENCES || reply.length > MAX_REPLY_CHARS) {
-    return { reason: `is too long for an X reply (${sentences} sentences, ${reply.length} characters)` };
+  if (sentences > MAX_REPLY_SENTENCES) {
+    return { reason: `runs ${sentences} sentences, more than a quick X reply` };
   }
   // A question is fine as the whole reply or mid-reply; tacked onto the end of a statement it is the
-  // "engagement question" shape the voice rules already ask the writer to avoid.
-  if (sentences >= 2 && /\?\s*$/.test(reply)) {
+  // "engagement question" shape the voice rules ask the writer to avoid.
+  if (sentences >= 2 && reply.trimEnd().endsWith("?")) {
     return { reason: "ends a multi-sentence reply with a question" };
   }
   return null;
@@ -229,4 +251,43 @@ export function buildRetryFeedback(rejectedReply: string, reason: string): strin
   return `Your previous draft was rejected because it ${reason}.
 Rejected draft: "${rejectedReply}"
 Write a NEW reply that fixes exactly that. Keep it to one or two short sentences.`;
+}
+
+/** A draft that only has soft style tells gets this many attempts in total (one retry) before it is shown as-is. */
+export const MAX_SOFT_ATTEMPTS = 2;
+
+export interface DraftAssessment {
+  /** A real problem: the draft must never be shown. */
+  hard: string | null;
+  /** A style tell: worth one retry, never a reason to refuse. */
+  soft: string | null;
+}
+
+/**
+ * Generates a reply, regenerating with the reason fed back when a check trips. A hard problem is
+ * retried up to MAX_DRAFT_ATTEMPTS times; a draft with only soft style tells is retried once
+ * (MAX_SOFT_ATTEMPTS) and then accepted. If a later attempt is worse than an earlier acceptable
+ * one, the earlier one wins. Returns null draft + the hard reason only when no attempt was
+ * acceptable. `assess` may throw to abort (e.g. the model judged the post irrelevant).
+ */
+export async function draftWithRetries<T extends { reply: string }>(options: {
+  generate: (retryFeedback?: string) => Promise<T>;
+  assess: (draft: T) => DraftAssessment;
+}): Promise<{ draft: T | null; hardReason: string | null }> {
+  let feedback: string | undefined;
+  let acceptable: T | null = null;
+  let hardReason: string | null = null;
+  for (let attempt = 1; attempt <= MAX_DRAFT_ATTEMPTS; attempt++) {
+    const draft = await options.generate(feedback);
+    const { hard, soft } = options.assess(draft);
+    if (!hard) {
+      if (!soft) return { draft, hardReason: null };
+      acceptable = draft;
+      if (attempt >= MAX_SOFT_ATTEMPTS) return { draft: acceptable, hardReason: null };
+    } else {
+      hardReason = hard;
+    }
+    feedback = buildRetryFeedback(draft.reply, (hard ?? soft) as string);
+  }
+  return { draft: acceptable, hardReason: acceptable ? null : hardReason };
 }

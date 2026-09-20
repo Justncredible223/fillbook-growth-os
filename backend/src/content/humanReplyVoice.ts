@@ -16,8 +16,8 @@ export const HUMAN_REPLY_VOICE_RULES = `HOW REAL TRADERS ACTUALLY REPLY ON X (th
   It is the single most recognizable AI sentence shape.
 - No tidy lists of three ("discipline, consistency, and patience"). Real people name one specific thing.
 - Do not restate or paraphrase what they just said back to them. They know what they said.
-- Default to ONE sentence. Two is fine. Three is the hard ceiling, and anything over about 250 characters
-  is rejected. If you need more room than that, you have too many points: pick the best one.
+- Default to ONE sentence. Two is fine. Aim for under about 230 characters; X allows 280 and anything
+  longer is rejected outright. If you need more room than that, you have too many points: pick the best one.
 - Never generalize about "most traders" or "most people". Talk about this person's post. Also never open with
   "The gap between", "The second you", "The hard part is" or "What separates", and never close with a tidy
   "that's the gap between X and Y" line. These are the shapes that get replies called AI slop.

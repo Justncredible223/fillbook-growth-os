@@ -5,13 +5,16 @@ import { loadGroundingContext } from "../inbound/inboundHandlers.js";
 import { selectDailyWorkingSet } from "./prospectingDailySelection.js";
 import { STALE_EXPIRY_DAYS } from "./prospectingEligibility.js";
 import { checkRelevanceCheap, draftProspectingReply, PROSPECTING_TRACKABLE_LINK, type ProspectingDraftContext, type ProspectingDraftResult } from "./prospectingReplyWriter.js";
-import { buildRetryFeedback, checkReplyGuardrails, MAX_DRAFT_ATTEMPTS } from "../content/xReplyGuardrails.js";
+import { checkReplyGuardrails, checkReplySoftStyle, draftWithRetries } from "../content/xReplyGuardrails.js";
 import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
 import { isPlausiblyTradingRelated } from "./prospectingRelevance.js";
 import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
 import { discoveryLabelForKey, replyClassForKey } from "./prospectingTopics.js";
 import { SupabaseProspectingRepository } from "./supabaseProspectingRepository.js";
 import type { ProspectingCandidate, ProspectingRepository } from "./types.js";
+
+/** Thrown from inside the draft-retry loop when the model says the post is irrelevant, so the loop stops without retrying. */
+class ProspectingIrrelevantSignal extends Error {}
 
 export class ProspectingActionError extends Error {}
 
@@ -206,33 +209,41 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
     });
 
   draftContext.styleExamples = await (deps.loadStyleExamples ?? loadStyleExamples)(client);
-  // A draft that trips a mechanical guardrail is regenerated with the reason fed back, up to
-  // MAX_DRAFT_ATTEMPTS, so the owner isn't left re-tapping "Draft" through avoidable rejections.
-  // The relevance gate and the guardrail check both run on every attempt.
-  let draft = await drafter(draftContext, brandRulesSummary, verifiedKnowledgeSummary);
-  let violation: { reason: string } | null = null;
-  for (let attempt = 1; ; attempt++) {
-    // Third, independent relevance gate -- the model's own honest judgment,
-    // for content that slipped past both the mechanical pre-filter and the
-    // cheap Haiku check above (e.g. a post that uses real trading vocabulary
-    // but in a fundamentally different, still-irrelevant context). Same
-    // terminal status and no persisted draft as the earlier gates.
-    if (!draft.isRelevant) {
+  // A draft with a real problem (banned phrase, link, unverified claim, dash, over X's length limit) is
+  // regenerated with the reason fed back, up to MAX_DRAFT_ATTEMPTS, and never shown. A draft with only a
+  // soft style tell ("most traders", a question tacked on the end, too many sentences) gets ONE retry and
+  // is then shown as the best attempt, since the owner edits every reply anyway.
+  const { draft: accepted, hardReason } = await draftWithRetries({
+    generate: (retryFeedback) => drafter(retryFeedback ? { ...draftContext, retryFeedback } : draftContext, brandRulesSummary, verifiedKnowledgeSummary),
+    assess: (candidate) => {
+      // Third, independent relevance gate -- the model's own honest judgment,
+      // for content that slipped past both the mechanical pre-filter and the
+      // cheap Haiku check above (e.g. a post that uses real trading vocabulary
+      // but in a fundamentally different, still-irrelevant context). Same
+      // terminal status and no persisted draft as the earlier gates.
+      if (!candidate.isRelevant) {
+        throw new ProspectingIrrelevantSignal();
+      }
+      // Mechanical, $0 safety net -- catches banned generic phrases, an
+      // unexplained link, and unverified performance/customer claims
+      // regardless of what the model's own mentionsFillbook/usesLink flags
+      // say. A hard violation is never persisted or shown to the owner.
+      return {
+        hard: checkReplyGuardrails(candidate.reply, candidate.usesLink)?.reason ?? null,
+        soft: checkReplySoftStyle(candidate.reply)?.reason ?? null,
+      };
+    },
+  }).catch(async (err) => {
+    if (err instanceof ProspectingIrrelevantSignal) {
       await repo.updateStatus(id, "not_relevant");
       throw new ProspectingActionError("Not eligible for drafting -- the model judged this post isn't genuinely relevant to futures/trading.");
     }
-
-    // Mechanical, $0 safety net -- catches banned generic phrases, an
-    // unexplained link, and unverified performance/customer claims
-    // regardless of what the model's own mentionsFillbook/usesLink flags
-    // say. A violating draft is never persisted or shown to the owner.
-    violation = checkReplyGuardrails(draft.reply, draft.usesLink);
-    if (!violation || attempt >= MAX_DRAFT_ATTEMPTS) break;
-    draft = await drafter({ ...draftContext, retryFeedback: buildRetryFeedback(draft.reply, violation.reason) }, brandRulesSummary, verifiedKnowledgeSummary);
+    throw err;
+  });
+  if (!accepted) {
+    throw new ProspectingActionError(`Draft rejected -- ${hardReason}. Try drafting again.`);
   }
-  if (violation) {
-    throw new ProspectingActionError(`Draft rejected -- ${violation.reason}. Try drafting again.`);
-  }
+  const draft = accepted;
 
   // Swaps the model's static placeholder link for a real per-candidate
   // short link (see trackableLinks.ts) -- closes the "per-reply link

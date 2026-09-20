@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { checkReplyGuardrails, containsAiTell, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
+import { describe, it, expect, vi } from "vitest";
+import { checkReplyGuardrails, checkReplySoftStyle, draftWithRetries, MAX_DRAFT_ATTEMPTS, MAX_SOFT_ATTEMPTS, containsAiTell, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
 
 describe("checkReplyGuardrails", () => {
   it("passes a purely helpful reply where promotion would be inappropriate -- no Fillbook mention at all", () => {
@@ -205,18 +205,39 @@ describe("profit-promise language is rejected", () => {
   });
 });
 
-describe("stock framings and essay-length replies are rejected (owner review 2026-09-20)", () => {
+describe("hard length limit vs soft style tells (owner review 2026-09-20)", () => {
+  it("rejects a reply over X's 280-character limit outright", () => {
+    const violation = checkReplyGuardrails("word ".repeat(60) + "end", false);
+    expect(violation?.reason).toContain("too long to post on X");
+  });
+
+  it("accepts a reply right at the limit", () => {
+    expect(checkReplyGuardrails("a".repeat(280), false)).toBeNull();
+  });
+
+  for (const text of [
+    "Halving size after a drawdown is the move most traders skip.",
+    "The gap between the plan and the click is where it goes wrong.",
+    "The second you log the loss, the urge fades.",
+    "Same loss every time. That's the gap between a review and a vent.",
+    "One. Two. Three. Four.",
+    "Halving size works. What's your trigger to go back to full risk?",
+  ]) {
+    it(`does NOT hard-reject the style tell: ${text.slice(0, 45)}`, () => {
+      expect(checkReplyGuardrails(text, false)).toBeNull();
+    });
+  }
+
   for (const [text, reason] of [
     ["Halving size after a drawdown is the move most traders skip.", "most traders"],
     ["The gap between the plan and the click is where it goes wrong.", "stock AI framing"],
     ["The second you log the loss, the urge fades.", "stock AI framing"],
     ["Same loss every time. That's the gap between a review and a vent.", "gap between"],
-    ["One. Two. Three. Four.", "too long"],
-    [`${"word ".repeat(60)}end`, "too long"],
+    ["One. Two. Three. Four.", "4 sentences"],
     ["Halving size works. What's your trigger to go back to full risk?", "ends a multi-sentence reply with a question"],
   ] as const) {
-    it(`rejects: ${text.slice(0, 50)}`, () => {
-      expect(checkReplyGuardrails(text, false)?.reason).toContain(reason);
+    it(`flags it as a soft tell: ${text.slice(0, 45)}`, () => {
+      expect(checkReplySoftStyle(text)?.reason).toContain(reason);
     });
   }
 
@@ -227,8 +248,82 @@ describe("stock framings and essay-length replies are rejected (owner review 202
     "appreciate it",
     "Two contracts on a tighter stop is more risk than the three that lost. Worth checking.",
   ]) {
-    it(`still allows: ${text}`, () => {
-      expect(checkReplyGuardrails(text, false)).toBeNull();
+    it(`raises no soft tell for: ${text}`, () => {
+      expect(checkReplySoftStyle(text)).toBeNull();
     });
   }
+});
+
+describe("draftWithRetries", () => {
+  const clean = { reply: "clean" };
+  const assessFor = (table: Record<string, { hard: string | null; soft: string | null }>) => (draft: { reply: string }) => table[draft.reply]!;
+  const sequence = (replies: string[]) => {
+    const generate = vi.fn(async (_feedback?: string) => ({ reply: replies[Math.min(generate.mock.calls.length - 1, replies.length - 1)]! }));
+    return generate;
+  };
+
+  it("returns a clean first draft with one call", async () => {
+    const generate = sequence(["clean"]);
+    const result = await draftWithRetries({ generate, assess: assessFor({ clean: { hard: null, soft: null } }) });
+    expect(result.draft).toEqual(clean);
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a soft-only draft once with the reason fed back, then shows it as the best attempt", async () => {
+    const generate = sequence(["soft", "soft"]);
+    const result = await draftWithRetries({ generate, assess: assessFor({ soft: { hard: null, soft: "uses a stock framing" } }) });
+    expect(result.draft).toEqual({ reply: "soft" });
+    expect(generate).toHaveBeenCalledTimes(MAX_SOFT_ATTEMPTS);
+    expect(generate.mock.calls[1]![0]).toContain("uses a stock framing");
+  });
+
+  it("takes the clean draft when the soft retry fixes it", async () => {
+    const generate = sequence(["soft", "clean"]);
+    const result = await draftWithRetries({
+      generate,
+      assess: assessFor({ soft: { hard: null, soft: "tell" }, clean: { hard: null, soft: null } }),
+    });
+    expect(result.draft).toEqual(clean);
+    expect(generate).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a hard problem up to MAX_DRAFT_ATTEMPTS and then reports it without a draft", async () => {
+    const generate = sequence(["bad"]);
+    const result = await draftWithRetries({ generate, assess: assessFor({ bad: { hard: "uses a banned phrase", soft: null } }) });
+    expect(result.draft).toBeNull();
+    expect(result.hardReason).toBe("uses a banned phrase");
+    expect(generate).toHaveBeenCalledTimes(MAX_DRAFT_ATTEMPTS);
+  });
+
+  it("keeps an earlier acceptable draft when the soft retry comes back with a hard problem", async () => {
+    const generate = sequence(["soft", "bad"]);
+    const result = await draftWithRetries({
+      generate,
+      assess: assessFor({ soft: { hard: null, soft: "tell" }, bad: { hard: "uses a banned phrase", soft: null } }),
+    });
+    expect(result.draft).toEqual({ reply: "soft" });
+  });
+
+  it("recovers when a hard problem is fixed on a later attempt", async () => {
+    const generate = sequence(["bad", "clean"]);
+    const result = await draftWithRetries({
+      generate,
+      assess: assessFor({ bad: { hard: "too long", soft: null }, clean: { hard: null, soft: null } }),
+    });
+    expect(result.draft).toEqual(clean);
+    expect(generate).toHaveBeenCalledTimes(2);
+  });
+
+  it("lets assess abort the loop by throwing, with no further attempts", async () => {
+    const generate = sequence(["x"]);
+    await expect(
+      draftWithRetries({
+        generate,
+        assess: () => {
+          throw new Error("irrelevant");
+        },
+      }),
+    ).rejects.toThrow("irrelevant");
+    expect(generate).toHaveBeenCalledTimes(1);
+  });
 });
