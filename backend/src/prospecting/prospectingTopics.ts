@@ -62,7 +62,6 @@ export const PROSPECTING_TOPICS: ProspectingTopic[] = [
   { key: "funded_discipline", query: '"funded account" discipline', label: "Funded-account discipline", replyClass: "A" },
   { key: "behavior_tracking", query: '"trading behavior" tracking', label: "Behavior tracking", replyClass: "A" },
   { key: "plan_adherence", query: '"trading plan" (follow OR stick OR broke)', label: "Plan adherence", replyClass: "A" },
-  { key: "trade_review", query: '"trade review"', label: "Trade review", replyClass: "A" },
   { key: "trading_mistakes", query: '"trading mistakes"', label: "Trade-review mistakes", replyClass: "A" },
   { key: "first_loss", query: '"first loss" trading', label: "First-loss behavior", replyClass: "A" },
   { key: "why_i_lost", query: '"why I lost" trading', label: "Why I lost", replyClass: "A" },
@@ -74,33 +73,46 @@ export const PROSPECTING_TOPICS: ProspectingTopic[] = [
   { key: "sized_up", query: '"sized up" trading loss', label: "Sizing up after losses", replyClass: "B" },
   { key: "tilt", query: '"trading tilt"', label: "Trading tilt", replyClass: "B" },
   { key: "losing_streak", query: '"losing streak" trading', label: "Losing streak", replyClass: "B" },
-  { key: "fomo_trading", query: '"FOMO" trading', label: "FOMO", replyClass: "B" },
-  { key: "trading_psychology", query: '"trading psychology"', label: "Trading psychology", replyClass: "B" },
   { key: "execution_trading", query: '"trade execution" consistency', label: "Execution consistency", replyClass: "B" },
   { key: "daily_loss", query: '"daily loss limit"', label: "Daily loss limit", replyClass: "B" },
   { key: "strategy_hopping", query: '"strategy hopping"', label: "Strategy hopping", replyClass: "B" },
-  { key: "trading_routine", query: '"trading routine" OR "trading process"', label: "Trading routine", replyClass: "B" },
   { key: "risk_management", query: '"risk management" futures', label: "Risk management (futures)", replyClass: "B" },
+  { key: "holding_losers", query: '"holding losers"', label: "Holding losers", replyClass: "B" },
+  { key: "bad_trading_day", query: '"bad trading day"', label: "Bad trading day", replyClass: "B" },
+
+  // ---- CLASS C -- relationship fit (credible futures traders/creators, no Fillbook fit required) ----
+  { key: "futures_trader", query: '"futures trader" (process OR psychology)', label: "Futures trader", replyClass: "C" },
+];
+
+/**
+ * Topics taken out of the daily search rotation (owner review 2026-09-20). X bills $0.005 per post
+ * read, and over 18 days these 12 accounted for about a quarter of all reads but only about a tenth
+ * of the replies actually posted (e.g. general futures 1 of 20, energy futures 1 of 16, rates 0 of
+ * 10, FOMO 0 of 9, trade review 8 of 29, routine 4 of 23), so the read cost bought very little.
+ * Kept in the file, not deleted: rows already stored under these keys still resolve their label and
+ * reply class (see discoveryLabelForKey / replyClassForKey), and a topic can be moved back into
+ * PROSPECTING_TOPICS in one edit if its yield changes.
+ */
+export const PARKED_PROSPECTING_TOPICS: ProspectingTopic[] = [
+  { key: "trade_review", query: '"trade review"', label: "Trade review", replyClass: "A" },
+  { key: "trading_routine", query: '"trading routine" OR "trading process"', label: "Trading routine", replyClass: "B" },
+  { key: "hesitation_trading", query: '"hesitate to enter" OR "entry hesitation" trading', label: "Hesitation", replyClass: "B" },
+  { key: "metals_futures", query: "(gold OR GC OR silver) futures trading", label: "Metals futures", replyClass: "C" },
+  { key: "mnq_nq", query: "(MNQ OR NQ OR ES OR MES) futures trading", label: "Index futures (MNQ/NQ/ES)", replyClass: "C" },
+  { key: "trading_psychology", query: '"trading psychology"', label: "Trading psychology", replyClass: "B" },
+  { key: "futures_trading_general", query: '"futures trading"', label: "Futures trading", replyClass: "C" },
+  { key: "energy_futures", query: "(crude oil OR CL) futures trading", label: "Energy futures", replyClass: "C" },
+  { key: "rates_futures", query: "(treasury OR bonds) futures trading", label: "Rates futures", replyClass: "C" },
+  { key: "fomo_trading", query: '"FOMO" trading', label: "FOMO", replyClass: "B" },
   { key: "gave_back_profits", query: '"gave back" profits trading', label: "Gave back profits", replyClass: "B" },
   // "trading" appended for the same reason as "overtrading" above -- the bare phrase
   // "too many trades" contains no anchor isPlausiblyTradingRelated() recognizes, so
   // every candidate this topic found (confirmed live 2026-09-07: 4 of 4) was silently
   // reclassified 'not_relevant' the instant the app fetched the queue.
   { key: "too_many_trades", query: '"too many trades" trading', label: "Overtrading volume", replyClass: "B" },
-  { key: "hesitation_trading", query: '"hesitate to enter" OR "entry hesitation" trading', label: "Hesitation", replyClass: "B" },
-  { key: "holding_losers", query: '"holding losers"', label: "Holding losers", replyClass: "B" },
-  { key: "bad_trading_day", query: '"bad trading day"', label: "Bad trading day", replyClass: "B" },
-
-  // ---- CLASS C -- relationship fit (credible futures traders/creators, no Fillbook fit required) ----
-  { key: "futures_trader", query: '"futures trader" (process OR psychology)', label: "Futures trader", replyClass: "C" },
-  { key: "futures_trading_general", query: '"futures trading"', label: "Futures trading", replyClass: "C" },
-  { key: "mnq_nq", query: "(MNQ OR NQ OR ES OR MES) futures trading", label: "Index futures (MNQ/NQ/ES)", replyClass: "C" },
-  { key: "energy_futures", query: "(crude oil OR CL) futures trading", label: "Energy futures", replyClass: "C" },
-  { key: "metals_futures", query: "(gold OR GC OR silver) futures trading", label: "Metals futures", replyClass: "C" },
-  { key: "rates_futures", query: "(treasury OR bonds) futures trading", label: "Rates futures", replyClass: "C" },
 ];
 
-const TOPIC_BY_KEY = new Map(PROSPECTING_TOPICS.map((t) => [t.key, t]));
+const TOPIC_BY_KEY = new Map([...PROSPECTING_TOPICS, ...PARKED_PROSPECTING_TOPICS].map((t) => [t.key, t]));
 
 /** Resolves a stored discovery_query key back to its human-readable label for API responses. Falls back to the raw key (rather than throwing) so a candidate discovered under a topic later removed from this list still displays something sane instead of erroring the whole queue. */
 export function discoveryLabelForKey(key: string): string {
