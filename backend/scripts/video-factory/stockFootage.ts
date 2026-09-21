@@ -1,4 +1,4 @@
-import { createWriteStream, mkdirSync, statSync, copyFileSync } from "node:fs";
+import { createWriteStream, mkdirSync, statSync, copyFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import type { Scene, SceneKind } from "./types.js";
@@ -348,11 +348,43 @@ export function pickRandomEligible<T extends { duration: number }>(items: readon
  * top-of-file comment on the actual root cause of "always the same
  * footage" this replaces).
  */
+export interface FetchStockClipOptions {
+  /**
+   * Looks at the downloaded clip's actual picture (see clipQuality.ts). A rejected clip is skipped and the
+   * next candidate is tried, so one bad clip no longer costs the scene its footage. Omitted = no picture check.
+   */
+  qualityCheck?: (clipPath: string) => Promise<{ ok: boolean; reason: string }>;
+  /** Called for every clip the quality check rejects, so the render log shows what was thrown away and why. */
+  onRejected?: (clipId: string, reason: string) => void;
+}
+
+/** How many candidates are downloaded and inspected for one scene before giving up on the query. */
+export const MAX_CLIP_CANDIDATES = 4;
+
+/**
+ * Candidates in the order to try: long-enough clips first, each group shuffled, so footage still varies
+ * between renders. The first element is what pickRandomEligible would have returned.
+ */
+export function orderCandidates<T extends { duration: number }>(items: readonly T[], minDurationSeconds: number): T[] {
+  const shuffle = (list: T[]) => {
+    const copy = [...list];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j]!, copy[i]!];
+    }
+    return copy;
+  };
+  const eligible = items.filter((v) => v.duration >= minDurationSeconds);
+  const rest = items.filter((v) => v.duration < minDurationSeconds);
+  return [...shuffle(eligible), ...shuffle(rest)];
+}
+
 export async function fetchStockClip(
   query: string,
   minDurationSeconds: number,
   cacheDir: string,
   credentials: StockFootageCredentials,
+  options: FetchStockClipOptions = {},
 ): Promise<string | null> {
   try {
     mkdirSync(cacheDir, { recursive: true });
@@ -370,24 +402,43 @@ export async function fetchStockClip(
     const combined = filterTradingRelevant([...pexelsResults, ...pixabayResults]);
     if (combined.length === 0) return null;
 
-    const asset = pickRandomEligible(combined, minDurationSeconds);
-    if (!asset) return null;
+    // Without a picture check the first candidate is the one clip used (the original behaviour). With one,
+    // up to MAX_CLIP_CANDIDATES are tried, because a clip that is described well can still be a blank or
+    // green-screen frame -- the relevance filter above only ever read its title and tags.
+    const candidates = orderCandidates(combined, minDurationSeconds).slice(0, options.qualityCheck ? MAX_CLIP_CANDIDATES : 1);
 
-    const cachePath = join(cacheDir, `${asset.provider}-${asset.id}.mp4`);
-    try {
-      statSync(cachePath);
-      return cachePath;
-    } catch {
-      // Not cached yet -- download below.
+    for (const asset of candidates) {
+      const cachePath = join(cacheDir, `${asset.provider}-${asset.id}.mp4`);
+      let cached = false;
+      try {
+        statSync(cachePath);
+        cached = true;
+      } catch {
+        // Not cached yet -- download below.
+      }
+
+      if (!cached) {
+        const dlResp = await fetch(asset.downloadUrl);
+        if (!dlResp.ok || !dlResp.body) {
+          if (!options.qualityCheck) return null;
+          continue;
+        }
+        const ws = createWriteStream(cachePath);
+        await pipeline(dlResp.body as unknown as NodeJS.ReadableStream, ws);
+      }
+
+      if (!options.qualityCheck) return cachePath;
+      const verdict = await options.qualityCheck(cachePath);
+      if (verdict.ok) return cachePath;
+      options.onRejected?.(`${asset.provider}-${asset.id}`, verdict.reason);
+      // Drop the bad clip from the cache so it is never picked (and re-inspected) again.
+      try {
+        unlinkSync(cachePath);
+      } catch {
+        // Already gone -- nothing to clean up.
+      }
     }
-
-    const dlResp = await fetch(asset.downloadUrl);
-    if (!dlResp.ok || !dlResp.body) return null;
-
-    const ws = createWriteStream(cachePath);
-    await pipeline(dlResp.body as unknown as NodeJS.ReadableStream, ws);
-
-    return cachePath;
+    return null;
   } catch {
     return null;
   }

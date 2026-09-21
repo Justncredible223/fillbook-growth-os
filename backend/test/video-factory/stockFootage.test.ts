@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
-import { getSceneQuery, getVideoQuery, pickRandomEligible, fetchStockClip, isLikelyTradingRelevant } from "../../scripts/video-factory/stockFootage";
+import { getSceneQuery, getVideoQuery, pickRandomEligible, fetchStockClip, isLikelyTradingRelevant, orderCandidates, MAX_CLIP_CANDIDATES } from "../../scripts/video-factory/stockFootage";
 
 function jsonResponse(body: unknown) {
   return { ok: true, json: async () => body } as Response;
@@ -314,5 +314,100 @@ describe("fetchStockClip -- searches Pexels and Pixabay together", () => {
     }) as unknown as typeof fetch;
     const second = await fetchStockClip("trader at desk", 10, cacheDir, { pexelsApiKey: "pex-key", pixabayApiKey: "pix-key" });
     expect(second).toBe(first);
+  });
+});
+
+describe("fetchStockClip -- picture quality check", () => {
+  const originalFetch = global.fetch;
+  let cacheDir: string;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    if (cacheDir) rmSync(cacheDir, { recursive: true, force: true });
+  });
+
+  const relevantVideo = (id: number) => ({
+    ...PEXELS_VIDEO,
+    id,
+    url: `https://www.pexels.com/video/a-trader-watching-stock-charts-${id}/`,
+    video_files: [{ quality: "hd", link: `https://pexels.example/clip-${id}.mp4`, file_type: "video/mp4" }],
+  });
+  const mockSearch = (ids: number[]) => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("pexels.com")) return jsonResponse({ videos: ids.map(relevantVideo) });
+      return downloadResponse();
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    return fetchMock;
+  };
+  const creds = { pexelsApiKey: "pex-key", pixabayApiKey: null };
+
+  it("skips a clip whose picture is rejected and uses the next candidate instead", async () => {
+    cacheDir = mkdtempSync(join(tmpdir(), "stock-footage-test-"));
+    mockSearch([333, 444]);
+    const qualityCheck = vi.fn(async (path: string) => (path.includes("pexels-333") ? { ok: false, reason: "chroma-key green screen" } : { ok: true, reason: "ok" }));
+
+    const result = await fetchStockClip("trader at desk", 10, cacheDir, creds, { qualityCheck });
+
+    expect(result).toContain("pexels-444.mp4");
+  });
+
+  it("reports what it rejected and why, and removes the bad clip from the cache so it is never picked again", async () => {
+    cacheDir = mkdtempSync(join(tmpdir(), "stock-footage-test-"));
+    mockSearch([333]);
+    const onRejected = vi.fn();
+
+    const result = await fetchStockClip("trader at desk", 10, cacheDir, creds, {
+      qualityCheck: async () => ({ ok: false, reason: "mostly white / washed out" }),
+      onRejected,
+    });
+
+    expect(result).toBeNull();
+    expect(onRejected).toHaveBeenCalledWith("pexels-333", "mostly white / washed out");
+    expect(readdirSync(cacheDir)).toEqual([]);
+  });
+
+  it("gives up after MAX_CLIP_CANDIDATES rather than downloading every search result", async () => {
+    cacheDir = mkdtempSync(join(tmpdir(), "stock-footage-test-"));
+    const fetchMock = mockSearch([1, 2, 3, 4, 5, 6, 7, 8]);
+    const qualityCheck = vi.fn(async () => ({ ok: false, reason: "flat" }));
+
+    const result = await fetchStockClip("trader at desk", 10, cacheDir, creds, { qualityCheck });
+
+    expect(result).toBeNull();
+    expect(qualityCheck).toHaveBeenCalledTimes(MAX_CLIP_CANDIDATES);
+    const downloads = fetchMock.mock.calls.filter(([url]) => String(url).includes("pexels.example"));
+    expect(downloads).toHaveLength(MAX_CLIP_CANDIDATES);
+  });
+
+  it("a cached clip is re-checked on each call but never downloaded again", async () => {
+    cacheDir = mkdtempSync(join(tmpdir(), "stock-footage-test-"));
+    mockSearch([333]);
+    const qualityCheck = vi.fn(async () => ({ ok: true, reason: "ok" }));
+
+    const first = await fetchStockClip("trader at desk", 10, cacheDir, creds, { qualityCheck });
+    const second = await fetchStockClip("trader at desk", 10, cacheDir, creds, { qualityCheck });
+
+    expect(first).toBe(second);
+    expect(qualityCheck).toHaveBeenCalledTimes(2); // once per call; the cached file is re-checked, never re-downloaded
+  });
+
+  it("without a quality check it behaves as before: exactly one candidate, no inspection", async () => {
+    cacheDir = mkdtempSync(join(tmpdir(), "stock-footage-test-"));
+    const fetchMock = mockSearch([333, 444, 555]);
+
+    const result = await fetchStockClip("trader at desk", 10, cacheDir, creds);
+
+    expect(result).not.toBeNull();
+    const downloads = fetchMock.mock.calls.filter(([url]) => String(url).includes("pexels.example"));
+    expect(downloads).toHaveLength(1);
+  });
+
+  it("orderCandidates puts long-enough clips first and keeps every clip", () => {
+    const items = [{ duration: 2, id: "short-a" }, { duration: 30, id: "long-a" }, { duration: 1, id: "short-b" }, { duration: 40, id: "long-b" }];
+    const ordered = orderCandidates(items, 10);
+    expect(ordered).toHaveLength(4);
+    expect(new Set(ordered.slice(0, 2).map((c) => c.id))).toEqual(new Set(["long-a", "long-b"]));
+    expect(new Set(ordered.map((c) => c.id))).toEqual(new Set(items.map((c) => c.id)));
   });
 });
