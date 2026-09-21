@@ -131,9 +131,18 @@ export function buildScenePlan(shotList: string[], totalDurationSeconds: number,
   );
   const cuts = planCutTimes(wordCues, totalDurationSeconds, voiceEndSeconds, sceneCount);
   const boundaries = [0, ...cuts, totalDurationSeconds];
-  return Array.from({ length: sceneCount }, (_, j) =>
-    makeScene(Math.floor((j * shotList.length) / sceneCount), boundaries[j + 1]! - boundaries[j]!),
-  );
+  return Array.from({ length: sceneCount }, (_, j) => {
+    const scene = makeScene(Math.floor((j * shotList.length) / sceneCount), boundaries[j + 1]! - boundaries[j]!);
+    // The words spoken during this scene, so footage can be chosen to match what is being said
+    // rather than only the scene's generic kind (see stockFootage.ts's getSceneQuery).
+    const start = boundaries[j]!;
+    const end = boundaries[j + 1]!;
+    scene.narration = wordCues
+      .filter((cue) => cue.startSeconds >= start && cue.startSeconds < end)
+      .map((cue) => cue.text)
+      .join(" ");
+    return scene;
+  });
 }
 
 /** Converts a scene plan into timed SceneLabel dialogue cues for the .ass file. */

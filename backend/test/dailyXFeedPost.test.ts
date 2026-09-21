@@ -813,6 +813,16 @@ describe("bounded execution -- stops starting new work when insufficient real ti
     expect(retried.status).toBe("ready");
   });
 
+  it("an attempt still starts with ~40s left -- real attempts take 8-20s, so a rejected first draft can retry within the 52s deadline (13 and 16 Sep failed here)", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(draftResponse(GOOD_DRAFT_A)).mockResolvedValue(verdictResponse(true));
+    const { deps } = buildHarness(fetchMock);
+
+    const result = await runDailyXFeedPostStep(deps, OPERATING_DATE, false, new Date(), Date.now() + 40_000);
+
+    expect(result.status).toBe("ready");
+    expect(result.attempts).toBe(1);
+  });
+
   it("ESTIMATED_ATTEMPT_DURATION_MS is a real, positive, non-trivial bound (not a placeholder) used to decide whether to start another attempt", () => {
     expect(ESTIMATED_ATTEMPT_DURATION_MS).toBeGreaterThan(0);
     expect(ESTIMATED_ATTEMPT_DURATION_MS).toBeLessThan(60_000); // must fit within Vercel's own 60s maxDuration with room to spare

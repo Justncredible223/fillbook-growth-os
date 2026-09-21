@@ -1,3 +1,5 @@
+import type { RecentVideo } from "./videoHookVariety.js";
+import { MANUAL_VIDEO_TOPIC_TITLE_PREFIX } from "../opportunities/manualVideoTopic.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
@@ -19,8 +21,8 @@ export interface RunCampaignDeps {
   brandRulesSummary: string;
   verifiedKnowledgeSummary: string;
   recentTextsForSameTopic: string[];
-  /** Hooks of recent video scripts across all topics, see videoHookDiversity.ts. */
-  recentVideoHooks?: string[];
+  /** Hooks and titles of recently made videos, passed to the video script writer so it avoids repeating them. */
+  recentVideos?: RecentVideo[];
   /** Called only when the pipeline reaches ready_for_owner -- never otherwise. */
   markOpportunityActioned: (opportunityId: string) => Promise<void>;
   /** Called only when the pipeline reaches ready_for_owner. Sets 'in_review', NOT 'approved' -- AI review is not human approval. */
@@ -50,6 +52,18 @@ export interface RunCampaignOptions {
   assetTypeOverride?: "video_script" | "research";
 }
 
+/**
+ * An opportunity the owner typed in as a video request keeps that meaning wherever it is run from. Without
+ * this, running such an opportunity from Radar without the video option, or letting the daily auto-draft pick
+ * it (it takes any open opportunity), drafted a plain text POST for a "Video request:" (9 times between
+ * 2026-09-09 and 2026-09-21). Approving a post never queues a render, so the video "never went to render".
+ * An explicit override from the caller still wins. Research requests are not covered: they have their own
+ * handler logic keyed on the caller's option, and nothing shows the same problem there.
+ */
+export function assetTypeForManualRequest(title: string): "video_script" | undefined {
+  return title.startsWith(MANUAL_VIDEO_TOPIC_TITLE_PREFIX) ? "video_script" : undefined;
+}
+
 export async function runCampaignForOpportunity(
   deps: RunCampaignDeps,
   opportunity: PipelineOpportunity,
@@ -59,8 +73,8 @@ export async function runCampaignForOpportunity(
     brandRulesSummary: deps.brandRulesSummary,
     verifiedKnowledgeSummary: deps.verifiedKnowledgeSummary,
     recentTextsForSameTopic: deps.recentTextsForSameTopic,
-    recentVideoHooks: deps.recentVideoHooks,
-    assetTypeOverride: options.assetTypeOverride,
+    recentVideos: deps.recentVideos,
+    assetTypeOverride: options.assetTypeOverride ?? assetTypeForManualRequest(opportunity.title),
   });
 
   if (result.finalStage === "ready_for_owner") {
@@ -121,21 +135,18 @@ export async function buildSupabaseRunCampaignDeps(
     .limit(10);
   const recentTextsForSameTopic = (recentVersions ?? []).map((row: { body: string }) => row.body);
 
-  // Recent video hooks across ALL topics: the whole-body check above only sees the last 10 versions of
-  // any type, which never caught the same opener repeating across different videos.
-  let recentVideoHooks: string[] = [];
-  try {
-    const { data: videoVersions } = await client
-      .from("content_versions")
-      .select("metadata")
-      .not("metadata->videoScript", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(30);
-    recentVideoHooks = (videoVersions ?? [])
-      .map((row: { metadata: { videoScript?: { hook?: unknown } } | null }) => row.metadata?.videoScript?.hook)
-      .filter((hook: unknown): hook is string => typeof hook === "string" && hook.trim().length > 0);
-  } catch {
-    // best-effort: the published-hook list still applies
+  // Recent video hooks and titles (from the stored script package), so a new video script does not
+  // reuse an opening the channel already ran.
+  const { data: recentVideoRows } = await client
+    .from("content_versions")
+    .select("metadata")
+    .not("metadata", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(60);
+  const recentVideos: RecentVideo[] = [];
+  for (const row of (recentVideoRows ?? []) as Array<{ metadata: { videoScript?: { hook?: string; youtubeTitle?: string } } | null }>) {
+    const script = row.metadata?.videoScript;
+    if (script?.hook) recentVideos.push({ hook: script.hook, title: script.youtubeTitle ?? "" });
   }
 
   const usage = createUsageTracker();
@@ -152,7 +163,7 @@ export async function buildSupabaseRunCampaignDeps(
     brandRulesSummary,
     verifiedKnowledgeSummary,
     recentTextsForSameTopic,
-    recentVideoHooks,
+    recentVideos,
     markOpportunityActioned: async (id) => {
       await client.from("opportunities").update({ status: "actioned", updated_at: new Date().toISOString() }).eq("id", id);
     },

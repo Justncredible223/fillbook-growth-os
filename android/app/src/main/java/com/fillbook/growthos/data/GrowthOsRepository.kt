@@ -76,8 +76,11 @@ interface GrowthOsRepository {
      * Records the human decision -- approve or reject -- for one
      * campaign asset. Never publishes anything; only changes what this
      * app displays. The owner still does the actual posting themselves.
+     *
+     * Returns the render outcome when an approved asset was a video script (queued, already running, or
+     * refused with a reason such as the daily render limit), and null otherwise.
      */
-    suspend fun decideApproval(campaignAssetId: String, approve: Boolean)
+    suspend fun decideApproval(campaignAssetId: String, approve: Boolean): VideoRenderOutcome?
     /** Wires CampaignFactory.handOffToOwner() -- EXTERNAL_DRAFT only, "opened the composer," never a publish. */
     suspend fun handOffAsset(campaignAssetId: String): HandOffResult
 
@@ -463,8 +466,9 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         totalCalls = 20,
     )
 
-    override suspend fun decideApproval(campaignAssetId: String, approve: Boolean) {
+    override suspend fun decideApproval(campaignAssetId: String, approve: Boolean): VideoRenderOutcome? {
         // No backend to call in fake mode -- no-op.
+        return null
     }
 
     override suspend fun setPaused(paused: Boolean) {

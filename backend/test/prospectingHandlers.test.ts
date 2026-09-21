@@ -358,6 +358,58 @@ describe("draftProspectingCandidateReply -- the candidate's platform reaches the
     expect(row!.draftReply).toBeNull();
   });
 
+  const overLimit = "word ".repeat(70);
+
+  it("regenerates a hard-rejected draft with the reason fed back, and saves the fixed one", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-retry", platform: "x", status: "shown", draftReply: null }));
+    const badDraft = { isRelevant: true, reply: overLimit, mentionsFillbook: false, usesLink: false };
+    const goodDraft = { isRelevant: true, reply: "EOD for most firms.", mentionsFillbook: false, usesLink: false };
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => (drafter.mock.calls.length === 1 ? badDraft : goodDraft));
+
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-retry", { repo, drafter, loadGrounding, cheapRelevanceCheck });
+
+    expect(drafter).toHaveBeenCalledTimes(2);
+    expect(drafter.mock.calls[0]![0].retryFeedback).toBeUndefined();
+    expect(drafter.mock.calls[1]![0].retryFeedback).toMatch(/too long/);
+    expect(updated.status).toBe("ready");
+    expect(updated.draftReply).toBe("EOD for most firms.");
+  });
+
+  it("gives up after MAX_DRAFT_ATTEMPTS on a hard problem and never persists the draft", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-giveup", platform: "x", status: "shown", draftReply: null }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: true, reply: overLimit, mentionsFillbook: false, usesLink: false }));
+
+    await expect(draftProspectingCandidateReply(fakeClient, "x-giveup", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(/too long/);
+
+    expect(drafter).toHaveBeenCalledTimes(3);
+    expect((await repo.getById("x-giveup"))!.draftReply).toBeNull();
+  });
+
+  it("shows a draft with only a soft style tell after one retry instead of refusing it", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-soft", platform: "x", status: "shown", draftReply: null }));
+    const softDraft = { isRelevant: true, reply: "Halving size is the move most traders skip.", mentionsFillbook: false, usesLink: false };
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => softDraft);
+
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-soft", { repo, drafter, loadGrounding, cheapRelevanceCheck });
+
+    expect(drafter).toHaveBeenCalledTimes(2);
+    expect(drafter.mock.calls[1]![0].retryFeedback).toMatch(/most traders/);
+    expect(updated.status).toBe("ready");
+    expect(updated.draftReply).toBe(softDraft.reply);
+  });
+
+  it("does not retry when the model says the post is not relevant", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-irrelevant", platform: "x", status: "shown", draftReply: null }));
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => ({ isRelevant: false, reply: "", mentionsFillbook: false, usesLink: false }));
+
+    await expect(draftProspectingCandidateReply(fakeClient, "x-irrelevant", { repo, drafter, loadGrounding, cheapRelevanceCheck })).rejects.toThrow(/relevant/);
+    expect(drafter).toHaveBeenCalledTimes(1);
+  });
+
   it("REFINED: rejects a draft with an unsupported customer-result claim", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(candidate({ id: "x-3", platform: "x", status: "shown", draftReply: null }));

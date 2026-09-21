@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { PROSPECTING_TOPICS } from "../src/prospecting/prospectingTopics";
+import { PROSPECTING_TOPICS, PARKED_PROSPECTING_TOPICS, discoveryLabelForKey, replyClassForKey } from "../src/prospecting/prospectingTopics";
 import { isPlausiblyTradingRelated } from "../src/prospecting/prospectingRelevance";
 
 /**
@@ -44,4 +44,38 @@ describe("PROSPECTING_TOPICS queries are guaranteed to pass isPlausiblyTradingRe
       expect(isPlausiblyTradingRelated(text)).toBe(true);
     });
   }
+});
+
+describe("parked low-yield topics (owner review 2026-09-20)", () => {
+  const parkedKeys = PARKED_PROSPECTING_TOPICS.map((t) => t.key);
+
+  it("takes the 12 weakest topics out of the search rotation", () => {
+    expect(parkedKeys).toHaveLength(12);
+    const activeKeys = new Set(PROSPECTING_TOPICS.map((t) => t.key));
+    for (const key of parkedKeys) expect(activeKeys.has(key)).toBe(false);
+  });
+
+  it("keeps the high-yield topics in the rotation", () => {
+    const activeKeys = new Set(PROSPECTING_TOPICS.map((t) => t.key));
+    for (const key of ["revenge_trading", "trailing_drawdown", "prop_firm", "blown_account", "losing_streak", "daily_loss", "strategy_hopping", "futures_trader"]) {
+      expect(activeKeys.has(key)).toBe(true);
+    }
+  });
+
+  it("never lists a key twice across the active and parked lists", () => {
+    const all = [...PROSPECTING_TOPICS, ...PARKED_PROSPECTING_TOPICS].map((t) => t.key);
+    expect(new Set(all).size).toBe(all.length);
+  });
+
+  it("still resolves the label and reply class for rows already stored under a parked key", () => {
+    expect(discoveryLabelForKey("energy_futures")).toBe("Energy futures");
+    expect(replyClassForKey("energy_futures")).toBe("C");
+    expect(discoveryLabelForKey("trade_review")).toBe("Trade review");
+    expect(replyClassForKey("trade_review")).toBe("A");
+  });
+
+  it("still falls back safely for a key that is in neither list", () => {
+    expect(discoveryLabelForKey("never_existed")).toBe("never_existed");
+    expect(replyClassForKey("never_existed")).toBe("B");
+  });
 });

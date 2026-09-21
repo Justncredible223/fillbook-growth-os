@@ -4,8 +4,8 @@ import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
 import { createLlmClient } from "../content/llmClient.js";
 import { recordCostEvent, estimateCostUsd } from "../cost/costTracking.js";
-import { draftInboundResponse, INBOUND_APPROVED_LINK_DOMAINS, INBOUND_TRACKABLE_LINK } from "./inboundResponseWriter.js";
-import { checkReplyGuardrails, impliesContactOrLinkRequest } from "../content/xReplyGuardrails.js";
+import { draftInboundResponse, INBOUND_APPROVED_LINK_DOMAINS, INBOUND_TRACKABLE_LINK, type InboundDraftContext } from "./inboundResponseWriter.js";
+import { checkReplyGuardrails, checkReplySoftStyle, draftWithRetries, impliesContactOrLinkRequest } from "../content/xReplyGuardrails.js";
 import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
 import { SupabaseInboundRepository } from "./supabaseInboundRepository.js";
 import { ingestInboundMentions } from "./inboundIngestion.js";
@@ -141,41 +141,45 @@ export async function draftResponseForInbound(client: SupabaseClient, id: string
     void recordCostEvent(client, usage, { inboundEngagementId: id, endpoint: "inbound-draft" });
   });
 
-  const draft = await draftInboundResponse(
-    llmClient,
-    {
-      platform: row.platform,
-      authorHandle: row.authorHandle,
-      messageText: row.body,
-      inResponseToText: row.inResponseToText,
-      isRepeatEngager: row.isRepeatEngager,
-      priorInteractionCount: await repo.countPriorFromAuthor(row.platform, row.authorExternalId ?? ""),
-      styleExamples: await loadInboundStyleExamples(client),
+  const draftContext: InboundDraftContext = {
+    platform: row.platform,
+    authorHandle: row.authorHandle,
+    messageText: row.body,
+    inResponseToText: row.inResponseToText,
+    isRepeatEngager: row.isRepeatEngager,
+    priorInteractionCount: await repo.countPriorFromAuthor(row.platform, row.authorExternalId ?? ""),
+    styleExamples: await loadInboundStyleExamples(client),
+  };
+
+  // A draft with a real problem is regenerated with the reason fed back (up to MAX_DRAFT_ATTEMPTS) and
+  // never shown; a draft with only a soft style tell gets one retry and is then shown as the best attempt.
+  const { draft: accepted, hardReason } = await draftWithRetries({
+    generate: (retryFeedback) =>
+      draftInboundResponse(llmClient, retryFeedback ? { ...draftContext, retryFeedback } : draftContext, brandRulesSummary, verifiedKnowledgeSummary),
+    assess: (candidate) => {
+      let hard: string | null;
+      // A link is only ever earned when BOTH the model declared usesLink=true
+      // AND the person's own message actually asked for contact info/a link --
+      // checked here (not inside checkReplyGuardrails, which has no visibility
+      // into the original message) so a model that sets usesLink=true on an
+      // unrelated conversation still gets rejected, not silently trusted.
+      if (candidate.usesLink && !impliesContactOrLinkRequest(row.body)) {
+        hard = "includes a link, but the original message never asked for contact info or a link";
+      } else {
+        // Mechanical, $0 safety net -- see xReplyGuardrails.ts. A link is only
+        // ever permitted when usesLink=true (checked above against the original
+        // message) AND it resolves to Fillbook's own approved contact link -- an
+        // arbitrary or promotional domain is still rejected even with
+        // usesLink=true.
+        hard = checkReplyGuardrails(candidate.reply, candidate.usesLink, { approvedLinkDomains: INBOUND_APPROVED_LINK_DOMAINS })?.reason ?? null;
+      }
+      return { hard, soft: checkReplySoftStyle(candidate.reply)?.reason ?? null };
     },
-    brandRulesSummary,
-    verifiedKnowledgeSummary,
-  );
-
-  // A link is only ever earned when BOTH the model declared usesLink=true
-  // AND the person's own message actually asked for contact info/a link --
-  // checked here (not inside checkReplyGuardrails, which has no visibility
-  // into the original message) so a model that sets usesLink=true on an
-  // unrelated conversation still gets rejected, not silently trusted.
-  if (draft.usesLink && !impliesContactOrLinkRequest(row.body)) {
-    throw new InboundActionError(
-      "Draft rejected -- includes a link, but the original message never asked for contact info or a link. Try drafting again.",
-    );
+  });
+  if (!accepted) {
+    throw new InboundActionError(`Draft rejected -- ${hardReason}. Try drafting again.`);
   }
-
-  // Mechanical, $0 safety net -- see xReplyGuardrails.ts. A link is only
-  // ever permitted when usesLink=true (checked above against the original
-  // message) AND it resolves to Fillbook's own approved contact link -- an
-  // arbitrary or promotional domain is still rejected even with
-  // usesLink=true.
-  const violation = checkReplyGuardrails(draft.reply, draft.usesLink, { approvedLinkDomains: INBOUND_APPROVED_LINK_DOMAINS });
-  if (violation) {
-    throw new InboundActionError(`Draft rejected -- ${violation.reason}. Try drafting again.`);
-  }
+  const draft = accepted;
 
   // Swaps the model's static placeholder link for a real per-engagement
   // short link (see trackableLinks.ts) -- same per-reply attribution this

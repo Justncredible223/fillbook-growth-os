@@ -1,5 +1,6 @@
+import { findRepeatedHook, formatRecentVideos, type RecentVideo } from "./videoHookVariety.js";
 import type { LlmClient } from "./llmClient.js";
-import { buildHookGuidance, checkHookSimilarity, KNOWN_PUBLISHED_HOOKS, pickHookFormat } from "./videoHookDiversity.js";
+import { capitalizationProblem, dashProblem } from "./xReplyGuardrails.js";
 
 const VIDEO_SCRIPT_SCHEMA = {
   type: "object",
@@ -99,9 +100,15 @@ QUALITY BAR -- every output must clear this:
   review daily cut losing streaks 2x faster," "traders who review daily spot pattern errors 2x
   faster" -- all invented, all auto-failed by every reviewer for violating the grounding rules below.
   If a journal/routine/review-benefit topic has no real number to draw on, the hook is a named
-  mistake or mechanism instead, never a percentage. Write it fresh for this topic and follow the
-  "HOOK FOR THIS VIDEO" section in the user message: it names the format to use and lists hooks
-  that are already used and must not be repeated. Never reuse an example line from this prompt.
+  mistake or mechanism instead, e.g. "Copy-trading five funded accounts means one mistake gets made
+  five times" or "Your loss limit doesn't care that the trade was a good one" -- not "X% of traders
+  who don't journal repeat the same mistake."
+- Build every hook fresh for THIS topic. The request lists RECENT VIDEOS: never reuse or echo any of
+  those openings, and never open with "You already know...". Our best-performing videos so far were
+  about one specific prop-firm rule or mechanic with a surprising consequence (copy-trading several
+  accounts against drawdown rules, inconsistent position sizing, the two drawdown numbers a prop firm
+  tracks). The weakest were generic "a journal remembers your mistakes" hooks. Prefer a concrete rule,
+  mechanic or scenario plus its consequence, without inventing a statistic.
 - Script: the exact words someone speaks aloud or feeds to a TTS voice. Tight, punchy, real.
   No filler sentences. No corporate SaaS language. Never use these phrases (they will auto-fail
   review): "at the end of the day", "when it comes to", "game changer", "game-changer",
@@ -115,13 +122,23 @@ QUALITY BAR -- every output must clear this:
   sentence that doesn't earn its place; one idea, one payoff.
 - LOOP ENDING: the final sentence must flow straight back into the hook, so the video replays
   seamlessly when it restarts -- rewatches are another strong ranking signal. Write the last line
-  so it reads as the beginning of the hook's sentence or thought (a short connective such as
-  "...and that's exactly why" or "Because" that lands back on the first line), never a sign-off, never "thanks for watching", never a standalone conclusion. Mention
+  so it reads as the beginning of the hook's sentence or thought (e.g. hook "Your loss limit
+  doesn't care that the trade was a good one" -> final line "...and that's exactly why" / "Because"),
+  never a sign-off, never "thanks for watching", never a standalone conclusion. Mention
   Fillbook and fillbookhq.com once, naturally, in the middle-to-late body where it is relevant
   (never as the last line) -- the video ends on the loop, not on a brand card.
 - Shot list: filmable with a phone + screen recorder + basic title cards. 8-12 entries -- one
   per script beat of roughly 2-3 seconds, because the visuals should change that often. Show
   Fillbook UI where it is genuinely relevant -- always labeled example/demo data.
+- Capitalization and grammar (owner rule): the hook, script, titles, descriptions and captions all use
+  proper capitalization and grammar. Every sentence starts with a capital letter, "I" is capitalized,
+  punctuation is correct, and sentences are complete. Never write in all lowercase.
+- No em dashes or en dashes anywhere (hook, script, titles, descriptions, captions). Use a period or a
+  comma. Do not use "--" as a stand-in either.
+- Any trial claim must match the verified knowledge exactly: a 14-day free trial, no card required, and no
+  permanent free plan afterwards. Never invent trial terms or a different length, and never promise features
+  during the trial that the verified knowledge says need a paid plan. Saying "free trial" is fine when it is
+  accurate; leaving the trial out and just pointing to fillbookhq.com is fine too.
 - YouTube title: specific, under 70 characters, searchable -- no ALL CAPS, no stacked punctuation.
 - YouTube description: 3-5 sentences. Expand the hook, name the specific problem Fillbook solves,
   close with a clear CTA pointing to fillbookhq.com. Distinct from the spoken script and the
@@ -186,11 +203,9 @@ export async function draftVideoScript(
   opportunity: { title: string; rationale: string },
   brandRulesSummary: string,
   verifiedKnowledgeSummary: string,
-  options: { recentHooks?: string[]; now?: Date } = {},
+  recentVideos: readonly RecentVideo[] = [],
 ): Promise<VideoScript> {
-  const recentHooks = options.recentHooks ?? [];
-  const avoidHooks = [...recentHooks, ...KNOWN_PUBLISHED_HOOKS];
-  const format = pickHookFormat(options.now ?? new Date(), opportunity.title, recentHooks);
+  const recentSection = formatRecentVideos(recentVideos);
   const userMessage = [
     `Opportunity: ${opportunity.title}`,
     `Rationale: ${opportunity.rationale}`,
@@ -200,29 +215,16 @@ export async function draftVideoScript(
     "",
     "Verified knowledge (use ONLY these facts about Fillbook -- do not invent anything else):",
     verifiedKnowledgeSummary,
-    "",
-    buildHookGuidance({ format, recentHooks }),
-  ].join("\n");
+    recentSection ? "" : null,
+    recentSection || null,
+  ]
+    .filter((line): line is string => line !== null)
+    .join("\n");
 
   const call = (message: string) =>
     client.callTool<VideoScriptToolInput>(SYSTEM_PROMPT, message, "submit_video_script", VIDEO_SCRIPT_SCHEMA, 45_000, 4096);
 
   let result = await call(userMessage);
-  // A repeated opener is the failure mode that showed up on the live account (a dozen near-identical
-  // TikTok hooks), so it gets one targeted retry, then a hard stop, same shape as the length guard below.
-  const hookCheck = checkHookSimilarity(result.hook, avoidHooks);
-  if (hookCheck.similar) {
-    result = await call(
-      [
-        userMessage,
-        "",
-        `HOOK FIX REQUIRED: your hook "${result.hook}" is too close to an existing one (${hookCheck.reason}: "${hookCheck.against}").`,
-        `Write a completely different hook in the "${format.name}" format, with different opening words and a different sentence shape. Keep the rest of the package consistent with the new hook.`,
-      ].join("\n"),
-    );
-    const again = checkHookSimilarity(result.hook, avoidHooks);
-    if (again.similar) throw new VideoHookTooSimilarError(result.hook, again.against ?? "", again.reason ?? "");
-  }
   let words = countSpokenWords(result.script);
   if (words > MAX_SCRIPT_WORDS) {
     // The length rule in the prompt is only a request -- a model can exceed
@@ -240,10 +242,99 @@ export async function draftVideoScript(
     result = await call(retryMessage);
     words = countSpokenWords(result.script);
     if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
-    const afterRewrite = checkHookSimilarity(result.hook, avoidHooks);
-    if (afterRewrite.similar) throw new VideoHookTooSimilarError(result.hook, afterRewrite.against ?? "", afterRewrite.reason ?? "");
   }
-  return result;
+
+  // Owner rules for everything a viewer reads or hears: proper capitalization and grammar (2026-09-20) and no
+  // em or en dashes (2026-09-21). Every problem found is named in ONE rewrite;
+  // if a problem is still there after it the script is kept rather than failing the whole request, since
+  // the owner reviews it before it is rendered.
+  const copyProblems = videoCopyProblems(result);
+  if (copyProblems.length > 0) {
+    result = await call(
+      [
+        userMessage,
+        "",
+        "COPY FIX REQUIRED: your previous package had these problems:",
+        ...copyProblems.map((problem) => `- The ${problem.field} ${problem.reason}.`),
+        "Rewrite the whole package and fix every one of them: proper capitalization and grammar (every sentence starts with a capital letter, \"I\" is capitalized), and no em or en dashes anywhere (use a period or a comma). Keep the content, the hook's idea, the loop ending and the script within the length limit.",
+      ].join("\n"),
+    );
+    words = countSpokenWords(result.script);
+    if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
+  }
+
+  // The prompt asks for a fresh hook, but a model can still fall back on an opening it has
+  // used before. Send a repeat back with the offending hook named, and give up (rather than
+  // publish a repeat) if it still comes back the same.
+  const recentHooks = recentVideos.map((video) => video.hook);
+  for (let attempt = 1; ; attempt++) {
+    const repeated = findRepeatedHook(result.hook, recentHooks);
+    if (!repeated) return result;
+    if (attempt > MAX_HOOK_REWRITES) throw new VideoHookRepeatError(result.hook, repeated);
+    result = await call(
+      [
+        userMessage,
+        "",
+        "HOOK REPEATS A RECENT VIDEO -- REWRITE REQUIRED:",
+        `Your hook: ${result.hook}`,
+        `Recent hook it repeats: ${repeated}`,
+        "Write the whole package again with a different opening, a different mechanic or consequence for this topic, and a loop ending that flows into the NEW hook. Keep the script within the length limit.",
+      ].join("\n"),
+    );
+    words = countSpokenWords(result.script);
+    if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
+  }
+}
+
+/** The viewer-facing text fields of a script package, in the order a viewer meets them. Hashtags are not prose and are left out. */
+function viewerFacingFields(video: VideoScript): Array<[string, unknown]> {
+  return [
+    ["hook", video.hook],
+    ["script", video.script],
+    ["YouTube title", video.youtubeTitle],
+    ["YouTube description", video.youtubeDescription],
+    ["TikTok caption", video.tiktokCaption],
+    ["Instagram caption", video.instagramCaption],
+  ];
+}
+
+/** The first viewer-facing field of a script package that breaks the proper-capitalization rule, or null. */
+export function videoCapitalizationProblem(video: VideoScript): { field: string; reason: string } | null {
+  for (const [field, text] of viewerFacingFields(video)) {
+    // A field the model left out is a schema problem, not a capitalization one.
+    if (typeof text !== "string") continue;
+    const problem = capitalizationProblem(text);
+    if (problem) return { field, reason: problem.reason };
+  }
+  return null;
+}
+
+/**
+ * Every copy problem in a script package's viewer-facing text: capitalization and em or en dashes. One entry
+ * per field per kind of problem, so a single rewrite can be told about all of them.
+ */
+export function videoCopyProblems(video: VideoScript): Array<{ field: string; reason: string }> {
+  const problems: Array<{ field: string; reason: string }> = [];
+  for (const [field, text] of viewerFacingFields(video)) {
+    if (typeof text !== "string") continue;
+    for (const problem of [capitalizationProblem(text), dashProblem(text)]) {
+      if (problem) problems.push({ field, reason: problem.reason });
+    }
+  }
+  return problems;
+}
+
+/** How many times a repeated hook is sent back before the request fails instead. */
+export const MAX_HOOK_REWRITES = 2;
+
+export class VideoHookRepeatError extends Error {
+  constructor(
+    public readonly hook: string,
+    public readonly repeatedHook: string,
+  ) {
+    super(`Video hook still repeats a recent video after ${MAX_HOOK_REWRITES} rewrites ("${hook}" vs "${repeatedHook}"). Not queuing it -- try the request again or pick a different topic.`);
+    this.name = "VideoHookRepeatError";
+  }
 }
 
 /** Hard ceiling on spoken words (~27s at the render's +8% pace); the prompt asks for 45-75. */
@@ -253,17 +344,6 @@ export class VideoScriptTooLongError extends Error {
   constructor(public readonly words: number) {
     super(`Video script is ${words} words after one rewrite; the maximum is ${MAX_SCRIPT_WORDS}. Not queuing it -- a script this long renders past the target length.`);
     this.name = "VideoScriptTooLongError";
-  }
-}
-
-export class VideoHookTooSimilarError extends Error {
-  constructor(
-    public readonly hook: string,
-    public readonly against: string,
-    reason: string,
-  ) {
-    super(`Video hook "${hook}" is too close to an existing hook ("${against}", ${reason}) even after one rewrite. Not queuing it -- run it again for a fresh angle.`);
-    this.name = "VideoHookTooSimilarError";
   }
 }
 

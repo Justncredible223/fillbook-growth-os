@@ -1,7 +1,7 @@
-import { createWriteStream, mkdirSync, statSync, copyFileSync } from "node:fs";
+import { createWriteStream, mkdirSync, statSync, copyFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
-import type { SceneKind } from "./types.js";
+import type { Scene, SceneKind } from "./types.js";
 
 /**
  * Rotating stock-footage search queries per scene kind. Broadened
@@ -93,6 +93,54 @@ export function getVideoQuery(kind: SceneKind, seed: number): string | null {
   const queries = SCENE_QUERIES[kind];
   if (!queries || queries.length === 0) return null;
   return queries[seed % queries.length] ?? null;
+}
+
+/**
+ * What a scene is ABOUT, read from the words spoken over it and its shot-list
+ * line, mapped to footage searches. Before this, footage was picked from the
+ * scene's generic kind alone, so a line about revenge trading could get a calm
+ * "trader at desk" clip and a line about a winning streak a red chart. Checked
+ * in order, first match wins, so the more specific emotional/behavioral
+ * concepts come before the generic chart ones. Every query keeps a
+ * trader/chart/stock word in it so results still pass isLikelyTradingRelevant.
+ */
+const CONCEPT_QUERIES: Array<{ pattern: RegExp; queries: string[] }> = [
+  {
+    pattern: /\b(revenge|blew|blown|blow up|loss(?:es)?|losing|lost|drawdown|breach(?:ed)?|panic|fear|stress\w*|frustrat\w*|tilt|red day|wipe[sd]? out)\b/,
+    queries: ["trader stressed watching red chart", "trader losing money red chart", "stock market crash red chart", "trader frustrated at desk stock chart"],
+  },
+  {
+    pattern: /\b(win(?:s|ning)?|green|profit\w*|payout|gains?|rally|funded|passed)\b/,
+    queries: ["trader winning trade green chart", "green candlestick rally chart", "stock market gains chart", "trading profit growth chart"],
+  },
+  {
+    pattern: /\b(journal\w*|log(?:ged|ging)?|review\w*|replay|notes?|tag(?:s|ged)?|written|write|pattern\w*|memory)\b/,
+    queries: ["trader writing trading journal notes", "trader reviewing past trades", "trader reviewing trade history", "trader notebook stock chart desk"],
+  },
+  {
+    pattern: /\b(rules?|plan|discipline|stop|system|checklist|routine|process|strategy)\b/,
+    queries: ["trading strategy whiteboard chart", "trader annotating chart on tablet", "trader analyzing candlestick chart"],
+  },
+  {
+    pattern: /\b(size[sd]?|sizing|risk|contracts?|position|leverage)\b/,
+    queries: ["risk management trading chart screen", "day trader analyzing futures chart", "trading account balance chart"],
+  },
+  {
+    pattern: /\b(entry|entries|setup|chase[sd]?|chasing|hesitat\w*|staring|watching|waiting|signal)\b/,
+    queries: ["trader watching market charts", "trader typing on keyboard charts", "day trader candlestick chart monitors"],
+  },
+];
+
+/**
+ * Footage search for one scene: a concept query when the narration or shot
+ * line is clearly about something specific, otherwise the scene kind's generic
+ * rotation. Deterministic for a given seed, like getVideoQuery.
+ */
+export function getSceneQuery(scene: Pick<Scene, "kind" | "narration" | "shot">, seed: number): string | null {
+  const text = `${scene.narration ?? ""} ${scene.shot ?? ""}`.toLowerCase();
+  const concept = CONCEPT_QUERIES.find(({ pattern }) => pattern.test(text));
+  if (concept) return concept.queries[seed % concept.queries.length] ?? null;
+  return getVideoQuery(scene.kind, seed);
 }
 
 /**
@@ -300,11 +348,43 @@ export function pickRandomEligible<T extends { duration: number }>(items: readon
  * top-of-file comment on the actual root cause of "always the same
  * footage" this replaces).
  */
+export interface FetchStockClipOptions {
+  /**
+   * Looks at the downloaded clip's actual picture (see clipQuality.ts). A rejected clip is skipped and the
+   * next candidate is tried, so one bad clip no longer costs the scene its footage. Omitted = no picture check.
+   */
+  qualityCheck?: (clipPath: string) => Promise<{ ok: boolean; reason: string }>;
+  /** Called for every clip the quality check rejects, so the render log shows what was thrown away and why. */
+  onRejected?: (clipId: string, reason: string) => void;
+}
+
+/** How many candidates are downloaded and inspected for one scene before giving up on the query. */
+export const MAX_CLIP_CANDIDATES = 4;
+
+/**
+ * Candidates in the order to try: long-enough clips first, each group shuffled, so footage still varies
+ * between renders. The first element is what pickRandomEligible would have returned.
+ */
+export function orderCandidates<T extends { duration: number }>(items: readonly T[], minDurationSeconds: number): T[] {
+  const shuffle = (list: T[]) => {
+    const copy = [...list];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j]!, copy[i]!];
+    }
+    return copy;
+  };
+  const eligible = items.filter((v) => v.duration >= minDurationSeconds);
+  const rest = items.filter((v) => v.duration < minDurationSeconds);
+  return [...shuffle(eligible), ...shuffle(rest)];
+}
+
 export async function fetchStockClip(
   query: string,
   minDurationSeconds: number,
   cacheDir: string,
   credentials: StockFootageCredentials,
+  options: FetchStockClipOptions = {},
 ): Promise<string | null> {
   try {
     mkdirSync(cacheDir, { recursive: true });
@@ -322,24 +402,43 @@ export async function fetchStockClip(
     const combined = filterTradingRelevant([...pexelsResults, ...pixabayResults]);
     if (combined.length === 0) return null;
 
-    const asset = pickRandomEligible(combined, minDurationSeconds);
-    if (!asset) return null;
+    // Without a picture check the first candidate is the one clip used (the original behaviour). With one,
+    // up to MAX_CLIP_CANDIDATES are tried, because a clip that is described well can still be a blank or
+    // green-screen frame -- the relevance filter above only ever read its title and tags.
+    const candidates = orderCandidates(combined, minDurationSeconds).slice(0, options.qualityCheck ? MAX_CLIP_CANDIDATES : 1);
 
-    const cachePath = join(cacheDir, `${asset.provider}-${asset.id}.mp4`);
-    try {
-      statSync(cachePath);
-      return cachePath;
-    } catch {
-      // Not cached yet -- download below.
+    for (const asset of candidates) {
+      const cachePath = join(cacheDir, `${asset.provider}-${asset.id}.mp4`);
+      let cached = false;
+      try {
+        statSync(cachePath);
+        cached = true;
+      } catch {
+        // Not cached yet -- download below.
+      }
+
+      if (!cached) {
+        const dlResp = await fetch(asset.downloadUrl);
+        if (!dlResp.ok || !dlResp.body) {
+          if (!options.qualityCheck) return null;
+          continue;
+        }
+        const ws = createWriteStream(cachePath);
+        await pipeline(dlResp.body as unknown as NodeJS.ReadableStream, ws);
+      }
+
+      if (!options.qualityCheck) return cachePath;
+      const verdict = await options.qualityCheck(cachePath);
+      if (verdict.ok) return cachePath;
+      options.onRejected?.(`${asset.provider}-${asset.id}`, verdict.reason);
+      // Drop the bad clip from the cache so it is never picked (and re-inspected) again.
+      try {
+        unlinkSync(cachePath);
+      } catch {
+        // Already gone -- nothing to clean up.
+      }
     }
-
-    const dlResp = await fetch(asset.downloadUrl);
-    if (!dlResp.ok || !dlResp.body) return null;
-
-    const ws = createWriteStream(cachePath);
-    await pipeline(dlResp.body as unknown as NodeJS.ReadableStream, ws);
-
-    return cachePath;
+    return null;
   } catch {
     return null;
   }

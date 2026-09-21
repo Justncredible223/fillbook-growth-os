@@ -174,6 +174,8 @@ export interface InboundDraftContext {
   priorInteractionCount: number;
   /** Recent owner edits shown as tone examples. Optional and best-effort, see inboundStyleExamples.ts. */
   styleExamples?: StyleExample[];
+  /** Set on a retry: why the previous draft was rejected, so the model fixes it. See xReplyGuardrails.ts's buildRetryFeedback. */
+  retryFeedback?: string;
 }
 
 /**
@@ -217,9 +219,22 @@ export async function draftInboundResponse(
     verifiedKnowledgeSummary,
     formatStyleExamples(context.styleExamples) ? "" : null,
     formatStyleExamples(context.styleExamples) || null,
+    context.retryFeedback ? "" : null,
+    context.retryFeedback ?? null,
   ]
     .filter((line): line is string => line !== null)
     .join("\n");
 
-  return client.callTool<InboundDraftResult>(buildInboundSystemPrompt(context.platform), userMessage, "submit_reply", DRAFT_SCHEMA);
+  // Same reasoning as the Prospecting drafter: a large, stable system prompt and drafts that arrive
+  // in bursts (about half within 5 minutes of the previous one), so cache it.
+  return client.callTool<InboundDraftResult>(
+    buildInboundSystemPrompt(context.platform),
+    userMessage,
+    "submit_reply",
+    DRAFT_SCHEMA,
+    undefined,
+    undefined,
+    undefined,
+    true,
+  );
 }

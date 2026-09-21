@@ -29,3 +29,36 @@ describe("draftContent voice rules", () => {
     expect(client.callTool.mock.calls[0][1]).not.toContain("HOW REAL TRADERS ACTUALLY REPLY");
   });
 });
+
+describe("draftContent proper capitalization (owner rule 2026-09-20)", () => {
+  const clientReturning = (...bodies: string[]) => {
+    const callTool = vi.fn(async () => ({ body: bodies[Math.min(callTool.mock.calls.length - 1, bodies.length - 1)]! }));
+    return { callTool } as any;
+  };
+  const opportunity = { title: "t", rationale: "r" };
+
+  it("makes one call when the draft is properly capitalized", async () => {
+    const client = clientReturning("Trailing drawdown locks once you're up 2k.");
+    const text = await draftContent(client, "x", opportunity, "brand", "facts");
+    expect(text).toBe("Trailing drawdown locks once you're up 2k.");
+    expect(client.callTool).toHaveBeenCalledTimes(1);
+  });
+
+  it("rewrites a lowercase draft once, naming the problem, and returns the fixed version", async () => {
+    const client = clientReturning("fees are the silent killer. every spread counts.", "Fees are the silent killer. Every spread counts.");
+    const text = await draftContent(client, "x", opportunity, "brand", "facts");
+
+    expect(text).toBe("Fees are the silent killer. Every spread counts.");
+    expect(client.callTool).toHaveBeenCalledTimes(2);
+    const retryUser = client.callTool.mock.calls[1][1] as string;
+    expect(retryUser).toContain("starts with a lowercase letter");
+    expect(retryUser).toContain("fees are the silent killer");
+  });
+
+  it("never blocks the post: a second lowercase draft is still returned after the one rewrite", async () => {
+    const client = clientReturning("still lowercase here.", "still lowercase here too.");
+    const text = await draftContent(client, "x", opportunity, "brand", "facts");
+    expect(text).toBe("still lowercase here too.");
+    expect(client.callTool).toHaveBeenCalledTimes(2);
+  });
+});

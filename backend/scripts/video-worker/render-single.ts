@@ -24,7 +24,8 @@ import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from 
 import { renderVideo, extractThumbnail } from "../video-factory/render.js";
 import { assignUiScreens, copyUiScreenToDir } from "../video-factory/uiScreens.js";
 import { pickMusic } from "../video-factory/music.js";
-import { copyClipToDir, fetchStockClip, getVideoQuery, type StockFootageCredentials } from "../video-factory/stockFootage.js";
+import { copyClipToDir, fetchStockClip, getSceneQuery, getVideoQuery, type StockFootageCredentials } from "../video-factory/stockFootage.js";
+import { inspectClip } from "../video-factory/clipQuality.js";
 import { runFfprobeJson, validateOutput } from "../video-factory/validate.js";
 import { createProcessRunner, requireExecutable } from "../video-factory/processRunner.js";
 import { sendRenderNotification } from "./pushSender.js";
@@ -105,12 +106,26 @@ async function main(): Promise<void> {
   console.log(`[render-single] UI screenshots: ${scenes.filter((s) => s.imagePath).length}/${scenes.length} scenes are real app screens`);
 
   let scenesWithClip = 0;
+  // Every stock clip is looked at before it is used: the relevance filter only reads a clip's title and
+  // tags, so blank-white and green-screen clips (both reached a real render on 2026-09-20) used to get through.
+  const clipOptions = {
+    qualityCheck: (clipPath: string) => inspectClip(clipPath, runner, outDir),
+    onRejected: (clipId: string, reason: string) => console.log(`[render-single] rejected stock clip ${clipId}: ${reason}`),
+  };
   for (const [i, scene] of scenes.entries()) {
     if (scene.imagePath) continue;
     if (hasAnyStockProvider) {
-      const query = getVideoQuery(scene.kind, seed + i);
+      // Prefer footage that matches what is being said over this scene; if that search
+      // comes back empty, fall back to the scene kind's generic rotation before giving up.
+      const query = getSceneQuery(scene, seed + i);
       if (query) {
-        const cached = await fetchStockClip(query, scene.durationSeconds, STOCK_CLIP_CACHE, stockCredentials);
+        let cached = await fetchStockClip(query, scene.durationSeconds, STOCK_CLIP_CACHE, stockCredentials, clipOptions);
+        if (!cached) {
+          const fallbackQuery = getVideoQuery(scene.kind, seed + i);
+          if (fallbackQuery && fallbackQuery !== query) {
+            cached = await fetchStockClip(fallbackQuery, scene.durationSeconds, STOCK_CLIP_CACHE, stockCredentials, clipOptions);
+          }
+        }
         if (cached) {
           scene.clipPath = copyClipToDir(cached, outDir);
           scenesWithClip++;

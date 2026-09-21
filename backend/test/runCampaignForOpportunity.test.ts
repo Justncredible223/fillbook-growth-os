@@ -5,7 +5,7 @@ import { ContentQualityGate } from "../src/content/contentQualityGate";
 import { BrandConstitution } from "../src/knowledge/brandConstitution";
 import { InMemoryBrandConstitutionRepository } from "../src/knowledge/inMemoryRepositories";
 import { InMemoryContentScoreRepository } from "../src/content/contentScoreRepository";
-import { runCampaignForOpportunity, type RunCampaignDeps } from "../src/content/runCampaignForOpportunity";
+import { assetTypeForManualRequest, runCampaignForOpportunity, type RunCampaignDeps } from "../src/content/runCampaignForOpportunity";
 import type { CampaignRepository } from "../src/content/campaignPipeline";
 import type { AssetStage } from "../src/content/campaignFactory";
 
@@ -166,5 +166,46 @@ describe("runCampaignForOpportunity", () => {
     expect((deps.campaignRepo as InMemoryCampaignRepository).assets.find((a) => a.id === result.campaignAssetId)?.assetType).toBe(
       "post",
     );
+  });
+});
+
+describe("a 'Video request:' opportunity always runs as a video (owner report 2026-09-21)", () => {
+  const videoRequest = {
+    id: "opp-video",
+    title: "Video request: why prop firm traders who track their trades get funded",
+    rationale: 'Owner-requested video topic, entered directly in the app: "why prop firm traders who track their trades get funded"',
+    recommendedChannels: [] as string[],
+  };
+  const assetTypeOf = (deps: RunCampaignDeps, id: string) => (deps.campaignRepo as InMemoryCampaignRepository).assets.find((a) => a.id === id)?.assetType;
+
+  it("drafts a video script when run with no options -- the plain Radar run and the daily auto-draft both call it this way", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(videoScriptResponse()).mockResolvedValue(verdictResponse(true));
+    const deps = buildDeps(fetchMock);
+
+    const result = await runCampaignForOpportunity(deps, videoRequest);
+
+    expect(assetTypeOf(deps, result.campaignAssetId)).toBe("video_script");
+    expect(result.draftText).toContain("SHOT LIST:");
+  });
+
+  it("an explicit override from the caller still wins", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(videoScriptResponse()).mockResolvedValue(verdictResponse(true));
+    const deps = buildDeps(fetchMock);
+    const result = await runCampaignForOpportunity(deps, videoRequest, { assetTypeOverride: "video_script" });
+    expect(assetTypeOf(deps, result.campaignAssetId)).toBe("video_script");
+  });
+
+  it("an ordinary opportunity is still a plain post", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(draftResponse("Funded accounts get pulled for rules nobody rereads.")).mockResolvedValue(verdictResponse(true));
+    const deps = buildDeps(fetchMock);
+    const result = await runCampaignForOpportunity(deps, { ...opportunity, title: "Traders confused about drawdown" });
+    expect(assetTypeOf(deps, result.campaignAssetId)).toBe("post");
+  });
+
+  it("assetTypeForManualRequest only matches the exact request prefix", () => {
+    expect(assetTypeForManualRequest("Video request: anything")).toBe("video_script");
+    expect(assetTypeForManualRequest("Research request: anything")).toBeUndefined();
+    expect(assetTypeForManualRequest("A video request: anything")).toBeUndefined();
+    expect(assetTypeForManualRequest("video request: lowercase prefix")).toBeUndefined();
   });
 });

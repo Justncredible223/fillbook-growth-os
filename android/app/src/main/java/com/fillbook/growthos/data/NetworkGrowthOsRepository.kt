@@ -390,12 +390,12 @@ class NetworkGrowthOsRepository(
         )
     }
 
-    override suspend fun decideApproval(campaignAssetId: String, approve: Boolean) {
+    override suspend fun decideApproval(campaignAssetId: String, approve: Boolean): VideoRenderOutcome? {
         val body = JSONObject()
             .put("campaignAssetId", campaignAssetId)
             .put("action", if (approve) "approve" else "reject")
             .put("decidedBy", deciderName)
-        post("/api/approvals", body)
+        return parseVideoRenderOutcome(post("/api/approvals", body))
     }
 
     override suspend fun setPaused(paused: Boolean) {
@@ -1137,3 +1137,17 @@ private fun JSONObject.toIntMap(): Map<String, Int> =
 
 private fun JSONObject.toStringMap(): Map<String, String> =
     keys().asSequence().associateWith { key -> getString(key) }
+
+/**
+ * Reads the `videoRender` block POST /api/approvals adds when an approved asset was a video script.
+ * Null when the response has none (a reject, or any other asset type), so callers only report a render
+ * outcome when there is one.
+ */
+internal fun parseVideoRenderOutcome(response: JSONObject): VideoRenderOutcome? {
+    val block = response.optJSONObject("videoRender") ?: return null
+    return VideoRenderOutcome(
+        queued = block.optBoolean("queued", false),
+        alreadyExisted = block.optBoolean("alreadyExisted", false),
+        reason = if (block.isNull("reason")) null else block.optString("reason").ifBlank { null },
+    )
+}

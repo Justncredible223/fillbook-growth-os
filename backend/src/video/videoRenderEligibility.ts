@@ -30,6 +30,10 @@ export const MAX_VIDEO_RENDERS_PER_MONTH = 30;
  * the monthly cap), so it can never be bypassed by a caller that forgets
  * to check it -- including both the manual "Create Fillbook Video" button
  * and the reconciliation sweep.
+ *
+ * "Day" is the owner's calendar day in America/Phoenix (migration 0037), so
+ * the cap resets at local midnight; it was the UTC day (5 PM Phoenix time)
+ * until 2026-09-20, when an afternoon approval was silently blocked.
  */
 export const MAX_VIDEO_RENDERS_PER_DAY = 1;
 

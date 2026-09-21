@@ -700,8 +700,17 @@ function isStaleRunning(run: XFeedPostRun, now: Date): boolean {
  * slack for the DB writes around it. Used only to decide whether there's
  * enough time left to safely START another attempt, never to bound the
  * attempt itself (that bound is the per-call timeout).
+ *
+ * Tuned from real runs (x_feed_post_runs, 2026-09-05..20): a whole attempt
+ * takes 8-20s in practice. The earlier 45s estimate against the pipeline's
+ * 52s deadline meant a second attempt only started if the first finished
+ * within 7s, so a first draft rejected in review ended the day as "failed:
+ * insufficient time remaining" instead of retrying (13 and 16 Sep). 30s
+ * leaves room for a retry after a normal first attempt and still stops a
+ * genuinely slow one; a mid-attempt kill is recovered by the stale-run
+ * reclaim.
  */
-export const ESTIMATED_ATTEMPT_DURATION_MS = 45_000;
+export const ESTIMATED_ATTEMPT_DURATION_MS = 30_000;
 
 export async function runDailyXFeedPostStep(
   deps: XFeedPostStepDeps,

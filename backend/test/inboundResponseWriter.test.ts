@@ -2,6 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 import { LlmClient } from "../src/content/llmClient";
 import { draftInboundResponse } from "../src/inbound/inboundResponseWriter";
 
+/** The system value is a plain string, or an array of text blocks when prompt caching is on. */
+function systemText(system: unknown): string {
+  return Array.isArray(system) ? system.map((block: { text: string }) => block.text).join(" ") : (system as string);
+}
+
 function jsonResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
 }
@@ -16,7 +21,7 @@ async function capture(context: Parameters<typeof draftInboundResponse>[1]) {
   await draftInboundResponse(client, context, "voice: concise", "");
   const [, options] = fetchMock.mock.calls[0]!;
   const body = JSON.parse((options as { body: string }).body);
-  return { system: body.system as string, user: body.messages[0].content as string };
+  return { system: systemText(body.system), user: body.messages[0].content as string };
 }
 
 describe("draftInboundResponse", () => {
@@ -110,5 +115,18 @@ describe("draftInboundResponse", () => {
     expect(system).toContain("unless the conversation itself is");
     expect(system).toContain("specifically about trade journaling/tracking tools");
     expect(system).not.toContain("only earned once the reply has already added a concrete insight");
+  });
+});
+
+describe("draftInboundResponse prompt caching", () => {
+  it("marks the static system prompt for caching and keeps the message text out of it", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(replyResponse("appreciate it"));
+    const context = { platform: "x", authorHandle: "a", messageText: "UNIQUE-MESSAGE-TEXT", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 } as Parameters<typeof draftInboundResponse>[1];
+    await draftInboundResponse(new LlmClient("test-key", fetchMock), context, "voice", "");
+
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    expect(Array.isArray(body.system)).toBe(true);
+    expect(body.system[0].cache_control).toEqual({ type: "ephemeral" });
+    expect(body.system[0].text).not.toContain("UNIQUE-MESSAGE-TEXT");
   });
 });

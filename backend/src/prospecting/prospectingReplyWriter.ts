@@ -224,6 +224,8 @@ export interface ProspectingDraftContext {
   discoveryQuery: string;
   /** Recent owner edits, shown as tone examples. Optional and best-effort, see prospectingStyleExamples.ts. */
   styleExamples?: StyleExample[];
+  /** Set on a retry: why the previous draft was rejected, so the model fixes it. See xReplyGuardrails.ts's buildRetryFeedback. */
+  retryFeedback?: string;
 }
 
 export interface ProspectingDraftResult {
@@ -276,11 +278,25 @@ export async function draftProspectingReply(
     verifiedKnowledgeSummary,
     formatStyleExamples(context.styleExamples) ? "" : null,
     formatStyleExamples(context.styleExamples) || null,
+    context.retryFeedback ? "" : null,
+    context.retryFeedback ?? null,
   ]
     .filter((line): line is string => line !== null)
     .join("\n");
 
-  return client.callTool<ProspectingDraftResult>(buildProspectingSystemPrompt(profile), userMessage, "submit_reply", DRAFT_SCHEMA);
+  // The ~3k-token system prompt is identical on every draft, and drafts come in bursts (about two
+  // thirds land within 5 minutes of the previous one, retries included), so cache it: a cache read
+  // costs 10% of a normal input token. Undefined args keep the default timeout, token cap and model.
+  return client.callTool<ProspectingDraftResult>(
+    buildProspectingSystemPrompt(profile),
+    userMessage,
+    "submit_reply",
+    DRAFT_SCHEMA,
+    undefined,
+    undefined,
+    undefined,
+    true,
+  );
 }
 
 const CHEAP_RELEVANCE_SYSTEM_PROMPT = `You are a fast relevance filter for a trading-journal company's outreach queue. A post matched an
