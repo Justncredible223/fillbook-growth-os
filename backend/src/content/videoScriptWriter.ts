@@ -1,6 +1,6 @@
 import { findRepeatedHook, formatRecentVideos, type RecentVideo } from "./videoHookVariety.js";
 import type { LlmClient } from "./llmClient.js";
-import { capitalizationProblem, dashProblem, freeTrialProblem } from "./xReplyGuardrails.js";
+import { capitalizationProblem, dashProblem } from "./xReplyGuardrails.js";
 
 const VIDEO_SCRIPT_SCHEMA = {
   type: "object",
@@ -135,9 +135,10 @@ QUALITY BAR -- every output must clear this:
   punctuation is correct, and sentences are complete. Never write in all lowercase.
 - No em dashes or en dashes anywhere (hook, script, titles, descriptions, captions). Use a period or a
   comma. Do not use "--" as a stand-in either.
-- Never say "free trial". Verified knowledge describes a 7-day trial that collects a card up front, and a
-  separate free plan, so "free trial" is inaccurate. Either name only what the verified knowledge supports
-  (for example "start a 7-day trial") or point to fillbookhq.com without a trial claim.
+- Any trial claim must match the verified knowledge exactly: a 14-day free trial, no card required, and no
+  permanent free plan afterwards. Never invent trial terms or a different length, and never promise features
+  during the trial that the verified knowledge says need a paid plan. Saying "free trial" is fine when it is
+  accurate; leaving the trial out and just pointing to fillbookhq.com is fine too.
 - YouTube title: specific, under 70 characters, searchable -- no ALL CAPS, no stacked punctuation.
 - YouTube description: 3-5 sentences. Expand the hook, name the specific problem Fillbook solves,
   close with a clear CTA pointing to fillbookhq.com. Distinct from the spoken script and the
@@ -243,8 +244,8 @@ export async function draftVideoScript(
     if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
   }
 
-  // Owner rules for everything a viewer reads or hears: proper capitalization and grammar (2026-09-20), no
-  // em or en dashes, and no "free trial" wording (2026-09-21). Every problem found is named in ONE rewrite;
+  // Owner rules for everything a viewer reads or hears: proper capitalization and grammar (2026-09-20) and no
+  // em or en dashes (2026-09-21). Every problem found is named in ONE rewrite;
   // if a problem is still there after it the script is kept rather than failing the whole request, since
   // the owner reviews it before it is rendered.
   const copyProblems = videoCopyProblems(result);
@@ -255,7 +256,7 @@ export async function draftVideoScript(
         "",
         "COPY FIX REQUIRED: your previous package had these problems:",
         ...copyProblems.map((problem) => `- The ${problem.field} ${problem.reason}.`),
-        "Rewrite the whole package and fix every one of them: proper capitalization and grammar (every sentence starts with a capital letter, \"I\" is capitalized), no em or en dashes anywhere (use a period or a comma), and never call Fillbook's trial a \"free trial\". Keep the content, the hook's idea, the loop ending and the script within the length limit.",
+        "Rewrite the whole package and fix every one of them: proper capitalization and grammar (every sentence starts with a capital letter, \"I\" is capitalized), and no em or en dashes anywhere (use a period or a comma). Keep the content, the hook's idea, the loop ending and the script within the length limit.",
       ].join("\n"),
     );
     words = countSpokenWords(result.script);
@@ -309,14 +310,14 @@ export function videoCapitalizationProblem(video: VideoScript): { field: string;
 }
 
 /**
- * Every copy problem in a script package's viewer-facing text: capitalization, em or en dashes, and "free
- * trial" wording. One entry per field per kind of problem, so a single rewrite can be told about all of them.
+ * Every copy problem in a script package's viewer-facing text: capitalization and em or en dashes. One entry
+ * per field per kind of problem, so a single rewrite can be told about all of them.
  */
 export function videoCopyProblems(video: VideoScript): Array<{ field: string; reason: string }> {
   const problems: Array<{ field: string; reason: string }> = [];
   for (const [field, text] of viewerFacingFields(video)) {
     if (typeof text !== "string") continue;
-    for (const problem of [capitalizationProblem(text), dashProblem(text), freeTrialProblem(text)]) {
+    for (const problem of [capitalizationProblem(text), dashProblem(text)]) {
       if (problem) problems.push({ field, reason: problem.reason });
     }
   }

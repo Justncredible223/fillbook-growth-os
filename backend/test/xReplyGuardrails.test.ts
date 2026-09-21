@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { capitalizationProblem, dashProblem, freeTrialProblem, checkReplyGuardrails, checkReplySoftStyle, draftWithRetries, MAX_DRAFT_ATTEMPTS, MAX_SOFT_ATTEMPTS, containsAiTell, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
+import { capitalizationProblem, dashProblem, checkReplyGuardrails, checkReplySoftStyle, draftWithRetries, MAX_DRAFT_ATTEMPTS, MAX_SOFT_ATTEMPTS, containsAiTell, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
 
 describe("checkReplyGuardrails", () => {
   it("passes a purely helpful reply where promotion would be inappropriate -- no Fillbook mention at all", () => {
@@ -372,8 +372,8 @@ describe("proper capitalization and grammar (owner rule 2026-09-20)", () => {
   });
 });
 
-describe("dashProblem and freeTrialProblem (video copy rules, owner direction 2026-09-21)", () => {
-  for (const text of ["It's structure—not words.", "Range 2020–2024", "wait -- what", "no--spaces"]) {
+describe("dashProblem (video copy rule, owner direction 2026-09-21)", () => {
+  for (const text of ["It's structure\u2014not words.", "Range 2020\u20132024", "wait -- what", "no--spaces"]) {
     it(`flags a dash: ${text}`, () => {
       expect(dashProblem(text)?.reason).toContain("dash");
     });
@@ -381,16 +381,6 @@ describe("dashProblem and freeTrialProblem (video copy rules, owner direction 20
   for (const text of ["A plain hyphen: drawdown-based rules are fine.", "Two sentences. No dashes.", "A range of 5-10 trades."]) {
     it(`allows: ${text}`, () => {
       expect(dashProblem(text)).toBeNull();
-    });
-  }
-  for (const text of ["Start your free trial today.", "Try the FREE TRIAL", "Get a free 7-day trial", "free  trial"]) {
-    it(`flags a free trial claim: ${text}`, () => {
-      expect(freeTrialProblem(text)?.reason).toContain("free trial");
-    });
-  }
-  for (const text of ["Start a 7-day trial.", "There is a free plan for small accounts.", "Trial and error teaches less than a journal.", "Link in bio."]) {
-    it(`does not flag: ${text}`, () => {
-      expect(freeTrialProblem(text)).toBeNull();
     });
   }
 });
