@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scoreProspectingCandidate } from "../src/prospecting/prospectingScoring";
+import { scoreProspectingCandidate, recencyPointsForAge } from "../src/prospecting/prospectingScoring";
 import { MIN_DAILY_SET_SCORE } from "../src/prospecting/prospectingDailySelection";
 import type { ProspectingTopic } from "../src/prospecting/prospectingTopics";
 
@@ -133,5 +133,34 @@ describe("scoreProspectingCandidate", () => {
     expect(Object.keys(result.breakdown)).toEqual(
       expect.arrayContaining(["topicRelevance", "activeDiscussion", "authorReach", "recency", "authenticity", "valueOpportunity", "priorRelationship"]),
     );
+  });
+});
+
+describe("scoreProspectingCandidate -- reach review (2026-09-21)", () => {
+  const hoursAgo = (h: number) => new Date(now.getTime() - h * 3_600_000);
+
+  it("a 1-hour-old post outranks an otherwise identical 20-hour-old post by a real margin", () => {
+    const fresh = scoreProspectingCandidate(baseInput({ postCreatedAt: hoursAgo(1) }));
+    const older = scoreProspectingCandidate(baseInput({ postCreatedAt: hoursAgo(20) }));
+    expect(fresh.score - older.score).toBeGreaterThanOrEqual(10);
+  });
+
+  it("recency steps down as a post ages", () => {
+    const pts = (h: number) => recencyPointsForAge(h * 3_600_000);
+    expect([pts(0.5), pts(2), pts(5), pts(10), pts(20), pts(48), pts(100)]).toEqual([25, 20, 15, 10, 6, 3, 1]);
+  });
+
+  it("penalizes a thread that already has hundreds of replies, since a new reply would be buried", () => {
+    const quiet = scoreProspectingCandidate(baseInput({ publicMetrics: { reply_count: 20, quote_count: 0, like_count: 10 } }));
+    const crowded = scoreProspectingCandidate(baseInput({ publicMetrics: { reply_count: 400, quote_count: 0, like_count: 10 } }));
+    expect(crowded.breakdown.crowdedThread).toContain("buried");
+    expect(quiet.breakdown.crowdedThread).toBeUndefined();
+    expect(crowded.score).toBeLessThan(quiet.score);
+  });
+
+  it("does not penalize a large account with a fresh, quiet post, which is still the best case", () => {
+    const bigFresh = scoreProspectingCandidate(baseInput({ authorFollowerCount: 500_000, postCreatedAt: hoursAgo(0.5), publicMetrics: { reply_count: 2, quote_count: 0, like_count: 5 } }));
+    expect(bigFresh.breakdown.crowdedThread).toBeUndefined();
+    expect(bigFresh.score).toBeGreaterThan(70);
   });
 });

@@ -37,7 +37,19 @@ const CLASS_WEIGHT: Record<ProspectingTopic["replyClass"], number> = {
   C: 10,
 };
 
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+
+/** Step curve, most weight on the first hours: <1h 25, <3h 20, <6h 15, <12h 10, <24h 6, <72h 3, older 1. Exported for tests. */
+export function recencyPointsForAge(ageMs: number): number {
+  const hours = Math.max(0, ageMs) / HOUR_MS;
+  if (hours < 1) return 25;
+  if (hours < 3) return 20;
+  if (hours < 6) return 15;
+  if (hours < 12) return 10;
+  if (hours < 24) return 6;
+  if (hours < 72) return 3;
+  return 1;
+}
 
 // Phrases that show up almost exclusively in signal-selling/spam/bot posts
 // -- excluded outright rather than merely down-ranked, since a reply under
@@ -130,16 +142,28 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
   const reachPoints = Math.min(Math.log10(followers + 1) * 6, 35);
   breakdown.authorReach = `${followers} followers -> +${reachPoints.toFixed(1)} (capped at 35)`;
 
-  // Recency -- linear decay across the 7-day search window.
+  // Recency -- hour-scale, not a 7-day slope (2026-09-21 reach review): on X
+  // a reply lands near the top of a thread only if it is among the first
+  // few, so a 1-hour-old post is worth far more than a 20-hour-old one, a
+  // difference the old 7-day linear decay (about 0.09 points/hour) all but
+  // erased. Unknown post time keeps its old neutral credit.
   let recencyPoints = 5;
   if (input.postCreatedAt) {
     const ageMs = input.now.getTime() - input.postCreatedAt.getTime();
-    const fraction = Math.max(0, 1 - ageMs / SEVEN_DAYS_MS);
-    recencyPoints = fraction * 15;
-    breakdown.recency = `posted ${(ageMs / 3_600_000).toFixed(1)}h ago -> +${recencyPoints.toFixed(1)}`;
+    recencyPoints = recencyPointsForAge(ageMs);
+    breakdown.recency = `posted ${(ageMs / 3_600_000).toFixed(1)}h ago -> +${recencyPoints}`;
   } else {
     breakdown.recency = `unknown post time -> +${recencyPoints}`;
   }
+
+  // Crowded thread -- a reply under a post that already has hundreds of
+  // replies is buried no matter how large the author is. Only the reply
+  // count matters here; a big account with a fresh, quiet post is still
+  // the best case (see the reach revision above).
+  let crowdedPenalty = 0;
+  if (replyCount > 300) crowdedPenalty = 20;
+  else if (replyCount > 100) crowdedPenalty = 12;
+  if (crowdedPenalty > 0) breakdown.crowdedThread = `${replyCount} replies already -> -${crowdedPenalty} (a reply would be buried)`;
 
   // Authenticity -- verified is a mild positive signal; nothing here can
   // ever prove "real person," only nudge toward it, per X visibility
@@ -160,7 +184,7 @@ export function scoreProspectingCandidate(input: ProspectingScoreInput): Prospec
     ? "already replied to this author before -> +10"
     : "no prior Prospecting contact -> +0";
 
-  const total = topicPoints + discussionPoints + reachPoints + recencyPoints + authenticityPoints + opportunityPoints + relationshipPoints;
+  const total = topicPoints + discussionPoints + reachPoints + recencyPoints + authenticityPoints + opportunityPoints + relationshipPoints - crowdedPenalty;
   const score = Math.round(Math.max(0, Math.min(100, total)) * 100) / 100;
 
   return { score, breakdown, excluded: false, exclusionReason: null };

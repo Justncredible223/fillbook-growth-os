@@ -42,6 +42,8 @@ export interface PipelineContext {
   brandRulesSummary: string;
   verifiedKnowledgeSummary: string;
   recentTextsForSameTopic: string[];
+  /** Hooks of recent video scripts (any topic), so a new script never opens like one already made. See videoHookDiversity.ts. */
+  recentVideoHooks?: string[];
   /**
    * Overrides the asset_type this run creates -- defaults to the
    * existing "video_script" (video platforms) / "post" (everything
@@ -133,7 +135,9 @@ export async function runCampaignPipeline(
     researchReport = await draftResearch(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
     draftText = formatResearchAsText(researchReport);
   } else if (isVideo) {
-    videoScript = await draftVideoScript(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
+    videoScript = await draftVideoScript(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary, {
+      recentHooks: context.recentVideoHooks,
+    });
     draftText = formatVideoScriptAsText(videoScript);
   } else {
     draftText = await draftContent(

@@ -19,6 +19,8 @@ export interface RunCampaignDeps {
   brandRulesSummary: string;
   verifiedKnowledgeSummary: string;
   recentTextsForSameTopic: string[];
+  /** Hooks of recent video scripts across all topics, see videoHookDiversity.ts. */
+  recentVideoHooks?: string[];
   /** Called only when the pipeline reaches ready_for_owner -- never otherwise. */
   markOpportunityActioned: (opportunityId: string) => Promise<void>;
   /** Called only when the pipeline reaches ready_for_owner. Sets 'in_review', NOT 'approved' -- AI review is not human approval. */
@@ -57,6 +59,7 @@ export async function runCampaignForOpportunity(
     brandRulesSummary: deps.brandRulesSummary,
     verifiedKnowledgeSummary: deps.verifiedKnowledgeSummary,
     recentTextsForSameTopic: deps.recentTextsForSameTopic,
+    recentVideoHooks: deps.recentVideoHooks,
     assetTypeOverride: options.assetTypeOverride,
   });
 
@@ -118,6 +121,23 @@ export async function buildSupabaseRunCampaignDeps(
     .limit(10);
   const recentTextsForSameTopic = (recentVersions ?? []).map((row: { body: string }) => row.body);
 
+  // Recent video hooks across ALL topics: the whole-body check above only sees the last 10 versions of
+  // any type, which never caught the same opener repeating across different videos.
+  let recentVideoHooks: string[] = [];
+  try {
+    const { data: videoVersions } = await client
+      .from("content_versions")
+      .select("metadata")
+      .not("metadata->videoScript", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(30);
+    recentVideoHooks = (videoVersions ?? [])
+      .map((row: { metadata: { videoScript?: { hook?: unknown } } | null }) => row.metadata?.videoScript?.hook)
+      .filter((hook: unknown): hook is string => typeof hook === "string" && hook.trim().length > 0);
+  } catch {
+    // best-effort: the published-hook list still applies
+  }
+
   const usage = createUsageTracker();
   const llmClient = createLlmClient(process.env, (u: LlmUsage) => {
     usage.usages.push(u);
@@ -132,6 +152,7 @@ export async function buildSupabaseRunCampaignDeps(
     brandRulesSummary,
     verifiedKnowledgeSummary,
     recentTextsForSameTopic,
+    recentVideoHooks,
     markOpportunityActioned: async (id) => {
       await client.from("opportunities").update({ status: "actioned", updated_at: new Date().toISOString() }).eq("id", id);
     },

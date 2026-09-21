@@ -1,4 +1,5 @@
 import type { LlmClient } from "./llmClient.js";
+import { buildHookGuidance, checkHookSimilarity, KNOWN_PUBLISHED_HOOKS, pickHookFormat } from "./videoHookDiversity.js";
 
 const VIDEO_SCRIPT_SCHEMA = {
   type: "object",
@@ -98,8 +99,9 @@ QUALITY BAR -- every output must clear this:
   review daily cut losing streaks 2x faster," "traders who review daily spot pattern errors 2x
   faster" -- all invented, all auto-failed by every reviewer for violating the grounding rules below.
   If a journal/routine/review-benefit topic has no real number to draw on, the hook is a named
-  mistake or mechanism instead: "You already know which trade you're about to repeat. You just
-  haven't written it down yet" -- not "X% of traders who don't journal repeat the same mistake."
+  mistake or mechanism instead, never a percentage. Write it fresh for this topic and follow the
+  "HOOK FOR THIS VIDEO" section in the user message: it names the format to use and lists hooks
+  that are already used and must not be repeated. Never reuse an example line from this prompt.
 - Script: the exact words someone speaks aloud or feeds to a TTS voice. Tight, punchy, real.
   No filler sentences. No corporate SaaS language. Never use these phrases (they will auto-fail
   review): "at the end of the day", "when it comes to", "game changer", "game-changer",
@@ -113,9 +115,8 @@ QUALITY BAR -- every output must clear this:
   sentence that doesn't earn its place; one idea, one payoff.
 - LOOP ENDING: the final sentence must flow straight back into the hook, so the video replays
   seamlessly when it restarts -- rewatches are another strong ranking signal. Write the last line
-  so it reads as the beginning of the hook's sentence or thought (e.g. hook "You already know
-  which trade you're about to repeat" -> final line "...and that's exactly why" / "Because"),
-  never a sign-off, never "thanks for watching", never a standalone conclusion. Mention
+  so it reads as the beginning of the hook's sentence or thought (a short connective such as
+  "...and that's exactly why" or "Because" that lands back on the first line), never a sign-off, never "thanks for watching", never a standalone conclusion. Mention
   Fillbook and fillbookhq.com once, naturally, in the middle-to-late body where it is relevant
   (never as the last line) -- the video ends on the loop, not on a brand card.
 - Shot list: filmable with a phone + screen recorder + basic title cards. 8-12 entries -- one
@@ -185,7 +186,11 @@ export async function draftVideoScript(
   opportunity: { title: string; rationale: string },
   brandRulesSummary: string,
   verifiedKnowledgeSummary: string,
+  options: { recentHooks?: string[]; now?: Date } = {},
 ): Promise<VideoScript> {
+  const recentHooks = options.recentHooks ?? [];
+  const avoidHooks = [...recentHooks, ...KNOWN_PUBLISHED_HOOKS];
+  const format = pickHookFormat(options.now ?? new Date(), opportunity.title, recentHooks);
   const userMessage = [
     `Opportunity: ${opportunity.title}`,
     `Rationale: ${opportunity.rationale}`,
@@ -195,12 +200,29 @@ export async function draftVideoScript(
     "",
     "Verified knowledge (use ONLY these facts about Fillbook -- do not invent anything else):",
     verifiedKnowledgeSummary,
+    "",
+    buildHookGuidance({ format, recentHooks }),
   ].join("\n");
 
   const call = (message: string) =>
     client.callTool<VideoScriptToolInput>(SYSTEM_PROMPT, message, "submit_video_script", VIDEO_SCRIPT_SCHEMA, 45_000, 4096);
 
   let result = await call(userMessage);
+  // A repeated opener is the failure mode that showed up on the live account (a dozen near-identical
+  // TikTok hooks), so it gets one targeted retry, then a hard stop, same shape as the length guard below.
+  const hookCheck = checkHookSimilarity(result.hook, avoidHooks);
+  if (hookCheck.similar) {
+    result = await call(
+      [
+        userMessage,
+        "",
+        `HOOK FIX REQUIRED: your hook "${result.hook}" is too close to an existing one (${hookCheck.reason}: "${hookCheck.against}").`,
+        `Write a completely different hook in the "${format.name}" format, with different opening words and a different sentence shape. Keep the rest of the package consistent with the new hook.`,
+      ].join("\n"),
+    );
+    const again = checkHookSimilarity(result.hook, avoidHooks);
+    if (again.similar) throw new VideoHookTooSimilarError(result.hook, again.against ?? "", again.reason ?? "");
+  }
   let words = countSpokenWords(result.script);
   if (words > MAX_SCRIPT_WORDS) {
     // The length rule in the prompt is only a request -- a model can exceed
@@ -218,6 +240,8 @@ export async function draftVideoScript(
     result = await call(retryMessage);
     words = countSpokenWords(result.script);
     if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
+    const afterRewrite = checkHookSimilarity(result.hook, avoidHooks);
+    if (afterRewrite.similar) throw new VideoHookTooSimilarError(result.hook, afterRewrite.against ?? "", afterRewrite.reason ?? "");
   }
   return result;
 }
@@ -229,6 +253,17 @@ export class VideoScriptTooLongError extends Error {
   constructor(public readonly words: number) {
     super(`Video script is ${words} words after one rewrite; the maximum is ${MAX_SCRIPT_WORDS}. Not queuing it -- a script this long renders past the target length.`);
     this.name = "VideoScriptTooLongError";
+  }
+}
+
+export class VideoHookTooSimilarError extends Error {
+  constructor(
+    public readonly hook: string,
+    public readonly against: string,
+    reason: string,
+  ) {
+    super(`Video hook "${hook}" is too close to an existing hook ("${against}", ${reason}) even after one rewrite. Not queuing it -- run it again for a fresh angle.`);
+    this.name = "VideoHookTooSimilarError";
   }
 }
 
