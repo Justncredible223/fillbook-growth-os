@@ -18,7 +18,7 @@ const VIDEO_SCRIPT_SCHEMA = {
     },
     youtubeTitle: {
       type: "string",
-      description: "YouTube Shorts video title -- under ~70 characters, specific, no clickbait/all-caps/excessive punctuation.",
+      description: "YouTube Shorts video title, written the way a trader would search for it: the specific prop-firm rule, mechanic or comparison in the first three words (e.g. 'X vs Y: ...', 'How X works for funded traders'), then the useful angle. Under 70 characters, never first-person, no emoji, no ALL CAPS words, no clickbait.",
     },
     youtubeDescription: {
       type: "string",
@@ -154,7 +154,18 @@ QUALITY BAR -- every output must clear this:
   permanent free plan afterwards. Never invent trial terms or a different length, and never promise features
   during the trial that the verified knowledge says need a paid plan. Saying "free trial" is fine when it is
   accurate; leaving the trial out and just pointing to fillbookhq.com is fine too.
-- YouTube title: specific, under 70 characters, searchable -- no ALL CAPS, no stacked punctuation.
+- YouTube title (owner analytics 2026-09-21: 36% of our YouTube views come from YouTube SEARCH, and the
+  titles that name a specific prop-firm rule or comparison are the ones that get found, e.g. a
+  "static vs trailing drawdown" explainer or a "funded trader drawdown rules" video; our only
+  first-person title, "I Blew a Funded Account Over ONE Number...", had the lowest watch rate):
+    * Write it the way a trader would type it into search. Put the specific rule, mechanic or comparison
+      in the first three words (trailing drawdown, static vs trailing drawdown, consistency rule,
+      payout rules, daily loss limit), then the useful angle.
+    * Prefer a plain explainer shape: "X vs Y: ...", "How X works for funded traders", "X explained",
+      "Why X ...". A title that could sit on any trading video ("Why traders break their rules") is too generic.
+    * Under 70 characters. Never first-person ("I", "My"), no emoji, no ALL CAPS words, no stacked
+      punctuation, no clickbait or fake urgency. Do not name a specific prop firm unless the topic itself does.
+    * The title must describe what the video actually teaches, so a viewer who searched it gets what they came for.
 - YouTube description: 3-5 sentences. Expand the hook, name the specific problem Fillbook solves,
   close with a clear CTA pointing to fillbookhq.com. Distinct from the spoken script and the
   TikTok caption.
@@ -337,6 +348,27 @@ export function videoCopyProblems(video: VideoScript): Array<{ field: string; re
     }
   }
   problems.push(...hookOpeningProblems(video));
+  problems.push(...youtubeTitleProblems(video));
+  return problems;
+}
+
+/**
+ * Clear-cut YouTube title problems (owner analytics 2026-09-21: a third of YouTube views come from search, and the one
+ * first-person, all-caps, emoji-style title had the lowest watch rate). Whether a title is well-optimized is still
+ * the writer prompt's job; this only catches what is plainly wrong. Same one-rewrite handling as the other copy rules.
+ */
+/** Real trading acronyms that are correctly written in capitals, so they never count as shouting. */
+const TITLE_ACRONYM_ALLOWLIST = new Set(["MNQ", "MES", "MGC", "MCL", "ICT", "FOMC", "CPI", "ATR", "RSI", "EOD", "PDT", "USD", "EMA", "VWAP", "MAE", "MFE", "CME", "NFA", "CFTC", "SEC", "IRS", "ETF"]);
+
+export function youtubeTitleProblems(video: VideoScript): Array<{ field: string; reason: string }> {
+  const title = video.youtubeTitle;
+  if (typeof title !== "string" || !title.trim()) return [];
+  const problems: Array<{ field: string; reason: string }> = [];
+  if (title.trim().length > 70) problems.push({ field: "YouTube title", reason: `is ${title.trim().length} characters; it must be under 70` });
+  if (/^\s*(i|i'm|i've|my)\b/i.test(title)) problems.push({ field: "YouTube title", reason: "is written in the first person; write it as a search-style explainer instead" });
+  if (/\p{Extended_Pictographic}/u.test(title)) problems.push({ field: "YouTube title", reason: "contains an emoji" });
+  const shouted = (title.match(/\b[A-Z]{3,}\b/g) ?? []).filter((word) => !TITLE_ACRONYM_ALLOWLIST.has(word));
+  if (shouted.length > 0) problems.push({ field: "YouTube title", reason: `contains an ALL CAPS word (${shouted[0]})` });
   return problems;
 }
 

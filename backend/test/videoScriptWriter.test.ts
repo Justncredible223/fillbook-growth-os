@@ -8,7 +8,7 @@ import {
   VideoScriptTooLongError,
   VideoHookRepeatError,
   MAX_HOOK_REWRITES,
-  type VideoScript, hookOpeningProblems, videoCopyProblems } from "../src/content/videoScriptWriter";
+  type VideoScript, hookOpeningProblems, videoCopyProblems, youtubeTitleProblems } from "../src/content/videoScriptWriter";
 
 function jsonResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -398,5 +398,45 @@ describe("hookOpeningProblems (first-second retention rules, 2026-09-21)", () =>
   it("feeds into videoCopyProblems so the existing one-rewrite retry handles it", () => {
     const problems = videoCopyProblems(base({ hook: "Did you know your drawdown trails the peak of your balance today?" }));
     expect(problems.some((x) => x.reason.includes("lead-in"))).toBe(true);
+  });
+});
+
+describe("youtubeTitleProblems (search-first titles, 2026-09-21)", () => {
+  const withTitle = (youtubeTitle: string): VideoScript => ({
+    hook: "Trailing drawdown never resets after a peak.", script: "x", shotList: ["Fillbook UI: example rule alert (demo data)"],
+    youtubeTitle, youtubeDescription: "d", tiktokCaption: "c", instagramCaption: "i", hashtags: [], disclosureCta: null, youtubeThumbnailConcept: "x",
+  });
+
+  it("passes a search-style rule explainer", () => {
+    expect(youtubeTitleProblems(withTitle("Static vs Trailing Drawdown: What Funded Traders Need to Know"))).toEqual([]);
+    expect(youtubeTitleProblems(withTitle("Funded Trader Drawdown Rules Explained"))).toEqual([]);
+  });
+
+  it("flags a first-person title, like the one with the lowest watch rate", () => {
+    expect(youtubeTitleProblems(withTitle("I Blew a Funded Account Over a Number I Didn't Track")).some((p) => p.reason.includes("first person"))).toBe(true);
+    expect(youtubeTitleProblems(withTitle("My Trailing Drawdown Mistake")).some((p) => p.reason.includes("first person"))).toBe(true);
+  });
+
+  it("flags emoji, ALL CAPS words and titles over 70 characters", () => {
+    expect(youtubeTitleProblems(withTitle("How to Stop Overtrading: Avoid the Midday Leak \u{1F4C9}")).some((p) => p.reason.includes("emoji"))).toBe(true);
+    expect(youtubeTitleProblems(withTitle("Blew an Account Over ONE Number")).some((p) => p.reason.includes("ALL CAPS"))).toBe(true);
+    expect(youtubeTitleProblems(withTitle("A".repeat(10) + " trailing drawdown explained for funded traders who want the full picture here")).some((p) => p.reason.includes("under 70"))).toBe(true);
+  });
+
+  it("does not flag short acronyms of three letters or fewer, or an empty title", () => {
+    expect(youtubeTitleProblems(withTitle("How Apex and NQ Drawdown Rules Work"))).toEqual([]);
+    expect(youtubeTitleProblems(withTitle(""))).toEqual([]);
+  });
+
+  it("feeds into videoCopyProblems so the existing one-rewrite retry handles it", () => {
+    expect(videoCopyProblems(withTitle("I Blew a Funded Account")).some((p) => p.field === "YouTube title")).toBe(true);
+  });
+});
+
+describe("youtubeTitleProblems acronym handling", () => {
+  const withTitle = (youtubeTitle: string) => ({ hook: "Trailing drawdown never resets after a peak.", script: "x", shotList: ["Fillbook UI: example rule alert (demo data)"], youtubeTitle, youtubeDescription: "d", tiktokCaption: "c", instagramCaption: "i", hashtags: [], disclosureCta: null, youtubeThumbnailConcept: "x" }) as VideoScript;
+  it("allows real trading acronyms but still flags shouting like ONE", () => {
+    expect(youtubeTitleProblems(withTitle("MNQ Trailing Drawdown Rules Explained"))).toEqual([]);
+    expect(youtubeTitleProblems(withTitle("Blew an Account Over ONE Number")).some((p) => p.reason.includes("ONE"))).toBe(true);
   });
 });
