@@ -243,7 +243,7 @@ describe("draftVideoScript capitalization (owner rule 2026-09-20)", () => {
     const result = await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(bodyText(fetchMock, 1)).toContain("CAPITALIZATION FIX REQUIRED");
+    expect(bodyText(fetchMock, 1)).toContain("COPY FIX REQUIRED");
     expect(bodyText(fetchMock, 1)).toContain("TikTok caption");
     expect(result.tiktokCaption).toBe("Loss limits explained.");
   });
@@ -267,5 +267,84 @@ describe("draftVideoScript capitalization (owner rule 2026-09-20)", () => {
     const fetchMock = vi.fn().mockResolvedValue(scriptResponse(package_()));
     await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
     expect(bodyText(fetchMock, 0)).toContain("proper capitalization and grammar");
+  });
+});
+
+describe("draftVideoScript dashes and 'free trial' (owner direction 2026-09-21)", () => {
+  const goodPackage = (overrides: Partial<VideoScript> = {}): VideoScript => ({
+    hook: "Your loss limit doesn't care that the trade was a good one.",
+    script: Array.from({ length: 60 }, (_, i) => (i === 0 ? "Word0" : `word${i}`)).join(" "),
+    shotList: ["Text card: the hook line"],
+    youtubeTitle: "Why Your Loss Limit Ignores Good Trades",
+    youtubeDescription: "A short explainer. See fillbookhq.com.",
+    tiktokCaption: "Loss limits explained. Link in bio.",
+    instagramCaption: "Loss limits explained. Link in bio.",
+    hashtags: ["futurestrading"],
+    disclosureCta: null,
+    youtubeThumbnailConcept: "Bold text over a red chart.",
+    ...overrides,
+  });
+  const bodyText = (fetchMock: ReturnType<typeof vi.fn>, call: number) => (fetchMock.mock.calls[call]![1] as { body: string }).body;
+
+  it("catches the exact wording that reached the live video: an em dash and 'Start your free trial'", async () => {
+    // Taken from the 2026-09-21 render's YouTube description and TikTok caption.
+    const bad = goodPackage({
+      youtubeDescription: "Your plan isn't just words in a doc—it's structure that keeps you funded. Start your free trial at fillbookhq.com.",
+      tiktokCaption: "Your trading plan needs enforcement, not just good intentions. Max daily loss, position sizing rules—Fillbook builds the guardrails. Link in bio.",
+    });
+    const fetchMock = vi.fn().mockResolvedValueOnce(scriptResponse(bad)).mockResolvedValueOnce(scriptResponse(goodPackage()));
+
+    const result = await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const retry = bodyText(fetchMock, 1);
+    expect(retry).toContain("COPY FIX REQUIRED");
+    expect(retry).toContain("YouTube description");
+    expect(retry).toContain("free trial");
+    expect(retry).toContain("TikTok caption");
+    expect(retry).toContain("em or en dash");
+    expect(result).toEqual(goodPackage());
+  });
+
+  it("names every problem in one rewrite, not one call per problem", async () => {
+    const bad = goodPackage({ youtubeTitle: "why your loss limit ignores good trades", tiktokCaption: "Loss limits—explained. Try a free 7-day trial." });
+    const fetchMock = vi.fn().mockResolvedValueOnce(scriptResponse(bad)).mockResolvedValueOnce(scriptResponse(goodPackage()));
+    await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const retry = bodyText(fetchMock, 1);
+    expect(retry).toContain("YouTube title");
+    expect(retry).toContain("lowercase");
+    expect(retry).toContain("dash");
+    expect(retry).toContain("free trial");
+  });
+
+  it("makes one call for a clean package", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(goodPackage()));
+    await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the script after one rewrite instead of failing the request", async () => {
+    const stubborn = goodPackage({ youtubeDescription: "Start your free trial at fillbookhq.com." });
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(stubborn));
+    const result = await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(result.youtubeDescription).toContain("free trial");
+  });
+
+  it("does not flag the legitimate caption wording 'link in bio'", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(goodPackage({ tiktokCaption: "Loss limits explained. Link in bio." })));
+    await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("the system prompt states both rules", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(goodPackage()));
+    await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+    const system = (JSON.parse(bodyText(fetchMock, 0)) as { system: string | Array<{ text: string }> }).system;
+    const prompt = typeof system === "string" ? system : system.map((block) => block.text).join(" ");
+    expect(prompt).toContain("No em dashes or en dashes anywhere");
+    expect(prompt).toContain('Never say "free trial"');
   });
 });

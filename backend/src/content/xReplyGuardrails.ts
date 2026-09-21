@@ -229,6 +229,27 @@ export function checkReplySoftStyle(reply: string): GuardrailViolation | null {
   return null;
 }
 
+/**
+ * Copy rules the video scripts share with replies (owner direction 2026-09-21). The dash rule already
+ * applied to replies through AI_TELL_PATTERNS; these standalone checks let the video script writer apply the
+ * same two rules to its titles, descriptions, captions and script without pulling in the reply-only rules
+ * (a TikTok caption legitimately says "link in bio").
+ */
+const DASH_PATTERN = /[–—]|\s--\s|\w--\w/;
+export function dashProblem(text: string): GuardrailViolation | null {
+  return DASH_PATTERN.test(text) ? { reason: 'uses an em or en dash (or a "--" stand-in for one)' } : null;
+}
+
+/**
+ * "Free trial" wording. Fillbook's verified pricing knowledge describes a 7-day trial that collects a card
+ * up front, alongside a separate free plan, so calling it a "free trial" misdescribes both. Matches
+ * "free trial" and "free 7-day trial".
+ */
+const FREE_TRIAL_PATTERN = /\bfree\s+(?:\d+[- ]days?\s+)?trial\b/i;
+export function freeTrialProblem(text: string): GuardrailViolation | null {
+  return FREE_TRIAL_PATTERN.test(text) ? { reason: 'says "free trial", which misdescribes the card-upfront trial and the free plan' } : null;
+}
+
 export interface ReplyGuardrailOptions {
   /**
    * When given, a link is only accepted if EVERY link-shaped match in the

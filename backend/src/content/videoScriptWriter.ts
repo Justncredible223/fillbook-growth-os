@@ -1,6 +1,6 @@
 import { findRepeatedHook, formatRecentVideos, type RecentVideo } from "./videoHookVariety.js";
 import type { LlmClient } from "./llmClient.js";
-import { capitalizationProblem } from "./xReplyGuardrails.js";
+import { capitalizationProblem, dashProblem, freeTrialProblem } from "./xReplyGuardrails.js";
 
 const VIDEO_SCRIPT_SCHEMA = {
   type: "object",
@@ -133,6 +133,11 @@ QUALITY BAR -- every output must clear this:
 - Capitalization and grammar (owner rule): the hook, script, titles, descriptions and captions all use
   proper capitalization and grammar. Every sentence starts with a capital letter, "I" is capitalized,
   punctuation is correct, and sentences are complete. Never write in all lowercase.
+- No em dashes or en dashes anywhere (hook, script, titles, descriptions, captions). Use a period or a
+  comma. Do not use "--" as a stand-in either.
+- Never say "free trial". Verified knowledge describes a 7-day trial that collects a card up front, and a
+  separate free plan, so "free trial" is inaccurate. Either name only what the verified knowledge supports
+  (for example "start a 7-day trial") or point to fillbookhq.com without a trial claim.
 - YouTube title: specific, under 70 characters, searchable -- no ALL CAPS, no stacked punctuation.
 - YouTube description: 3-5 sentences. Expand the hook, name the specific problem Fillbook solves,
   close with a clear CTA pointing to fillbookhq.com. Distinct from the spoken script and the
@@ -238,17 +243,19 @@ export async function draftVideoScript(
     if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
   }
 
-  // Owner rule (2026-09-20): proper capitalization and grammar in everything a viewer reads or hears.
-  // One rewrite with the field and reason named; if it is still wrong the script is kept rather than
-  // failing the whole request, since the owner reviews it before it is rendered.
-  const capitalization = videoCapitalizationProblem(result);
-  if (capitalization) {
+  // Owner rules for everything a viewer reads or hears: proper capitalization and grammar (2026-09-20), no
+  // em or en dashes, and no "free trial" wording (2026-09-21). Every problem found is named in ONE rewrite;
+  // if a problem is still there after it the script is kept rather than failing the whole request, since
+  // the owner reviews it before it is rendered.
+  const copyProblems = videoCopyProblems(result);
+  if (copyProblems.length > 0) {
     result = await call(
       [
         userMessage,
         "",
-        `CAPITALIZATION FIX REQUIRED: your previous package's ${capitalization.field} ${capitalization.reason}.`,
-        "Rewrite the whole package with proper capitalization and grammar in the hook, script, titles, descriptions and captions: every sentence starts with a capital letter, \"I\" is capitalized, punctuation is correct. Keep the content, the hook's idea, the loop ending and the script within the length limit.",
+        "COPY FIX REQUIRED: your previous package had these problems:",
+        ...copyProblems.map((problem) => `- The ${problem.field} ${problem.reason}.`),
+        "Rewrite the whole package and fix every one of them: proper capitalization and grammar (every sentence starts with a capital letter, \"I\" is capitalized), no em or en dashes anywhere (use a period or a comma), and never call Fillbook's trial a \"free trial\". Keep the content, the hook's idea, the loop ending and the script within the length limit.",
       ].join("\n"),
     );
     words = countSpokenWords(result.script);
@@ -278,9 +285,9 @@ export async function draftVideoScript(
   }
 }
 
-/** The first viewer-facing field of a script package that breaks the proper-capitalization rule, or null. */
-export function videoCapitalizationProblem(video: VideoScript): { field: string; reason: string } | null {
-  const fields: Array<[string, string]> = [
+/** The viewer-facing text fields of a script package, in the order a viewer meets them. Hashtags are not prose and are left out. */
+function viewerFacingFields(video: VideoScript): Array<[string, unknown]> {
+  return [
     ["hook", video.hook],
     ["script", video.script],
     ["YouTube title", video.youtubeTitle],
@@ -288,13 +295,32 @@ export function videoCapitalizationProblem(video: VideoScript): { field: string;
     ["TikTok caption", video.tiktokCaption],
     ["Instagram caption", video.instagramCaption],
   ];
-  for (const [field, text] of fields) {
+}
+
+/** The first viewer-facing field of a script package that breaks the proper-capitalization rule, or null. */
+export function videoCapitalizationProblem(video: VideoScript): { field: string; reason: string } | null {
+  for (const [field, text] of viewerFacingFields(video)) {
     // A field the model left out is a schema problem, not a capitalization one.
     if (typeof text !== "string") continue;
     const problem = capitalizationProblem(text);
     if (problem) return { field, reason: problem.reason };
   }
   return null;
+}
+
+/**
+ * Every copy problem in a script package's viewer-facing text: capitalization, em or en dashes, and "free
+ * trial" wording. One entry per field per kind of problem, so a single rewrite can be told about all of them.
+ */
+export function videoCopyProblems(video: VideoScript): Array<{ field: string; reason: string }> {
+  const problems: Array<{ field: string; reason: string }> = [];
+  for (const [field, text] of viewerFacingFields(video)) {
+    if (typeof text !== "string") continue;
+    for (const problem of [capitalizationProblem(text), dashProblem(text), freeTrialProblem(text)]) {
+      if (problem) problems.push({ field, reason: problem.reason });
+    }
+  }
+  return problems;
 }
 
 /** How many times a repeated hook is sent back before the request fails instead. */
