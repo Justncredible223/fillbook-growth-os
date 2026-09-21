@@ -1,4 +1,5 @@
 import type { RecentVideo } from "./videoHookVariety.js";
+import { MANUAL_VIDEO_TOPIC_TITLE_PREFIX } from "../opportunities/manualVideoTopic.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
@@ -51,6 +52,18 @@ export interface RunCampaignOptions {
   assetTypeOverride?: "video_script" | "research";
 }
 
+/**
+ * An opportunity the owner typed in as a video request keeps that meaning wherever it is run from. Without
+ * this, running such an opportunity from Radar without the video option, or letting the daily auto-draft pick
+ * it (it takes any open opportunity), drafted a plain text POST for a "Video request:" (9 times between
+ * 2026-09-09 and 2026-09-21). Approving a post never queues a render, so the video "never went to render".
+ * An explicit override from the caller still wins. Research requests are not covered: they have their own
+ * handler logic keyed on the caller's option, and nothing shows the same problem there.
+ */
+export function assetTypeForManualRequest(title: string): "video_script" | undefined {
+  return title.startsWith(MANUAL_VIDEO_TOPIC_TITLE_PREFIX) ? "video_script" : undefined;
+}
+
 export async function runCampaignForOpportunity(
   deps: RunCampaignDeps,
   opportunity: PipelineOpportunity,
@@ -61,7 +74,7 @@ export async function runCampaignForOpportunity(
     verifiedKnowledgeSummary: deps.verifiedKnowledgeSummary,
     recentTextsForSameTopic: deps.recentTextsForSameTopic,
     recentVideos: deps.recentVideos,
-    assetTypeOverride: options.assetTypeOverride,
+    assetTypeOverride: options.assetTypeOverride ?? assetTypeForManualRequest(opportunity.title),
   });
 
   if (result.finalStage === "ready_for_owner") {
