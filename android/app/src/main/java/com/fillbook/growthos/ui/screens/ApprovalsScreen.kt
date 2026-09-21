@@ -26,6 +26,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -44,6 +45,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.ApprovalAsset
 import com.fillbook.growthos.data.GrowthOsRepository
+import com.fillbook.growthos.data.VideoRenderOutcome
 import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.CopyButton
 import com.fillbook.growthos.ui.components.ExpandableText
@@ -134,10 +136,14 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
         scope.launch {
             busyId = asset.id
             try {
-                repo.decideApproval(asset.id, approve)
+                val renderOutcome = repo.decideApproval(asset.id, approve)
                 actionError = null
                 refresh()
-                snackbarHostState.showSnackbar(if (approve) "Approved" else "Rejected")
+                snackbarHostState.showSnackbar(
+                    message = approvalSnackbarMessage(approve, renderOutcome),
+                    // A refused render needs reading, not a two-second flash.
+                    duration = if (renderOutcome != null && !renderOutcome.queued) SnackbarDuration.Long else SnackbarDuration.Short,
+                )
             } catch (e: Exception) {
                 actionError = "Couldn't record that decision. Check your connection and try again."
             } finally {
@@ -273,8 +279,9 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             title = { Text("Render this video?") },
             text = {
                 Text(
-                    "\"${asset.campaignTitle}\" will queue on the render server now. It renders automatically -- " +
-                        "you'll get a notification and can download it from Video Status once it's ready. " +
+                    "\"${asset.campaignTitle}\" will queue on the render server now, unless today's 1-video limit " +
+                        "is already used (then it waits and renders automatically after the midnight reset). " +
+                        "Once it renders you'll get a notification and can download it from Video Status. " +
                         "This never posts anywhere on its own; you still choose to share it yourself.",
                 )
             },
@@ -367,5 +374,26 @@ private fun ApprovalCard(
         }
         Spacer(Modifier.height(2.dp))
         GhostButton(text = "Copy & Share", onClick = onCopyAndShare, enabled = !busy, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+/**
+ * The confirmation shown after a decision. For an approved video it says what the server actually did about
+ * rendering, because a render can be refused (daily or monthly limit) while the approval itself still
+ * succeeds -- and before this the app said only "Approved", so a refused render looked like nothing happened.
+ */
+internal fun approvalSnackbarMessage(approve: Boolean, outcome: VideoRenderOutcome?): String {
+    if (!approve) return "Rejected"
+    if (outcome == null) return "Approved"
+    if (outcome.alreadyExisted) return "Approved. This video is already rendering."
+    if (outcome.queued) return "Approved. Video queued for rendering. Check Video Status in a minute or two."
+    val reason = outcome.reason.orEmpty()
+    return when {
+        reason.startsWith("daily_render_cap_reached") ->
+            "Approved, but not rendering yet: today's 1-video limit is used. It will render automatically after the daily reset at midnight."
+        reason.startsWith("monthly_render_cap_reached") ->
+            "Approved, but not rendering: this month's video limit is used."
+        reason.isNotBlank() -> "Approved, but the video was not queued: $reason"
+        else -> "Approved, but the video was not queued."
     }
 }

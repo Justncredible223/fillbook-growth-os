@@ -28,6 +28,14 @@ data class Opportunity(
 /** Result of handing a ready campaign asset off to the owner (opened the platform composer) -- never a publish confirmation. */
 data class HandOffResult(val campaignAssetId: String, val stage: String)
 
+/**
+ * What the server did about rendering when a video_script was approved. `queued` is true when a render is
+ * now in progress (including one that already existed); otherwise `reason` says why not, e.g.
+ * "daily_render_cap_reached (1 renders today, cap is 1)". Null from decideApproval means the asset was not
+ * a video (or it was rejected), so there was nothing to report.
+ */
+data class VideoRenderOutcome(val queued: Boolean, val alreadyExisted: Boolean, val reason: String?)
+
 enum class AssetStage {
     DRAFT, FINAL_DRAFT, READY_FOR_OWNER, HANDED_OFF
 }
