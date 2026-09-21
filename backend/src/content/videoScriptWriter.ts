@@ -109,6 +109,21 @@ QUALITY BAR -- every output must clear this:
   accounts against drawdown rules, inconsistent position sizing, the two drawdown numbers a prop firm
   tracks). The weakest were generic "a journal remembers your mistakes" hooks. Prefer a concrete rule,
   mechanic or scenario plus its consequence, without inventing a statistic.
+- THE FIRST SECOND (owner analytics, 2026-09-21): on our published videos viewers watched about 2 seconds
+  of 24 on average, only 1-2% watched to the end, and most left at second one. Distribution was fine (99%
+  of views came from the For You feed); the opening lost them. So the opening is the whole job:
+    * The first sentence of the hook is 10 words or fewer, and its first three words are the most
+      specific thing in the video: a named prop-firm rule or mechanic (trailing drawdown, the consistency
+      rule, the payout threshold, the daily loss limit) or a concrete consequence. Never open on a
+      general observation about the viewer's habits, and never on a lead-in ("Most traders...", "Did you
+      know...", "Have you...", "Here's...", "Let's...", "Imagine...", "In this video...", "What if...").
+    * Open a loop: state the consequence or the surprising fact first and hold back the reason. The
+      reason arrives in the second sentence, inside the first 3-4 seconds.
+    * No warm-up, no greeting, no setup. The very first word is the point.
+    * Shot 1 of the shot list is what fills the screen at 0:00, so it must be a concrete, specific
+      visual: a Fillbook screen with example data showing a rule alert or a number, or a large on-screen
+      rule name or figure. Never a generic stock scene of a trader at a desk, and never a plain text card
+      of the hook line.
 - Script: the exact words someone speaks aloud or feeds to a TTS voice. Tight, punchy, real.
   No filler sentences. No corporate SaaS language. Never use these phrases (they will auto-fail
   review): "at the end of the day", "when it comes to", "game changer", "game-changer",
@@ -256,7 +271,7 @@ export async function draftVideoScript(
         "",
         "COPY FIX REQUIRED: your previous package had these problems:",
         ...copyProblems.map((problem) => `- The ${problem.field} ${problem.reason}.`),
-        "Rewrite the whole package and fix every one of them: proper capitalization and grammar (every sentence starts with a capital letter, \"I\" is capitalized), and no em or en dashes anywhere (use a period or a comma). Keep the content, the hook's idea, the loop ending and the script within the length limit.",
+        "Rewrite the whole package and fix every one of them: proper capitalization and grammar (every sentence starts with a capital letter, \"I\" is capitalized), and no em or en dashes anywhere (use a period or a comma). Where the problem is the hook's opening or the first shot, follow the FIRST SECOND rules: a first sentence of 10 words or fewer whose first three words are the specific rule or consequence, the reason held back for the second sentence, and shot 1 a concrete on-screen visual. Keep the content, the loop ending and the script within the length limit.",
       ].join("\n"),
     );
     words = countSpokenWords(result.script);
@@ -320,6 +335,44 @@ export function videoCopyProblems(video: VideoScript): Array<{ field: string; re
     for (const problem of [capitalizationProblem(text), dashProblem(text)]) {
       if (problem) problems.push({ field, reason: problem.reason });
     }
+  }
+  problems.push(...hookOpeningProblems(video));
+  return problems;
+}
+
+/** Lead-ins that give a scrolling viewer no reason to stay for the next second. */
+const WEAK_HOOK_OPENERS = /^\s*(most|many|some)\s+(traders|people|funded)\b|^\s*(have you|did you know|do you|are you|what if|imagine|picture|let'?s|here'?s|here is|today|in this video|want to|ever wonder|so\b|okay\b|hey\b|hi\b|welcome)|^\s*you already know\b/i;
+/** Words in a first shot that make it a specific, concrete visual rather than filler. */
+const CONCRETE_SHOT = /\d|fillbook ui|screen|screenshot|alert|breach|drawdown|dashboard|daily loss|consistency|payout|threshold|balance|limit|rule/i;
+/** A first shot that is only a plain text card or generic stock scene. */
+const GENERIC_FIRST_SHOT = /^\s*(text|title) card\b(?![^.]*\b(rule|drawdown|limit|payout|consistency)\b)|trader (at|sitting|working)|person (at|typing|working)|generic|stock (footage|clip) of/i;
+
+/** Number of spoken words in the first sentence of a hook. */
+function firstSentenceWords(hook: string): number {
+  const first = hook.split(/(?<=[.!?])\s+/)[0] ?? hook;
+  return countSpokenWords(first);
+}
+
+/**
+ * Retention problems in how a script opens (owner analytics 2026-09-21: average watch time was about 2 seconds
+ * of 24 and most viewers left at second one). Only the clear-cut cases, since whether a hook is good is still
+ * a judgment call for the writer prompt: a long first sentence, a lead-in opener, and a first shot that is
+ * generic filler. Same one-rewrite handling as the capitalization and dash problems.
+ */
+export function hookOpeningProblems(video: VideoScript): Array<{ field: string; reason: string }> {
+  const problems: Array<{ field: string; reason: string }> = [];
+  if (typeof video.hook === "string" && video.hook.trim()) {
+    const words = firstSentenceWords(video.hook);
+    if (words > 10) {
+      problems.push({ field: "hook", reason: `has a first sentence of ${words} words; it must be 10 or fewer so the point lands inside the first two seconds` });
+    }
+    if (WEAK_HOOK_OPENERS.test(video.hook)) {
+      problems.push({ field: "hook", reason: "opens with a lead-in or a general observation instead of the specific rule or consequence in its first three words" });
+    }
+  }
+  const firstShot = Array.isArray(video.shotList) ? video.shotList[0] : undefined;
+  if (typeof firstShot === "string" && (GENERIC_FIRST_SHOT.test(firstShot) || !CONCRETE_SHOT.test(firstShot))) {
+    problems.push({ field: "first shot", reason: "is generic filler or a plain text card; the first frame must be a concrete visual such as a Fillbook screen with example data showing a rule alert or a number" });
   }
   return problems;
 }

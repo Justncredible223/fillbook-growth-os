@@ -8,8 +8,7 @@ import {
   VideoScriptTooLongError,
   VideoHookRepeatError,
   MAX_HOOK_REWRITES,
-  type VideoScript,
-} from "../src/content/videoScriptWriter";
+  type VideoScript, hookOpeningProblems, videoCopyProblems } from "../src/content/videoScriptWriter";
 
 function jsonResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
@@ -27,9 +26,9 @@ const opportunity = {
 describe("draftVideoScript", () => {
   it("returns the structured video script from the tool call", async () => {
     const script: VideoScript = {
-      hook: "Your funded account can get pulled even on a winning trade.",
-      script: "Your funded account can get pulled even on a winning trade. Here's why trailing drawdown catches people off guard...",
-      shotList: ["Text card: the hook line", "Fillbook UI: example drawdown chart (demo data)"],
+      hook: "Trailing drawdown can pull a funded account while winning.",
+      script: "Trailing drawdown can pull a funded account while winning. Here's why trailing drawdown catches people off guard...",
+      shotList: ["Fillbook UI: example rule alert (demo data)", "Fillbook UI: example drawdown chart (demo data)"],
       youtubeTitle: "Why Your Funded Account Gets Pulled Even When You're Winning",
       youtubeDescription: "Trailing drawdown catches even profitable traders off guard -- here's what to watch for.",
       tiktokCaption: "Trailing drawdown explained in 30 seconds.",
@@ -55,7 +54,7 @@ describe("draftVideoScript length guard", () => {
   const withScript = (script: string): VideoScript => ({
     hook: "The hook.",
     script,
-    shotList: ["Text card: the hook line"],
+    shotList: ["Fillbook UI: example rule alert (demo data)"],
     youtubeTitle: "Title",
     youtubeDescription: "Description.",
     tiktokCaption: "Caption.",
@@ -103,7 +102,7 @@ describe("draftVideoScript hook variety", () => {
   const scriptWith = (hook: string): VideoScript => ({
     hook,
     script: Array.from({ length: 60 }, (_, i) => (i === 0 ? "Word0" : `word${i}`)).join(" "),
-    shotList: ["Text card: the hook line"],
+    shotList: ["Fillbook UI: example rule alert (demo data)"],
     youtubeTitle: "Title",
     youtubeDescription: "Description.",
     tiktokCaption: "Caption.",
@@ -112,7 +111,7 @@ describe("draftVideoScript hook variety", () => {
     disclosureCta: null,
     youtubeThumbnailConcept: "x",
   });
-  const recentVideos = [{ hook: "You already know which trade you're about to repeat.", title: "Trade review" }];
+  const recentVideos = [{ hook: "Trailing drawdown never resets after a peak.", title: "Trade review" }];
   const bodyText = (fetchMock: ReturnType<typeof vi.fn>, call: number) => (fetchMock.mock.calls[call]![1] as { body: string }).body;
 
   it("shows the recent hooks to the writer and makes one call when the hook is fresh", async () => {
@@ -120,30 +119,30 @@ describe("draftVideoScript hook variety", () => {
     await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts", recentVideos);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(bodyText(fetchMock, 0)).toContain("RECENT VIDEOS");
-    expect(bodyText(fetchMock, 0)).toContain("You already know which trade you're about to repeat.");
+    expect(bodyText(fetchMock, 0)).toContain("Trailing drawdown never resets after a peak.");
   });
 
   it("sends a repeated hook back with the hook it repeats, and returns the fresh rewrite", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(scriptResponse(scriptWith("You already know which trade you're about to blow up.")))
+      .mockResolvedValueOnce(scriptResponse(scriptWith("Trailing drawdown never resets after a new high.")))
       .mockResolvedValueOnce(scriptResponse(scriptWith("Copy-trading five accounts means one mistake gets made five times.")));
     const result = await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts", recentVideos);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(bodyText(fetchMock, 1)).toContain("HOOK REPEATS A RECENT VIDEO");
-    expect(bodyText(fetchMock, 1)).toContain("You already know which trade you're about to repeat.");
+    expect(bodyText(fetchMock, 1)).toContain("Trailing drawdown never resets after a peak.");
     expect(result.hook).toContain("Copy-trading");
   });
 
   it("throws VideoHookRepeatError after MAX_HOOK_REWRITES rewrites instead of returning a repeat", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(scriptWith("You already know which trade you're about to blow up.")));
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(scriptWith("Trailing drawdown never resets after a new high.")));
     const attempt = draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts", recentVideos);
     await expect(attempt).rejects.toBeInstanceOf(VideoHookRepeatError);
     expect(fetchMock).toHaveBeenCalledTimes(1 + MAX_HOOK_REWRITES);
   });
 
   it("does no hook checking and adds no history section when there are no recent videos", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(scriptWith("You already know which trade you're about to repeat.")));
+    const fetchMock = vi.fn().mockResolvedValue(scriptResponse(scriptWith("Trailing drawdown never resets after a peak.")));
     await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(bodyText(fetchMock, 0)).not.toContain("RECENT VIDEOS (already published");
@@ -170,7 +169,7 @@ describe("formatVideoScriptAsText", () => {
     const script: VideoScript = {
       hook: "The hook line.",
       script: "The full spoken script.",
-      shotList: ["First shot", "Second shot"],
+      shotList: ["Fillbook UI: example rule alert (demo data)", "Second shot"],
       youtubeTitle: "The YouTube title.",
       youtubeDescription: "The YouTube description.",
       tiktokCaption: "The TikTok caption.",
@@ -183,7 +182,7 @@ describe("formatVideoScriptAsText", () => {
     const text = formatVideoScriptAsText(script);
 
     expect(text).toContain("HOOK: The hook line.");
-    expect(text).toContain("1. First shot");
+    expect(text).toContain("1. Fillbook UI: example rule alert (demo data)");
     expect(text).toContain("2. Second shot");
     expect(text).toContain("YOUTUBE TITLE:\nThe YouTube title.");
     expect(text).toContain("YOUTUBE DESCRIPTION:\nThe YouTube description.");
@@ -197,7 +196,7 @@ describe("formatVideoScriptAsText", () => {
     const script: VideoScript = {
       hook: "The hook line.",
       script: "The full spoken script.",
-      shotList: ["First shot"],
+      shotList: ["Fillbook UI: example rule alert (demo data)"],
       youtubeTitle: "The YouTube title.",
       youtubeDescription: "The YouTube description.",
       tiktokCaption: "The TikTok caption.",
@@ -215,9 +214,9 @@ describe("formatVideoScriptAsText", () => {
 
 describe("draftVideoScript capitalization (owner rule 2026-09-20)", () => {
   const package_ = (overrides: Partial<VideoScript> = {}): VideoScript => ({
-    hook: "Your loss limit doesn't care that the trade was a good one.",
+    hook: "Your loss limit ignores good trades.",
     script: Array.from({ length: 60 }, (_, i) => (i === 0 ? "Word0" : `word${i}`)).join(" "),
-    shotList: ["Text card: the hook line"],
+    shotList: ["Fillbook UI: example rule alert (demo data)"],
     youtubeTitle: "Why Your Loss Limit Ignores Good Trades",
     youtubeDescription: "A short explainer.",
     tiktokCaption: "Loss limits explained.",
@@ -272,9 +271,9 @@ describe("draftVideoScript capitalization (owner rule 2026-09-20)", () => {
 
 describe("draftVideoScript em dashes and trial wording (owner direction 2026-09-21)", () => {
   const goodPackage = (overrides: Partial<VideoScript> = {}): VideoScript => ({
-    hook: "Your loss limit doesn't care that the trade was a good one.",
+    hook: "Your loss limit ignores good trades.",
     script: Array.from({ length: 60 }, (_, i) => (i === 0 ? "Word0" : `word${i}`)).join(" "),
-    shotList: ["Text card: the hook line"],
+    shotList: ["Fillbook UI: example rule alert (demo data)"],
     youtubeTitle: "Why Your Loss Limit Ignores Good Trades",
     youtubeDescription: "A short explainer. See fillbookhq.com.",
     tiktokCaption: "Loss limits explained. Link in bio.",
@@ -355,5 +354,49 @@ describe("draftVideoScript em dashes and trial wording (owner direction 2026-09-
     expect(prompt).toContain("Any trial claim must match the verified knowledge exactly");
     expect(prompt).toContain("14-day free trial, no card required");
     expect(prompt).not.toContain('Never say "free trial"');
+  });
+});
+
+describe("hookOpeningProblems (first-second retention rules, 2026-09-21)", () => {
+  const base = (over: Partial<VideoScript>): VideoScript => ({
+    hook: "Trailing drawdown never resets after a peak.",
+    script: "x", shotList: ["Fillbook UI: example rule alert (demo data)"],
+    youtubeTitle: "t", youtubeDescription: "d", tiktokCaption: "c", instagramCaption: "i",
+    hashtags: [], disclosureCta: null, youtubeThumbnailConcept: "x",
+    ...over,
+  });
+
+  it("passes a short, rule-first hook with a concrete first shot", () => {
+    expect(hookOpeningProblems(base({}))).toEqual([]);
+  });
+
+  it("flags a first sentence longer than 10 words, the shape of every video that lost viewers at 0:01", () => {
+    const p = hookOpeningProblems(base({ hook: "You pass the eval because the rules are tight and the account stays." }));
+    expect(p.some((x) => x.field === "hook" && x.reason.includes("10 or fewer"))).toBe(true);
+  });
+
+  it("only counts the first sentence, so a short hook followed by a payoff sentence is fine", () => {
+    expect(hookOpeningProblems(base({ hook: "Daily loss limits reset. Trailing drawdown does not, and most funded traders only watch one." }))).toEqual([]);
+  });
+
+  it("flags lead-in and generic-observation openers", () => {
+    for (const hook of ["Most traders never review their wins.", "Did you know drawdown trails your peak?", "Imagine blowing an account on a rule.", "You already know which rule you will break."]) {
+      expect(hookOpeningProblems(base({ hook })).some((x) => x.reason.includes("lead-in")), hook).toBe(true);
+    }
+  });
+
+  it("flags a first shot that is a plain text card or generic stock scene", () => {
+    for (const shot of ["Text card: the hook line", "Trader at desk looking frustrated", "First shot"]) {
+      expect(hookOpeningProblems(base({ shotList: [shot] })).some((x) => x.field === "first shot"), shot).toBe(true);
+    }
+  });
+
+  it("accepts a text card that carries a specific rule or number", () => {
+    expect(hookOpeningProblems(base({ shotList: ["Text card: Trailing drawdown, big white text"] }))).toEqual([]);
+  });
+
+  it("feeds into videoCopyProblems so the existing one-rewrite retry handles it", () => {
+    const problems = videoCopyProblems(base({ hook: "Did you know your drawdown trails the peak of your balance today?" }));
+    expect(problems.some((x) => x.reason.includes("lead-in"))).toBe(true);
   });
 });

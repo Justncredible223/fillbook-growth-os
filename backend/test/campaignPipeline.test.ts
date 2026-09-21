@@ -74,9 +74,9 @@ function videoScriptResponse() {
         type: "tool_use",
         name: "submit_video_script",
         input: {
-          hook: "Your funded account can get pulled even on a winning trade.",
-          script: "Your funded account can get pulled even on a winning trade. Here's why.",
-          shotList: ["Text card: the hook", "Fillbook UI: example drawdown chart (demo data)"],
+          hook: "Trailing drawdown can pull a funded account while winning.",
+          script: "Trailing drawdown can pull a funded account while winning. Here's why.",
+          shotList: ["Fillbook UI: example rule alert (demo data)", "Fillbook UI: example drawdown chart (demo data)"],
           youtubeTitle: "Why Funded Accounts Get Pulled Even When Winning",
           youtubeDescription: "Trailing drawdown explained.",
           tiktokCaption: "Trailing drawdown explained.",
@@ -190,7 +190,7 @@ describe("runCampaignPipeline", () => {
 
     const version = campaignRepo.versions.find((v) => v.campaignAssetId === result.campaignAssetId);
     expect((version?.metadata.videoScript as { hook: string } | undefined)?.hook).toBe(
-      "Your funded account can get pulled even on a winning trade.",
+      "Trailing drawdown can pull a funded account while winning.",
     );
   });
 

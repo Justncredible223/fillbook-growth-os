@@ -49,9 +49,9 @@ function videoScriptResponse() {
         type: "tool_use",
         name: "submit_video_script",
         input: {
-          hook: "Your funded account can get pulled even on a winning trade.",
-          script: "Your funded account can get pulled even on a winning trade. Here's why.",
-          shotList: ["Text card: the hook"],
+          hook: "Trailing drawdown can pull a funded account while winning.",
+          script: "Trailing drawdown can pull a funded account while winning. Here's why.",
+          shotList: ["Fillbook UI: example rule alert (demo data)"],
           youtubeTitle: "Why Funded Accounts Get Pulled Even When Winning",
           youtubeDescription: "Trailing drawdown explained.",
           tiktokCaption: "Trailing drawdown explained.",
