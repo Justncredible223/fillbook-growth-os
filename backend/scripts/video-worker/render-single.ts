@@ -30,6 +30,9 @@ import { runFfprobeJson, validateOutput } from "../video-factory/validate.js";
 import { createProcessRunner, requireExecutable } from "../video-factory/processRunner.js";
 import { sendRenderNotification } from "./pushSender.js";
 import type { RenderPlan } from "../video-factory/types.js";
+import { JobQueue } from "../../src/jobs/jobQueue.js";
+import { SupabaseJobQueueRepository } from "../../src/jobs/supabaseJobQueueRepository.js";
+import { PUBLISH_YOUTUBE_JOB_TYPE } from "../../src/video/youtubePublishJob.js";
 
 const STORAGE_BUCKET = "rendered-videos";
 // Just enough tail that TTS/AAC never clips the last word. No brand card or
@@ -247,6 +250,25 @@ async function main(): Promise<void> {
       updated_at: new Date().toISOString(),
     })
     .eq("id", videoRenderId);
+
+  // Automated YouTube publishing (Phase 1, 2026-09-22) -- gated behind its
+  // own flag so this file is safe to merge/deploy without immediately
+  // going live: with the flag unset (the default), behavior here is
+  // byte-for-byte what it was before this feature existed. Enqueuing
+  // through the shared job queue (rather than publishing inline, right
+  // here) keeps a transient YouTube/network failure from ever affecting
+  // this render's own success -- the render is already 'ready' by this
+  // point regardless of whether the publish job later succeeds or fails.
+  if (process.env.YOUTUBE_PUBLISHING_ENABLED === "true") {
+    const jobQueue = new JobQueue(new SupabaseJobQueueRepository(client));
+    await jobQueue.enqueue({
+      jobType: PUBLISH_YOUTUBE_JOB_TYPE,
+      payload: { videoRenderId },
+      idempotencyKey: `${PUBLISH_YOUTUBE_JOB_TYPE}:${videoRenderId}`,
+      maxAttempts: 3,
+    });
+    console.log(`[render-single] enqueued ${PUBLISH_YOUTUBE_JOB_TYPE} for ${videoRenderId}`);
+  }
 
   // Send FCM push to all non-revoked devices
   const [{ data: devices }, { data: render }] = await Promise.all([

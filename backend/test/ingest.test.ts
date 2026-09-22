@@ -57,10 +57,22 @@ describe("api/ingest -- YouTube/TikTok removed, X + Search Console remain manual
     });
   }
 
-  it("daily-pipeline.ts still contains no path to YouTube/TikTok ingestion -- that removal stands", () => {
+  // daily-pipeline.ts DOES now import YouTube-related modules (2026-09-22)
+  // -- another real, narrow, deliberate reversal, same posture as
+  // growth-pulse.ts's own YouTube comment-monitoring import below: this is
+  // automated PUBLISHING of already-rendered videos + pulling their real
+  // analytics back (src/video/youtubePublishJob.ts,
+  // src/video/youtubeAnalyticsRefresh.ts), gated behind
+  // YOUTUBE_PUBLISHING_ENABLED, not the old topic/content-scraping
+  // ingestion this describe block's title refers to as removed -- that
+  // ingestion path (api/ingest.ts's manual source list, asserted above)
+  // is untouched. TikTok still gets none of this: no TikTok import
+  // anywhere in this file.
+  it("daily-pipeline.ts imports YouTube publishing/analytics modules, but still no TikTok import at all", () => {
     const source = readFileSync(join(here, "..", "api", "daily-pipeline.ts"), "utf8");
     const imports = source.split("\n").filter((line) => line.startsWith("import "));
-    expect(imports.some((line) => /youtube|tiktok/i.test(line))).toBe(false);
+    expect(imports.some((line) => /youtubePublishJob|youtubeAnalyticsRefresh/i.test(line))).toBe(true);
+    expect(imports.some((line) => /tiktok/i.test(line))).toBe(false);
   });
 
   // growth-pulse.ts DOES now import YouTube-related modules (2026-09-18) --
