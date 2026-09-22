@@ -74,6 +74,7 @@ async function main(): Promise<void> {
         final_stage: result.finalStage,
         block_reasons: blockReasons,
         cost_usd: usage.costUsd(),
+        error: null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", campaignRunRequestId);
