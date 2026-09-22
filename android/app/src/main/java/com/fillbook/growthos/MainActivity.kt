@@ -140,7 +140,7 @@ private sealed class Destination(val route: String, val label: String, val icon:
 }
 
 /**
- * The 5 screens worth a permanent thumb-reach slot -- everything else
+ * The 6 screens worth a permanent thumb-reach slot -- everything else
  * lives in More. Prospecting replaced Analytics here: for a new product
  * with no inbound traffic yet, proactive daily outreach is the primary
  * growth system, not a periodic check (see docs/PROSPECTING.md) --
@@ -153,8 +153,14 @@ private sealed class Destination(val route: String, val label: String, val icon:
  * drafts is now the more frequent daily action of the two, so Partnerships
  * moved to More instead -- still one tap away, just no longer competing
  * for the habitual slot.
+ *
+ * VideoStatus joined as a 6th slot (2026-09-22): checking on a render,
+ * downloading it, and sharing/drafting it out is now a routine daily loop
+ * of its own, not an occasional check -- worth the permanent slot instead
+ * of a trip through More every time.
  */
-private val primaryDestinations = listOf(Destination.Home, Destination.Radar, Destination.Prospecting, Destination.Inbound, Destination.Approvals)
+private val primaryDestinations =
+    listOf(Destination.Home, Destination.Radar, Destination.Prospecting, Destination.Inbound, Destination.Approvals, Destination.VideoStatus)
 
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
@@ -172,7 +178,6 @@ private val moreDestinations = listOf(
     Destination.MorningBrief,
     Destination.EveningReport,
     Destination.XFeedPostHistory,
-    Destination.VideoStatus,
 )
 
 private val allDestinations = primaryDestinations + moreDestinations

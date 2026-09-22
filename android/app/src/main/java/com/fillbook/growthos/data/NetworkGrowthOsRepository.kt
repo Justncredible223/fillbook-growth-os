@@ -1,6 +1,7 @@
 package com.fillbook.growthos.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -49,18 +50,27 @@ class NetworkGrowthOsRepository(
 ) : GrowthOsRepository {
 
     // Default OkHttp timeouts are 10s each way -- fine for every other
-    // endpoint here, but POST /api/run-campaign drafts content and then runs
-    // up to nine sequential LLM review-agent calls server-side, which
-    // routinely takes well past 10s. Verified live: a real run reached
-    // ready_for_owner in Supabase while the client had already timed out and
-    // shown "couldn't run that campaign" -- the campaign wasn't lost, but
-    // retrying on that false failure would have spent real LLM tokens
-    // drafting the same opportunity a second time.
+    // endpoint here. POST /api/run-campaign used to drift well past 10s
+    // (it drafted content and ran up to nine sequential LLM review-agent
+    // calls inline), which is exactly why that endpoint is now enqueue-only
+    // and polled instead (see enqueueAndAwaitCampaignRun below) -- the 90s
+    // read timeout here is a generous margin for any individual request,
+    // not a budget for the whole campaign run anymore.
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(90, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
+
+    companion object {
+        private const val CAMPAIGN_RUN_POLL_INTERVAL_MS = 3_000L
+        // Generous outer bound on the whole enqueue-and-wait loop -- well
+        // past any campaign run this pipeline has actually taken so far,
+        // but still short enough that the app doesn't hang indefinitely if
+        // something is genuinely stuck. The run itself is never lost if
+        // this is hit -- see the timeout message below.
+        private const val CAMPAIGN_RUN_POLL_TIMEOUT_MS = 5 * 60_000L
+    }
 
     private suspend fun get(path: String): JSONObject = withContext(Dispatchers.IO) {
         val request = Request.Builder()
@@ -259,36 +269,60 @@ class NetworkGrowthOsRepository(
      * narrative the owner had no way to see without querying the database
      * directly.
      */
-    private fun JSONObject.toCampaignRunResult(): CampaignRunResult {
-        val result = getJSONObject("result")
-        val mechanicalReasons = result.optJSONArray("mechanicalBlockReasons")?.mapStrings() ?: emptyList()
-        val deepReviewReasons = result.optJSONObject("deepReview")?.optJSONArray("blockReasons")?.mapStrings() ?: emptyList()
-        return CampaignRunResult(
-            finalStage = result.getString("finalStage"),
-            blockReasons = mechanicalReasons + deepReviewReasons,
-            costUsd = getDouble("costUsd"),
-        )
+    /**
+     * POST /api/run-campaign now only enqueues the run and returns a
+     * campaignRunRequestId immediately (2026-09-22) -- the actual pipeline
+     * (one drafting call plus up to nine review calls) moved to GitHub
+     * Actions after production logs showed it occasionally exceeding
+     * Vercel's 120s function cap, which this app surfaced as a generic
+     * "couldn't run that campaign" even on runs that eventually succeeded
+     * server-side. This polls GET /api/campaign-run-status until the run
+     * reaches a terminal state, then maps it to the exact same
+     * CampaignRunResult every caller (RadarScreen, ResearchScreen,
+     * VideoStatusScreen) already expects -- none of them need to change.
+     */
+    private suspend fun enqueueAndAwaitCampaignRun(body: JSONObject): CampaignRunResult {
+        val enqueued = post("/api/run-campaign", body)
+        val campaignRunRequestId = enqueued.getString("campaignRunRequestId")
+
+        val deadline = System.currentTimeMillis() + CAMPAIGN_RUN_POLL_TIMEOUT_MS
+        while (true) {
+            val status = get("/api/campaign-run-status?id=$campaignRunRequestId")
+            when (status.getString("status")) {
+                "ready" -> {
+                    val mechanicalReasons = status.optJSONArray("blockReasons")?.mapStrings() ?: emptyList()
+                    return CampaignRunResult(
+                        finalStage = status.getString("finalStage"),
+                        blockReasons = mechanicalReasons,
+                        costUsd = if (status.isNull("costUsd")) 0.0 else status.getDouble("costUsd"),
+                    )
+                }
+                "failed" -> throw NetworkException(status.optString("error", "Campaign run failed for an unknown reason."))
+                else -> {
+                    if (System.currentTimeMillis() > deadline) {
+                        throw NetworkException("Campaign run is taking longer than expected -- check Approvals shortly, it may still land.")
+                    }
+                    delay(CAMPAIGN_RUN_POLL_INTERVAL_MS)
+                }
+            }
+        }
     }
 
-    override suspend fun runCampaignForOpportunity(opportunityId: String): CampaignRunResult {
-        val json = post("/api/run-campaign", JSONObject().put("opportunityId", opportunityId))
-        return json.toCampaignRunResult()
-    }
+    override suspend fun runCampaignForOpportunity(opportunityId: String): CampaignRunResult =
+        enqueueAndAwaitCampaignRun(JSONObject().put("opportunityId", opportunityId))
 
     override suspend fun requestVideoScript(topic: String?, opportunityId: String?): CampaignRunResult {
         val body = JSONObject().put("assetType", "video_script")
         if (topic != null) body.put("topic", topic)
         if (opportunityId != null) body.put("opportunityId", opportunityId)
-        val json = post("/api/run-campaign", body)
-        return json.toCampaignRunResult()
+        return enqueueAndAwaitCampaignRun(body)
     }
 
     override suspend fun requestResearch(topic: String?, opportunityId: String?): CampaignRunResult {
         val body = JSONObject().put("assetType", "research")
         if (topic != null) body.put("topic", topic)
         if (opportunityId != null) body.put("opportunityId", opportunityId)
-        val json = post("/api/run-campaign", body)
-        return json.toCampaignRunResult()
+        return enqueueAndAwaitCampaignRun(body)
     }
 
     private fun JSONObject.toResearchRecord() = ResearchRecord(

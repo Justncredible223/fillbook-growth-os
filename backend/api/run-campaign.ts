@@ -3,12 +3,10 @@ import { errorMessage } from "../src/lib/errorMessage.js";
 import { getServiceClient } from "../src/lib/supabaseClient.js";
 import { SupabaseOpportunityRepository } from "../src/opportunities/supabaseOpportunityRepository.js";
 import type { OpportunityRepository } from "../src/opportunities/types.js";
-import { runCampaignForOpportunity, buildSupabaseRunCampaignDeps } from "../src/content/runCampaignForOpportunity.js";
 import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 import { isPlausiblyTradingRelated } from "../src/prospecting/prospectingRelevance.js";
 import { validateVideoTopicShape, manualVideoTopicTitle, manualVideoTopicOpportunityInput } from "../src/opportunities/manualVideoTopic.js";
 import { validateResearchTopicShape, manualResearchTopicTitle, manualResearchTopicOpportunityInput } from "../src/opportunities/manualResearchTopic.js";
-import { recordResearchCost } from "../src/research/researchHandlers.js";
 
 /** The only asset-type overrides this endpoint will ever accept from a caller -- see the `assetType` handling below for why this is validated as an exact-match allowlist, never passed through freely. */
 export const ALLOWED_ASSET_TYPE_OVERRIDES = ["video_script", "research"] as const;
@@ -20,15 +18,26 @@ export function isAllowedAssetTypeOverride(value: unknown): value is AllowedAsse
 }
 
 /**
- * Manual trigger: runs one opportunity through the full Opportunity ->
- * draft -> mechanical gate -> nine-agent deep review -> ready_for_owner
- * pipeline. Never publishes anything -- the furthest an asset can reach
- * here is 'ready_for_owner'. Costs real LLM tokens (one drafting call
- * plus up to nine review calls), so POST-only. See
+ * Manual trigger: validates the request, then enqueues one opportunity to
+ * run through the full Opportunity -> draft -> mechanical gate ->
+ * nine-agent deep review -> ready_for_owner pipeline. Never publishes
+ * anything -- the furthest an asset can reach is 'ready_for_owner'. Costs
+ * real LLM tokens (one drafting call plus up to nine review calls), so
+ * POST-only.
+ *
+ * The actual pipeline runs on GitHub Actions
+ * (scripts/campaign-worker/run-single.ts), not inline in this request --
+ * see enqueue_campaign_run's own doc comment (migration
+ * 0041_campaign_run_requests.sql) for why: this endpoint used to call
+ * runCampaignForOpportunity directly and occasionally exceeded Vercel's
+ * 120s function cap. Poll GET /api/campaign-run-status?id=<the returned
+ * campaignRunRequestId> for the eventual result. See
  * src/content/runCampaignForOpportunity.ts for the shared, testable
- * implementation also used by the scheduled auto-draft step
- * (api/daily-pipeline.ts) -- this endpoint tags its cost events
- * source: "manual" to distinguish itself from that automated path.
+ * pipeline implementation, also used by the scheduled auto-draft step
+ * (api/daily-pipeline.ts, which still calls it inline -- that path has no
+ * HTTP client waiting on a response, so the timeout this endpoint hit
+ * doesn't apply there) -- source: "manual" tags this path's cost events to
+ * distinguish it from that automated one.
  *
  * Optional `assetType` field (2026-09-08): lets the owner explicitly
  * request a video_script for ANY open opportunity, not just one whose
@@ -222,17 +231,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const { deps, usage } = await buildSupabaseRunCampaignDeps(client, () => opportunity!.id, "manual");
-    const result = await runCampaignForOpportunity(deps, opportunity, { assetTypeOverride });
+    // The actual pipeline (one drafting call plus up to nine review calls)
+    // used to run right here, synchronously, inside this request -- moved
+    // to GitHub Actions (2026-09-22) after production logs confirmed this
+    // endpoint occasionally exceeded Vercel's 120s function cap ("Vercel
+    // Runtime Timeout Error"), which the app surfaced as a generic failure
+    // even on runs that eventually succeeded server-side. This now only
+    // enqueues the work and returns immediately -- see
+    // src/db/migrations/0041_campaign_run_requests.sql's enqueue_campaign_run
+    // and scripts/campaign-worker/run-single.ts for where it actually runs,
+    // same shape as enqueue_video_render/render-single.ts.
+    const { data: enqueueRows, error: enqueueError } = await client.rpc("enqueue_campaign_run", {
+      p_opportunity_id: opportunity.id,
+      p_asset_type_override: assetTypeOverride ?? null,
+    });
+    if (enqueueError) throw new Error(`enqueue_campaign_run failed: ${enqueueError.message}`);
+    const enqueued = (enqueueRows as Array<{ campaign_run_request_id: string; job_id: string | null; already_existed: boolean }>)[0]!;
 
-    if (assetTypeOverride === "research") {
-      // Best-effort -- never blocks or fails the main response (see
-      // recordResearchCost's own doc comment for why this is a swallowed,
-      // logged-only failure path).
-      void recordResearchCost(client, result.campaignAssetId, usage.costUsd());
-    }
-
-    res.status(200).json({ result, aiCalls: usage.aiCalls(), costUsd: usage.costUsd() });
+    res.status(200).json({ status: "queued", campaignRunRequestId: enqueued.campaign_run_request_id, opportunityId: opportunity.id });
   } catch (err) {
     res.status(500).json({ error: errorMessage(err) });
   }
