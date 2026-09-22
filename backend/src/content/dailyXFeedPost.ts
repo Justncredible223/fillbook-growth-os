@@ -58,24 +58,32 @@ export function evaluateXFeedPostBudget(monthSpendUsd: number): EligibilityCheck
  * a specific point to make rather than an open-ended topic name.
  */
 /**
- * Which slice of docs/SEED_DATA_SOURCES.md's content-mix guideline (40%
- * education / 25% psychology / 20% product demo / 10% conversation
- * starter / 5% direct promo-CTA) a topic belongs to. Added because an
+ * Which slice of docs/SEED_DATA_SOURCES.md's content-mix guideline (35%
+ * education / 20% psychology / 25% product demo / 10% conversation
+ * starter / 10% direct promo-CTA) a topic belongs to. Added because an
  * audit found every original topic landed in education/psychology --
  * structurally guaranteeing 0% product mentions regardless of the
  * documented target, since nothing tracked or nudged the realized mix.
  * See categoryUnderrepresentationBonus for how this now actually pulls
  * selection toward the target over time, not just in a doc comment.
+ *
+ * Raised product_demo/cta from 20%/5% to 25%/10% (2026-09-21, owner
+ * direction: "we are a business looking to expand, not just talk to
+ * people") -- taken from education (40%->35%) and psychology (25%->20%),
+ * not from conversation_starter. Landed alongside a fix to
+ * HUMAN_POST_VOICE_RULES's own "never a pitch, a call to action" line,
+ * which was silently overriding this target for every product_demo/cta
+ * topic before a draft was even written -- see that file's own comment.
  */
 export type FeedPostContentCategory = "education" | "psychology" | "product_demo" | "conversation_starter" | "cta";
 
 /** The guideline itself, machine-readable -- mirrors docs/SEED_DATA_SOURCES.md's "Content mix guideline" line exactly. A target, not a hard cap. */
 export const FEED_POST_CATEGORY_TARGETS: Record<FeedPostContentCategory, number> = {
-  education: 0.4,
-  psychology: 0.25,
-  product_demo: 0.2,
+  education: 0.35,
+  psychology: 0.2,
+  product_demo: 0.25,
   conversation_starter: 0.1,
-  cta: 0.05,
+  cta: 0.1,
 };
 
 export interface FeedPostTopic {
@@ -311,6 +319,54 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
       "Fillbook, naming ONE specific, verified capability as the reason (not a feature list) -- this must read as an earned " +
       "next step, never a bare advertisement; keep it concrete and short, one clear action, no urgency/hype language.",
     editorialTags: [],
+    audienceRelevance: 4,
+    specificity: 3,
+    practicalUsefulness: 3,
+    evidenceStrength: 2,
+  },
+  {
+    key: "behavior_flags_in_practice",
+    label: "What Fillbook actually flags on a trade, and why",
+    contentCategory: "product_demo",
+    rationale:
+      "Walk through ONE concrete, specific moment where Fillbook's trade-log flags (e.g. tagging a trade Revenge trade or " +
+      "Oversized) would catch a real behavioral pattern as it happens, tied to a genuine sequence (e.g. a losing trade " +
+      "immediately followed by a much larger one) -- the product must read as evidence of that specific mechanism, never a " +
+      "feature list, and the flag must be framed as a review prompt, never a diagnosis of intent. Ground every claim about " +
+      "Fillbook ONLY in the verified knowledge you're given; if it doesn't support a specific enough claim, make the " +
+      "behavioral point without the product claim.",
+    editorialTags: ["loss-triggered-behavior", "sizing-discipline"],
+    audienceRelevance: 5,
+    specificity: 4,
+    practicalUsefulness: 4,
+    evidenceStrength: 3,
+  },
+  {
+    key: "setup_breakdown_in_practice",
+    label: "What breaking your month down by setup actually shows",
+    contentCategory: "product_demo",
+    rationale:
+      "Walk through ONE concrete, specific moment where Fillbook's by-setup breakdown reveals a losing or underperforming " +
+      "setup hiding inside an otherwise positive month -- the product must read as evidence of that specific mechanism (a " +
+      "real trade count and result for one setup), never a feature list. Ground every claim about Fillbook ONLY in the " +
+      "verified knowledge you're given; if it doesn't support a specific enough claim, make the point about breaking totals " +
+      "down by setup without the product claim.",
+    editorialTags: ["process-over-outcome", "rule-literacy"],
+    audienceRelevance: 4,
+    specificity: 4,
+    practicalUsefulness: 4,
+    evidenceStrength: 3,
+  },
+  {
+    key: "direct_cta_multi_account_traders",
+    label: "A direct, earned invitation for traders running more than one funded account",
+    contentCategory: "cta",
+    rationale:
+      "Write a short, direct, proportionate call-to-action inviting a futures trader who runs more than one prop-firm " +
+      "account to try Fillbook, naming broker-agnostic import as the ONE specific, verified reason (reconciling P&L across " +
+      "platforms/firms without manual work) -- this must read as an earned next step, never a bare advertisement; keep it " +
+      "concrete and short, one clear action, no urgency/hype language.",
+    editorialTags: ["prop-firm-mechanics"],
     audienceRelevance: 4,
     specificity: 3,
     practicalUsefulness: 3,
