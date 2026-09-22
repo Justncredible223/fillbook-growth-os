@@ -292,7 +292,24 @@ async function searchPixabay(query: string, apiKey: string): Promise<NormalizedV
  * entire description is a single ambiguous word.
  */
 const STRONG_TRADING_PATTERN =
-  /\b(trad(?:e|es|er|ers|ing)|stocks?|stock markets?|financial markets?|charts?|candlesticks?|forex|futures|crypto\w*|bitcoin|invest\w*|broker\w*|financ\w*|tickers?|portfolio|profits?|equity|equities|nasdaq|nyse|wall street|bullish|bearish)\b/;
+  /\b(trad(?:er|ers|ing)|stocks?|stock markets?|financial markets?|charts?|candlesticks?|forex|futures|crypto\w*|bitcoin|tickers?|nasdaq|nyse|wall street|bullish|bearish)\b/;
+
+/**
+ * Generic business/finance words (finance, invest, profit, equity, portfolio,
+ * broker, money, economy...) are NOT trading evidence on their own. Stock
+ * libraries -- Pixabay especially -- tag ordinary "person with a laptop" and
+ * businesswoman/entrepreneur portrait clips with them, which is how people
+ * portraits reached real renders (2026-09-22) even after the laptop/office
+ * tightening. They were removed from STRONG_TRADING_PATTERN above; a clip now
+ * needs a word that names something visibly trading-specific (a trader, a
+ * chart, a ticker, a stock market).
+ *
+ * Portrait/lifestyle framing is also vetoed outright: a clip described as a
+ * portrait, posing, headshot, smiling, happy, success or entrepreneur shot is
+ * about the person, not the screen, even if its tags also say "stock chart".
+ */
+const PORTRAIT_VETO_PATTERN =
+  /\b(portraits?|headshots?|pos(?:e|es|ing)|models?|selfies?|smil\w*|happy|happiness|laugh\w*|success\w*|entrepreneur\w*|businesswom[ae]n|businessm[ae]n|business ?people|meeting|conference|presentation|handshake|teamwork|coworkers?|colleagues|interview|lifestyle|stock footage|stock video)\b/;
 
 const OFF_TOPIC_VETO_PATTERN =
   /\b(farmers?|flea|super ?markets?|grocery|groceries|fish|food|street ?(market|vendor|food)|market ?stalls?|marketplace\w*|vendors?|merchants?|bazaars?|souks?|kiosks?|hawkers?|peddlers?|produce|fruits?|vegetables?|seafood|spices?|grocers?|bakery|bakeries|butcher\w*|artisan\w*|night market|wet market|open[- ]?air market|livestock|cattle|golf\w*|beach|vacation|holiday|travel|tourist\w*|sunset|sunrise|nature|forest|mountain|wedding|party|dance|dancing|festival|family|kids?|children|baby|wildlife|animals?|dogs?|cats?|horses?|cooking|kitchen|fitness|gym|yoga|sports?|football|soccer|basketball|trade show|real estate|house|car|traffic|fashion|shopping|mall|casino|poker|gambling|slot)\b/;
@@ -306,6 +323,7 @@ const OFF_TOPIC_VETO_PATTERN =
 export function isLikelyTradingRelevant(searchText: string): boolean {
   const lower = searchText.toLowerCase();
   if (OFF_TOPIC_VETO_PATTERN.test(lower)) return false;
+  if (PORTRAIT_VETO_PATTERN.test(lower)) return false;
   return STRONG_TRADING_PATTERN.test(lower);
 }
 

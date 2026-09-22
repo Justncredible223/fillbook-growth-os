@@ -121,6 +121,14 @@ const PIXABAY_HIT = {
 };
 
 describe("isLikelyTradingRelevant", () => {
+  it("rejects generic business/finance-tagged people clips (2026-09-22 portrait leak)", () => {
+    expect(isLikelyTradingRelevant("woman african business finance laptop success")).toBe(false);
+    expect(isLikelyTradingRelevant("businesswoman investment money office")).toBe(false);
+    expect(isLikelyTradingRelevant("woman, entrepreneur, finance, profit, happy")).toBe(false);
+    expect(isLikelyTradingRelevant("black woman working business economy invest")).toBe(false);
+    expect(isLikelyTradingRelevant("woman smiling portrait stock chart")).toBe(false);
+  });
+
   it("passes text with a strong trading/markets term", () => {
     expect(isLikelyTradingRelevant("a trader typing on a laptop")).toBe(true);
     expect(isLikelyTradingRelevant("stock market chart close up")).toBe(true);
