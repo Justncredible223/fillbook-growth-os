@@ -9,7 +9,7 @@ const VIDEO_SCRIPT_SCHEMA = {
     script: {
       type: "string",
       description:
-        "Full voiceover/spoken script, hook through close. Plain sentences, no stage directions. 45-75 words (hard max 80). The last sentence must flow back into the hook so the video loops.",
+        "Full voiceover/spoken script, hook through close. Plain sentences, no stage directions. 45-75 words (hard max 100). The last sentence must flow back into the hook so the video loops.",
     },
     shotList: {
       type: "array",
@@ -132,7 +132,7 @@ QUALITY BAR -- every output must clear this:
   Never open with "let's dive in", "have you ever wondered", "picture this",
   "in today's fast-paced", or "in the world of". Sound like the smartest trader in the room explaining something
   to a peer, not a brand account talking at a prospect.
-- LENGTH: the script is 45-75 words, hard maximum 80 (about 18-30 seconds spoken). Short videos
+- LENGTH: the script is 45-75 words, hard maximum 100 (about 18-34 seconds spoken). Short videos
   get watched to the end, and completion rate is the strongest TikTok ranking signal. Cut any
   sentence that doesn't earn its place; one idea, one payoff.
 - LOOP ENDING: the final sentence must flow straight back into the hook, so the video replays
@@ -453,8 +453,8 @@ export class VideoHookRepeatError extends Error {
   }
 }
 
-/** Hard ceiling on spoken words (~27s at the render's +8% pace); the prompt asks for 45-75. */
-export const MAX_SCRIPT_WORDS = 80;
+/** Hard ceiling on spoken words (~34s at the render's +8% pace); the prompt asks for 45-75. */
+export const MAX_SCRIPT_WORDS = 100;
 
 /** How many times an over-length script is sent back for a shorter rewrite before the request fails instead. */
 export const MAX_SCRIPT_REWRITES = 2;
