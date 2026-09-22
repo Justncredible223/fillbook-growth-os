@@ -81,6 +81,35 @@ export function assignUiScreens(scenes: Scene[], seed: number): void {
   }
 }
 
+/**
+ * Guarantees the hook scene is never a flat, motionless color card. Real published videos'
+ * own TikTok retention data (checked 2026-09-21) showed viewers dropping off at 0:01 on every
+ * video regardless of length or topic -- traced to the hook scene (always scene index 0, see
+ * scenes.ts's classifyShot) being the one scene kind that `assignUiScreens` above never gives a
+ * screenshot to, combined with stock footage (the intended primary hook treatment -- see
+ * render.ts's dedicated hook zoom/scrim effect) silently failing whenever no API key is
+ * configured or no relevant clip is found, per stockFootage.ts's fetchStockClip: "no clip is
+ * strictly better than an off-topic clip." Both of those are reasonable choices on their own, but
+ * together they left the hook scene with NO required fallback, so it fell all the way through to
+ * `render.ts`'s solid-color lavfi source -- a static screen for the one second that decides
+ * whether a viewer stays.
+ *
+ * This must run AFTER both assignUiScreens and the stock-footage fetch attempt, and only touches
+ * a hook scene that still has neither `imagePath` nor `clipPath` at that point -- it never
+ * overrides real stock footage or steals a screen a product scene already used this render.
+ */
+export function assignHookFallbackScreen(scenes: Scene[], seed: number): void {
+  const used = new Set(scenes.map((s) => s.imagePath?.split(/[\\/]/).pop()).filter((f): f is string => Boolean(f)));
+  for (const [i, scene] of scenes.entries()) {
+    if (scene.kind !== "hook" || scene.imagePath || scene.clipPath) continue;
+    const available = UI_SCREENS.filter((s) => !used.has(s.file));
+    const pool = available.length > 0 ? available : UI_SCREENS;
+    const chosen = pool[(seed + i) % pool.length]!;
+    used.add(chosen.file);
+    scene.imagePath = join(UI_SCREENS_DIR, chosen.file);
+  }
+}
+
 /** Stable numeric seed from any id string (the local CLI's draft ids aren't necessarily UUIDs). */
 export function seedFromId(id: string): number {
   let hash = 0;

@@ -14,7 +14,7 @@ import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
 import { buildCaptionCues, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "./captions.js";
 import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "./scenes.js";
 import { renderVideo, extractThumbnail } from "./render.js";
-import { assignUiScreens, copyUiScreenToDir, seedFromId } from "./uiScreens.js";
+import { assignUiScreens, assignHookFallbackScreen, copyUiScreenToDir, seedFromId } from "./uiScreens.js";
 import { pickMusic } from "./music.js";
 import { runFfprobeJson, validateOutput } from "./validate.js";
 import { VideoFactoryError, type RenderPlan, type RenderReport, type VideoScriptPackage } from "./types.js";
@@ -147,6 +147,10 @@ async function main(): Promise<void> {
   const captionCues = buildCaptionCues(wordCues);
   const scenes = buildScenePlan(pkg.videoScript.shotList, totalDurationSeconds, wordCues);
   assignUiScreens(scenes, seedFromId(pkg.draftId));
+  // This local CLI path never attempts stock footage, so without this the hook scene (the one
+  // second that decides whether a viewer stays) would always be a flat color card -- see
+  // assignHookFallbackScreen's own doc comment for why that matters.
+  assignHookFallbackScreen(scenes, seedFromId(pkg.draftId));
   for (const scene of scenes) {
     if (scene.imagePath) scene.imagePath = copyUiScreenToDir(scene.imagePath, outDir);
   }
