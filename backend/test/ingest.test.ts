@@ -57,22 +57,24 @@ describe("api/ingest -- YouTube/TikTok removed, X + Search Console remain manual
     });
   }
 
-  // daily-pipeline.ts DOES now import YouTube-related modules (2026-09-22)
-  // -- another real, narrow, deliberate reversal, same posture as
+  // daily-pipeline.ts DOES now import YouTube- AND TikTok-related modules
+  // (2026-09-22) -- real, narrow, deliberate reversals, same posture as
   // growth-pulse.ts's own YouTube comment-monitoring import below: this is
-  // automated PUBLISHING of already-rendered videos + pulling their real
-  // analytics back (src/video/youtubePublishJob.ts,
-  // src/video/youtubeAnalyticsRefresh.ts), gated behind
-  // YOUTUBE_PUBLISHING_ENABLED, not the old topic/content-scraping
-  // ingestion this describe block's title refers to as removed -- that
-  // ingestion path (api/ingest.ts's manual source list, asserted above)
-  // is untouched. TikTok still gets none of this: no TikTok import
-  // anywhere in this file.
-  it("daily-pipeline.ts imports YouTube publishing/analytics modules, but still no TikTok import at all", () => {
+  // automated DRAFTING of already-rendered videos (YouTube as a private,
+  // not-publicly-reachable upload; TikTok as an inbox draft the owner
+  // still has to post themselves in-app -- both EXTERNAL_DRAFT under
+  // externalWriteFirewall.ts, never an autonomous publish) + pulling
+  // YouTube's real analytics back (src/video/youtubePublishJob.ts,
+  // src/video/youtubeAnalyticsRefresh.ts, src/video/tiktokPublishJob.ts),
+  // gated behind YOUTUBE_PUBLISHING_ENABLED/TIKTOK_PUBLISHING_ENABLED, not
+  // the old topic/content-scraping ingestion this describe block's title
+  // refers to as removed -- that ingestion path (api/ingest.ts's manual
+  // source list, asserted above) is untouched.
+  it("daily-pipeline.ts imports YouTube publishing/analytics modules and TikTok publishing modules", () => {
     const source = readFileSync(join(here, "..", "api", "daily-pipeline.ts"), "utf8");
     const imports = source.split("\n").filter((line) => line.startsWith("import "));
     expect(imports.some((line) => /youtubePublishJob|youtubeAnalyticsRefresh/i.test(line))).toBe(true);
-    expect(imports.some((line) => /tiktok/i.test(line))).toBe(false);
+    expect(imports.some((line) => /tiktokPublishJob/i.test(line))).toBe(true);
   });
 
   // growth-pulse.ts DOES now import YouTube-related modules (2026-09-18) --

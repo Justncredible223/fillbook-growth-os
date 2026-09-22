@@ -25,6 +25,7 @@ import { JobQueue } from "../src/jobs/jobQueue.js";
 import { SupabaseJobQueueRepository } from "../src/jobs/supabaseJobQueueRepository.js";
 import { PUBLISH_YOUTUBE_JOB_TYPE, createPublishYoutubeJobDeps, createPublishYoutubeJobHandler } from "../src/video/youtubePublishJob.js";
 import { createYoutubeAnalyticsRefreshDeps, refreshYoutubeAnalytics } from "../src/video/youtubeAnalyticsRefresh.js";
+import { PUBLISH_TIKTOK_JOB_TYPE, createPublishTiktokJobDeps, createPublishTiktokJobHandler } from "../src/video/tiktokPublishJob.js";
 
 const STRATEGY_REGENERATION_INTERVAL_DAYS = 7;
 const NOTIFICATION_LOOKBACK_HOURS = 25; // safe margin over the ~24h cron cadence
@@ -32,6 +33,7 @@ const NOTIFICATION_LOOKBACK_HOURS = 25; // safe margin over the ~24h cron cadenc
 // can't threaten this endpoint's 60s maxDuration -- any leftover jobs just
 // get picked up by the following day's run instead of blocking this one.
 const MAX_YOUTUBE_PUBLISHES_PER_RUN = 5;
+const MAX_TIKTOK_PUBLISHES_PER_RUN = 5;
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -286,6 +288,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await runStep("youtube_analytics", async () => {
           const result = await refreshYoutubeAnalytics(createYoutubeAnalyticsRefreshDeps(client));
           return `${result.metricsRecorded}/${result.publishedVideos} video(s) refreshed, ${result.skippedNoMetadata} skipped (no metadata)`;
+        }),
+      );
+    }
+
+    // Automated TikTok drafting -- same reasoning/gating as YouTube above,
+    // its own flag and cron-cap-friendly fold into this existing entry.
+    if (process.env.TIKTOK_PUBLISHING_ENABLED === "true") {
+      results.push(
+        await runStep("tiktok_publish", async () => {
+          const jobQueue = new JobQueue(new SupabaseJobQueueRepository(client));
+          const handler = createPublishTiktokJobHandler(createPublishTiktokJobDeps(client));
+          let processed = 0;
+          for (let i = 0; i < MAX_TIKTOK_PUBLISHES_PER_RUN; i++) {
+            const job = await jobQueue.processOne(handler, [PUBLISH_TIKTOK_JOB_TYPE]);
+            if (!job) break;
+            processed += 1;
+          }
+          return `${processed} job(s) processed`;
         }),
       );
     }
