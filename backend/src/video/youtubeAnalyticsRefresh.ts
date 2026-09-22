@@ -72,7 +72,12 @@ export async function refreshYoutubeAnalytics(
     .from("platform_publications")
     .select("video_render_id, external_video_id")
     .eq("platform", "youtube")
-    .eq("status", "published")
+    // 'drafted' (uploaded private, awaiting the owner making it public) and
+    // 'published' (confirmed public) both have real analytics -- YouTube
+    // Analytics works for the channel owner's own videos regardless of
+    // privacyStatus, so there's no reason to wait for the owner's action
+    // before pulling numbers.
+    .in("status", ["drafted", "published"])
     .not("external_video_id", "is", null);
   if (error) throw new Error(`load platform_publications failed: ${error.message}`);
   const publications = (data ?? []) as Array<{ video_render_id: string; external_video_id: string }>;

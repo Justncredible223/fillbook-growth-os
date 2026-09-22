@@ -63,19 +63,29 @@ function fakeBlob(bytes: number[] = [1, 2, 3]) {
 }
 
 describe("createPublishYoutubeJobHandler", () => {
-  it("uploads the rendered video and records a published publication + metadata row", async () => {
+  it("uploads the rendered video as a private draft, routes through the firewall as EXTERNAL_DRAFT, and records a drafted publication + metadata row", async () => {
     const fake = makeFake();
     const client = withStorage(fake, async () => ({ data: fakeBlob(), error: null }));
     const uploadVideo = vi.fn().mockResolvedValue("yt-external-id");
     const performanceRepo = new InMemoryVideoPerformanceRepository();
+    const auditSink = vi.fn().mockResolvedValue(undefined);
     const deps: PublishYoutubeJobDeps = {
       client,
       uploadClient: { uploadVideo } as unknown as YoutubeUploadClient,
       performanceRepo,
+      auditSink,
     };
 
     const handler = createPublishYoutubeJobHandler(deps);
     await handler(makeJob({ videoRenderId: "render-1" }));
+
+    expect(auditSink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actionName: "youtube.upload_private_draft",
+        actionClass: "EXTERNAL_DRAFT",
+        outcome: "drafted",
+      }),
+    );
 
     expect(uploadVideo).toHaveBeenCalledTimes(1);
     expect(uploadVideo.mock.calls[0]?.[0]).toMatchObject({
@@ -84,7 +94,7 @@ describe("createPublishYoutubeJobHandler", () => {
     });
 
     const publication = (fake.tables.platform_publications ?? []).find((r) => r.video_render_id === "render-1");
-    expect(publication).toMatchObject({ status: "published", external_video_id: "yt-external-id", platform: "youtube" });
+    expect(publication).toMatchObject({ status: "drafted", external_video_id: "yt-external-id", platform: "youtube" });
     expect(publication?.published_at).toBeTruthy();
 
     const metaEntries = [...performanceRepo.metadata.values()];
@@ -98,10 +108,10 @@ describe("createPublishYoutubeJobHandler", () => {
     });
   });
 
-  it("is idempotent: does not re-upload when already published", async () => {
+  it("is idempotent: does not re-upload when already drafted or published", async () => {
     const fake = makeFake();
     fake.tables.platform_publications = [
-      { id: "pub-1", video_render_id: "render-1", platform: "youtube", status: "published", external_video_id: "already-there" },
+      { id: "pub-1", video_render_id: "render-1", platform: "youtube", status: "drafted", external_video_id: "already-there" },
     ];
     const client = withStorage(fake, async () => ({ data: fakeBlob(), error: null }));
     const uploadVideo = vi.fn().mockResolvedValue("should-not-be-called");
@@ -109,6 +119,7 @@ describe("createPublishYoutubeJobHandler", () => {
       client,
       uploadClient: { uploadVideo } as unknown as YoutubeUploadClient,
       performanceRepo: new InMemoryVideoPerformanceRepository(),
+      auditSink: vi.fn().mockResolvedValue(undefined),
     };
 
     await createPublishYoutubeJobHandler(deps)(makeJob({ videoRenderId: "render-1" }));
@@ -124,6 +135,7 @@ describe("createPublishYoutubeJobHandler", () => {
       client,
       uploadClient: { uploadVideo } as unknown as YoutubeUploadClient,
       performanceRepo: new InMemoryVideoPerformanceRepository(),
+      auditSink: vi.fn().mockResolvedValue(undefined),
     };
 
     await expect(createPublishYoutubeJobHandler(deps)(makeJob({ videoRenderId: "render-1" }))).rejects.toThrow("quota exceeded");
@@ -140,6 +152,7 @@ describe("createPublishYoutubeJobHandler", () => {
       client,
       uploadClient: { uploadVideo: vi.fn() } as unknown as YoutubeUploadClient,
       performanceRepo: new InMemoryVideoPerformanceRepository(),
+      auditSink: vi.fn().mockResolvedValue(undefined),
     };
 
     await expect(createPublishYoutubeJobHandler(deps)(makeJob({ videoRenderId: "render-1" }))).rejects.toThrow("not ready to publish");

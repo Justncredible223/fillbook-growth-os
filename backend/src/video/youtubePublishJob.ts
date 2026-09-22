@@ -7,6 +7,7 @@ import { loadFromSupabase, assertApproved } from "../../scripts/video-factory/lo
 import { SupabaseVideoPerformanceRepository, type VideoPerformanceRepository } from "../shortform/performanceRepository.js";
 import type { PublishedVideoMetadata } from "../shortform/metadata.js";
 import { OFFICIAL_HANDLE } from "../shortform/types.js";
+import { authorizeAndAudit, type AuditSink } from "../firewall/externalWriteFirewall.js";
 
 const STORAGE_BUCKET = "rendered-videos";
 export const PUBLISH_YOUTUBE_JOB_TYPE = "publish_youtube";
@@ -27,6 +28,21 @@ export interface PublishYoutubeJobDeps {
   client: SupabaseClient;
   uploadClient: YoutubeUploadClient;
   performanceRepo: VideoPerformanceRepository;
+  auditSink: AuditSink;
+}
+
+/** Writes a real row to audit_logs -- see docs/EXTERNAL_WRITE_FIREWALL.md. */
+function supabaseAuditSink(client: SupabaseClient): AuditSink {
+  return async (record) => {
+    await client.from("audit_logs").insert({
+      action_name: record.actionName,
+      action_class: record.actionClass,
+      outcome: record.outcome,
+      reason: record.reason,
+      context: record.context,
+      created_at: record.timestamp,
+    });
+  };
 }
 
 export function createPublishYoutubeJobDeps(client: SupabaseClient, env: NodeJS.ProcessEnv = process.env): PublishYoutubeJobDeps {
@@ -34,6 +50,7 @@ export function createPublishYoutubeJobDeps(client: SupabaseClient, env: NodeJS.
     client,
     uploadClient: createYoutubeUploadClient(client, env),
     performanceRepo: new SupabaseVideoPerformanceRepository(client),
+    auditSink: supabaseAuditSink(client),
   };
 }
 
@@ -93,8 +110,11 @@ function buildAutoPublishedMetadata(
 
 /**
  * Handles one `publish_youtube` job: downloads the already-rendered MP4
- * from Supabase Storage, uploads it via YouTube Data API v3, and records
- * the result. Idempotent against retries -- an already-`published` row for
+ * from Supabase Storage, uploads it to YouTube via the Data API v3 as a
+ * PRIVATE, not-publicly-reachable video, and records the result. This is
+ * an EXTERNAL_DRAFT under docs/EXTERNAL_WRITE_FIREWALL.md, not a publish --
+ * the owner still has to open YouTube Studio and make it public themselves.
+ * Idempotent against retries -- an already-`drafted`/`published` row for
  * this render is treated as success without re-uploading (a real YouTube
  * video, unlike most external side effects, can't be "upserted" away if a
  * retry re-ran the upload, so this check matters more than most).
@@ -110,7 +130,17 @@ export function createPublishYoutubeJobHandler(deps: PublishYoutubeJobDeps): Job
       .eq("platform", "youtube")
       .maybeSingle();
     if (existingError) throw new Error(`load platform_publications failed: ${existingError.message}`);
-    if ((existing as { status: string } | null)?.status === "published") return;
+    const existingStatus = (existing as { status: string } | null)?.status;
+    if (existingStatus === "drafted" || existingStatus === "published") return;
+
+    await authorizeAndAudit(
+      {
+        name: "youtube.upload_private_draft",
+        actionClass: "EXTERNAL_DRAFT",
+        context: { videoRenderId },
+      },
+      deps.auditSink,
+    );
 
     const { data: render, error: renderError } = await deps.client
       .from("video_renders")
@@ -168,14 +198,14 @@ export function createPublishYoutubeJobHandler(deps: PublishYoutubeJobDeps): Job
         .from("platform_publications")
         .update({
           external_video_id: externalVideoId,
-          status: "published",
+          status: "drafted",
           published_at: publishedAt,
           error: null,
           updated_at: new Date().toISOString(),
         })
         .eq("video_render_id", videoRenderId)
         .eq("platform", "youtube");
-      if (publishedError) throw new Error(`mark platform_publications published failed: ${publishedError.message}`);
+      if (publishedError) throw new Error(`mark platform_publications drafted failed: ${publishedError.message}`);
     } catch (err) {
       const message = errorMessage(err);
       await deps.client
