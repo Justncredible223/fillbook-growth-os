@@ -89,12 +89,28 @@ describe("draftVideoScript length guard", () => {
     expect(countSpokenWords(result.script)).toBe(70);
   });
 
-  it("throws VideoScriptTooLongError (no third attempt) when the rewrite is still over the cap", async () => {
+  it("escalates the rewrite ask on a second miss, and returns the eventually-shorter script", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(scriptResponse(withScript(words(93))))
+      .mockResolvedValueOnce(scriptResponse(withScript(words(84))))
+      .mockResolvedValueOnce(scriptResponse(withScript(words(70))));
+    const result = await draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    const secondRetryText = JSON.stringify(bodyOf(fetchMock, 2));
+    expect(secondRetryText).toContain("LENGTH FIX REQUIRED");
+    expect(secondRetryText).toContain("was 84 words");
+    expect(secondRetryText).toContain("Cut harder this time");
+    expect(countSpokenWords(result.script)).toBe(70);
+  });
+
+  it("throws VideoScriptTooLongError (no fourth attempt) when the script is still over the cap after every rewrite", async () => {
     const fetchMock = vi.fn().mockResolvedValue(scriptResponse(withScript(words(95))));
     const attempt = draftVideoScript(new LlmClient("k", fetchMock), opportunity, "voice", "facts");
     await expect(attempt).rejects.toBeInstanceOf(VideoScriptTooLongError);
     await expect(attempt).rejects.toThrow(/95 words/);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });
 

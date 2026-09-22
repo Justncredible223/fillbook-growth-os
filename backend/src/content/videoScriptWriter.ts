@@ -261,19 +261,10 @@ export async function draftVideoScript(
   if (words > MAX_SCRIPT_WORDS) {
     // The length rule in the prompt is only a request -- a model can exceed
     // it (a 90+ word script renders as a ~31s video, past the ~25s target that
-    // holds completion rate). Send it back once with the exact count.
-    const retryMessage = [
-      userMessage,
-      "",
-      `LENGTH FIX REQUIRED: your previous script was ${words} words. The hard maximum is ${MAX_SCRIPT_WORDS}; the target is 45-75.`,
-      "Previous script:",
-      result.script,
-      "",
-      "Rewrite the whole package with a shorter script: cut sentences, not the idea. Keep the hook and the loop ending (the last line flows back into the hook), and keep 8-12 shot-list beats that match the shorter script.",
-    ].join("\n");
-    result = await call(retryMessage);
+    // holds completion rate). Send it back for a shorter rewrite, escalating
+    // if one pass isn't enough to also protect the hook, loop ending, and beat count.
+    result = await shortenScript(result, userMessage, words, call);
     words = countSpokenWords(result.script);
-    if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
   }
 
   // Owner rules for everything a viewer reads or hears: proper capitalization and grammar (2026-09-20) and no
@@ -292,7 +283,8 @@ export async function draftVideoScript(
       ].join("\n"),
     );
     words = countSpokenWords(result.script);
-    if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
+    if (words > MAX_SCRIPT_WORDS) result = await shortenScript(result, userMessage, words, call);
+    words = countSpokenWords(result.script);
   }
 
   // The prompt asks for a fresh hook, but a model can still fall back on an opening it has
@@ -314,8 +306,41 @@ export async function draftVideoScript(
       ].join("\n"),
     );
     words = countSpokenWords(result.script);
-    if (words > MAX_SCRIPT_WORDS) throw new VideoScriptTooLongError(words);
+    if (words > MAX_SCRIPT_WORDS) result = await shortenScript(result, userMessage, words, call);
+    words = countSpokenWords(result.script);
   }
+}
+
+/**
+ * Sends the script back for a shorter rewrite, escalating the ask across up to
+ * MAX_SCRIPT_REWRITES attempts. A single pass often undershoots the cut because it
+ * also has to protect the hook, loop ending, and shot-list beat count, so this keeps
+ * trying with a harder instruction rather than giving up on the first miss.
+ */
+async function shortenScript(
+  result: VideoScriptToolInput,
+  userMessage: string,
+  words: number,
+  call: (message: string) => Promise<VideoScriptToolInput>,
+): Promise<VideoScriptToolInput> {
+  for (let attempt = 1; attempt <= MAX_SCRIPT_REWRITES; attempt++) {
+    const over = words - MAX_SCRIPT_WORDS;
+    const retryMessage = [
+      userMessage,
+      "",
+      `LENGTH FIX REQUIRED: your previous script was ${words} words, ${over} over the hard maximum of ${MAX_SCRIPT_WORDS}. The target is 45-75.`,
+      "Previous script:",
+      result.script,
+      "",
+      attempt === 1
+        ? "Rewrite the whole package with a shorter script: cut sentences, not the idea. Keep the hook and the loop ending (the last line flows back into the hook), and keep 8-12 shot-list beats that match the shorter script."
+        : "Cut harder this time: drop a full sentence or shot-list beat rather than trimming words within one. Keep the hook and the loop ending, and keep the shot list matched to the shorter script.",
+    ].join("\n");
+    result = await call(retryMessage);
+    words = countSpokenWords(result.script);
+    if (words <= MAX_SCRIPT_WORDS) return result;
+  }
+  throw new VideoScriptTooLongError(words);
 }
 
 /** The viewer-facing text fields of a script package, in the order a viewer meets them. Hashtags are not prose and are left out. */
@@ -431,9 +456,12 @@ export class VideoHookRepeatError extends Error {
 /** Hard ceiling on spoken words (~27s at the render's +8% pace); the prompt asks for 45-75. */
 export const MAX_SCRIPT_WORDS = 80;
 
+/** How many times an over-length script is sent back for a shorter rewrite before the request fails instead. */
+export const MAX_SCRIPT_REWRITES = 2;
+
 export class VideoScriptTooLongError extends Error {
   constructor(public readonly words: number) {
-    super(`Video script is ${words} words after one rewrite; the maximum is ${MAX_SCRIPT_WORDS}. Not queuing it -- a script this long renders past the target length.`);
+    super(`Video script is ${words} words after ${MAX_SCRIPT_REWRITES} rewrites; the maximum is ${MAX_SCRIPT_WORDS}. Not queuing it -- a script this long renders past the target length.`);
     this.name = "VideoScriptTooLongError";
   }
 }
