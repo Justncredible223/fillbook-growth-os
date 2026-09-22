@@ -17,7 +17,13 @@ export interface YoutubeUploadInput {
   description: string;
   /** Raw MP4 bytes, already downloaded from Supabase Storage. */
   fileBytes: Buffer;
-  /** "public" | "unlisted" | "private" -- defaults to "public" (Shorts are meant to be discovered). */
+  /**
+   * "public" | "unlisted" | "private" -- defaults to "private". Automated
+   * uploads must never go live on their own (see
+   * docs/EXTERNAL_WRITE_FIREWALL.md): "private" is the only privacyStatus
+   * that isn't publicly reachable, so it's the only one this client will
+   * default to without the caller explicitly overriding it.
+   */
   privacyStatus?: "public" | "unlisted" | "private";
   /** YouTube category id. "22" = People & Blogs, a reasonable default for talking-through-a-trade content. */
   categoryId?: string;
@@ -100,7 +106,7 @@ export class YoutubeUploadClient {
           categoryId: input.categoryId ?? "22",
         },
         status: {
-          privacyStatus: input.privacyStatus ?? "public",
+          privacyStatus: input.privacyStatus ?? "private",
           selfDeclaredMadeForKids: false,
         },
       }),
