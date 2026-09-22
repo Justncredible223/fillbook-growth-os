@@ -279,6 +279,15 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             type = "video/mp4"
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            // Attach the TikTok caption so it's at least on the share sheet's
+            // clipboard/text payload -- previously this intent carried only
+            // the video file, so the caption always had to be copied from
+            // this screen's own TIKTOK section and pasted by hand. Not every
+            // receiving app prefills its caption field from EXTRA_TEXT (some
+            // ignore it entirely for a media share), so this doesn't
+            // guarantee a filled-in caption the way the TIKTOK metadata
+            // section below still lets the owner copy exactly what's used.
+            render.videoMetadata?.let { meta -> putExtra(Intent.EXTRA_TEXT, buildTiktokShareText(meta)) }
         }
         // A generic chooser (not a package-targeted intent) needs no
         // <queries> manifest declaration to see installed apps like TikTok
@@ -641,6 +650,14 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     }
 }
 
+/** The exact TikTok caption text this screen's own TIKTOK section shows/copies -- reused as the share intent's EXTRA_TEXT so both paths always agree. */
+internal fun buildTiktokShareText(meta: VideoRenderMetadata): String =
+    listOfNotNull(
+        meta.tiktokCaption,
+        meta.hashtags.takeIf { it.isNotEmpty() }?.joinToString(" ") { "#$it" },
+        meta.disclosureCta,
+    ).joinToString("\n")
+
 internal fun statusTone(status: String): StatusTone = when (status) {
     "ready" -> StatusTone.READY
     "rendering", "queued" -> StatusTone.WAITING
@@ -743,11 +760,7 @@ private fun VideoRenderCard(
             VideoMetadataSection(
                 label = "TIKTOK",
                 copyLabel = "TikTok metadata",
-                body = listOfNotNull(
-                    meta.tiktokCaption,
-                    meta.hashtags.takeIf { it.isNotEmpty() }?.joinToString(" ") { "#$it" },
-                    meta.disclosureCta,
-                ).joinToString("\n"),
+                body = buildTiktokShareText(meta),
             )
             meta.instagramCaption?.let { caption ->
                 Spacer(Modifier.height(8.dp))

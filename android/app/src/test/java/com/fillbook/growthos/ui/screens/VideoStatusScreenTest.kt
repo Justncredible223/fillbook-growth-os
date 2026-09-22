@@ -1,5 +1,6 @@
 package com.fillbook.growthos.ui.screens
 
+import com.fillbook.growthos.data.VideoRenderMetadata
 import com.fillbook.growthos.ui.components.StatusTone
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -31,6 +32,55 @@ class VideoStatusScreenTest {
     @Test
     fun `capitalizes an unrecognized future status rather than showing a raw db value`() {
         assertEquals("Some_future_status", statusLabel("some_future_status"))
+    }
+}
+
+/**
+ * Regression guard for the Share sheet only ever carrying the video file,
+ * never a caption (owner-reported 2026-09-22: TikTok's own share target
+ * showed up blank, forcing a manual copy/paste from this screen's TIKTOK
+ * section every time). buildTiktokShareText is the single source both the
+ * on-screen copy button and the Share intent's EXTRA_TEXT now read from, so
+ * they can never drift apart -- these tests pin its exact join behavior.
+ */
+class VideoStatusScreenShareTextTest {
+    private fun meta(
+        tiktokCaption: String = "Caption text",
+        hashtags: List<String> = emptyList(),
+        disclosureCta: String? = null,
+    ) = VideoRenderMetadata(
+        youtubeTitle = "Title",
+        youtubeDescription = "Description",
+        tiktokCaption = tiktokCaption,
+        instagramCaption = null,
+        hashtags = hashtags,
+        disclosureCta = disclosureCta,
+        youtubeThumbnailConcept = null,
+    )
+
+    @Test
+    fun `joins caption, hashtags, and disclosure CTA on their own lines`() {
+        val text = buildTiktokShareText(
+            meta(tiktokCaption = "Watch this", hashtags = listOf("FuturesTrading", "TradingJournal"), disclosureCta = "Not financial advice."),
+        )
+        assertEquals("Watch this\n#FuturesTrading #TradingJournal\nNot financial advice.", text)
+    }
+
+    @Test
+    fun `omits the hashtag line entirely when there are no hashtags, rather than leaving a blank line`() {
+        val text = buildTiktokShareText(meta(tiktokCaption = "Watch this", hashtags = emptyList(), disclosureCta = "Not financial advice."))
+        assertEquals("Watch this\nNot financial advice.", text)
+    }
+
+    @Test
+    fun `omits the disclosure line entirely when null, rather than leaving a blank line`() {
+        val text = buildTiktokShareText(meta(tiktokCaption = "Watch this", hashtags = listOf("FuturesTrading"), disclosureCta = null))
+        assertEquals("Watch this\n#FuturesTrading", text)
+    }
+
+    @Test
+    fun `is just the caption alone when there are no hashtags or disclosure CTA`() {
+        assertEquals("Watch this", buildTiktokShareText(meta(tiktokCaption = "Watch this")))
     }
 }
 
