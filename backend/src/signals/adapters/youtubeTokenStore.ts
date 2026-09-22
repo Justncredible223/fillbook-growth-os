@@ -14,9 +14,11 @@ export interface YoutubeTokenState {
  * refresh token is minted with a fixed scope set at consent time, and the
  * Search Console token was authorized with only webmasters.readonly, not
  * youtube.upload/yt-analytics.readonly -- reusing it here would fail with
- * insufficient_scope on every call. Same GOOGLE_OAUTH_CLIENT_ID/SECRET
- * (same Google Cloud project) can still mint and refresh this second
- * token pair; only the token pair itself needs its own env vars/row.
+ * insufficient_scope on every call. Minted under its own dedicated OAuth
+ * client (YOUTUBE_OAUTH_CLIENT_ID/SECRET), not GOOGLE_OAUTH_CLIENT_ID/SECRET:
+ * the Google Cloud console's redesigned Credentials UI no longer exposes a
+ * way to view or reset an existing client's secret, so reusing the Search
+ * Console client wasn't an option once its secret was lost.
  */
 export interface YoutubeTokenStore {
   load(): Promise<YoutubeTokenState | null>;
