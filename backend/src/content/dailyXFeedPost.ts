@@ -58,32 +58,36 @@ export function evaluateXFeedPostBudget(monthSpendUsd: number): EligibilityCheck
  * a specific point to make rather than an open-ended topic name.
  */
 /**
- * Which slice of docs/SEED_DATA_SOURCES.md's content-mix guideline (35%
- * education / 20% psychology / 25% product demo / 10% conversation
- * starter / 10% direct promo-CTA) a topic belongs to. Added because an
+ * Which slice of docs/SEED_DATA_SOURCES.md's content-mix guideline (20%
+ * education / 15% psychology / 35% product demo / 10% conversation
+ * starter / 20% direct promo-CTA) a topic belongs to. Added because an
  * audit found every original topic landed in education/psychology --
  * structurally guaranteeing 0% product mentions regardless of the
  * documented target, since nothing tracked or nudged the realized mix.
  * See categoryUnderrepresentationBonus for how this now actually pulls
  * selection toward the target over time, not just in a doc comment.
  *
- * Raised product_demo/cta from 20%/5% to 25%/10% (2026-09-21, owner
- * direction: "we are a business looking to expand, not just talk to
- * people") -- taken from education (40%->35%) and psychology (25%->20%),
- * not from conversation_starter. Landed alongside a fix to
- * HUMAN_POST_VOICE_RULES's own "never a pitch, a call to action" line,
- * which was silently overriding this target for every product_demo/cta
- * topic before a draft was even written -- see that file's own comment.
+ * Raised product_demo/cta twice on 2026-09-21: first from 20%/5% to
+ * 25%/10% ("we are a business looking to expand, not just talk to
+ * people"), then to 35%/20% the same day once the owner clarified the
+ * actual bar: "both our x post and our video render scripts should be
+ * mainly about fillbook... what it does, how it helps and how to use" --
+ * product_demo + cta is now the majority share (55%), taken from
+ * education (40%->20%) and psychology (25%->15%), not from
+ * conversation_starter. Landed alongside a fix to HUMAN_POST_VOICE_RULES's
+ * own "never a pitch, a call to action" line, which was silently
+ * overriding this target for every product_demo/cta topic before a draft
+ * was even written -- see that file's own comment.
  */
 export type FeedPostContentCategory = "education" | "psychology" | "product_demo" | "conversation_starter" | "cta";
 
 /** The guideline itself, machine-readable -- mirrors docs/SEED_DATA_SOURCES.md's "Content mix guideline" line exactly. A target, not a hard cap. */
 export const FEED_POST_CATEGORY_TARGETS: Record<FeedPostContentCategory, number> = {
-  education: 0.35,
-  psychology: 0.2,
-  product_demo: 0.25,
+  education: 0.2,
+  psychology: 0.15,
+  product_demo: 0.35,
   conversation_starter: 0.1,
-  cta: 0.1,
+  cta: 0.2,
 };
 
 export interface FeedPostTopic {
@@ -371,6 +375,21 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
     specificity: 3,
     practicalUsefulness: 3,
     evidenceStrength: 2,
+  },
+  {
+    key: "how_to_set_up_drawdown_tracking",
+    label: "How to actually set up drawdown and daily-loss tracking in Fillbook",
+    contentCategory: "product_demo",
+    rationale:
+      "Write a short, concrete HOW-TO: the specific steps a trader takes to enter their prop firm's trailing drawdown and " +
+      "daily loss limit into Fillbook so it tracks both automatically -- this is a walkthrough of using the product, not a " +
+      "hook about a mistake. Ground every step ONLY in the verified knowledge you're given; if it doesn't support a specific " +
+      "enough step-by-step claim, narrow the how-to to what it does support rather than inventing UI details.",
+    editorialTags: ["rule-literacy", "prop-firm-mechanics"],
+    audienceRelevance: 4,
+    specificity: 4,
+    practicalUsefulness: 5,
+    evidenceStrength: 3,
   },
 ];
 

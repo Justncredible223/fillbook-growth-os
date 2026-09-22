@@ -40,12 +40,16 @@ status) before relying on it later.
 | disclosure_rule | Never assert an account is "shadowbanned" without evidence. | docs/social/MASTER_SOCIAL_STRATEGY.md |
 | financial_claim_restriction | Every claim classified VERIFIED FACT / EVIDENCE-SUPPORTED OBSERVATION / REASONABLE HYPOTHESIS / OPINION; never promote hypothesis/opinion into fact. | docs/social/MASTER_SOCIAL_STRATEGY.md |
 
-Content mix guideline (not a hard rule, a target): 35% useful education, 20%
-relatable trader psychology, 25% product functionality/demos, 10%
-conversation starters, 10% direct promo/CTA. (Raised from 20%/5% product-demo/CTA
-2026-09-21 -- the business is actively growing, not just building audience goodwill,
-and the writer's own voice rules were found to structurally cancel out the CTA
-category regardless of this target; see humanReplyVoice.ts's HUMAN_POST_VOICE_RULES.)
+Content mix guideline (not a hard rule, a target): 20% useful education, 15%
+relatable trader psychology, 35% product functionality/demos, 10%
+conversation starters, 20% direct promo/CTA -- product_demo + cta is the
+majority share on purpose. (Raised twice 2026-09-21: first from 20%/5% to
+25%/10% product-demo/CTA -- the business is actively growing, not just
+building audience goodwill, and the writer's own voice rules were found to
+structurally cancel out the CTA category regardless of this target; see
+humanReplyVoice.ts's HUMAN_POST_VOICE_RULES -- then to 35%/20% once the owner
+clarified the bar: both X posts and video scripts should be mainly about
+Fillbook itself -- what it does, how it helps, and how to use it.)
 
 Forbidden tactics (maps directly to `EXTERNAL_WRITE`/anti-slop rejection
 reasons, not just brand color): purchased followers/engagement, engagement

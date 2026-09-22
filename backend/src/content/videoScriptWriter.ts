@@ -141,7 +141,13 @@ QUALITY BAR -- every output must clear this:
   doesn't care that the trade was a good one" -> final line "...and that's exactly why" / "Because"),
   never a sign-off, never "thanks for watching", never a standalone conclusion. Mention
   Fillbook and fillbookhq.com once, naturally, in the middle-to-late body where it is relevant
-  (never as the last line) -- the video ends on the loop, not on a brand card.
+  (never as the last line) -- the video ends on the loop, not on a brand card. EXCEPTION: when the
+  opportunity itself is about a specific Fillbook feature or how to use one (a product-demo or
+  how-to topic, not a general trading-education topic), Fillbook is the subject of the video, not a
+  single incidental mention -- name it throughout wherever the feature itself is being described,
+  and let the shot list show the actual UI doing the thing being described. The one-mention rule
+  above is for general education/psychology topics where Fillbook is a supporting point, not the
+  topic.
 - Shot list: filmable with a phone + screen recorder + basic title cards. 8-12 entries -- one
   per script beat of roughly 2-3 seconds, because the visuals should change that often. Show
   Fillbook UI where it is genuinely relevant -- always labeled example/demo data.

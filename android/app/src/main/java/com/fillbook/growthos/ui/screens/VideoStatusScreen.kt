@@ -933,6 +933,22 @@ private val WEEKLY_TOPIC_SETS: List<List<String>> = listOf(
         "why funded traders who track their psychology outperform those who don't",
         "how to build a consistent trading routine from scratch",
     ),
+    // Fillbook feature / how-to-use topics (added 2026-09-21, owner direction: videos should be
+    // mainly about Fillbook itself -- what it does, how it helps, how to use it -- not just general
+    // trading education with an incidental mention. Every set above named zero Fillbook features by
+    // name; these do, and are written to stay inside the writer's grounding rules (draws only on
+    // features already in the verified-knowledge summary: broker-agnostic import, prop-firm
+    // drawdown/rule tracking, the AI coach, revenge/oversized trade flags, the by-setup breakdown).
+    listOf(
+        "how fillbook flags a revenge trade before it costs you the account",
+        "how to see which trading setup is actually losing you money in fillbook",
+        "how fillbook tracks your prop firm's trailing drawdown for you",
+        "how to import your trades into fillbook from any broker or platform",
+        "how fillbook's ai coach finds the pattern you keep missing",
+        "a real look at how fillbook breaks your month down by setup",
+        "how to set up fillbook to track your daily loss limit automatically",
+        "how fillbook tags oversized and revenge trades before you notice the pattern yourself",
+    ),
 )
 
 private val ALL_SUGGESTED_TOPICS: List<String> = WEEKLY_TOPIC_SETS.flatten()
