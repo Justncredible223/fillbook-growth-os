@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assignUiScreens, copyUiScreenToDir, seedFromId, UI_SCREENS } from "../../scripts/video-factory/uiScreens";
+import { assignHookFallbackScreen, assignUiScreens, copyUiScreenToDir, seedFromId, UI_SCREENS } from "../../scripts/video-factory/uiScreens";
 import type { Scene } from "../../scripts/video-factory/types";
 
 const scene = (kind: Scene["kind"], shot: string): Scene => ({ kind, label: "", durationSeconds: 3, backgroundColor: "0x0d1420", shot });
@@ -77,5 +77,50 @@ describe("UI screens", () => {
   it("seedFromId is stable and non-negative", () => {
     expect(seedFromId("draft-1")).toBe(seedFromId("draft-1"));
     expect(seedFromId("draft-1")).toBeGreaterThanOrEqual(0);
+  });
+
+  describe("hook fallback (retention-critical: the hook must never be a flat color card)", () => {
+    it("gives a hook scene with no imagePath and no clipPath a real screenshot", () => {
+      const scenes = [scene("hook", "the hook line")];
+      assignHookFallbackScreen(scenes, 0);
+      expect(scenes[0]!.imagePath).toBeTruthy();
+      expect(existsSync(scenes[0]!.imagePath!)).toBe(true);
+    });
+
+    it("never touches a hook scene that already has real stock footage", () => {
+      const scenes: Scene[] = [{ ...scene("hook", "the hook line"), clipPath: "/clips/hook.mp4" }];
+      assignHookFallbackScreen(scenes, 0);
+      expect(scenes[0]!.imagePath).toBeUndefined();
+      expect(scenes[0]!.clipPath).toBe("/clips/hook.mp4");
+    });
+
+    it("never touches a hook scene that already has a screenshot", () => {
+      const scenes: Scene[] = [{ ...scene("hook", "the hook line"), imagePath: "/already/assigned.jpg" }];
+      assignHookFallbackScreen(scenes, 0);
+      expect(scenes[0]!.imagePath).toBe("/already/assigned.jpg");
+    });
+
+    it("never assigns a non-hook scene, even when it also has no imagePath or clipPath", () => {
+      const scenes = [scene("hook", "hook"), scene("explanation", "talking"), scene("metric", "a number")];
+      assignHookFallbackScreen(scenes, 0);
+      expect(scenes.map((s) => Boolean(s.imagePath))).toEqual([true, false, false]);
+    });
+
+    it("does not reuse a screen a product scene already used this render", () => {
+      const scenes = [scene("product", "Fillbook UI"), scene("hook", "hook")];
+      assignUiScreens(scenes, 0);
+      const productScreen = scenes[0]!.imagePath;
+      assignHookFallbackScreen(scenes, 0);
+      expect(scenes[1]!.imagePath).toBeTruthy();
+      expect(scenes[1]!.imagePath).not.toBe(productScreen);
+    });
+
+    it("is deterministic for a given seed", () => {
+      const a = [scene("hook", "hook")];
+      const b = [scene("hook", "hook")];
+      assignHookFallbackScreen(a, 5);
+      assignHookFallbackScreen(b, 5);
+      expect(a[0]!.imagePath).toBe(b[0]!.imagePath);
+    });
   });
 });

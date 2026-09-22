@@ -22,7 +22,7 @@ import { generateVoiceover, DEFAULT_VOICE } from "../video-factory/voiceover.js"
 import { buildCaptionCues, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "../video-factory/captions.js";
 import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "../video-factory/scenes.js";
 import { renderVideo, extractThumbnail } from "../video-factory/render.js";
-import { assignUiScreens, copyUiScreenToDir } from "../video-factory/uiScreens.js";
+import { assignUiScreens, assignHookFallbackScreen, copyUiScreenToDir } from "../video-factory/uiScreens.js";
 import { pickMusic } from "../video-factory/music.js";
 import { copyClipToDir, fetchStockClip, getSceneQuery, getVideoQuery, type StockFootageCredentials } from "../video-factory/stockFootage.js";
 import { inspectClip } from "../video-factory/clipQuality.js";
@@ -98,11 +98,11 @@ async function main(): Promise<void> {
   );
   const seed = parseInt(videoRenderId.replace(/-/g, "").slice(0, 8), 16);
   // Product scenes get a real Fillbook app screenshot (a slow vertical pan)
-  // instead of stock B-roll or a flat card.
+  // instead of stock B-roll or a flat card. Copying to outDir happens once,
+  // below, after the hook fallback (next) has had its own chance to assign
+  // an imagePath too -- otherwise a hook-fallback screen would be left
+  // pointing at the bundled assets path instead of this render's own copy.
   assignUiScreens(scenes, seed);
-  for (const scene of scenes) {
-    if (scene.imagePath) scene.imagePath = copyUiScreenToDir(scene.imagePath, outDir);
-  }
   console.log(`[render-single] UI screenshots: ${scenes.filter((s) => s.imagePath).length}/${scenes.length} scenes are real app screens`);
 
   let scenesWithClip = 0;
@@ -143,6 +143,16 @@ async function main(): Promise<void> {
     }
   }
   console.log(`[render-single] stock footage: ${scenesWithClip}/${scenes.length} scenes got real footage`);
+
+  // Retention-critical: the hook scene (the first ~1-3s, when a viewer decides whether to stay)
+  // must never fall through to a flat color card just because stock footage wasn't configured or
+  // no relevant clip was found. This only fills a hook scene that still has neither imagePath nor
+  // clipPath at this point -- see assignHookFallbackScreen's own doc comment for why.
+  assignHookFallbackScreen(scenes, seed);
+  for (const scene of scenes) {
+    if (scene.imagePath) scene.imagePath = copyUiScreenToDir(scene.imagePath, outDir);
+  }
+  console.log(`[render-single] hook scene visual: ${scenes[0]?.imagePath ? "screenshot" : scenes[0]?.clipPath ? "stock footage" : "FLAT COLOR CARD (retention risk)"}`);
 
   const music = await pickMusic(seed, totalDurationSeconds, runner);
   if (music) console.log(`[render-single] music: ${music.file.split(/[\/]/).pop()} from ${music.startSeconds}s`);
