@@ -878,15 +878,15 @@ describe("selectFeedPostAngle -- comparative editorial selection, not first-non-
   });
 });
 
-describe("categoryUnderrepresentationBonus / content-mix self-correction -- fixes the real gap where every topic was education/psychology and nothing ever nudged toward the documented 25% product-demo / 10% CTA target", () => {
+describe("categoryUnderrepresentationBonus / content-mix self-correction -- fixes the real gap where every topic was education/psychology and nothing ever nudged toward the documented 35% product-demo / 20% CTA target", () => {
   it("a category at 0% of recent history against a positive target gets a real, non-zero bonus", () => {
     const bonus = categoryUnderrepresentationBonus("product_demo", Array(20).fill("education"));
     expect(bonus).toBeGreaterThan(0);
   });
 
   it("a category already exactly on-target gets a zero bonus, not a negative one", () => {
-    // 20 recent runs, exactly 25% (5) product_demo -- matches its target exactly.
-    const history: FeedPostContentCategory[] = [...Array(15).fill("education"), ...Array(5).fill("product_demo")];
+    // 20 recent runs, exactly 35% (7) product_demo -- matches its target exactly.
+    const history: FeedPostContentCategory[] = [...Array(13).fill("education"), ...Array(7).fill("product_demo")];
     expect(categoryUnderrepresentationBonus("product_demo", history)).toBe(0);
   });
 
