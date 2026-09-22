@@ -14,7 +14,7 @@ const FRAME_RATE = 30;
  * UI-screenshot scenes show the app in a window between two dark bands: the
  * top one holds the SceneLabel ("FILLBOOK · EXAMPLE DATA", MarginV=140, also
  * clear of TikTok's top UI) and the bottom one holds the burned-in captions
- * (MarginV=320), so neither draws over the screenshot's own text.
+ * (MarginV=400), so neither draws over the screenshot's own text.
  */
 const UI_TOP_BAND = 230;
 const UI_BOTTOM_BAND = 420;
@@ -389,7 +389,7 @@ const THUMBNAIL_BRAND_ASS_BASENAME = "thumbnail-brand.ass";
 
 /**
  * One-line .ass file for the thumbnail badge -- top-left (Alignment=7),
- * well clear of both the bottom-anchored Hook/Caption text (MarginV=320,
+ * well clear of both the bottom-anchored Hook/Caption text (MarginV=400,
  * see captions.ts) and the top-anchored SceneLabel text (MarginV=140).
  * BorderStyle=3 gives an opaque background box behind the text (same look
  * the old drawtext boxcolor/boxborderw was going for); BackColour's
