@@ -142,10 +142,10 @@ export function createYoutubeUploadClient(
   supabase: SupabaseClient,
   env: NodeJS.ProcessEnv = process.env,
 ): YoutubeUploadClient {
-  const clientId = env.GOOGLE_OAUTH_CLIENT_ID;
-  const clientSecret = env.GOOGLE_OAUTH_CLIENT_SECRET;
+  const clientId = env.YOUTUBE_OAUTH_CLIENT_ID;
+  const clientSecret = env.YOUTUBE_OAUTH_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    throw new YoutubeUploadError("GOOGLE_OAUTH_CLIENT_ID/GOOGLE_OAUTH_CLIENT_SECRET are not set in the environment.");
+    throw new YoutubeUploadError("YOUTUBE_OAUTH_CLIENT_ID/YOUTUBE_OAUTH_CLIENT_SECRET are not set in the environment.");
   }
   const tokenStore = new BootstrappingYoutubeTokenStore(
     new SupabaseYoutubeTokenStore(supabase),
