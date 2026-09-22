@@ -282,11 +282,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             // Attach the TikTok caption so it's at least on the share sheet's
             // clipboard/text payload -- previously this intent carried only
             // the video file, so the caption always had to be copied from
-            // this screen's own TIKTOK section and pasted by hand. Not every
-            // receiving app prefills its caption field from EXTRA_TEXT (some
-            // ignore it entirely for a media share), so this doesn't
-            // guarantee a filled-in caption the way the TIKTOK metadata
-            // section below still lets the owner copy exactly what's used.
+            // this screen's own TIKTOK section and pasted by hand.
             render.videoMetadata?.let { meta -> putExtra(Intent.EXTRA_TEXT, buildTiktokShareText(meta)) }
         }
         // A generic chooser (not a package-targeted intent) needs no
@@ -294,6 +290,20 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
         // or YouTube -- that visibility restriction only applies to intents
         // naming a specific target package.
         context.startActivity(Intent.createChooser(shareIntent, "Share video"))
+
+        // ACTION_SEND is fire-and-forget: Android gives the sender no result
+        // and no way to ask what the receiving app did with EXTRA_TEXT, so
+        // there's no way to detect "TikTok ignored the caption" after the
+        // fact -- not every app prefills its caption field from EXTRA_TEXT
+        // for a media share, and some silently drop it. Instead of pretending
+        // to detect that, this copies the caption to the clipboard as a
+        // guaranteed fallback and tells the owner so up front, every time.
+        render.videoMetadata?.let { meta ->
+            copyToClipboard(context, "TikTok caption", buildTiktokShareText(meta))
+            scope.launch {
+                snackbarHostState.showSnackbar("Caption copied — paste it if it doesn't fill in automatically.")
+            }
+        }
     }
 
     // Simpler, one-shot fire-and-forget than download()/share() above: the
