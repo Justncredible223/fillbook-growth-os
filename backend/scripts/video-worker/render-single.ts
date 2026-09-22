@@ -33,6 +33,7 @@ import type { RenderPlan } from "../video-factory/types.js";
 import { JobQueue } from "../../src/jobs/jobQueue.js";
 import { SupabaseJobQueueRepository } from "../../src/jobs/supabaseJobQueueRepository.js";
 import { PUBLISH_YOUTUBE_JOB_TYPE } from "../../src/video/youtubePublishJob.js";
+import { PUBLISH_TIKTOK_JOB_TYPE } from "../../src/video/tiktokPublishJob.js";
 
 const STORAGE_BUCKET = "rendered-videos";
 // Just enough tail that TTS/AAC never clips the last word. No brand card or
@@ -268,6 +269,22 @@ async function main(): Promise<void> {
       maxAttempts: 3,
     });
     console.log(`[render-single] enqueued ${PUBLISH_YOUTUBE_JOB_TYPE} for ${videoRenderId}`);
+  }
+
+  // Automated TikTok drafting -- same reasoning and gating as YouTube above,
+  // its own flag. "Publishing" here means TikTok's inbox/draft flow (see
+  // tiktokPublishJob.ts): the owner still opens the TikTok app to finish
+  // posting, matching externalWriteFirewall.ts's permanent rejection of
+  // tiktok.publish_video (TikTok's real Direct Post).
+  if (process.env.TIKTOK_PUBLISHING_ENABLED === "true") {
+    const jobQueue = new JobQueue(new SupabaseJobQueueRepository(client));
+    await jobQueue.enqueue({
+      jobType: PUBLISH_TIKTOK_JOB_TYPE,
+      payload: { videoRenderId },
+      idempotencyKey: `${PUBLISH_TIKTOK_JOB_TYPE}:${videoRenderId}`,
+      maxAttempts: 3,
+    });
+    console.log(`[render-single] enqueued ${PUBLISH_TIKTOK_JOB_TYPE} for ${videoRenderId}`);
   }
 
   // Send FCM push to all non-revoked devices
