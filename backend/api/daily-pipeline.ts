@@ -21,9 +21,17 @@ import { generateStrategy } from "../src/strategy/strategyEngine.js";
 import { SupabaseStrategyRepository, collectStrategyEngineInputs } from "../src/strategy/supabaseStrategyRepository.js";
 import { decideNotifications } from "../src/notifications/notificationEngine.js";
 import { SupabaseNotificationRepository, collectNotificationInputs } from "../src/notifications/supabaseNotificationRepository.js";
+import { JobQueue } from "../src/jobs/jobQueue.js";
+import { SupabaseJobQueueRepository } from "../src/jobs/supabaseJobQueueRepository.js";
+import { PUBLISH_YOUTUBE_JOB_TYPE, createPublishYoutubeJobDeps, createPublishYoutubeJobHandler } from "../src/video/youtubePublishJob.js";
+import { createYoutubeAnalyticsRefreshDeps, refreshYoutubeAnalytics } from "../src/video/youtubeAnalyticsRefresh.js";
 
 const STRATEGY_REGENERATION_INTERVAL_DAYS = 7;
 const NOTIFICATION_LOOKBACK_HOURS = 25; // safe margin over the ~24h cron cadence
+// Bounds one invocation's YouTube-publish work so a burst of queued renders
+// can't threaten this endpoint's 60s maxDuration -- any leftover jobs just
+// get picked up by the following day's run instead of blocking this one.
+const MAX_YOUTUBE_PUBLISHES_PER_RUN = 5;
 
 function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -253,6 +261,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return `generated version ${saved.version} (lowConfidence=${saved.lowConfidence})`;
       }),
     );
+
+    // Automated YouTube publishing + analytics pull-back (Phase 1,
+    // 2026-09-22) -- both gated behind the same flag render-single.ts
+    // checks before ever enqueuing a publish_youtube job, so with the flag
+    // unset these two steps are always a fast, harmless no-op (there's
+    // never anything in the queue to drain, and no published video to
+    // fetch analytics for). Folded into THIS existing cron entry rather
+    // than a new Vercel Cron job -- see this file's own doc comment on the
+    // Hobby-plan 2-cron cap.
+    if (process.env.YOUTUBE_PUBLISHING_ENABLED === "true") {
+      results.push(
+        await runStep("youtube_publish", async () => {
+          const jobQueue = new JobQueue(new SupabaseJobQueueRepository(client));
+          const handler = createPublishYoutubeJobHandler(createPublishYoutubeJobDeps(client));
+          let processed = 0;
+          for (let i = 0; i < MAX_YOUTUBE_PUBLISHES_PER_RUN; i++) {
+            const job = await jobQueue.processOne(handler, [PUBLISH_YOUTUBE_JOB_TYPE]);
+            if (!job) break;
+            processed += 1;
+          }
+          return `${processed} job(s) processed`;
+        }),
+        await runStep("youtube_analytics", async () => {
+          const result = await refreshYoutubeAnalytics(createYoutubeAnalyticsRefreshDeps(client));
+          return `${result.metricsRecorded}/${result.publishedVideos} video(s) refreshed, ${result.skippedNoMetadata} skipped (no metadata)`;
+        }),
+      );
+    }
   }
 
   if (groups.xFeedPost) {
