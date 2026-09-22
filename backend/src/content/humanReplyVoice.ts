@@ -118,4 +118,10 @@ export const HUMAN_POST_VOICE_RULES = `FILLBOOK TEAM VOICE FOR PUBLIC POSTS (doe
   problem you describe should make the need obvious on its own.
 - Never promise or imply profit ("will make you profitable", "guaranteed", "proven"). The honest frame is
   seeing what you're actually doing so you can decide what to change.
-- Never a pitch, a call to action, or "check it out".`;
+- Never a pitch, a call to action, or "check it out" -- UNLESS the opportunity's rationale below
+  explicitly asks for a direct call-to-action or a walkthrough of what a specific Fillbook capability
+  does (a product-demo or CTA angle, not the general education/psychology case above). When it does:
+  name Fillbook directly, tie the post to ONE concrete, verified capability (never a feature list), and
+  end with exactly one clear, proportionate next step (e.g. "worth a look if that's ever cost you a
+  breach" -- not "check it out now!", no urgency, no discount talk, no exclamation marks). The product
+  must still read as evidence of a real mechanism, never as an advertisement.`;

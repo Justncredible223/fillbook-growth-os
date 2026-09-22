@@ -40,9 +40,12 @@ status) before relying on it later.
 | disclosure_rule | Never assert an account is "shadowbanned" without evidence. | docs/social/MASTER_SOCIAL_STRATEGY.md |
 | financial_claim_restriction | Every claim classified VERIFIED FACT / EVIDENCE-SUPPORTED OBSERVATION / REASONABLE HYPOTHESIS / OPINION; never promote hypothesis/opinion into fact. | docs/social/MASTER_SOCIAL_STRATEGY.md |
 
-Content mix guideline (not a hard rule, a target): 40% useful education, 25%
-relatable trader psychology, 20% product functionality/demos, 10%
-conversation starters, 5% direct promo/CTA.
+Content mix guideline (not a hard rule, a target): 35% useful education, 20%
+relatable trader psychology, 25% product functionality/demos, 10%
+conversation starters, 10% direct promo/CTA. (Raised from 20%/5% product-demo/CTA
+2026-09-21 -- the business is actively growing, not just building audience goodwill,
+and the writer's own voice rules were found to structurally cancel out the CTA
+category regardless of this target; see humanReplyVoice.ts's HUMAN_POST_VOICE_RULES.)
 
 Forbidden tactics (maps directly to `EXTERNAL_WRITE`/anti-slop rejection
 reasons, not just brand color): purchased followers/engagement, engagement
