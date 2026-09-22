@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { ProcessRunner } from "./processRunner.js";
 import type { RenderPlan } from "./types.js";
 import { VideoFactoryError } from "./types.js";
+import { escapeAssText } from "./captions.js";
 
 const WIDTH = 1080;
 const HEIGHT = 1920;
@@ -381,27 +382,36 @@ export async function renderVideo(plan: RenderPlan, runner: ProcessRunner): Prom
 /**
  * Site-branding text burned onto every generated thumbnail -- added
  * 2026-09-17 (owner request: thumbnails should carry the site, not rely
- * on whatever the hook caption happens to say at that frame). The hook
- * caption is about the video's content, not the brand, so a thumbnail
- * grabbed from it alone can easily never mention Fillbook at all.
+ * on whatever the hook caption happens to say at that frame).
  */
 const THUMBNAIL_SITE_TEXT = "fillbookhq.com";
-const THUMBNAIL_BRAND_ASS_BASENAME = "thumbnail-brand.ass";
+const THUMBNAIL_ASS_BASENAME = "thumbnail-card.ass";
+/** Same brand-dark base the hook scene itself renders on (see scenes.ts's SCENE_COLORS). */
+const THUMBNAIL_BACKGROUND_COLOR = "0x05070a";
+/** Brand cyan, matches captions.ts's HIGHLIGHT_COLOR_TAG. */
+const THUMBNAIL_TOPIC_COLOR = "&H00EED322&";
 
 /**
- * One-line .ass file for the thumbnail badge -- top-left (Alignment=7),
- * well clear of both the bottom-anchored Hook/Caption text (MarginV=450,
- * see captions.ts) and the top-anchored SceneLabel text (MarginV=140).
- * BorderStyle=3 gives an opaque background box behind the text (same look
- * the old drawtext boxcolor/boxborderw was going for); BackColour's
- * leading byte is alpha (ASS is &HAABBGGRR), 0x73 ~= the old box@0.55
- * opacity. PlayResX/Y match the render resolution -- same libass-clipping
- * fix captions.ts's ASS_HEADER doc comment explains. Single Dialogue line
- * spans well past any real thumbnail frame's timestamp (0-10s window vs.
- * -frames:v 1 grabbing pts 0 from the already-extracted still image), so
- * it's always active regardless of `atSeconds`.
+ * Thumbnail generation used to grab a real frame from the finished video
+ * (`-ss <timestamp> -i video -frames:v 1`). Retired 2026-09-22 (owner-
+ * reported: downloaded thumbnails came back blank/corrupted) -- a frame
+ * grab is also the wrong shape of "good thumbnail" regardless: it's
+ * whatever happened to be on screen at one timestamp, not something that
+ * reads the video's actual topic at a glance the way a real YouTube/TikTok
+ * thumbnail does. This instead composites a text card, the same way a
+ * human would design one: the video's own hook line (already the single
+ * most attention-grabbing sentence in the script, see videoScriptWriter.ts's
+ * quality bar) large and centered, the campaign topic as a small label
+ * above it, and the site badge -- burned onto a flat brand-dark
+ * background via the same `subtitles`-over-`color` technique the flat
+ * scene cards already use (never `drawtext`, which segfaults on this
+ * ffmpeg build -- see captions.ts's own doc comment). No video frame is
+ * read at all, so there is nothing for the video's actual content or
+ * length to go wrong against.
  */
-function buildThumbnailBrandAss(): string {
+function buildThumbnailCardAss(hookText: string, topicLabel: string): string {
+  const escapedHook = escapeAssText(hookText);
+  const escapedTopic = escapeAssText(topicLabel.toUpperCase());
   return `[Script Info]
 ScriptType: v4.00+
 PlayResX: ${WIDTH}
@@ -412,55 +422,33 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: ThumbnailBrand,Poppins ExtraBold,44,&H00FFFFFF,&H00FFFFFF,&H00000000,&H73000000,1,0,0,0,100,100,0,0,3,8,0,7,32,32,32,1
+Style: ThumbnailTopic,Poppins ExtraBold,40,${THUMBNAIL_TOPIC_COLOR},${THUMBNAIL_TOPIC_COLOR},&H00000000,&H00000000,1,0,0,0,100,100,4,0,1,4,2,5,80,80,520,1
+Style: ThumbnailHook,Poppins ExtraBold,100,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,9,3,5,80,80,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailBrand,,0,0,0,,${THUMBNAIL_SITE_TEXT}`;
+Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailBrand,,0,0,0,,${THUMBNAIL_SITE_TEXT}
+Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailTopic,,0,0,0,,${escapedTopic}
+Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailHook,,0,0,0,,${escapedHook}`;
 }
 
 /**
- * Extracts a single real frame from the finished video as a JPG thumbnail,
- * then burns in a small "fillbookhq.com" badge via a second ffmpeg pass.
- * Two separate ffmpeg calls rather than one combined -ss/-i/-filter_complex
- * invocation: the first stays a plain -ss/-i/-frames:v call (as before) so
- * it's safe to pass a real absolute `videoPath` directly -- no filter-graph
- * syntax there for a Windows drive-letter colon to collide with. The
- * second runs with cwd set to the thumbnail's own directory and references
- * files by plain basename, same basename-only path-safety pattern
- * renderVideo already uses for the bundled caption font.
- *
- * The badge is burned in via the `subtitles` filter over a one-line .ass
- * file (see THUMBNAIL_BRAND_STYLE below), NOT `drawtext` -- an earlier
- * version of this function used drawtext directly for the badge, which
- * never actually showed up on real renders (owner-reported 2026-09-18):
- * drawtext reproducibly segfaults on the ffmpeg build every real render
- * runs on (ubuntu-latest in GitHub Actions -- see captions.ts's own doc
- * comment, which is why every OTHER piece of burned-in text, captions and
- * scene labels alike, already goes through `subtitles` instead). This
- * brings the thumbnail badge in line with that established, verified-
- * working pattern instead of the one path that still used drawtext.
+ * Renders a designed thumbnail card -- the video's hook line and campaign
+ * topic burned over a flat brand-dark background -- as a JPG. See
+ * buildThumbnailCardAss's doc comment for why this replaced a real-frame
+ * grab. Single ffmpeg pass: `color` lavfi source stands in for a "raw"
+ * input, same `subtitles` overlay technique renderVideo and the old
+ * extractThumbnail both already use, so there's no new failure mode to
+ * reason about.
  */
-export async function extractThumbnail(videoPath: string, atSeconds: number, thumbnailPath: string, runner: ProcessRunner): Promise<void> {
+export async function renderThumbnailCard(
+  hookText: string,
+  topicLabel: string,
+  thumbnailPath: string,
+  runner: ProcessRunner,
+): Promise<void> {
   const cwd = renderDirname(thumbnailPath);
   const finalBasename = renderBasename(thumbnailPath);
-  const rawBasename = `raw-${finalBasename}`;
-  const rawPath = join(cwd, rawBasename);
-
-  const rawResult = await runner.run("ffmpeg", [
-    "-y",
-    "-ss",
-    Math.max(0, atSeconds).toFixed(3),
-    "-i",
-    videoPath,
-    "-frames:v",
-    "1",
-    "-q:v",
-    "2",
-    rawPath,
-  ]);
-  if (rawResult.exitCode !== 0) {
-    throw new VideoFactoryError(`ffmpeg thumbnail extraction failed (exit ${rawResult.exitCode}):\n${rawResult.stderr || rawResult.stdout}`);
-  }
 
   // Best-effort font copy -- same reasoning as renderVideo: a visual
   // nicety, not a correctness requirement. Falls back to fontconfig's own
@@ -472,21 +460,32 @@ export async function extractThumbnail(videoPath: string, atSeconds: number, thu
     // Deliberately swallowed -- see comment above.
   }
 
-  const assPath = join(cwd, THUMBNAIL_BRAND_ASS_BASENAME);
-  writeFileSync(assPath, buildThumbnailBrandAss(), "utf-8");
+  const assPath = join(cwd, THUMBNAIL_ASS_BASENAME);
+  writeFileSync(assPath, buildThumbnailCardAss(hookText, topicLabel), "utf-8");
 
-  // Runs with cwd set to the thumbnail's own directory and references
-  // files by plain basename inside the filter string -- same basename-
+  // Runs with cwd set to the thumbnail's own directory and references the
+  // .ass file by plain basename inside the filter string -- same basename-
   // only path-safety pattern as renderVideo's bundled font/captions (see
-  // that function's own doc comment). Writes directly to `finalBasename`
-  // (resolving to the real `thumbnailPath` via `cwd`) so there's no extra
-  // copy-back step needed.
-  const brandResult = await runner.run(
+  // that function's own doc comment).
+  const result = await runner.run(
     "ffmpeg",
-    ["-y", "-i", rawBasename, "-vf", `subtitles=${THUMBNAIL_BRAND_ASS_BASENAME}:fontsdir=.`, "-frames:v", "1", "-q:v", "2", finalBasename],
+    [
+      "-y",
+      "-f",
+      "lavfi",
+      "-i",
+      `color=c=${THUMBNAIL_BACKGROUND_COLOR}:s=${WIDTH}x${HEIGHT}:d=1`,
+      "-vf",
+      `subtitles=${THUMBNAIL_ASS_BASENAME}:fontsdir=.`,
+      "-frames:v",
+      "1",
+      "-q:v",
+      "2",
+      finalBasename,
+    ],
     { cwd },
   );
-  if (brandResult.exitCode !== 0) {
-    throw new VideoFactoryError(`ffmpeg thumbnail branding failed (exit ${brandResult.exitCode}):\n${brandResult.stderr || brandResult.stdout}`);
+  if (result.exitCode !== 0) {
+    throw new VideoFactoryError(`ffmpeg thumbnail card render failed (exit ${result.exitCode}):\n${result.stderr || result.stdout}`);
   }
 }

@@ -11,9 +11,9 @@ import {
   loadFromSupabase,
 } from "./loadApprovedScript.js";
 import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
-import { buildCaptionCues, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "./captions.js";
-import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "./scenes.js";
-import { renderVideo, extractThumbnail } from "./render.js";
+import { buildCaptionCues, buildAssFile, mergeBrandNameWordCues } from "./captions.js";
+import { buildScenePlan, buildSceneLabelCues } from "./scenes.js";
+import { renderVideo, renderThumbnailCard } from "./render.js";
 import { assignUiScreens, assignHookFallbackScreen, copyUiScreenToDir, seedFromId } from "./uiScreens.js";
 import { pickMusic } from "./music.js";
 import { runFfprobeJson, validateOutput } from "./validate.js";
@@ -180,14 +180,12 @@ async function main(): Promise<void> {
   const fileSizeBytes = statSync(outputPath).size;
   const validation = validateOutput(ffprobeResult, fileSizeBytes, totalDurationSeconds);
 
-  console.log("Extracting thumbnail (ffmpeg)...");
+  console.log("Rendering thumbnail card (ffmpeg)...");
   const thumbnailPath = join(outDir, "thumbnail.jpg");
   try {
-    const hookMidpoint = getHookMidpointSeconds(captionCues);
-    const thumbnailSeconds = selectBestThumbnailSeconds(scenes, hookMidpoint) ?? 1;
-    await extractThumbnail(outputPath, thumbnailSeconds, thumbnailPath, runner);
+    await renderThumbnailCard(pkg.videoScript.hook, pkg.campaignTitle, thumbnailPath, runner);
   } catch (err) {
-    console.error(`Thumbnail extraction failed (non-fatal): ${(err as Error).message}`);
+    console.error(`Thumbnail card render failed (non-fatal): ${(err as Error).message}`);
   }
 
   const videoStream = ffprobeResult.streams.find((s) => s.codec_type === "video");

@@ -7,7 +7,7 @@ import {
   renderBasename,
   renderDirname,
   renderVideo,
-  extractThumbnail,
+  renderThumbnailCard,
   computeSceneTransitions,
   computeSyncedSceneTimeline,
 } from "../../scripts/video-factory/render";
@@ -276,11 +276,11 @@ describe("renderVideo", () => {
   });
 });
 
-describe("extractThumbnail", () => {
-  // Unlike buildFfmpegArgs (pure), extractThumbnail now really writes the
-  // brand .ass file to `cwd` before its second ffmpeg call, so these tests
-  // need a real writable directory -- a fake "C:\out\draft-1" (fine when
-  // only path *strings* were asserted) would throw ENOENT here.
+describe("renderThumbnailCard", () => {
+  // Unlike buildFfmpegArgs (pure), renderThumbnailCard really writes the
+  // .ass file to `cwd` before its ffmpeg call, so these tests need a real
+  // writable directory -- a fake "C:\out\draft-1" (fine when only path
+  // *strings* were asserted) would throw ENOENT here.
   async function withTempDir<T>(fn: (dir: string) => Promise<T>): Promise<T> {
     const dir = mkdtempSync(join(tmpdir(), "thumbnail-test-"));
     try {
@@ -290,59 +290,46 @@ describe("extractThumbnail", () => {
     }
   }
 
-  it("runs two ffmpeg calls: a plain frame extraction, then a subtitles-filter branding pass (not drawtext, which segfaults on the real render build)", async () =>
+  it("runs one ffmpeg call compositing a flat color source with a subtitles-filter text overlay (not drawtext, which segfaults on the real render build), reading no video frame at all", async () =>
     withTempDir(async (dir) => {
       const thumbnailPath = join(dir, "thumbnail.jpg");
       const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
       const runner: ProcessRunner = { run };
 
-      await extractThumbnail(join(dir, "final.mp4"), 1.5, thumbnailPath, runner);
+      await renderThumbnailCard("You already know which trade you're about to repeat", "Trading discipline", thumbnailPath, runner);
 
-      expect(run).toHaveBeenCalledTimes(2);
-
-      const [firstCommand, firstArgs] = run.mock.calls[0]!;
-      expect(firstCommand).toBe("ffmpeg");
-      expect(firstArgs).toContain(join(dir, "final.mp4"));
-      expect(firstArgs).not.toContain("-vf");
-
-      const [secondCommand, secondArgs, secondOptions] = run.mock.calls[1]!;
-      expect(secondCommand).toBe("ffmpeg");
-      expect(secondOptions?.cwd).toBe(dir);
-      // References files by plain basename only inside the second call's own
-      // args/filter -- same path-safety reasoning as buildFfmpegArgs.
-      expect(secondArgs.join(" ")).not.toContain(dir);
-      expect(secondArgs).toContain("raw-thumbnail.jpg");
-      expect(secondArgs).toContain("thumbnail.jpg");
-      const vfIndex = secondArgs.indexOf("-vf");
-      expect(vfIndex).toBeGreaterThan(-1);
-      expect(secondArgs[vfIndex + 1]).not.toContain("drawtext");
-      expect(secondArgs[vfIndex + 1]).toContain("subtitles=thumbnail-brand.ass");
-
-      // The real .ass file was written to cwd, and it's the thing that
-      // actually carries "fillbookhq.com" (not the -vf arg itself).
-      const assContent = readFileSync(join(dir, "thumbnail-brand.ass"), "utf-8");
-      expect(assContent).toContain("fillbookhq.com");
-    }));
-
-  it("throws VideoFactoryError if the raw frame extraction fails, without attempting the branding pass", async () =>
-    withTempDir(async (dir) => {
-      const thumbnailPath = join(dir, "thumbnail.jpg");
-      const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "no such stream", exitCode: 1 });
-      const runner: ProcessRunner = { run };
-
-      await expect(extractThumbnail(join(dir, "final.mp4"), 1.5, thumbnailPath, runner)).rejects.toThrow(/no such stream/);
       expect(run).toHaveBeenCalledTimes(1);
+
+      const [command, args, options] = run.mock.calls[0]!;
+      expect(command).toBe("ffmpeg");
+      expect(options?.cwd).toBe(dir);
+      expect(args).toContain("lavfi");
+      const inputIndex = args.indexOf("-i");
+      expect(args[inputIndex + 1]).toContain("color=c=0x05070a");
+      // References the .ass file by plain basename only -- same path-safety
+      // reasoning as buildFfmpegArgs.
+      expect(args.join(" ")).not.toContain(dir);
+      expect(args).toContain("thumbnail.jpg");
+      const vfIndex = args.indexOf("-vf");
+      expect(vfIndex).toBeGreaterThan(-1);
+      expect(args[vfIndex + 1]).not.toContain("drawtext");
+      expect(args[vfIndex + 1]).toContain("subtitles=thumbnail-card.ass");
+
+      // The real .ass file was written to cwd, carrying the site badge, the
+      // topic label, and the video's own hook line.
+      const assContent = readFileSync(join(dir, "thumbnail-card.ass"), "utf-8");
+      expect(assContent).toContain("fillbookhq.com");
+      expect(assContent).toContain("TRADING DISCIPLINE");
+      expect(assContent).toContain("You already know which trade you're about to repeat");
     }));
 
-  it("throws VideoFactoryError if the branding pass fails", async () =>
+  it("throws VideoFactoryError with ffmpeg's stderr on a non-zero exit", async () =>
     withTempDir(async (dir) => {
       const thumbnailPath = join(dir, "thumbnail.jpg");
-      const run = vi
-        .fn()
-        .mockResolvedValueOnce({ stdout: "", stderr: "", exitCode: 0 })
-        .mockResolvedValueOnce({ stdout: "", stderr: "unknown filter subtitles", exitCode: 1 });
+      const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "unknown filter subtitles", exitCode: 1 });
       const runner: ProcessRunner = { run };
 
-      await expect(extractThumbnail(join(dir, "final.mp4"), 1.5, thumbnailPath, runner)).rejects.toThrow(/unknown filter subtitles/);
+      await expect(renderThumbnailCard("Hook", "Topic", thumbnailPath, runner)).rejects.toThrow(VideoFactoryError);
+      await expect(renderThumbnailCard("Hook", "Topic", thumbnailPath, runner)).rejects.toThrow(/unknown filter subtitles/);
     }));
 });

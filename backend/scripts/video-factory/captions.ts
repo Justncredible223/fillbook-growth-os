@@ -129,21 +129,6 @@ function countHookPhrases(phrases: WordCue[][]): number {
 }
 
 /**
- * Midpoint of the Hook phrase's total on-screen window -- the moment a
- * thumbnail frame should be pulled from (see render.ts's extractThumbnail),
- * since it's guaranteed to show bold, on-brand caption text regardless of
- * which specific word happens to be highlighted at that instant. Null only
- * if buildCaptionCues was given no words at all (nothing to show).
- */
-export function getHookMidpointSeconds(captionCues: CaptionCue[]): number | null {
-  const hookCues = captionCues.filter((c) => c.style === "Hook");
-  if (hookCues.length === 0) return null;
-  const start = Math.min(...hookCues.map((c) => c.startSeconds));
-  const end = Math.max(...hookCues.map((c) => c.endSeconds));
-  return (start + end) / 2;
-}
-
-/**
  * NO LONGER USED by the render pipeline (retired: a silent end card is dead
  * time that lowers completion rate and breaks looping -- videos now end on
  * the last spoken line, which flows back into the hook). Kept for reference.

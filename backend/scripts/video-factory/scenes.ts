@@ -157,30 +157,3 @@ export function buildSceneLabelCues(scenes: Scene[]): SceneLabelCue[] {
   }
   return cues;
 }
-
-/**
- * Picks the timestamp for the thumbnail frame -- the midpoint of the
- * best real scene available, not just "whatever's at the Hook's
- * midpoint" (the old behavior, which always landed in the first scene
- * and produced a flat brand-color card whenever no stock clip loaded
- * for it, even when a later scene had real stock footage). "Best" means
- * a scene with actual stock footage (`clipPath` set, not a flat color
- * card), preferring a non-hook scene so the thumbnail shows real footage
- * variety rather than always the opening beat. Falls back to
- * `fallbackSeconds` (the Hook midpoint) only when no scene has real
- * footage at all -- every scene rendered as a flat color card, so no
- * timestamp is visually "better" than any other.
- */
-export function selectBestThumbnailSeconds(scenes: Scene[], fallbackSeconds: number | null): number | null {
-  let elapsed = 0;
-  const withFootage: Array<{ midSeconds: number; kind: SceneKind }> = [];
-  for (const scene of scenes) {
-    if (scene.clipPath || scene.imagePath) {
-      withFootage.push({ midSeconds: elapsed + scene.durationSeconds / 2, kind: scene.kind });
-    }
-    elapsed += scene.durationSeconds;
-  }
-  if (withFootage.length === 0) return fallbackSeconds;
-  const nonHook = withFootage.find((s) => s.kind !== "hook");
-  return (nonHook ?? withFootage[0]!).midSeconds;
-}

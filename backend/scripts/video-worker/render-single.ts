@@ -19,9 +19,9 @@ import {
 import { MAX_VIDEO_STORAGE_BYTES } from "../../src/video/videoRenderEligibility.js";
 import { loadFromSupabase, assertApproved } from "../video-factory/loadApprovedScript.js";
 import { generateVoiceover, DEFAULT_VOICE } from "../video-factory/voiceover.js";
-import { buildCaptionCues, buildAssFile, getHookMidpointSeconds, mergeBrandNameWordCues } from "../video-factory/captions.js";
-import { buildScenePlan, buildSceneLabelCues, selectBestThumbnailSeconds } from "../video-factory/scenes.js";
-import { renderVideo, extractThumbnail } from "../video-factory/render.js";
+import { buildCaptionCues, buildAssFile, mergeBrandNameWordCues } from "../video-factory/captions.js";
+import { buildScenePlan, buildSceneLabelCues } from "../video-factory/scenes.js";
+import { renderVideo, renderThumbnailCard } from "../video-factory/render.js";
 import { assignUiScreens, assignHookFallbackScreen, copyUiScreenToDir } from "../video-factory/uiScreens.js";
 import { pickMusic } from "../video-factory/music.js";
 import { copyClipToDir, fetchStockClip, getSceneQuery, getVideoQuery, type StockFootageCredentials } from "../video-factory/stockFootage.js";
@@ -212,20 +212,12 @@ async function main(): Promise<void> {
 
   // Best-effort: a downloadable thumbnail is a nice-to-have on top of an
   // already-successful video, not a correctness requirement -- a failure
-  // here (e.g. the selected frame landing on a corrupt frame) never fails
-  // the whole render, it just leaves thumbnail_path null for this row.
+  // here never fails the whole render, it just leaves thumbnail_path null
+  // for this row.
   let thumbnailPath: string | null = null;
   try {
-    // Prefers the midpoint of a scene with real stock footage (the "best
-    // shot") over always grabbing the Hook's on-screen window, which
-    // frequently landed on a flat brand-color card when no stock clip had
-    // loaded for that early scene -- see selectBestThumbnailSeconds's own
-    // doc comment. Falls back to the old Hook-midpoint behavior only when
-    // every scene rendered as a flat color card.
-    const hookMidpoint = getHookMidpointSeconds(captionCues);
-    const thumbnailSeconds = selectBestThumbnailSeconds(scenes, hookMidpoint) ?? 1;
     const thumbnailLocalPath = join(outDir, "thumbnail.jpg");
-    await extractThumbnail(outputPath, thumbnailSeconds, thumbnailLocalPath, runner);
+    await renderThumbnailCard(pkg.videoScript.hook, pkg.campaignTitle, thumbnailLocalPath, runner);
     const candidatePath = `${videoRenderId}-thumbnail.jpg`;
     const { error: thumbUploadError } = await client.storage
       .from(STORAGE_BUCKET)
