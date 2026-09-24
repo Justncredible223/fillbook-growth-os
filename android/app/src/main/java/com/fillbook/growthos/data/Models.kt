@@ -2,6 +2,14 @@ package com.fillbook.growthos.data
 
 enum class Urgency { LOW, NORMAL, HIGH }
 
+/** One entry in the small, fixed catalog of concepts with real verified product-motion footage -- see GrowthOsRepository.getMotionConcepts's own doc comment. */
+data class MotionConcept(
+    val id: String,
+    val title: String,
+    val hook: String,
+    val topic: String,
+)
+
 enum class HealthStatus { HEALTHY, DEGRADED, DOWN, NOT_CONNECTED }
 
 data class Opportunity(
@@ -592,5 +600,34 @@ data class ResearchRecord(
     val status: String,
     val costUsd: Double?,
     val createdAt: String,
+)
+
+/**
+ * Fillbook Stats: a scoped subset of what GET /api/admin?action=growth on
+ * the fillbookhq.com site returns (see handleGrowth in frontend/api/
+ * admin.ts, and AdminGrowth.tsx which renders the same response) --
+ * deliberately not every field that endpoint has (acquisition-by-source,
+ * plan distribution, the intro-offer experiment, etc.), matching this
+ * app's own "cap the top-N, don't wall the owner with every number that
+ * exists" convention elsewhere (BreakdownChart above). Field names below
+ * are copied from that endpoint's actual `metrics`/`funnel` keys, not
+ * invented -- see admin.ts's handleGrowth for the source of truth if this
+ * ever needs extending.
+ */
+data class GrowthStats(
+    val period: String,
+    val visitors: Int,
+    val signups: Int,
+    val signupStarted: Int,
+    val activated: Int,
+    val newSubscribers: Int,
+    val cancellations: Int,
+    /**
+     * Ordered stage-to-stage conversion rates as whole percents (0-100),
+     * null meaning "not enough data" (admin.ts's own pct() returns null on
+     * a zero denominator, never a misleading 0%/NaN) -- rendered literally
+     * as "N/A", never coerced to 0.
+     */
+    val funnel: List<Pair<String, Double?>>,
 )
 

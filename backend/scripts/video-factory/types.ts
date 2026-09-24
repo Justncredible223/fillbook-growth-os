@@ -7,6 +7,21 @@
 
 export class VideoFactoryError extends Error {}
 
+/**
+ * The explicit, validated reference an approved script carries when it was
+ * generated FOR a specific verified ScenePlan (src/shortform/pilots.ts) --
+ * never inferred from matching text. `scenePlanHash` is
+ * computeScenePlanHash's output at GENERATION time; a render-time consumer
+ * recomputes it from the CURRENT plan and refuses to render on any
+ * mismatch (stale/modified plan, or a tampered/incorrect reference) rather
+ * than substituting that plan's content for whatever the approved script
+ * actually says. See motionCatalog.ts's resolveMotionScenePlan.
+ */
+export interface MotionScenePlanRef {
+  scenePlanId: string;
+  scenePlanHash: string;
+}
+
 /** The structured production package, same shape as backend/src/content/videoScriptWriter.ts's VideoScript. */
 export interface VideoScript {
   hook: string;
@@ -17,6 +32,8 @@ export interface VideoScript {
   tiktokCaption: string;
   hashtags: string[];
   disclosureCta: string | null;
+  /** Present only when this script was generated for a specific verified-motion concept (never for a free-text/opportunity-derived script). Null/undefined means "no motion requested" -- the normal stock-footage/UI-screenshot path. */
+  motionScenePlan?: MotionScenePlanRef | null;
 }
 
 /**
@@ -66,6 +83,34 @@ export interface Scene {
   imagePath?: string; // absolute path to a UI screenshot; rendered as a slow vertical pan. Takes precedence over clipPath.
   shot?: string; // the approved shot-list description this scene came from (used to pick a matching UI screenshot)
   narration?: string; // the words spoken while this scene is on screen (used to pick footage that matches what is being said)
+  /**
+   * Only meaningful with `clipPath`. When set, this scene's clip is a real,
+   * verified recording (e.g. src/shortform's `screen_recording` assets) and
+   * MUST be played once, trimmed to this exact range -- never
+   * `-stream_loop`'d like ordinary stock footage (see buildFfmpegArgs).
+   * `{start, end}` are seconds into the SOURCE clip. buildFfmpegArgs throws
+   * rather than loop when the declared range is shorter than this scene
+   * actually needs (its durationSeconds plus any adjacent transition
+   * padding) -- reported as insufficient footage, never silently stretched.
+   */
+  clipTimeRangeSeconds?: { start: number; end: number };
+  /**
+   * Only meaningful with `clipPath`. Crops the SOURCE clip to this
+   * rectangle (source pixel coordinates) before the normal scale/crop-to-
+   * canvas step -- e.g. excluding a captured app's sidebar/chrome, or
+   * framing one specific UI region. Absent means the existing
+   * scale-to-fill/center-crop behavior, unchanged.
+   */
+  sourceCrop?: { x: number; y: number; w: number; h: number };
+  /**
+   * Only meaningful with `sourceCrop`. Extra regions (source pixel
+   * coordinates, same space as `sourceCrop`) to black out -- e.g. an
+   * account email visible in a corner of the raw recording that
+   * `sourceCrop` alone doesn't exclude. A mask entirely outside
+   * `sourceCrop` is simply not drawn (nothing left to hide once cropped
+   * out already).
+   */
+  privacyMasks?: { x: number; y: number; w: number; h: number }[];
 }
 
 export interface RenderPlan {

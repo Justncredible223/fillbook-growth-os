@@ -1,5 +1,5 @@
 import { buildPublishedMetadata, type PublishedVideoMetadata } from "./metadata.js";
-import { OFFICIAL_HANDLE, type Claim, type Platform, type Rect, type SceneSpec, type ScenePlan } from "./types.js";
+import { OFFICIAL_HANDLE, type Claim, type Mask, type Platform, type Rect, type SceneSpec, type ScenePlan } from "./types.js";
 
 /**
  * The three pilot videos from the approved creative direction:
@@ -14,7 +14,6 @@ import { OFFICIAL_HANDLE, type Claim, type Platform, type Rect, type SceneSpec, 
 export const PILOT_EXPERIMENT_ID = "exp-pilot-2026-09";
 const VOICE = "edge-tts en-US-AndrewMultilingualNeural (pipeline default; the owner may replace it)";
 const VISUAL_STYLE = "real-ui-crop-card-v1";
-const EXAMPLE = "EXAMPLE DATA";
 
 interface SceneInput {
   sceneId: string;
@@ -32,6 +31,9 @@ interface SceneInput {
   topics: string[];
   claims?: Claim[];
   first?: boolean;
+  /** Only for a `screen_recording` assetId -- which part of the captured clip this scene uses. */
+  clipTimeRangeSeconds?: { start: number; end: number };
+  masks?: Mask[];
 }
 
 function scene(i: SceneInput): SceneSpec {
@@ -56,7 +58,8 @@ function scene(i: SceneInput): SceneSpec {
     variationId: i.variationId,
     expectedTopics: i.topics,
     claims: i.claims ?? [],
-    masks: [],
+    masks: i.masks ?? [],
+    clipTimeRangeSeconds: hasAsset ? i.clipTimeRangeSeconds : undefined,
   };
 }
 
@@ -64,7 +67,12 @@ function scene(i: SceneInput): SceneSpec {
 /* Pilot 1: "Green month. Losing setup."   Series: What the Total Hides                            */
 /* ---------------------------------------------------------------------------------------------- */
 
-const P1 = "p1-a";
+const P1 = "p1-c"; // -c: phone-layout capture (2026-09-23), replacing the -b desktop capture
+const P1_REC = "rec.p1-reports-setup-breakdown.v2";
+/** Measured off the settled 1080x1920 frames: the Overview card grid, then the By setup card after the swipe. */
+const P1_TOTAL_CROP: Rect = { x: 0, y: 615, w: 1080, h: 825 };
+const P1_SETUP_CROP: Rect = { x: 0, y: 805, w: 1080, h: 507 };
+
 export const PILOT_1: ScenePlan = {
   planId: "pilot-1-green-month-losing-setup",
   title: "Green month. Losing setup.",
@@ -84,66 +92,45 @@ export const PILOT_1: ScenePlan = {
       first: true,
       narration: "Green month. Losing setup.",
       takeaway: "A positive total does not mean every setup is working.",
-      assetId: "ui.month-overview-setups.v1",
-      crop: { x: 40, y: 480, w: 480, h: 170 },
-      focal: { x: 40, y: 480, w: 480, h: 170 },
+      assetId: P1_REC,
+      crop: P1_TOTAL_CROP,
+      focal: P1_TOTAL_CROP,
       headline: "Green month. Losing setup.",
-      caption: "The total is positive.",
-      seconds: 2.6, // real edge-tts speech is 2.0s; was 3.0s authored-guess
-      disclosure: EXAMPLE,
+      caption: "$387.08 net, 22 of 22 trades.",
+      seconds: 3.5,
+      disclosure: "Demo data",
       topics: ["month_total"],
-      claims: [{ id: "p1-c1", type: "data_point", text: "The example month total is positive.", evidence: [{ assetId: "ui.month-overview-setups.v1", factKey: "month.total_positive" }] }],
+      clipTimeRangeSeconds: { start: 0.1, end: 4.5 },
+      claims: [{ id: "p1-c1", type: "data_point", text: "Net P&L $387.08 across 22 of 22 trades, a positive month.", evidence: [{ assetId: P1_REC, factKey: "month.net_pnl" }] }],
     }),
     scene({
-      sceneId: "p1-s2-trades",
+      sceneId: "p1-s2-setup-breakdown",
       variationId: P1,
-      narration: "The month is positive, and the trade count is right there on screen.",
-      takeaway: "The total is built from many trades, not one.",
-      assetId: "ui.month-overview-setups.v1",
-      crop: { x: 530, y: 650, w: 470, h: 170 },
-      focal: { x: 530, y: 650, w: 470, h: 170 },
-      headline: "Positive month",
-      caption: "Every trade counts toward the total.",
-      seconds: 4.1, // real edge-tts speech is 3.5s; was 5.0s authored-guess
-      disclosure: EXAMPLE,
-      topics: ["month_total"],
-      claims: [{ id: "p1-c2", type: "data_point", text: "The month view shows the number of trades behind the total.", evidence: [{ assetId: "ui.month-overview-setups.v1", factKey: "month.trade_count" }] }],
-    }),
-    /**
-     * The real "By setup" row has its label flush left and its trade count/result flush right,
-     * ~940px apart in the 1444px-wide source screenshot. One crop cannot include both and stay
-     * phone-readable (a crop wide enough for both is width-limited to ~0.62x, per fitCrop), so this
-     * beat is split in two: the setup name, then its trade count and dollar result.
-     */
-    scene({
-      sceneId: "p1-s3-setups",
-      variationId: P1,
-      narration: "Break it down by setup. One stands out.",
+      narration: "Break it down by setup, and one stands out: Opening Range Break, 8 trades, 25% win, negative $421.76.",
       takeaway: "Break a total down by setup to find the one that is not working.",
-      assetId: "ui.setup-breakdown.v1",
-      crop: { x: 0, y: 220, w: 380, h: 120 },
-      focal: { x: 0, y: 270, w: 230, h: 40 },
-      headline: "One setup stands out",
-      caption: "Opening Range Break: the worst setup this month.",
-      seconds: 2.8, // real edge-tts speech is 2.5s exactly; was 2.5s authored-guess, leaving no margin
-      disclosure: EXAMPLE,
+      assetId: P1_REC,
+      crop: P1_SETUP_CROP,
+      focal: P1_SETUP_CROP,
+      headline: "Opening Range Break: -$421.76",
+      caption: "8 trades, 25% win. The total hides it.",
+      seconds: 6.5,
+      disclosure: "Demo data",
       topics: ["setup_breakdown"],
-      claims: [{ id: "p1-c3", type: "data_point", text: "The setup breakdown highlights Opening Range Break as the worst setup this month.", evidence: [{ assetId: "ui.setup-breakdown.v1", factKey: "setup.losing_setup_name" }] }],
+      // Starts just before the swipe (4.53-5.73s) so the viewer sees the page move down to the breakdown.
+      clipTimeRangeSeconds: { start: 4.35, end: 17.7 },
+      claims: [{ id: "p1-c2", type: "data_point", text: "By setup, worst first: Opening Range Break has 8 trades, 25% win, -$421.76.", evidence: [{ assetId: P1_REC, factKey: "setup.opening_range_break_result" }] }],
     }),
     scene({
-      sceneId: "p1-s3-setups-result",
+      sceneId: "p1-s3-qualify",
       variationId: P1,
-      narration: "It shows 2 trades, 0% win, and -$1,030.00.",
-      takeaway: "Break a total down by setup to find the one that is not working.",
-      assetId: "ui.setup-breakdown.v1",
-      crop: { x: 1064, y: 220, w: 380, h: 120 },
-      focal: { x: 1140, y: 270, w: 280, h: 40 },
-      headline: "0% win. -$1,030.00.",
-      caption: "The total hides it. The breakdown shows it.",
-      seconds: 6.6, // real edge-tts speech is 6.0s (spoken dollar figures run long); was 3.5s authored-guess, which cut the line off
-      disclosure: EXAMPLE,
+      narration: "This is one example month, from recorded trades. Your own breakdown will look different.",
+      takeaway: "The pattern is what to check for, not this specific month's numbers.",
+      headline: "Based on recorded trades",
+      caption: "Your own breakdown will look different.",
+      seconds: 4,
+      disclosure: "Not investment advice.",
       topics: ["setup_breakdown"],
-      claims: [{ id: "p1-c3b", type: "data_point", text: "Opening Range Break shows 2 trades, 0% win, and a -$1,030.00 result.", evidence: [{ assetId: "ui.setup-breakdown.v1", factKey: "setup.losing_setup_result" }] }],
+      claims: [{ id: "p1-c3", type: "concept", text: "Qualifies that this is one example month's recorded trades, not a claim about any specific viewer's results.", evidence: [] }],
     }),
     scene({
       sceneId: "p1-s4-close",
@@ -164,22 +151,11 @@ export const PILOT_1: ScenePlan = {
 /* Pilot 2: "Balance isn't your buffer."   Series: Read the Rule                                   */
 /* ---------------------------------------------------------------------------------------------- */
 
-const P2 = "p2-a";
-const DD = "ui.drawdown-bars.v1";
-/**
- * Crops are in the 1290x872 source. The app header (y < 175) is always excluded.
- *
- * The full "Funded 50K" card (DD_CARD, retired below) put four unrelated numbers in every frame
- * at a width-limited ~0.74x scale, so each of the buffer/profit callouts read small next to the
- * giant single-metric shots elsewhere in this pilot. DD_BUFFER_ONLY and DD_PROFIT_ONLY isolate one
- * label/value pair each; DD_BUFFER_AND_PROFIT keeps both metrics the "compare" scene needs while
- * still dropping the account-name header above them.
- */
-const DD_BUFFER: Rect = { x: 60, y: 335, w: 1170, h: 230 };
-const DD_LOSS: Rect = { x: 60, y: 575, w: 1170, h: 175 };
-const DD_BUFFER_ONLY: Rect = { x: 88, y: 340, w: 1120, h: 215 };
-const DD_PROFIT_ONLY: Rect = { x: 85, y: 730, w: 830, h: 120 };
-const DD_BUFFER_AND_PROFIT: Rect = { x: 85, y: 340, w: 1120, h: 465 };
+const P2 = "p2-c"; // -c: phone-layout capture (2026-09-23): dashboard account context, then the rules card
+const P2_REC = "rec.p2-rules-buffer.v2";
+/** Dashboard Net P&L + Today cards (0-4.23s), then the account rules card after navigating to /rules. */
+const P2_ACCOUNT_CROP: Rect = { x: 0, y: 1160, w: 1080, h: 430 };
+const P2_RULES_CARD_CROP: Rect = { x: 0, y: 725, w: 1080, h: 465 };
 
 export const PILOT_2: ScenePlan = {
   planId: "pilot-2-balance-isnt-your-buffer",
@@ -200,91 +176,37 @@ export const PILOT_2: ScenePlan = {
       first: true,
       narration: "Balance isn't your buffer.",
       takeaway: "How much you are up says nothing about how close you are to a limit.",
-      assetId: DD,
-      crop: DD_BUFFER_ONLY,
+      assetId: P2_REC,
+      crop: P2_ACCOUNT_CROP,
       headline: "Balance isn't your buffer.",
-      caption: "Profit and buffer answer different questions.",
-      seconds: 2.0, // real edge-tts speech is 1.4s; was 3.0s authored-guess
-      disclosure: EXAMPLE,
-      topics: ["profit_target", "buffer"],
+      caption: "Account net: +$387.08.",
+      seconds: 3,
+      disclosure: "Demo data",
+      topics: ["account_context"],
+      clipTimeRangeSeconds: { start: 0.1, end: 4.2 },
+      claims: [{ id: "p2-c1", type: "data_point", text: "The dashboard's Net P&L card shows +$387.08 (14 wins, 8 losses) -- a balance figure, not a buffer.", evidence: [{ assetId: P2_REC, factKey: "account.net_pnl_dashboard" }] }],
+    }),
+    scene({
+      sceneId: "p2-s2-loss-and-profit",
+      variationId: P2,
+      narration: "Today's loss limit remaining reads $1,000.00, and profit target is $3,000.00, currently $387.08.",
+      takeaway: "Profit, daily loss limit, and buffer are three separate numbers, not one.",
+      assetId: P2_REC,
+      crop: P2_RULES_CARD_CROP,
+      headline: "Three separate numbers",
+      caption: "Buffer $1,725.12. Loss limit $1,000.00. Target $3,000.00.",
+      seconds: 6,
+      disclosure: "Demo data",
+      topics: ["buffer", "profit_target"],
+      clipTimeRangeSeconds: { start: 4.25, end: 16.2 },
       claims: [
-        {
-          id: "p2-c1",
-          type: "product_capability",
-          text: "The account card shows the trailing drawdown buffer as its own tracked number, separate from balance.",
-          evidence: [{ assetId: DD, factKey: "rule.trailing_drawdown_buffer" }],
-        },
+        { id: "p2-c1b", type: "data_point", text: "The account card shows a trailing drawdown buffer of $1,725.12, tracked separately from profit.", evidence: [{ assetId: P2_REC, factKey: "rule.trailing_drawdown_buffer" }] },
+        { id: "p2-c2", type: "data_point", text: "Today's loss limit remaining is $1,000.00.", evidence: [{ assetId: P2_REC, factKey: "rule.daily_loss_limit_remaining" }] },
+        { id: "p2-c3", type: "data_point", text: "Profit target $3,000.00, currently $387.08.", evidence: [{ assetId: P2_REC, factKey: "account.profit_target_progress" }] },
       ],
     }),
     scene({
-      sceneId: "p2-s2-profit",
-      variationId: P2,
-      narration: "This example account shows $12,967.14 in profit against a $3,000.00 target.",
-      takeaway: "Profit can be far past the target.",
-      assetId: DD,
-      crop: DD_PROFIT_ONLY,
-      focal: { x: 95, y: 748, w: 810, h: 52 },
-      headline: "Far past the target",
-      caption: "Profit target: $3,000.00. Currently $12,967.14.",
-      seconds: 8.4, // real edge-tts speech is 7.8s (spoken dollar figures run long); was 5.5s authored-guess, which cut the line off
-      disclosure: EXAMPLE,
-      topics: ["profit_target"],
-      claims: [{ id: "p2-c2", type: "data_point", text: "Profit target $3,000.00, currently $12,967.14.", evidence: [{ assetId: DD, factKey: "account.profit_target_progress" }] }],
-    }),
-    scene({
-      sceneId: "p2-s3-buffer",
-      variationId: P2,
-      narration: "The trailing drawdown buffer reads $690.50.",
-      takeaway: "The buffer is a separate, much smaller number.",
-      assetId: DD,
-      crop: DD_BUFFER,
-      headline: "Buffer: $690.50",
-      caption: "This is the trailing drawdown buffer.",
-      seconds: 5.1, // real edge-tts speech is 4.5s (spoken dollar figure runs long); was 4.0s authored-guess, which cut the line off
-      disclosure: EXAMPLE,
-      topics: ["drawdown", "buffer"],
-      claims: [{ id: "p2-c3", type: "data_point", text: "Trailing drawdown buffer $690.50.", evidence: [{ assetId: DD, factKey: "rule.trailing_drawdown_buffer" }] }],
-    }),
-    scene({
-      sceneId: "p2-s4-loss-limit",
-      variationId: P2,
-      narration: "Today's loss limit remaining reads $1,200.00.",
-      takeaway: "A daily limit is another separate number to read.",
-      assetId: DD,
-      crop: DD_LOSS,
-      headline: "Daily limit: $1,200.00",
-      caption: "Today's loss limit remaining.",
-      seconds: 4,
-      disclosure: EXAMPLE,
-      topics: ["buffer"],
-      claims: [{ id: "p2-c4", type: "data_point", text: "Today's loss limit remaining $1,200.00.", evidence: [{ assetId: DD, factKey: "rule.daily_loss_limit_remaining" }] }],
-    }),
-    scene({
-      sceneId: "p2-s5-compare",
-      variationId: P2,
-      narration: "Profit is one number. The buffer is another. Fillbook shows both from the rules you configure.",
-      takeaway: "Read the buffer next to the balance, not instead of it.",
-      assetId: DD,
-      crop: DD_BUFFER_AND_PROFIT,
-      headline: "Read both",
-      caption: "Profit and buffer, side by side.",
-      seconds: 6.1, // real edge-tts speech is 5.5s; was 6.5s authored-guess
-      disclosure: EXAMPLE,
-      topics: ["profit_target", "buffer"],
-      claims: [
-        {
-          id: "p2-c5",
-          type: "product_capability",
-          text: "Fillbook shows profit progress and the drawdown buffer for a configured account.",
-          evidence: [
-            { assetId: DD, factKey: "account.profit_target_progress" },
-            { assetId: DD, factKey: "rule.trailing_drawdown_buffer" },
-          ],
-        },
-      ],
-    }),
-    scene({
-      sceneId: "p2-s6-qualify",
+      sceneId: "p2-s3-qualify",
       variationId: P2,
       narration: "These numbers depend on the trades you record and the rules you configure. Check your prop firm's own rules for the official limits.",
       takeaway: "The figures are only as good as the trades recorded and the settings entered.",
@@ -293,10 +215,10 @@ export const PILOT_2: ScenePlan = {
       seconds: 7.3, // real edge-tts speech is 6.7s; was 8.5s authored-guess
       disclosure: "Not a broker or risk system.",
       topics: ["buffer"],
-      claims: [{ id: "p2-c6", type: "concept", text: "Qualifies that results depend on recorded trades and correct settings.", evidence: [] }],
+      claims: [{ id: "p2-c4", type: "concept", text: "Qualifies that results depend on recorded trades and correct settings.", evidence: [] }],
     }),
     scene({
-      sceneId: "p2-s7-close",
+      sceneId: "p2-s4-close",
       variationId: P2,
       narration: "Follow for more rule reads.",
       takeaway: "Read the rule before you trust the balance.",
@@ -305,7 +227,7 @@ export const PILOT_2: ScenePlan = {
       seconds: 2.5, // real edge-tts speech is 1.9s; was 3.0s authored-guess
       cta: `Follow ${OFFICIAL_HANDLE}`,
       topics: ["buffer"],
-      claims: [{ id: "p2-c7", type: "invitation", text: "Invites the viewer to follow for more rule explainers.", evidence: [] }],
+      claims: [{ id: "p2-c5", type: "invitation", text: "Invites the viewer to follow for more rule explainers.", evidence: [] }],
     }),
   ],
 };
@@ -314,16 +236,43 @@ export const PILOT_2: ScenePlan = {
 /* Pilot 3: "Same setup. Bigger size."   Series: One Trade to Review                               */
 /* ---------------------------------------------------------------------------------------------- */
 
-const P3 = "p3-a";
-const TL = "ui.trade-log-flags.v1";
-/** Excludes the row checkbox (~x48-140) and the Details/edit/delete icon row (y >= 1070) that the original full-card crop included; keeps symbol/side/result, date/qty/price, setup name, and both tags. */
-const TL_FLAGGED: Rect = { x: 195, y: 696, w: 630, h: 350 };
+const P3 = "p3-c"; // -c: phone-layout capture (2026-09-23): the trade card, then the plan's own limit, one recording
+const P3_REC = "rec.p3-trades-orb-size.v2";
+/** The 2026-09-21 Opening Range Break trade card after the swipe, then the plan's "Max contracts per trade" field on /plan. */
+const P3_RECENT_CROP: Rect = { x: 0, y: 831, w: 1080, h: 379 };
+const P3_PLAN_CROP: Rect = { x: 60, y: 915, w: 960, h: 195 };
 
+/**
+ * Reframed 2026-09-23 after checking what the new local capture actually
+ * supports. The old still-screenshot version (kept in git history, not
+ * here) claimed the trade log itself tagged the bigger trade "Revenge
+ * trade" -- true of that screenshot's dataset, but the new local fixture
+ * (seed-pilot-fixtures.mjs) has no such tag on any trade, so that claim is
+ * not available here and is not asserted. More importantly: the two
+ * Opening Range Break trades this pilot compares are 24 DAYS apart
+ * (2026-08-28 to 2026-09-21), not sequential trades -- checking the full
+ * trade list, the trade immediately before the bigger one (any setup) was
+ * actually a WIN, not a loss. There is no support here for "this happened
+ * right after a loss," so the video never claims or implies that. What IS
+ * directly observable and verifiable on screen: the same setup, used
+ * twice, at 1 contract and then 5 -- and 5 is above the trading plan's own
+ * written maxContracts of 3. That is the whole claim this version makes.
+ *
+ * Dropped the second "earliest trade" motion scene entirely on 2026-09-23:
+ * this capture's scroll_to actions (scripted for nth=-1, the 2026-08-28
+ * row further down the table) never actually produced visible scroll motion
+ * -- frames pulled from the raw clip at t=2.2s and t=6s are pixel-identical,
+ * both showing the same unscrolled top of the table. Rather than caption a
+ * scene with a date/quantity that isn't verifiably on screen at that
+ * clipTimeRangeSeconds, that scene is replaced with a text-only qualify
+ * scene (no asset, no unverified visual claim) so every remaining second
+ * of this pilot shows only what the capture actually demonstrates.
+ */
 export const PILOT_3: ScenePlan = {
   planId: "pilot-3-same-setup-bigger-size",
   title: "Same setup. Bigger size.",
   series: "One Trade to Review",
-  topic: "A trade flagged Oversized is a prompt to review the sequence, not proof of intent",
+  topic: "The same setup, at a size that broke the written trading plan",
   hook: "Same setup. Bigger size.",
   experimentId: PILOT_EXPERIMENT_ID,
   variationId: P3,
@@ -333,61 +282,65 @@ export const PILOT_3: ScenePlan = {
   requiredAssets: [],
   scenes: [
     scene({
-      sceneId: "p3-s1-before",
+      sceneId: "p3-s1-recent",
       variationId: P3,
       first: true,
-      narration: "Same setup. Bigger size.",
-      takeaway: "Compare the earlier trade with the later one before drawing conclusions.",
-      assetId: "ui.trade-log-before.v1",
-      crop: { x: 0, y: 130, w: 1417, h: 123 },
-      focal: { x: 0, y: 130, w: 1417, h: 123 },
+      narration: "Same setup. Bigger size. Five contracts, Opening Range Break, September 21st.",
+      takeaway: "Compare the size of two trades in the same setup before drawing conclusions.",
+      assetId: P3_REC,
+      crop: P3_RECENT_CROP,
+      focal: P3_RECENT_CROP,
       headline: "Same setup. Bigger size.",
-      caption: "First, the earlier trade.",
-      seconds: 2.6, // real edge-tts speech is 2.0s; was 3.0s authored-guess
-      disclosure: EXAMPLE,
+      caption: "5 contracts, Opening Range Break.",
+      seconds: 3,
+      disclosure: "Demo data",
       topics: ["trade_size"],
-      claims: [{ id: "p3-c1", type: "data_point", text: "An earlier trade of the same setup at a smaller size.", evidence: [{ assetId: "ui.trade-log-before.v1", factKey: "trade.same_setup_smaller_size" }] }],
+      // Starts on the top of the list so the swipe (0.6-1.8s) that brings the trade into view is on screen.
+      clipTimeRangeSeconds: { start: 0.2, end: 10.2 },
+      claims: [{ id: "p3-c1", type: "data_point", text: "The most recent Opening Range Break trade used 5 contracts, on 2026-09-21.", evidence: [{ assetId: P3_REC, factKey: "trade.orb_qty5_most_recent" }] }],
     }),
     scene({
-      sceneId: "p3-s2-flagged",
+      sceneId: "p3-s2-qualify",
       variationId: P3,
-      narration: "Later, the same setup shows 8 contracts. The trade log tagged it Revenge trade and Oversized.",
-      takeaway: "The log tagged the trade; that is a prompt to look closer.",
-      assetId: TL,
-      crop: TL_FLAGGED,
-      focal: { x: 205, y: 968, w: 485, h: 62 },
-      headline: "Flagged for review",
-      caption: "Tagged Revenge trade and Oversized.",
-      seconds: 6.5,
-      disclosure: EXAMPLE,
-      topics: ["behavior_flags", "trade_size"],
-      claims: [
-        { id: "p3-c2", type: "data_point", text: "An 8 contract Opening Range Break trade.", evidence: [{ assetId: TL, factKey: "trade.orb_mnq_8x_flagged" }] },
-        { id: "p3-c3", type: "behavior_flag", text: "The trade is tagged Revenge trade and Oversized.", evidence: [{ assetId: TL, factKey: "flag.revenge_and_oversized_tags" }] },
-      ],
+      narration: "This is one trade from one recorded log. Your own trade log will look different.",
+      takeaway: "The pattern to check is your own size against your own plan, not this specific trade.",
+      headline: "Based on one recorded trade",
+      caption: "Your own trade log will look different.",
+      seconds: 4,
+      disclosure: "Not investment advice.",
+      topics: ["trade_size"],
+      claims: [{ id: "p3-c2", type: "concept", text: "Qualifies that this is one example trade from one recorded log, not a claim about any specific viewer's trades.", evidence: [] }],
     }),
     scene({
-      sceneId: "p3-s3-prompt",
+      sceneId: "p3-s3-plan",
       variationId: P3,
-      narration: "A flag is a prompt to review the trade, not proof of why it happened.",
-      takeaway: "A behavior flag is a review prompt, not a diagnosis.",
-      headline: "A prompt, not a verdict",
-      caption: "Review the sequence before you decide.",
-      seconds: 4.5, // real edge-tts speech is 3.9s; was 5.0s authored-guess
-      topics: ["behavior_flags"],
-      claims: [{ id: "p3-c4", type: "concept", text: "Frames a behavior flag as a review prompt.", evidence: [] }],
+      narration: "This trading plan caps size at 3 contracts. Five is over the plan, not just bigger than usual.",
+      takeaway: "A size above the written plan is a fact you can check, not a guess about why.",
+      assetId: P3_REC,
+      crop: P3_PLAN_CROP,
+      focal: P3_PLAN_CROP,
+      headline: "Over the plan's own limit",
+      caption: "The plan caps this setup at 3 contracts.",
+      seconds: 5,
+      // Starts at 11.7s, once the swipe has cleared the "Max trades per day: 5" field from this narrow window;
+      // mid-swipe frames pair this field's label with the 5 above it, which would misread as "max contracts 5".
+      clipTimeRangeSeconds: { start: 11.7, end: 20.55 },
+      disclosure: "Demo data",
+      topics: ["trade_size"],
+      // Cites only the plan field shown in this scene's window; the "5 contracts" figure is cited in p3-s1-recent.
+      claims: [{ id: "p3-c3", type: "data_point", text: "This trading plan's 'Max contracts per trade' field is set to 3.", evidence: [{ assetId: P3_REC, factKey: "plan.max_contracts" }] }],
     }),
     scene({
       sceneId: "p3-s4-close",
       variationId: P3,
-      narration: "What would you look at first?",
-      takeaway: "Pick one trade and review it end to end.",
-      headline: "What do you look at first?",
-      caption: "Pick one trade to review.",
-      seconds: 2.5, // real edge-tts speech is 1.9s; was 3.5s authored-guess
+      narration: "What's your own contract limit?",
+      takeaway: "Check your own plan against your actual trade sizes.",
+      headline: "What's your contract limit?",
+      caption: "Compare your plan to your actual sizes.",
+      seconds: 2.5,
       cta: `Follow ${OFFICIAL_HANDLE}`,
-      topics: ["behavior_flags"],
-      claims: [{ id: "p3-c5", type: "invitation", text: "Invites the viewer to review a trade.", evidence: [] }],
+      topics: ["trade_size"],
+      claims: [{ id: "p3-c4", type: "invitation", text: "Invites the viewer to check their own plan against their own trade sizes.", evidence: [] }],
     }),
   ],
 };
@@ -405,20 +358,20 @@ const PILOT_COPY: Record<string, { topic: string; cta: string; captionBody: stri
   [PILOT_1.planId]: {
     topic: PILOT_1.topic,
     cta: "Follow for more trade reviews",
-    captionBody: "A positive month can still hide a setup that loses. This is an example month, so check your own breakdown by setup.",
+    captionBody: "A positive month can still hide a setup that loses. Demo data, so check your own breakdown by setup.",
     youtubeTitle: "Green Month, Losing Setup: Read Your Setup Breakdown",
   },
   [PILOT_2.planId]: {
     topic: PILOT_2.topic,
     cta: "Follow for more rule reads",
-    captionBody: "Your balance and your buffer answer different questions. Example account, based on recorded trades and configured rules.",
+    captionBody: "Your balance and your buffer answer different questions. Demo account, based on recorded trades and configured rules.",
     youtubeTitle: "Balance vs Drawdown Buffer: Read the Rule",
   },
   [PILOT_3.planId]: {
     topic: PILOT_3.topic,
     cta: "Follow for more trade reviews",
-    captionBody: "A flagged trade is a prompt to review the sequence, not proof of why it happened. Example data.",
-    youtubeTitle: "Same Setup, Bigger Size: Review the Trade Sequence",
+    captionBody: "Same setup, five times the size -- and over this plan's own contract limit. Demo data.",
+    youtubeTitle: "Same Setup, Bigger Size: Check It Against Your Plan",
   },
 };
 

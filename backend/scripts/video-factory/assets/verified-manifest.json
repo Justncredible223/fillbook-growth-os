@@ -1,0 +1,765 @@
+{
+  "version": 1,
+  "note": "Every claim a short-form video makes about Fillbook must point at a fact in this file. Facts and regions were transcribed by looking at each screenshot (2026-09-21) and MUST be confirmed by the owner in the contact sheet before any render. verifiedByOwner stays false until then. Only assets listed here may back a claim; the other files in assets/ui are decorative and cannot.",
+  "assets": [
+    {
+      "id": "ui.drawdown-bars.v1",
+      "file": "ui/drawdown-bars.jpg",
+      "sha256": "b374386a734ff1e959c95bc91871e696550aebf77ab88d12e1eba8afc1d7cbd0",
+      "width": 1290,
+      "height": 872,
+      "kind": "phone_ui",
+      "dataset": "demo-2026-09-19",
+      "source": "seeded demo account (example data, not a real user)",
+      "capturedAt": "2026-09-19",
+      "dataLabel": "EXAMPLE DATA",
+      "verifiedByOwner": true,
+      "topics": [
+        "account_rules",
+        "drawdown",
+        "buffer",
+        "profit_target"
+      ],
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1290,
+          "h": 175
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "account.name_size",
+          "text": "Funded 50K, $50,000.00 account",
+          "values": [
+            "$50,000.00"
+          ],
+          "topics": [
+            "account_rules"
+          ],
+          "region": {
+            "x": 98,
+            "y": 235,
+            "w": 1100,
+            "h": 75
+          }
+        },
+        {
+          "key": "rule.trailing_drawdown_buffer",
+          "text": "Trailing drawdown buffer $690.50 with a progress bar",
+          "values": [
+            "$690.50"
+          ],
+          "topics": [
+            "drawdown",
+            "buffer"
+          ],
+          "region": {
+            "x": 98,
+            "y": 345,
+            "w": 1100,
+            "h": 205
+          }
+        },
+        {
+          "key": "rule.daily_loss_limit_remaining",
+          "text": "Today's loss limit remaining $1,200.00 with a progress bar",
+          "values": [
+            "$1,200.00"
+          ],
+          "topics": [
+            "account_rules",
+            "buffer"
+          ],
+          "region": {
+            "x": 98,
+            "y": 585,
+            "w": 1100,
+            "h": 145
+          }
+        },
+        {
+          "key": "account.profit_target_progress",
+          "text": "Profit target: $3,000.00, currently $12,967.14 (432%)",
+          "values": [
+            "$3,000.00",
+            "$12,967.14",
+            "432%"
+          ],
+          "topics": [
+            "profit_target"
+          ],
+          "region": {
+            "x": 95,
+            "y": 748,
+            "w": 810,
+            "h": 52
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui.trade-log-flags.v1",
+      "file": "ui/trade-log-revenge.jpg",
+      "sha256": "64bacc6f33ff74152a71563cb1462a119cc1086d296a89090cce456ddcb440be",
+      "width": 900,
+      "height": 1680,
+      "kind": "phone_ui",
+      "dataset": "demo-2026-09-19",
+      "source": "seeded demo account (example data, not a real user)",
+      "capturedAt": "2026-09-19",
+      "dataLabel": "EXAMPLE DATA",
+      "verifiedByOwner": true,
+      "topics": [
+        "trade_log",
+        "behavior_flags",
+        "trade_size"
+      ],
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 900,
+          "h": 170
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "trade.es_1x",
+          "text": "ES Short, 1 contract, Failed Breakout / ORB Fade, -$279.50, -1.10R",
+          "values": [
+            "-$279.50",
+            "-1.10R"
+          ],
+          "topics": [
+            "trade_log"
+          ],
+          "region": {
+            "x": 48,
+            "y": 198,
+            "w": 804,
+            "h": 452
+          }
+        },
+        {
+          "key": "trade.orb_mnq_8x_flagged",
+          "text": "MNQ Short, 8 contracts, Opening Range Break, -$400.00, -1.25R, tagged Revenge trade and Oversized",
+          "values": [
+            "-$400.00",
+            "-1.25R",
+            "8"
+          ],
+          "topics": [
+            "trade_log",
+            "trade_size",
+            "behavior_flags"
+          ],
+          "region": {
+            "x": 200,
+            "y": 700,
+            "w": 620,
+            "h": 340
+          }
+        },
+        {
+          "key": "flag.revenge_and_oversized_tags",
+          "text": "Two tags on the 8 contract trade: Revenge trade, Oversized",
+          "values": [],
+          "topics": [
+            "behavior_flags"
+          ],
+          "region": {
+            "x": 205,
+            "y": 968,
+            "w": 485,
+            "h": 62
+          }
+        },
+        {
+          "key": "trade.orb_mnq_9x",
+          "text": "MNQ Short, 9 contracts, Opening Range Break, -$630.00, -1.75R",
+          "values": [
+            "-$630.00",
+            "-1.75R",
+            "9"
+          ],
+          "topics": [
+            "trade_log",
+            "trade_size"
+          ],
+          "region": {
+            "x": 48,
+            "y": 1218,
+            "w": 804,
+            "h": 450
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui.intelligence-overview.v1",
+      "file": "ui/intelligence-overview.jpg",
+      "sha256": "2a63bb9bf990d712a8e3c7e79d6888f31a0055bcacddd45fdf909424e8f75e23",
+      "width": 989,
+      "height": 2000,
+      "kind": "phone_ui",
+      "dataset": "demo-2026-09-19",
+      "source": "seeded demo account (example data, not a real user)",
+      "capturedAt": "2026-09-19",
+      "dataLabel": "EXAMPLE DATA",
+      "verifiedByOwner": false,
+      "topics": [
+        "intelligence",
+        "leaks",
+        "edge",
+        "account_health"
+      ],
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 989,
+          "h": 130
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "insight.biggest_leak",
+          "text": "Biggest Leak: your stop adherence, -$7,571",
+          "values": [
+            "-$7,571"
+          ],
+          "topics": [
+            "leaks"
+          ],
+          "region": {
+            "x": 37,
+            "y": 812,
+            "w": 915,
+            "h": 242
+          }
+        },
+        {
+          "key": "insight.strongest_edge",
+          "text": "Strongest setup: EMA Pullback, +1.57R, 9 trades, 78% win rate",
+          "values": [
+            "+1.57R",
+            "9",
+            "78%"
+          ],
+          "topics": [
+            "edge"
+          ],
+          "region": {
+            "x": 37,
+            "y": 1092,
+            "w": 915,
+            "h": 296
+          }
+        },
+        {
+          "key": "account.health_summary",
+          "text": "Your Account: drawdown buffer 35%, daily-loss buffer 100%, consistency 49%, profit target 100%, health 68/100",
+          "values": [
+            "35%",
+            "100%",
+            "49%",
+            "68/100"
+          ],
+          "topics": [
+            "account_health"
+          ],
+          "region": {
+            "x": 37,
+            "y": 1427,
+            "w": 915,
+            "h": 555
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui.calendar-earlier.v1",
+      "file": "ui/calendar.jpg",
+      "sha256": "ee32316d88822143c156a94a35b3ae80cda394c8e01ef204bf4f1c4d6d66595c",
+      "width": 1080,
+      "height": 2084,
+      "kind": "phone_ui",
+      "dataset": "demo-earlier",
+      "source": "seeded demo account (example data, not a real user), earlier capture with different totals",
+      "capturedAt": "2026-08",
+      "dataLabel": "EXAMPLE DATA",
+      "verifiedByOwner": false,
+      "topics": [
+        "calendar",
+        "month_total"
+      ],
+      "chromeRegions": [],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "month.total",
+          "text": "Month total $1,872.84, 4 days, 8 trades",
+          "values": [
+            "$1,872.84",
+            "4",
+            "8"
+          ],
+          "topics": [
+            "month_total"
+          ],
+          "region": {
+            "x": 100,
+            "y": 85,
+            "w": 860,
+            "h": 62
+          }
+        },
+        {
+          "key": "month.day_stats",
+          "text": "Best day $1,787.86, worst day -$139.42, average per trading day $468.21, green days 3 of 4",
+          "values": [
+            "$1,787.86",
+            "-$139.42",
+            "$468.21"
+          ],
+          "topics": [
+            "month_total"
+          ],
+          "region": {
+            "x": 110,
+            "y": 1720,
+            "w": 830,
+            "h": 260
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui.month-overview-setups.v1",
+      "file": "ui/month-overview-setups.jpg",
+      "sha256": "de208be5ebaabafd6e9d68ae37e3dcd69c8e54845b8f9ea56e94e70b54989226",
+      "width": 1518,
+      "height": 878,
+      "kind": "desktop_ui",
+      "dataset": "demo-pilot-1",
+      "source": "same seeded demo account (Funded 50K), Reports page, Month to date filter (example data, not a real user)",
+      "capturedAt": "2026-09-21",
+      "dataLabel": "EXAMPLE DATA",
+      "verifiedByOwner": true,
+      "topics": [
+        "month_total"
+      ],
+      "chromeRegions": [],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "month.total_positive",
+          "text": "Net P&L $1,549.10 (Month to date)",
+          "values": [
+            "$1,549.10"
+          ],
+          "topics": [
+            "month_total"
+          ],
+          "region": {
+            "x": 40,
+            "y": 480,
+            "w": 480,
+            "h": 170
+          }
+        },
+        {
+          "key": "month.trade_count",
+          "text": "Total trades 38 (24W . 14L . 0 scratch)",
+          "values": [
+            "38",
+            "24",
+            "14"
+          ],
+          "topics": [
+            "month_total"
+          ],
+          "region": {
+            "x": 530,
+            "y": 650,
+            "w": 470,
+            "h": 170
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui.setup-breakdown.v1",
+      "file": "ui/setup-breakdown.jpg",
+      "sha256": "8a4588bc3ecf8416dc1fdf41acc04e786830b4d8b7948a91b0f770f6c3473b8d",
+      "width": 1444,
+      "height": 340,
+      "kind": "desktop_ui",
+      "dataset": "demo-pilot-1",
+      "source": "same seeded demo account (Funded 50K), Reports page \"By setup\", Month to date filter, same session as ui.month-overview-setups.v1 (example data, not a real user)",
+      "capturedAt": "2026-09-21",
+      "dataLabel": "EXAMPLE DATA",
+      "verifiedByOwner": true,
+      "topics": [
+        "setup_breakdown"
+      ],
+      "chromeRegions": [],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "setup.losing_setup_name",
+          "text": "Opening Range Break (worst setup this month)",
+          "values": [],
+          "topics": [
+            "setup_breakdown"
+          ],
+          "region": {
+            "x": 0,
+            "y": 270,
+            "w": 230,
+            "h": 40
+          }
+        },
+        {
+          "key": "setup.losing_setup_result",
+          "text": "Opening Range Break: 2 trades, 0% win, -$1,030.00",
+          "values": [
+            "2",
+            "-$1,030.00"
+          ],
+          "topics": [
+            "setup_breakdown"
+          ],
+          "region": {
+            "x": 1140,
+            "y": 270,
+            "w": 280,
+            "h": 40
+          }
+        }
+      ]
+    },
+    {
+      "id": "ui.trade-log-before.v1",
+      "file": "ui/trade-log-before.jpg",
+      "sha256": "c12086ba2d7f7518ca8a4779ca40fbd05fd8e3a099683f320098defe920adc04",
+      "width": 1417,
+      "height": 253,
+      "kind": "desktop_ui",
+      "dataset": "demo-2026-09-19",
+      "source": "same seeded demo account (Funded 50K) as ui.trade-log-flags.v1, Trades page filtered to Opening Range Break (example data, not a real user)",
+      "capturedAt": "2026-09-21",
+      "dataLabel": "EXAMPLE DATA",
+      "verifiedByOwner": true,
+      "topics": [
+        "trade_size"
+      ],
+      "chromeRegions": [],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "trade.same_setup_smaller_size",
+          "text": "2026-08-06, MNQ Long, 6 contracts, Opening Range Break, +$261.48, +0.73R -- earlier and smaller than the flagged 8-contract trade",
+          "values": [
+            "6",
+            "+$261.48",
+            "+0.73R"
+          ],
+          "topics": [
+            "trade_size"
+          ],
+          "region": {
+            "x": 0,
+            "y": 130,
+            "w": 1417,
+            "h": 123
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.p1-reports-setup-breakdown.v2",
+      "file": "motion/p1-mobile-reports-setup-breakdown.mp4",
+      "sha256": "d3eaf70e78741a3c5cf4bc9893c30b16d268acb19dccf4a7319818a79c2c787a",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-fixture-account.2026-09-23",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920; every frame is a real screenshot of the app, holds verified unchanged start-to-end, scrolls rendered at their real offsets. Signed into a throwaway account (Pilot Fixture Account) seeded by frontend/scripts/seed-pilot-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: Overview grid held 0.03-4.53s, eased swipe down 4.53-5.73s, By setup card held 5.73-17.73s.",
+      "capturedAt": "2026-09-23",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "month_total",
+        "setup_breakdown"
+      ],
+      "durationSeconds": 17.733,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "month.net_pnl",
+          "text": "Reports, Net, All time, Overview: Net P&L $387.08, win rate 64%, total trades 22",
+          "values": [
+            "$387.08",
+            "64%",
+            "22"
+          ],
+          "topics": [
+            "month_total"
+          ],
+          "region": {
+            "x": 40,
+            "y": 640,
+            "w": 1000,
+            "h": 770
+          },
+          "timeRangeSeconds": {
+            "start": 0.03,
+            "end": 4.53
+          }
+        },
+        {
+          "key": "setup.opening_range_break_result",
+          "text": "By setup (worst first): Opening Range Break, 8 trades, 25% win, -$421.76",
+          "values": [
+            "8",
+            "25%",
+            "-$421.76"
+          ],
+          "topics": [
+            "setup_breakdown"
+          ],
+          "region": {
+            "x": 40,
+            "y": 1185,
+            "w": 1000,
+            "h": 75
+          },
+          "timeRangeSeconds": {
+            "start": 5.73,
+            "end": 17.73
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.p2-rules-buffer.v2",
+      "file": "motion/p2-mobile-dashboard-to-rules.mp4",
+      "sha256": "2c26648042978d5efe23492bba8f0828b106a9e31d9d03247c1f1ab5af6e53a7",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-fixture-account.2026-09-23",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920; every frame is a real screenshot of the app, holds verified unchanged start-to-end, scrolls rendered at their real offsets. Signed into a throwaway account (Pilot Fixture Account) seeded by frontend/scripts/seed-pilot-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: Dashboard account header held 0.03-4.23s, then a navigation cut to /rules at 4.23s (load not shown), account rules card held 4.23-16.23s.",
+      "capturedAt": "2026-09-23",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "account_context",
+        "drawdown",
+        "buffer",
+        "profit_target"
+      ],
+      "durationSeconds": 16.233,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "account.net_pnl_dashboard",
+          "text": "Dashboard, Pilot Fixture Account: Net P&L card +$387.08, 14W / 8L",
+          "values": [
+            "+$387.08"
+          ],
+          "topics": [
+            "account_context"
+          ],
+          "region": {
+            "x": 40,
+            "y": 1185,
+            "w": 1000,
+            "h": 380
+          },
+          "timeRangeSeconds": {
+            "start": 0.03,
+            "end": 4.23
+          }
+        },
+        {
+          "key": "rule.trailing_drawdown_buffer",
+          "text": "Prop firm rules, Pilot Fixture 50K Evaluation: Trailing drawdown buffer $1,725.12",
+          "values": [
+            "$1,725.12"
+          ],
+          "topics": [
+            "drawdown",
+            "buffer"
+          ],
+          "region": {
+            "x": 40,
+            "y": 865,
+            "w": 1000,
+            "h": 75
+          },
+          "timeRangeSeconds": {
+            "start": 4.23,
+            "end": 16.23
+          }
+        },
+        {
+          "key": "rule.daily_loss_limit_remaining",
+          "text": "Today's loss limit remaining $1,000.00",
+          "values": [
+            "$1,000.00"
+          ],
+          "topics": [
+            "buffer"
+          ],
+          "region": {
+            "x": 40,
+            "y": 970,
+            "w": 1000,
+            "h": 75
+          },
+          "timeRangeSeconds": {
+            "start": 4.23,
+            "end": 16.23
+          }
+        },
+        {
+          "key": "account.profit_target_progress",
+          "text": "Profit target: $3,000.00, currently $387.08 (13%)",
+          "values": [
+            "$3,000.00",
+            "$387.08",
+            "13%"
+          ],
+          "topics": [
+            "profit_target"
+          ],
+          "region": {
+            "x": 40,
+            "y": 1070,
+            "w": 1000,
+            "h": 50
+          },
+          "timeRangeSeconds": {
+            "start": 4.23,
+            "end": 16.23
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.p3-trades-orb-size.v2",
+      "file": "motion/p3-mobile-trade-size-vs-plan.mp4",
+      "sha256": "3d69dba26cc9d1d39d889c08dc510f9fe1f382c39c767d63aeade9bcf6d951ee",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-fixture-account.2026-09-23",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920; every frame is a real screenshot of the app, holds verified unchanged start-to-end, scrolls rendered at their real offsets. Signed into a throwaway account (Pilot Fixture Account) seeded by frontend/scripts/seed-pilot-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: trade list top held 0-0.6s, eased swipe to the 2026-09-21 trade 0.6-1.8s, held 1.8-10.3s, navigation cut to /plan at 10.3s, plan top held 10.3-10.9s, eased swipe to Max contracts 10.9-12.1s, held 12.1-20.6s.",
+      "capturedAt": "2026-09-23",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "trade_size",
+        "trade_log"
+      ],
+      "durationSeconds": 20.6,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "trade.orb_qty5_most_recent",
+          "text": "Trades: MNQ Short, 2026-09-21, 5 x 20000.00 -> 20025.00, Opening Range Break, -$257.40 -- the most recent Opening Range Break trade, above the trading plan's 3-contract maxContracts",
+          "values": [
+            "5",
+            "2026-09-21",
+            "-$257.40"
+          ],
+          "topics": [
+            "trade_size"
+          ],
+          "region": {
+            "x": 40,
+            "y": 852,
+            "w": 1000,
+            "h": 347
+          },
+          "timeRangeSeconds": {
+            "start": 1.8,
+            "end": 10.3
+          }
+        },
+        {
+          "key": "plan.max_contracts",
+          "text": "Trading plan page, 'Max contracts per trade' field set to 3",
+          "values": [
+            "3"
+          ],
+          "topics": [
+            "trade_size"
+          ],
+          "region": {
+            "x": 60,
+            "y": 930,
+            "w": 960,
+            "h": 160
+          },
+          "timeRangeSeconds": {
+            "start": 12.1,
+            "end": 20.6
+          }
+        }
+      ]
+    }
+  ]
+}

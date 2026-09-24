@@ -1,0 +1,212 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+
+/**
+ * Exercises the ACTUAL api/run-campaign.ts handler (not just
+ * campaignPipeline.ts directly) with a fake Supabase client -- proves the
+ * real request-body validation, opportunity creation, and
+ * enqueue_campaign_run RPC call construction for a motion-concept request,
+ * with every external effect (Supabase) mocked. The real GitHub Actions
+ * worker side of the chain (campaign-worker/run-single.ts reading the
+ * resulting opportunity and calling runCampaignPipeline) is proven
+ * separately in campaignPipeline.test.ts's own motion-concept tests --
+ * together they cover payload construction through to what the worker
+ * actually receives.
+ */
+
+const PILOT_2_ID = "pilot-2-balance-isnt-your-buffer";
+
+function fakeReq(body: unknown, method = "POST"): VercelRequest {
+  return { method, headers: { authorization: "Bearer test-app-token" }, body } as unknown as VercelRequest;
+}
+
+function fakeRes() {
+  const res: { statusCode: number | null; body: unknown } = { statusCode: null, body: null };
+  const handle = {
+    status: vi.fn((code: number) => {
+      res.statusCode = code;
+      return handle;
+    }),
+    json: vi.fn((payload: unknown) => {
+      res.body = payload;
+      return handle;
+    }),
+  };
+  return { res: handle as unknown as VercelResponse, result: res };
+}
+
+/** Minimal, chainable, thenable Supabase client fake -- records every rpc()/insert() call so a test can assert on exactly what was sent. */
+function createFakeClient(opts: { existingOpportunity?: { id: string; status: string } | null } = {}) {
+  const calls: { kind: string; args: unknown }[] = [];
+  const insertedOpportunities: Record<string, unknown>[] = [];
+
+  function builderFor(table: string): any {
+    const builder: any = {
+      select: (cols: string) => {
+        builder._cols = cols;
+        return builder;
+      },
+      eq: () => builder,
+      ilike: () => builder,
+      // SupabaseOpportunityRepository.listOpen awaits `.order(...)` directly -- resolve to full DB-row-shaped opportunities.
+      order: async () => {
+        if (table === "opportunities" && opts.existingOpportunity) {
+          const e = opts.existingOpportunity;
+          return {
+            data: [
+              {
+                id: e.id,
+                title: "Motion concept request: Balance isn't your buffer.",
+                score: 100,
+                urgency: "normal",
+                confidence: 1,
+                rationale: `MOTION_CONCEPT_REF:${PILOT_2_ID}`,
+                recommended_channels: [],
+                recommended_campaign_type: null,
+                approval_class: "EXTERNAL_DRAFT",
+                status: e.status,
+                signal_ids: [],
+                created_at: new Date().toISOString(),
+              },
+            ],
+            error: null,
+          };
+        }
+        return { data: [], error: null };
+      },
+      limit: async () => {
+        if (table === "opportunities") return { data: opts.existingOpportunity ? [opts.existingOpportunity] : [], error: null };
+        return { data: [], error: null };
+      },
+      single: async () => {
+        if (table === "system_settings") return { data: { paused: false }, error: null };
+        return { data: null, error: null };
+      },
+      insert: (row: Record<string, unknown>) => {
+        insertedOpportunities.push(row);
+        return {
+          select: () => ({
+            single: async () => ({ data: { ...row, id: "opp-new-1", status: "open", created_at: new Date().toISOString() }, error: null }),
+          }),
+        };
+      },
+    };
+    return builder;
+  }
+
+  return {
+    client: {
+      from: (table: string) => builderFor(table),
+      rpc: async (fn: string, args: unknown) => {
+        calls.push({ kind: fn, args });
+        if (fn === "enqueue_campaign_run") {
+          return { data: [{ campaign_run_request_id: "run-req-1", job_id: "job-1", already_existed: false }], error: null };
+        }
+        return { data: null, error: null };
+      },
+    },
+    calls,
+    insertedOpportunities,
+  };
+}
+
+describe("api/run-campaign.ts handler -- motion-concept payload construction", () => {
+  let handler: typeof import("../api/run-campaign").default;
+  let fakeClientState: ReturnType<typeof createFakeClient>;
+
+  beforeEach(async () => {
+    process.env.APP_API_TOKEN = "test-app-token";
+    fakeClientState = createFakeClient();
+    vi.resetModules();
+    vi.doMock("../src/lib/supabaseClient.js", () => ({ getServiceClient: () => fakeClientState.client }));
+    handler = (await import("../api/run-campaign")).default;
+  });
+
+  afterEach(() => {
+    vi.doUnmock("../src/lib/supabaseClient.js");
+    vi.resetModules();
+  });
+
+  it("GET returns the fixed motion-concept catalog, never an open-ended/inferred list", async () => {
+    const { res, result } = fakeRes();
+    await handler(fakeReq(undefined, "GET"), res);
+    expect(result.statusCode).toBe(200);
+    const body = result.body as { motionConcepts: { id: string }[] };
+    expect(body.motionConcepts.map((c) => c.id)).toContain(PILOT_2_ID);
+    expect(body.motionConcepts.length).toBe(3);
+  });
+
+  it("POST with a valid motionConceptId creates a real opportunity row and enqueues via the SAME enqueue_campaign_run RPC every other request uses, with asset_type video_script", async () => {
+    const { res, result } = fakeRes();
+    await handler(fakeReq({ motionConceptId: PILOT_2_ID }), res);
+
+    expect(result.statusCode).toBe(200);
+    const body = result.body as { status: string; campaignRunRequestId: string; opportunityId: string };
+    expect(body.status).toBe("queued");
+    expect(body.campaignRunRequestId).toBe("run-req-1");
+
+    // The opportunity actually inserted carries the machine-parseable
+    // reference AND the required title prefix (both required by
+    // campaignPipeline.ts's own guard against a coincidental rationale match).
+    expect(fakeClientState.insertedOpportunities).toHaveLength(1);
+    const inserted = fakeClientState.insertedOpportunities[0]!;
+    expect(inserted.title).toContain("Motion concept request:");
+    expect(inserted.rationale).toContain(`MOTION_CONCEPT_REF:${PILOT_2_ID}`);
+
+    const enqueueCall = fakeClientState.calls.find((c) => c.kind === "enqueue_campaign_run");
+    expect(enqueueCall?.args).toMatchObject({ p_opportunity_id: "opp-new-1", p_asset_type_override: "video_script" });
+  });
+
+  it("POST with an unknown motionConceptId is rejected with 400 before any opportunity is created or anything enqueued", async () => {
+    const { res, result } = fakeRes();
+    await handler(fakeReq({ motionConceptId: "not-a-real-concept" }), res);
+
+    expect(result.statusCode).toBe(400);
+    expect((result.body as { error: string }).error).toContain("Unknown motionConceptId");
+    expect(fakeClientState.insertedOpportunities).toHaveLength(0);
+    expect(fakeClientState.calls).toHaveLength(0);
+  });
+
+  it("POST with motionConceptId AND topic together is rejected with 400 -- exactly one selector is ever valid", async () => {
+    const { res, result } = fakeRes();
+    await handler(fakeReq({ motionConceptId: PILOT_2_ID, topic: "some custom topic" }), res);
+    expect(result.statusCode).toBe(400);
+    expect(fakeClientState.insertedOpportunities).toHaveLength(0);
+  });
+
+  it("POST with motionConceptId AND opportunityId together is rejected with 400", async () => {
+    const { res, result } = fakeRes();
+    await handler(fakeReq({ motionConceptId: PILOT_2_ID, opportunityId: "some-id" }), res);
+    expect(result.statusCode).toBe(400);
+    expect(fakeClientState.insertedOpportunities).toHaveLength(0);
+  });
+
+  it("re-runs a still-open (stuck) prior request for the SAME concept instead of creating a duplicate opportunity", async () => {
+    fakeClientState = createFakeClient({ existingOpportunity: { id: "opp-existing-1", status: "open" } });
+    vi.doMock("../src/lib/supabaseClient.js", () => ({ getServiceClient: () => fakeClientState.client }));
+    vi.resetModules();
+    handler = (await import("../api/run-campaign")).default;
+
+    const { res, result } = fakeRes();
+    await handler(fakeReq({ motionConceptId: PILOT_2_ID }), res);
+
+    expect(result.statusCode).toBe(200);
+    expect(fakeClientState.insertedOpportunities).toHaveLength(0); // no NEW opportunity created
+    const enqueueCall = fakeClientState.calls.find((c) => c.kind === "enqueue_campaign_run");
+    expect(enqueueCall?.args).toMatchObject({ p_opportunity_id: "opp-existing-1" });
+  });
+
+  it("refuses to enqueue anything while the system is paused (existing safeguard, unaffected by motion-concept routing)", async () => {
+    fakeClientState.client.from = ((table: string) => {
+      if (table === "system_settings") {
+        return { select: () => ({ eq: () => ({ single: async () => ({ data: { paused: true }, error: null }) }) }) };
+      }
+      return (createFakeClient().client.from as any)(table);
+    }) as any;
+
+    const { res, result } = fakeRes();
+    await handler(fakeReq({ motionConceptId: PILOT_2_ID }), res);
+    expect(result.statusCode).toBe(409);
+    expect(fakeClientState.calls).toHaveLength(0);
+  });
+});

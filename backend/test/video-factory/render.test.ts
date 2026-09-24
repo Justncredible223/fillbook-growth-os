@@ -132,6 +132,76 @@ describe("buildFfmpegArgs hook treatment", () => {
   });
 });
 
+describe("buildFfmpegArgs with a verified recording (clipTimeRangeSeconds/sourceCrop/privacyMasks)", () => {
+  const recordingPlan: RenderPlan = {
+    ...plan,
+    scenes: [
+      {
+        kind: "product",
+        label: "",
+        durationSeconds: 3,
+        backgroundColor: "0x05070a",
+        clipPath: "C:\\out\\draft-1\\recording.webm",
+        clipTimeRangeSeconds: { start: 3, end: 6.5 },
+        sourceCrop: { x: 240, y: 390, w: 800, h: 140 },
+        privacyMasks: [{ x: 0, y: 1370, w: 240, h: 30 }],
+      },
+      { kind: "explanation", label: "", durationSeconds: 5, backgroundColor: "0x05070a" },
+    ],
+  };
+
+  it("trims the clip to its declared range and plays it once -- never -stream_loop", () => {
+    const args = buildFfmpegArgs(recordingPlan);
+    const joined = args.join(" ");
+    expect(joined).toContain("-ss 3.000 -to 6.400 -i recording.webm"); // 3.4s = scene's 3s + 0.4s transition padding
+    expect(joined).not.toContain("-stream_loop -1 -t 3");
+  });
+
+  it("throws instead of looping when the declared range is shorter than the scene (plus transition padding) needs", () => {
+    const tooShort: RenderPlan = {
+      ...recordingPlan,
+      scenes: [{ ...recordingPlan.scenes[0]!, clipTimeRangeSeconds: { start: 3, end: 5.9 } }, recordingPlan.scenes[1]!],
+    };
+    expect(() => buildFfmpegArgs(tooShort)).toThrow(/Refusing to loop a real recording/);
+  });
+
+  it("crops to the source rectangle, masks a privacy region inside it, and fits (never zoom-crops) the whole crop into the SAME dark banded window the UI-screenshot path reserves -- never the caption/scene-label bands", () => {
+    const filter = buildFfmpegArgs(recordingPlan)[buildFfmpegArgs(recordingPlan).indexOf("-filter_complex") + 1]!;
+    expect(filter).toContain("[0:v]crop=800:140:240:390,scale=1080:-2,format=gbrp,geq=");
+    expect(filter).toContain(
+      ",format=yuv420p,pad=1080:'max(ih,1170)':0:'(oh-ih)/2':color=0x060a0d,crop=1080:1170:0:'(in_h-1170)/2',pad=1080:1920:0:230:color=0x060a0d,fps=30,setsar=1:1,setpts=PTS-STARTPTS[sv0]",
+    );
+  });
+
+  it("feathers a verified crop's outer edges into the page background instead of leaving a hard rectangle", () => {
+    const filter = buildFfmpegArgs(recordingPlan)[buildFfmpegArgs(recordingPlan).indexOf("-filter_complex") + 1]!;
+    expect(filter).toContain("r='6+(r(X,Y)-6)*min(1,min(min(X,W-1-X),min(Y,H-1-Y))/28)'");
+  });
+
+  it("a mask entirely outside the source crop is not drawn (nothing left to hide once cropped out)", () => {
+    const filter = buildFfmpegArgs(recordingPlan)[buildFfmpegArgs(recordingPlan).indexOf("-filter_complex") + 1]!;
+    expect(filter).not.toContain("drawbox");
+  });
+
+  it("a mask overlapping the source crop IS drawn, translated into the crop's own coordinates", () => {
+    const withOverlappingMask: RenderPlan = {
+      ...recordingPlan,
+      scenes: [{ ...recordingPlan.scenes[0]!, privacyMasks: [{ x: 260, y: 400, w: 50, h: 20 }] }, recordingPlan.scenes[1]!],
+    };
+    const filter = buildFfmpegArgs(withOverlappingMask)[buildFfmpegArgs(withOverlappingMask).indexOf("-filter_complex") + 1]!;
+    // mask x:260,y:400 minus crop origin x:240,y:390 -> drawn at 20,10 in the cropped frame's own coordinates.
+    expect(filter).toContain("drawbox=x=20:y=10:w=50:h=20:color=black:t=fill");
+  });
+
+  it("an ordinary stock clip (no clipTimeRangeSeconds) keeps the existing loop/fill-canvas behavior unchanged", () => {
+    const stockPlan: RenderPlan = { ...plan, scenes: [{ kind: "explanation", label: "", durationSeconds: 5, backgroundColor: "0x05070a", clipPath: "C:\\a\\stock.mp4" }, plan.scenes[1]!] };
+    const args = buildFfmpegArgs(stockPlan);
+    const filter = args[args.indexOf("-filter_complex") + 1]!;
+    expect(args.join(" ")).toContain("-stream_loop -1 -t 5.400 -i stock.mp4");
+    expect(filter).toContain("[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,fps=30,setsar=1:1,setpts=PTS-STARTPTS[sv0]");
+  });
+});
+
 describe("buildFfmpegArgs music selection", () => {
   it("seeks into the chosen track and references it by basename", () => {
     const args = buildFfmpegArgs({ ...plan, musicFile: "C:\\assets\\music\\other-track.mp3", musicStartSeconds: 42.5 });

@@ -15,6 +15,7 @@ const validScript = {
   tiktokCaption: "Trailing drawdown explained.",
   hashtags: ["futurestrading", "propfirm"],
   disclosureCta: null,
+  motionScenePlan: null,
 };
 
 const validPackage: VideoScriptPackage = {
@@ -62,6 +63,24 @@ describe("validateVideoScript", () => {
   it("accepts a real disclosureCta string when present", () => {
     const withCta = { ...validScript, disclosureCta: "Example data shown for illustration only." };
     expect(validateVideoScript(withCta)).toEqual(withCta);
+  });
+
+  it("accepts a valid motionScenePlan reference and passes it through untouched", () => {
+    const withRef = { ...validScript, motionScenePlan: { scenePlanId: "pilot-2-balance-isnt-your-buffer", scenePlanHash: "a".repeat(64) } };
+    expect(validateVideoScript(withRef)).toEqual(withRef);
+  });
+
+  it("defaults motionScenePlan to null when omitted -- an ordinary script never accidentally carries a stale/undefined reference", () => {
+    const { motionScenePlan: _omit, ...withoutField } = validScript as typeof validScript & { motionScenePlan?: unknown };
+    expect(validateVideoScript(withoutField).motionScenePlan).toBeNull();
+  });
+
+  it("rejects a motionScenePlan missing scenePlanHash", () => {
+    expect(() => validateVideoScript({ ...validScript, motionScenePlan: { scenePlanId: "x" } })).toThrow(/motionScenePlan/);
+  });
+
+  it("rejects a motionScenePlan missing scenePlanId", () => {
+    expect(() => validateVideoScript({ ...validScript, motionScenePlan: { scenePlanHash: "a".repeat(64) } })).toThrow(/motionScenePlan/);
   });
 
   it("rejects a disclosureCta that is neither a non-empty string nor null", () => {

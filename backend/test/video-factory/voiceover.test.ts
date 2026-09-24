@@ -102,6 +102,42 @@ describe("generateVoiceover", () => {
     await expect(generateVoiceover("Hello.", dir, runner)).rejects.toThrow(/voice not found/);
   });
 
+  it("retries a transient edge-tts failure (NoAudioReceived) and succeeds without re-running anything but the TTS call", async () => {
+    const dir = tempDir();
+    let pythonCalls = 0;
+    const run = vi.fn(async (command: string, args: string[]) => {
+      if (command === "python3") {
+        pythonCalls++;
+        if (pythonCalls === 1) return { stdout: "", stderr: "edge_tts.exceptions.NoAudioReceived: No audio was received.", exitCode: 1 };
+        writeFileSync(args[args.indexOf("--out-words") + 1]!, SAMPLE_WORDS);
+        writeFileSync(args[args.indexOf("--out-media") + 1]!, "");
+        return { stdout: "", stderr: "", exitCode: 0 };
+      }
+      return { stdout: JSON.stringify({ format: { duration: "3.5" } }), stderr: "", exitCode: 0 };
+    });
+
+    const result = await generateVoiceover("Hello there.", dir, { run }, DEFAULT_VOICE, DEFAULT_RATE, [0, 0]);
+
+    expect(pythonCalls).toBe(2);
+    expect(result.durationSeconds).toBe(3.5);
+  });
+
+  it("gives up after the bounded number of retries on a persistent transient failure", async () => {
+    const dir = tempDir();
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "NoAudioReceived", exitCode: 1 });
+
+    await expect(generateVoiceover("Hello.", dir, { run }, DEFAULT_VOICE, DEFAULT_RATE, [0, 0])).rejects.toThrow(/NoAudioReceived/);
+    expect(run).toHaveBeenCalledTimes(3);
+  });
+
+  it("never retries a non-transient failure (e.g. a bad voice name)", async () => {
+    const dir = tempDir();
+    const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "voice not found", exitCode: 1 });
+
+    await expect(generateVoiceover("Hello.", dir, { run }, DEFAULT_VOICE, DEFAULT_RATE, [0, 0])).rejects.toThrow(/voice not found/);
+    expect(run).toHaveBeenCalledTimes(1);
+  });
+
   it("throws VideoFactoryError if the word-timing script reports success but never wrote the words file", async () => {
     const dir = tempDir();
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });

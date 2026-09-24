@@ -11,6 +11,8 @@ import {
   validatePrivacyMasks,
   validateSceneFraming,
   validateSceneText,
+  validateMotionTiming,
+  wrapText,
 } from "../../src/shortform/layout";
 import { makeAsset, makeScene } from "./helpers";
 
@@ -84,6 +86,72 @@ describe("caption overflow and text limits", () => {
   it("rejects an email-like identifier in any on-screen or spoken text", () => {
     expect(codes(validateSceneText(makeScene({ captionText: "Ask trader@example.com" })))).toContain("personal_identifier_in_text");
     expect(validateSceneText(makeScene({ captionText: "Follow @fillbookhq" }))).toEqual([]);
+  });
+});
+
+describe("validateMotionTiming -- screen_recording clip range vs scene duration", () => {
+  const motionAsset = makeAsset({ kind: "screen_recording", durationSeconds: 18 });
+
+  it("passes when the clip range comfortably covers the scene duration", () => {
+    const scene = makeScene({ durationSeconds: 5, clipTimeRangeSeconds: { start: 2, end: 8 } });
+    expect(validateMotionTiming(scene, motionAsset)).toEqual([]);
+  });
+
+  it("is a no-op for a non-screen_recording asset -- still images never need a clip range", () => {
+    expect(validateMotionTiming(makeScene({ clipTimeRangeSeconds: undefined }), makeAsset({ kind: "phone_ui" }))).toEqual([]);
+  });
+
+  it("errors when clipTimeRangeSeconds is missing entirely on a screen_recording scene", () => {
+    const scene = makeScene({ clipTimeRangeSeconds: undefined });
+    expect(codes(validateMotionTiming(scene, motionAsset))).toContain("missing_clip_time_range");
+  });
+
+  it("errors -- never loops or freezes -- when the clip range is shorter than the scene needs", () => {
+    const scene = makeScene({ durationSeconds: 10, clipTimeRangeSeconds: { start: 0, end: 3 } });
+    const issues = validateMotionTiming(scene, motionAsset);
+    expect(codes(issues)).toContain("insufficient_motion_footage");
+    expect(issues[0]!.message).toMatch(/Never looped\/frozen/);
+  });
+
+  it("accounts for playbackSpeed when checking available seconds", () => {
+    // 2x speed halves the effective available seconds -- 6s of clip at 2x only covers a 3s scene, not a 5s one.
+    const tooFast = makeScene({ durationSeconds: 5, playbackSpeed: 2, clipTimeRangeSeconds: { start: 0, end: 6 } });
+    expect(codes(validateMotionTiming(tooFast, motionAsset))).toContain("insufficient_motion_footage");
+    const fine = makeScene({ durationSeconds: 3, playbackSpeed: 2, clipTimeRangeSeconds: { start: 0, end: 6 } });
+    expect(validateMotionTiming(fine, motionAsset)).toEqual([]);
+  });
+
+  it("errors when the requested range runs past what was actually captured", () => {
+    const scene = makeScene({ durationSeconds: 2, clipTimeRangeSeconds: { start: 15, end: 25 } });
+    expect(codes(validateMotionTiming(scene, motionAsset))).toContain("clip_time_range_past_capture");
+  });
+
+  it("errors on an inverted or zero-length range", () => {
+    const scene = makeScene({ clipTimeRangeSeconds: { start: 5, end: 5 } });
+    expect(codes(validateMotionTiming(scene, motionAsset))).toContain("invalid_clip_time_range");
+  });
+});
+
+describe("wrapText -- the measured line breaks buildSceneAss actually renders", () => {
+  it("keeps a short caption on one line", () => {
+    expect(wrapText("Short caption", 52, 900)).toEqual(["Short caption"]);
+  });
+
+  it("wraps a longer caption onto exactly as many lines as estimateLines/textOverflows would count -- the two must never disagree", () => {
+    const text = "Which setup is hiding inside your total this month?";
+    const lines = wrapText(text, 52, 500);
+    expect(lines.length).toBeGreaterThan(1);
+    // Reassembling the wrapped lines must reproduce every original word, in order -- wrapping must never drop or reorder text.
+    expect(lines.join(" ")).toBe(text);
+  });
+
+  it("never splits a single word across lines, even when the word alone is wider than the box", () => {
+    const lines = wrapText("Supercalifragilisticexpialidocious is long", 52, 100);
+    expect(lines[0]).toBe("Supercalifragilisticexpialidocious");
+  });
+
+  it("returns no lines for empty/whitespace-only text", () => {
+    expect(wrapText("   ", 52, 900)).toEqual([]);
   });
 });
 

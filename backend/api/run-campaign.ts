@@ -7,6 +7,8 @@ import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 import { isPlausiblyTradingRelated } from "../src/prospecting/prospectingRelevance.js";
 import { validateVideoTopicShape, manualVideoTopicTitle, manualVideoTopicOpportunityInput } from "../src/opportunities/manualVideoTopic.js";
 import { validateResearchTopicShape, manualResearchTopicTitle, manualResearchTopicOpportunityInput } from "../src/opportunities/manualResearchTopic.js";
+import { manualMotionConceptTitle, manualMotionConceptOpportunityInput } from "../src/opportunities/manualMotionConcept.js";
+import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
 
 /** The only asset-type overrides this endpoint will ever accept from a caller -- see the `assetType` handling below for why this is validated as an exact-match allowlist, never passed through freely. */
 export const ALLOWED_ASSET_TYPE_OVERRIDES = ["video_script", "research"] as const;
@@ -88,6 +90,15 @@ export function isAllowedAssetTypeOverride(value: unknown): value is AllowedAsse
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res)) return;
+  // GET: the fixed, small catalog of concepts that have verified product
+  // motion (see motionCatalog.ts's listMotionConcepts) -- read-only, no
+  // paused/budget gate needed since it costs nothing and changes nothing.
+  // The Android "Create Fillbook Video" picker calls this to show which
+  // concepts get real recordings vs. the free-text custom-topic fallback.
+  if (req.method === "GET") {
+    res.status(200).json({ motionConcepts: listMotionConcepts() });
+    return;
+  }
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
@@ -102,9 +113,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const body = req.body as { opportunityId?: string; topic?: unknown; assetType?: unknown } | undefined;
+    const body = req.body as { opportunityId?: string; topic?: unknown; assetType?: unknown; motionConceptId?: unknown } | undefined;
     const opportunityId = body?.opportunityId;
     const rawTopic = body?.topic;
+    const rawMotionConceptId = body?.motionConceptId;
+
+    if (rawMotionConceptId !== undefined) {
+      if (typeof rawMotionConceptId !== "string" || !rawMotionConceptId) {
+        res.status(400).json({ error: "motionConceptId, if provided, must be a non-empty string." });
+        return;
+      }
+      if (opportunityId || rawTopic !== undefined) {
+        res.status(400).json({ error: "Provide only one of motionConceptId, topic, or opportunityId." });
+        return;
+      }
+      const concept = listMotionConcepts().find((c) => c.id === rawMotionConceptId);
+      if (!concept) {
+        res.status(400).json({
+          error: `Unknown motionConceptId "${rawMotionConceptId}". Known concepts: ${listMotionConcepts().map((c) => c.id).join(", ")}.`,
+        });
+        return;
+      }
+
+      const opportunityRepo: OpportunityRepository = new SupabaseOpportunityRepository(client);
+      const canonicalTitle = manualMotionConceptTitle(concept);
+      const { data: existingDup, error: dupError } = await client
+        .from("opportunities")
+        .select("id, status")
+        .ilike("title", canonicalTitle)
+        .limit(1);
+      if (dupError) throw new Error(`Duplicate-concept check failed: ${dupError.message}`);
+
+      let motionOpportunity: Awaited<ReturnType<typeof opportunityRepo.listOpen>>[number] | undefined;
+      if (existingDup && existingDup.length > 0 && existingDup[0]!.status === "open") {
+        // Still open = stuck draft (failed a prior quality gate, e.g. the plan's own
+        // evidence validation, or the review gate). Re-run the exact same request.
+        const openList = await opportunityRepo.listOpen();
+        motionOpportunity = openList.find((o) => o.id === existingDup[0]!.id);
+      }
+      if (!motionOpportunity) {
+        motionOpportunity = await opportunityRepo.insert(manualMotionConceptOpportunityInput(concept));
+      }
+
+      const { data: enqueueRows, error: enqueueError } = await client.rpc("enqueue_campaign_run", {
+        p_opportunity_id: motionOpportunity.id,
+        p_asset_type_override: "video_script",
+      });
+      if (enqueueError) throw new Error(`enqueue_campaign_run failed: ${enqueueError.message}`);
+      const enqueued = (enqueueRows as Array<{ campaign_run_request_id: string; job_id: string | null; already_existed: boolean }>)[0]!;
+      res.status(200).json({ status: "queued", campaignRunRequestId: enqueued.campaign_run_request_id, opportunityId: motionOpportunity.id });
+      return;
+    }
 
     let assetTypeOverride: AllowedAssetTypeOverride | undefined;
     if (body?.assetType !== undefined) {

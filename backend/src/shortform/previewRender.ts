@@ -1,4 +1,4 @@
-import { CANVAS, DEFAULT_FONT, fitCrop, layoutBoxes, safeRect } from "./layout.js";
+import { CANVAS, DEFAULT_FONT, fitCrop, layoutBoxes, safeRect, wrapText } from "./layout.js";
 import type { Platform, Rect, SceneSpec, VerifiedAsset } from "./types.js";
 
 /**
@@ -110,10 +110,15 @@ export function buildSceneAss(scene: SceneSpec, options: AssOptions): string {
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
   ];
   const ev = (styleName: string, text: string, extra = "") => lines.push(`Dialogue: 0,0:00:00.00,${end},${styleName},,0,0,0,,${extra}${assEscape(text)}`);
+  // Wrapped here, once, by the SAME measurement validateSceneText checks
+  // against (layout.ts's wrapText) -- explicit "\n" line breaks (assEscape
+  // turns those into ASS's "\N"), not ASS's own WrapStyle auto-wrap, so
+  // what a human sees always matches what was validated as fitting.
+  const wrapped = (text: string, fontPx: number, boxWidth: number) => wrapText(text, fontPx, boxWidth).join("\n");
 
-  if (scene.headline.trim()) ev("Headline", scene.headline);
-  if (scene.captionText.trim()) ev("Caption", scene.captionText);
-  if (scene.disclosure?.trim()) ev("Disclosure", scene.disclosure);
+  if (scene.headline.trim()) ev("Headline", wrapped(scene.headline, hFont, boxes.headline.w));
+  if (scene.captionText.trim()) ev("Caption", wrapped(scene.captionText, cFont, boxes.caption.w));
+  if (scene.disclosure?.trim()) ev("Disclosure", wrapped(scene.disclosure, DEFAULT_FONT.disclosure, boxes.disclosure.w));
   if (scene.cta?.trim()) ev("Cta", scene.cta, `{\\pos(${Math.round(boxes.media.x + boxes.media.w / 2)},${mediaCenterY})}`);
   if (options.missingAssetId) {
     ev("Missing", `MISSING ASSET\n${options.missingAssetId}\nnot captured yet`, `{\\pos(${Math.round(boxes.media.x + boxes.media.w / 2)},${mediaCenterY})}`);
