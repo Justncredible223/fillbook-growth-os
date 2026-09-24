@@ -65,6 +65,12 @@ object AppConfig {
     fun buildRepository(): NetworkGrowthOsRepository =
         NetworkGrowthOsRepository(BASE_URL, PROTECTION_BYPASS_SECRET, APP_TOKEN, DECIDER_NAME)
 
+    /** Must be listed under Supabase Auth -> URL Configuration -> Redirect URLs, or Google sign-in lands on the website instead. */
+    const val OAUTH_REDIRECT_URI = "com.fillbook.growthos://auth-callback"
+
+    fun buildSupabaseAuthClient(context: android.content.Context): SupabaseAuthClient =
+        SupabaseAuthClient(SUPABASE_URL, SUPABASE_ANON_KEY, context)
+
     fun buildFillbookAdminRepository(context: android.content.Context): FillbookAdminRepository =
-        NetworkFillbookAdminRepository(FILLBOOK_BASE_URL, SupabaseAuthClient(SUPABASE_URL, SUPABASE_ANON_KEY, context))
+        NetworkFillbookAdminRepository(FILLBOOK_BASE_URL, buildSupabaseAuthClient(context))
 }

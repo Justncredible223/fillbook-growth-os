@@ -80,7 +80,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.lifecycleScope
 import com.fillbook.growthos.data.CrashReporter
+import com.fillbook.growthos.data.FillbookAuthEvents
+import kotlinx.coroutines.launch
 import com.fillbook.growthos.data.NetworkGrowthOsRepository
 import com.fillbook.growthos.ui.screens.AnalyticsScreen
 import com.fillbook.growthos.ui.screens.FillbookStatsScreen
@@ -199,6 +202,8 @@ class MainActivity : FragmentActivity() {
         // already-running-process case, since a singleTop/singleTask
         // launch never re-runs onCreate.
         pendingDeepLinkRoute.value = intent?.let { VideoNotifications.deepLinkRouteFor(it) }
+        // Only on a fresh launch: a recreated activity still carries the old intent, and an OAuth code is single-use.
+        if (savedInstanceState == null) intent?.let { handleOAuthCallback(it) }
         setContent {
             FillbookGrowthOSTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
@@ -213,6 +218,28 @@ class MainActivity : FragmentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingDeepLinkRoute.value = VideoNotifications.deepLinkRouteFor(intent)
+        handleOAuthCallback(intent)
+    }
+
+    private fun handleOAuthCallback(intent: android.content.Intent) {
+        if (intent.action != AuthCallbackActivity.ACTION_OAUTH_CALLBACK) return
+        val data = intent.data
+        setIntent(android.content.Intent(this, MainActivity::class.java))
+        pendingDeepLinkRoute.value = "fillbook_stats"
+        val code = data?.getQueryParameter("code")
+        if (code == null) {
+            val reason = data?.getQueryParameter("error_description") ?: data?.getQueryParameter("error") ?: "no sign-in code was returned"
+            FillbookAuthEvents.publish(false, "Google sign-in failed: $reason.")
+            return
+        }
+        lifecycleScope.launch {
+            try {
+                AppConfig.buildSupabaseAuthClient(this@MainActivity).completeOAuthSignIn(code)
+                FillbookAuthEvents.publish(true, null)
+            } catch (e: Exception) {
+                FillbookAuthEvents.publish(false, e.message ?: "Google sign-in failed.")
+            }
+        }
     }
 
     private val pendingDeepLinkRoute = mutableStateOf<String?>(null)
