@@ -109,6 +109,36 @@ export function textOverflows(text: string, fontPx: number, box: Rect): boolean 
   return wordTooWide || lines * fontPx * LINE_HEIGHT_EM > box.h;
 }
 
+/**
+ * Same measurement as estimateLines, but returns the actual wrapped lines
+ * instead of just a count -- so a caption's REAL line breaks are chosen
+ * here, once, by the same measurement validateSceneText checks against,
+ * rather than left to ASS's own WrapStyle auto-wrap (which uses its own
+ * font-metric guess and can legitimately disagree with this estimate,
+ * meaning a caption that "passed" validation could still wrap differently
+ * -- or overflow -- on screen). Never shrinks the font to make text fit;
+ * that is a scene-authoring decision (see this task's own instruction not
+ * to solve overflow by shrinking), not something a renderer does silently.
+ */
+export function wrapText(text: string, fontPx: number, boxWidth: number): string[] {
+  const charW = fontPx * CHAR_WIDTH_EM;
+  const maxChars = Math.max(1, Math.floor(boxWidth / charW));
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (current === "") current = word;
+    else if (current.length + 1 + word.length <= maxChars) current += ` ${word}`;
+    else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
 export function aspectValue(aspect: AspectRatio): number | null {
   if (aspect === "9:16") return 9 / 16;
   if (aspect === "4:5") return 4 / 5;
@@ -234,6 +264,47 @@ export function validateSceneText(scene: SceneSpec): PlanIssue[] {
     ["cta", scene.cta ?? ""],
   ] as const) {
     if (EMAIL_RE.test(text) && !text.toLowerCase().includes("@fillbookhq")) add("error", "personal_identifier_in_text", `The scene ${field} contains an email-like identifier.`);
+  }
+  return issues;
+}
+
+/**
+ * A `screen_recording` scene's clip range (divided by its playback speed)
+ * must actually cover the scene's on-screen durationSeconds -- explicitly
+ * an error, never silently patched by looping or freezing the last frame
+ * to fill the gap (see this task's own instruction). Also checks the
+ * requested range doesn't run past what was actually captured.
+ */
+export function validateMotionTiming(scene: SceneSpec, asset: VerifiedAsset): PlanIssue[] {
+  const issues: PlanIssue[] = [];
+  const add = (code: string, message: string) => issues.push({ severity: "error", code, sceneId: scene.sceneId, message });
+
+  if (asset.kind !== "screen_recording") return issues;
+  if (!scene.clipTimeRangeSeconds) {
+    add("missing_clip_time_range", "A screen_recording scene must set clipTimeRangeSeconds (which part of the captured clip it uses).");
+    return issues;
+  }
+  const { start, end } = scene.clipTimeRangeSeconds;
+  if (!(end > start)) {
+    add("invalid_clip_time_range", `clipTimeRangeSeconds end (${end}) must be after start (${start}).`);
+    return issues;
+  }
+  if (asset.durationSeconds !== undefined && end > asset.durationSeconds + 0.05) {
+    add("clip_time_range_past_capture", `clipTimeRangeSeconds end (${end}s) is past the captured clip's own duration (${asset.durationSeconds}s).`);
+  }
+  const speed = scene.playbackSpeed ?? 1;
+  if (!(speed > 0)) {
+    add("invalid_playback_speed", `playbackSpeed must be a positive number, got ${speed}.`);
+    return issues;
+  }
+  const availableSeconds = (end - start) / speed;
+  // Small tolerance for floating-point scene-duration authoring, not a loophole for genuinely short footage.
+  if (availableSeconds < scene.durationSeconds - 0.05) {
+    add(
+      "insufficient_motion_footage",
+      `Scene needs ${scene.durationSeconds.toFixed(1)}s but the clip range (${start}s-${end}s at ${speed}x) only provides ${availableSeconds.toFixed(1)}s -- ` +
+        `re-capture a longer range, slow durationSeconds down to match, or fall back to a still image. Never looped/frozen to fill the gap.`,
+    );
   }
   return issues;
 }

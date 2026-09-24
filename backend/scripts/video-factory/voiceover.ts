@@ -44,6 +44,10 @@ export interface VoiceoverResult {
   durationSeconds: number;
 }
 
+/** Network-side edge-tts failures seen in practice (e.g. "NoAudioReceived" that then succeeds on the next try). */
+const TRANSIENT_TTS_ERROR = /NoAudioReceived|WebSocket|ClientConnector|ServerDisconnected|TimeoutError|timed out|Connection reset|\b50[234]\b/i;
+export const TTS_RETRY_DELAYS_MS: readonly number[] = [2000, 5000];
+
 const WORD_TIMING_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "edge_tts_words.py");
 
 /**
@@ -94,25 +98,20 @@ export async function generateVoiceover(
   runner: ProcessRunner,
   voice: string = DEFAULT_VOICE,
   rate: string = DEFAULT_RATE,
+  retryDelaysMs: readonly number[] = TTS_RETRY_DELAYS_MS,
 ): Promise<VoiceoverResult> {
   const scriptPath = join(outDir, "script.txt");
   const mp3Path = join(outDir, "voiceover.mp3");
   const wordsPath = join(outDir, "voiceover.words.json");
   writeFileSync(scriptPath, respellFillbookForTts(scriptText), "utf-8");
 
-  const result = await runner.run("python3", [
-    WORD_TIMING_SCRIPT,
-    "--voice",
-    voice,
-    "--rate",
-    rate,
-    "--file",
-    scriptPath,
-    "--out-media",
-    mp3Path,
-    "--out-words",
-    wordsPath,
-  ]);
+  const args = [WORD_TIMING_SCRIPT, "--voice", voice, "--rate", rate, "--file", scriptPath, "--out-media", mp3Path, "--out-words", wordsPath];
+  let result = await runner.run("python3", args);
+  // Only this subprocess is retried, inside the same render job: no campaign regeneration, review, upload or approval repeats.
+  for (let attempt = 0; result.exitCode !== 0 && attempt < retryDelaysMs.length && TRANSIENT_TTS_ERROR.test(`${result.stderr}\n${result.stdout}`); attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, retryDelaysMs[attempt]));
+    result = await runner.run("python3", args);
+  }
   if (result.exitCode !== 0) {
     throw new VideoFactoryError(`edge-tts word-timing script failed (exit ${result.exitCode}): ${result.stderr || result.stdout}`);
   }

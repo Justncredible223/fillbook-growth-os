@@ -6,8 +6,12 @@ import { BrandConstitution } from "../src/knowledge/brandConstitution";
 import { InMemoryBrandConstitutionRepository } from "../src/knowledge/inMemoryRepositories";
 import { InMemoryContentScoreRepository } from "../src/content/contentScoreRepository";
 import { runCampaignPipeline, type CampaignRepository } from "../src/content/campaignPipeline";
+import { assetTypeForManualRequest } from "../src/content/runCampaignForOpportunity";
 import type { BrandRule } from "../src/knowledge/types";
 import type { AssetStage } from "../src/content/campaignFactory";
+import { PILOT_2 } from "../src/shortform/pilots";
+import { computeScenePlanHash } from "../src/shortform/scenePlan";
+import { MOTION_CONCEPT_REF_PREFIX, resolveMotionScenePlan } from "../scripts/video-factory/motionCatalog";
 
 const rules: BrandRule[] = [
   {
@@ -369,5 +373,121 @@ describe("runCampaignPipeline", () => {
       const body = JSON.parse(call[1]!.body as string);
       expect(body.messages[0].content).not.toContain("REPLY");
     }
+  });
+
+  describe("motion-backed concept requests (2026-09-23)", () => {
+    it("builds the video script DIRECTLY from the verified ScenePlan (no drafting LLM call) when the opportunity's rationale carries a motion-concept reference, and the stored videoScript resolves correctly at render time", async () => {
+      // No draftResponse mocked at all -- only verdicts. If campaignPipeline
+      // called draftVideoScript (the LLM path) instead of
+      // buildVideoScriptFromScenePlan, the first fetch would hit this
+      // verdict-shaped mock as if it were a draft response and fail loudly,
+      // proving this path genuinely skips the LLM drafting call.
+      const fetchMock = vi.fn().mockResolvedValue(verdictResponse(true));
+      const client = new LlmClient("test-key", fetchMock);
+      const campaignRepo = new InMemoryCampaignRepository();
+      const scoreRepo = new InMemoryContentScoreRepository();
+      const motionOpportunity = {
+        ...opportunity,
+        title: "Motion concept request: Balance isn't your buffer.",
+        rationale: `Owner-requested motion-backed video concept, entered directly in the app: "Balance isn't your buffer.". ${MOTION_CONCEPT_REF_PREFIX}${PILOT_2.planId}`,
+      };
+
+      const result = await runCampaignPipeline(client, buildFactory(), scoreRepo, campaignRepo, motionOpportunity, {
+        ...context,
+        assetTypeOverride: "video_script",
+      });
+
+      expect(result.finalStage).toBe("ready_for_owner");
+      expect(campaignRepo.assets.find((a) => a.id === result.campaignAssetId)?.assetType).toBe("video_script");
+      expect(result.draftText).toContain(PILOT_2.hook);
+
+      const version = campaignRepo.versions.find((v) => v.campaignAssetId === result.campaignAssetId);
+      const storedVideoScript = version?.metadata.videoScript as
+        | { hook: string; script: string; motionScenePlan?: { scenePlanId: string; scenePlanHash: string } | null }
+        | undefined;
+      expect(storedVideoScript?.hook).toBe(PILOT_2.hook);
+      expect(storedVideoScript?.motionScenePlan?.scenePlanId).toBe(PILOT_2.planId);
+      expect(storedVideoScript?.motionScenePlan?.scenePlanHash).toBe(computeScenePlanHash(PILOT_2));
+
+      // The generation-to-render chain, end to end: what got stored resolves
+      // to exactly PILOT_2, using ONLY the explicit reference -- never the
+      // (also-matching, but that's not why it resolves) hook text alone.
+      const resolved = resolveMotionScenePlan(storedVideoScript!);
+      expect(resolved.plan?.planId).toBe(PILOT_2.planId);
+    });
+
+    it("a motion-concept opportunity re-run WITHOUT an explicit assetTypeOverride (Radar re-run / daily auto-draft) is still labeled video_script, so approving it actually queues a render", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(verdictResponse(true));
+      const client = new LlmClient("test-key", fetchMock);
+      const campaignRepo = new InMemoryCampaignRepository();
+      const scoreRepo = new InMemoryContentScoreRepository();
+      const motionOpportunity = {
+        ...opportunity,
+        recommendedChannels: [] as string[],
+        title: "Motion concept request: Balance isn't your buffer.",
+        rationale: `Owner-requested motion-backed video concept, entered directly in the app: "Balance isn't your buffer.". ${MOTION_CONCEPT_REF_PREFIX}${PILOT_2.planId}`,
+      };
+
+      // No assetTypeOverride at all -- as when auto-draft or a plain Radar run picks it up.
+      const result = await runCampaignPipeline(client, buildFactory(), scoreRepo, campaignRepo, motionOpportunity, context);
+
+      expect(campaignRepo.assets.find((a) => a.id === result.campaignAssetId)?.assetType).toBe("video_script");
+      const version = campaignRepo.versions.find((v) => v.campaignAssetId === result.campaignAssetId);
+      expect((version?.metadata.videoScript as { motionScenePlan?: { scenePlanId: string } } | undefined)?.motionScenePlan?.scenePlanId).toBe(PILOT_2.planId);
+    });
+
+    it("assetTypeForManualRequest treats a motion-concept title as a video request (runCampaignForOpportunity's own fallback)", () => {
+      expect(assetTypeForManualRequest("Motion concept request: Balance isn't your buffer.")).toBe("video_script");
+      expect(assetTypeForManualRequest("Video request: some topic")).toBe("video_script");
+      expect(assetTypeForManualRequest("Trailing drawdown rules confuse traders")).toBeUndefined();
+    });
+
+    it("an ordinary CUSTOM-TOPIC opportunity whose owner-typed text happens to literally contain a MOTION_CONCEPT_REF marker does NOT activate motion mode -- title prefix, not rationale text alone, gates it", async () => {
+      // manualVideoTopicOpportunityInput embeds the owner's own typed text
+      // verbatim inside `rationale` -- if the owner typed (or pasted) a
+      // topic that happened to contain the literal marker string, the
+      // rationale substring match alone would wrongly activate motion
+      // mode. The title always carries "Video request: " for this flow
+      // (manualVideoTopicTitle), never "Motion concept request: ", so this
+      // must still draft a normal LLM video script.
+      const fetchMock = vi.fn().mockResolvedValueOnce(videoScriptResponse()).mockResolvedValue(verdictResponse(true));
+      const client = new LlmClient("test-key", fetchMock);
+      const campaignRepo = new InMemoryCampaignRepository();
+      const scoreRepo = new InMemoryContentScoreRepository();
+      const trickyOpportunity = {
+        ...opportunity,
+        title: "Video request: some topic",
+        rationale: `Owner-requested video topic, entered directly in the app: "some topic mentioning ${MOTION_CONCEPT_REF_PREFIX}${PILOT_2.planId} by coincidence"`,
+      };
+
+      const result = await runCampaignPipeline(client, buildFactory(), scoreRepo, campaignRepo, trickyOpportunity, {
+        ...context,
+        assetTypeOverride: "video_script",
+      });
+
+      // Drafted via the normal LLM path (videoScriptResponse's own fixed hook), not PILOT_2's.
+      expect(result.draftText).toContain("Trailing drawdown can pull a funded account while winning.");
+      const version = campaignRepo.versions.find((v) => v.campaignAssetId === result.campaignAssetId);
+      const storedVideoScript = version?.metadata.videoScript as { motionScenePlan?: unknown } | undefined;
+      expect(storedVideoScript?.motionScenePlan).toBeUndefined();
+    });
+
+    it("refuses to draft (never falls back to the LLM, never renders) when the motion concept id is unknown", async () => {
+      const fetchMock = vi.fn();
+      const client = new LlmClient("test-key", fetchMock);
+      const campaignRepo = new InMemoryCampaignRepository();
+      const scoreRepo = new InMemoryContentScoreRepository();
+      const badOpportunity = {
+        ...opportunity,
+        title: "Motion concept request: some unknown concept",
+        rationale: `${MOTION_CONCEPT_REF_PREFIX}pilot-does-not-exist`,
+      };
+
+      await expect(
+        runCampaignPipeline(client, buildFactory(), scoreRepo, campaignRepo, badOpportunity, { ...context, assetTypeOverride: "video_script" }),
+      ).rejects.toThrow(/not a known verified ScenePlan/);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(campaignRepo.assets).toHaveLength(0);
+    });
   });
 });

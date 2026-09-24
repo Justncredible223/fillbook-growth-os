@@ -150,6 +150,15 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     var selectedOpportunityId by rememberSaveable { mutableStateOf<String?>(null) }
     var eligibleOpportunities by remember { mutableStateOf<List<Opportunity>>(emptyList()) }
     var loadingOpportunities by remember { mutableStateOf(false) }
+    // Third mode alongside custom-topic/existing-opportunity: a small, fixed
+    // list of concepts that have REAL verified product-motion footage (see
+    // backend's motionCatalog.ts) instead of stock footage/screenshots.
+    // Mutually exclusive with the other two -- selecting this clears
+    // useExistingOpportunity, and vice versa (see the RadioButtons below).
+    var useMotionConcept by rememberSaveable { mutableStateOf(false) }
+    var selectedMotionConceptId by rememberSaveable { mutableStateOf<String?>(null) }
+    var motionConcepts by remember { mutableStateOf<List<com.fillbook.growthos.data.MotionConcept>>(emptyList()) }
+    var loadingMotionConcepts by remember { mutableStateOf(false) }
     // Doubles as both the busy/spinner state AND the duplicate-tap guard --
     // a rapid double-tap on Confirm can't fire two requests since the
     // button is disabled the instant the first tap sets this true.
@@ -390,6 +399,18 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
         }
     }
 
+    fun loadMotionConcepts() {
+        scope.launch {
+            loadingMotionConcepts = true
+            motionConcepts = try {
+                repo.getMotionConcepts()
+            } catch (e: Exception) {
+                emptyList()
+            }
+            loadingMotionConcepts = false
+        }
+    }
+
     fun requestVideoScript() {
         // Duplicate-tap guard: the Confirm button is also disabled while
         // this is true, but a second tap can still land in the same frame
@@ -397,12 +418,14 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
         if (creatingVideoScript) return
         val topic = videoTopicInput.trim()
         val opportunityId = selectedOpportunityId
+        val motionConceptId = selectedMotionConceptId
         scope.launch {
             creatingVideoScript = true
             try {
                 val result = repo.requestVideoScript(
-                    topic = if (!useExistingOpportunity) topic else null,
+                    topic = if (!useExistingOpportunity && !useMotionConcept) topic else null,
                     opportunityId = if (useExistingOpportunity) opportunityId else null,
+                    motionConceptId = if (useMotionConcept) motionConceptId else null,
                 )
                 createVideoResultMessage = if (result.finalStage == "ready_for_owner") {
                     "Video script sent to Approvals for your review."
@@ -414,7 +437,9 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                 showCreateVideoDialog = false
                 videoTopicInput = ""
                 selectedOpportunityId = null
+                selectedMotionConceptId = null
                 useExistingOpportunity = false
+                useMotionConcept = false
                 refresh()
             } catch (e: com.fillbook.growthos.data.NetworkException) {
                 createVideoResultMessage = extractVideoScriptRequestErrorMessage(e.httpCode, e.message)
@@ -445,7 +470,9 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                     onClick = {
                         videoTopicInput = ""
                         selectedOpportunityId = null
+                        selectedMotionConceptId = null
                         useExistingOpportunity = false
+                        useMotionConcept = false
                         showCreateVideoDialog = true
                     },
                 )
@@ -536,17 +563,75 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     }
 
     if (showCreateVideoDialog) {
-        val canContinue = if (useExistingOpportunity) selectedOpportunityId != null else videoTopicInput.trim().length >= 3
+        val canContinue = when {
+            useMotionConcept -> selectedMotionConceptId != null
+            useExistingOpportunity -> selectedOpportunityId != null
+            else -> videoTopicInput.trim().length >= 3
+        }
         AlertDialog(
             onDismissRequest = { showCreateVideoDialog = false },
             title = { Text("Create Fillbook Video") },
             text = {
                 Column {
+                    // Verified motion concept -- listed FIRST and clearly
+                    // labeled as the one option that gets a real, verified
+                    // product recording, so the owner never assumes a custom
+                    // topic below will get the same treatment (it uses stock
+                    // footage/screenshots, same as before this existed).
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(selected = !useExistingOpportunity, onClick = { useExistingOpportunity = false })
+                        RadioButton(
+                            selected = useMotionConcept,
+                            onClick = {
+                                useMotionConcept = true
+                                useExistingOpportunity = false
+                                if (motionConcepts.isEmpty() && !loadingMotionConcepts) loadMotionConcepts()
+                            },
+                        )
+                        Text("Verified motion concept", style = MaterialTheme.typography.bodyMedium)
+                    }
+                    if (useMotionConcept) {
+                        Text(
+                            "Uses a REAL recorded Fillbook product interaction, not stock footage.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextTertiary,
+                            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
+                        )
+                        if (loadingMotionConcepts) {
+                            CircularProgressIndicator(modifier = Modifier.height(18.dp))
+                        } else if (motionConcepts.isEmpty()) {
+                            Text("No verified motion concepts available right now.", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+                        } else {
+                            LazyColumn(modifier = Modifier.fillMaxWidth().height(140.dp)) {
+                                items(motionConcepts, key = { it.id }) { concept ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        RadioButton(
+                                            selected = selectedMotionConceptId == concept.id,
+                                            onClick = { selectedMotionConceptId = concept.id },
+                                        )
+                                        Column {
+                                            Text(concept.title, style = MaterialTheme.typography.bodySmall)
+                                            Text(concept.topic, style = MaterialTheme.typography.labelSmall, color = TextTertiary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = !useExistingOpportunity && !useMotionConcept, onClick = { useExistingOpportunity = false; useMotionConcept = false })
                         Text("Custom topic", style = MaterialTheme.typography.bodyMedium)
                     }
-                    if (!useExistingOpportunity) {
+                    if (!useExistingOpportunity && !useMotionConcept) {
+                        Text(
+                            "Uses stock footage/app screenshots, not a custom recording of this exact topic.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = TextTertiary,
+                            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
+                        )
                         Text(
                             "This week's topics — tap to use:",
                             style = MaterialTheme.typography.labelMedium,
@@ -584,6 +669,7 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                             selected = useExistingOpportunity,
                             onClick = {
                                 useExistingOpportunity = true
+                                useMotionConcept = false
                                 if (eligibleOpportunities.isEmpty() && !loadingOpportunities) loadEligibleOpportunities()
                             },
                         )
@@ -628,10 +714,10 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     }
 
     if (showVideoConfirmDialog) {
-        val topicSummary = if (useExistingOpportunity) {
-            eligibleOpportunities.firstOrNull { it.id == selectedOpportunityId }?.title ?: "the selected opportunity"
-        } else {
-            "\"${videoTopicInput.trim()}\""
+        val topicSummary = when {
+            useMotionConcept -> motionConcepts.firstOrNull { it.id == selectedMotionConceptId }?.title ?: "the selected motion concept"
+            useExistingOpportunity -> eligibleOpportunities.firstOrNull { it.id == selectedOpportunityId }?.title ?: "the selected opportunity"
+            else -> "\"${videoTopicInput.trim()}\""
         }
         AlertDialog(
             onDismissRequest = { if (!creatingVideoScript) showVideoConfirmDialog = false },
@@ -643,6 +729,9 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(8.dp))
+                    if (useMotionConcept) {
+                        Text("• It will use a REAL recorded Fillbook product interaction, not stock footage.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                    }
                     Text("• It will render on the video worker once approved.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     Text("• It will NOT post anywhere automatically.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     Text("• It lands in Approvals first -- approving it there is what starts the render.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)

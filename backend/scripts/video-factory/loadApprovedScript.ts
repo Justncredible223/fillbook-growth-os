@@ -36,6 +36,15 @@ export function validateVideoScript(raw: unknown): VideoScript {
   // answer (see videoScriptWriter.ts's own doc comment: never a fabricated
   // filler line when the video genuinely doesn't need one).
   if (v.disclosureCta !== null && !isNonEmptyString(v.disclosureCta)) missing.push("disclosureCta (string or null)");
+  let motionScenePlan: VideoScript["motionScenePlan"] = null;
+  if (v.motionScenePlan !== undefined && v.motionScenePlan !== null) {
+    const m = v.motionScenePlan as Record<string, unknown>;
+    if (!isNonEmptyString(m.scenePlanId) || !isNonEmptyString(m.scenePlanHash)) {
+      missing.push("motionScenePlan (must be null, or {scenePlanId, scenePlanHash} both non-empty strings)");
+    } else {
+      motionScenePlan = { scenePlanId: m.scenePlanId, scenePlanHash: m.scenePlanHash };
+    }
+  }
   if (missing.length > 0) {
     throw new VideoFactoryError(`videoScript is missing required field(s): ${missing.join(", ")}`);
   }
@@ -48,6 +57,7 @@ export function validateVideoScript(raw: unknown): VideoScript {
     tiktokCaption: v.tiktokCaption as string,
     hashtags: v.hashtags as string[],
     disclosureCta: (v.disclosureCta as string | null) ?? null,
+    motionScenePlan,
   };
 }
 

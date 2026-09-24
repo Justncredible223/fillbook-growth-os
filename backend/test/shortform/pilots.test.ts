@@ -33,15 +33,16 @@ describe("the three pilots from the approved creative direction", () => {
     }
   });
 
-  it("Pilot 3's real flagged trade is framed as a review prompt, never a diagnosis or proof of intent", () => {
-    const flaggedScene = PILOT_3.scenes.find((s) => s.sceneId === "p3-s2-flagged")!;
-    expect(flaggedScene.narration.toLowerCase()).not.toMatch(/proves|diagnos/);
-    const promptScene = PILOT_3.scenes.find((s) => s.sceneId === "p3-s3-prompt")!;
-    expect(promptScene.narration).toMatch(/prompt/i);
+  it("Pilot 3 never claims or implies the bigger trade happened right after a loss, or was revenge trading -- only the observable, plan-relative size fact (2026-09-23 reframe)", () => {
+    const allText = PILOT_3.scenes.map((s) => `${s.narration} ${s.takeaway} ${s.headline} ${s.captionText}`).join(" ").toLowerCase();
+    expect(allText).not.toMatch(/revenge|proves|diagnos|right after|immediately after|because of the loss/);
+    const planScene = PILOT_3.scenes.find((s) => s.sceneId === "p3-s3-plan")!;
+    expect(planScene.narration.toLowerCase()).toMatch(/plan/);
+    expect(planScene.narration.toLowerCase()).toMatch(/3 contracts|contract limit/);
   });
 
   it("Pilot 2's qualification scene says results depend on recorded trades and settings, and never claims a live risk system", () => {
-    const qualify = PILOT_2.scenes.find((s) => s.sceneId === "p2-s6-qualify")!;
+    const qualify = PILOT_2.scenes.find((s) => s.sceneId === "p2-s3-qualify")!;
     expect(qualify.narration.toLowerCase()).toContain("record");
     expect(qualify.narration.toLowerCase()).toContain("configure");
     for (const plan of PILOTS) for (const scene of plan.scenes) expect(scene.narration.toLowerCase()).not.toMatch(/replaces|real-time risk|live risk/);

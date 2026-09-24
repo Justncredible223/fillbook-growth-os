@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { validateSceneClaims } from "./claims.js";
-import { TEXT_LIMITS, validatePrivacyMasks, validateSceneFraming, validateSceneText } from "./layout.js";
+import { TEXT_LIMITS, validateMotionTiming, validatePrivacyMasks, validateSceneFraming, validateSceneText } from "./layout.js";
 import { OFFICIAL_HANDLE, type PlanIssue, type PlanValidation, type RequiredAsset, type SceneSpec, type ScenePlan, type VerifiedAsset, type VerifiedManifest } from "./types.js";
 
 export const ASSETS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "scripts", "video-factory", "assets");
@@ -15,6 +15,40 @@ export function loadManifest(path: string = MANIFEST_PATH): VerifiedManifest {
 
 export function sha256File(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+/**
+ * A content hash of everything a viewer would actually see/hear if this
+ * plan were rendered -- hook, and every scene's narration/headline/
+ * captionText/disclosure/claims, crop and clip range. Deliberately
+ * excludes fields that don't change what's shown (variationId, transition
+ * timing) so an unrelated authoring tweak doesn't spuriously invalidate an
+ * already-approved reference. This is the "version" half of the explicit
+ * scene-plan identifier + version contract a render-time consumer checks
+ * an approved script's `motionScenePlan.scenePlanHash` against (see
+ * motionCatalog.ts's resolveMotionScenePlan): a hook-text match alone is
+ * NOT authorization to substitute a plan's narration/claims for whatever
+ * an approved script actually says -- the approved script must carry this
+ * exact hash, computed from the plan version it was generated against, so
+ * a coincidental same-hook-different-body script (or pilots.ts changing
+ * after generation) can never silently select the wrong content.
+ */
+export function computeScenePlanHash(plan: ScenePlan): string {
+  const canonical = {
+    hook: plan.hook,
+    scenes: plan.scenes.map((s) => ({
+      sceneId: s.sceneId,
+      narration: s.narration,
+      headline: s.headline,
+      captionText: s.captionText,
+      disclosure: s.disclosure,
+      assetId: s.assetId,
+      crop: s.crop,
+      clipTimeRangeSeconds: s.clipTimeRangeSeconds ?? null,
+      claims: s.claims.map((c) => ({ id: c.id, type: c.type, text: c.text, evidence: c.evidence })),
+    })),
+  };
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
 export interface ValidateOptions {
@@ -94,7 +128,12 @@ export function validateScenePlan(plan: ScenePlan, manifest: VerifiedManifest, o
     }
 
     usedAssets.set(asset.id, asset);
+    // validateSceneFraming's checks (crop bounds, focal region, chrome,
+    // aspect/upscale) are generic across every asset kind, including
+    // screen_recording -- only the CLIP-TIME dimension is unique to motion
+    // assets, so validateMotionTiming runs IN ADDITION, not instead of it.
     issues.push(...validateSceneFraming(scene, asset));
+    if (asset.kind === "screen_recording") issues.push(...validateMotionTiming(scene, asset));
     issues.push(...validatePrivacyMasks(scene, asset));
     issues.push(...validateSceneClaims(scene, asset));
 

@@ -30,6 +30,15 @@ const UI_WINDOW_HEIGHT = HEIGHT - UI_TOP_BAND - UI_BOTTOM_BAND;
 const UI_BACKGROUND = "0x060a0d";
 
 /**
+ * Blends the outer 28px of a verified crop into UI_BACKGROUND (RGB 6,10,13), so a crop that cuts through a card
+ * never shows a hard rectangular edge against the padding around it. Over page background it is invisible.
+ */
+const FEATHER_PX = 28;
+const featherWeight = `min(1,min(min(X,W-1-X),min(Y,H-1-Y))/${FEATHER_PX})`;
+const CROP_EDGE_FEATHER =
+  `format=gbrp,geq=r='6+(r(X,Y)-6)*${featherWeight}':g='10+(g(X,Y)-10)*${featherWeight}':b='13+(b(X,Y)-13)*${featherWeight}',format=yuv420p`;
+
+/**
  * Bundled caption font (Poppins ExtraBold, OFL-licensed -- see
  * assets/fonts/OFL.txt) -- bolder and more rounded than the Arial/Verdana
  * system fallback libass would otherwise substitute on ubuntu-latest,
@@ -197,6 +206,24 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
         "-t", inputDuration.toFixed(3),
         "-i", renderBasename(scene.imagePath),
       );
+    } else if (scene.clipPath && scene.clipTimeRangeSeconds) {
+      // A real, verified recording -- trimmed to the declared range and
+      // played once, NEVER -stream_loop'd to stretch a short capture to
+      // fill the gap (that would silently fabricate motion that was never
+      // actually recorded). inputDuration already includes this scene's
+      // adjacent transition padding (see computeSyncedSceneTimeline), so the
+      // available footage must cover THAT, not just durationSeconds -- an
+      // insufficient range is reported here rather than truncated quietly.
+      const { start, end } = scene.clipTimeRangeSeconds;
+      const available = end - start;
+      if (available < inputDuration - 0.02) {
+        throw new VideoFactoryError(
+          `Scene ${i} ("${scene.label || scene.kind}"): declared clip range is ${available.toFixed(2)}s but this scene ` +
+            `(including transition padding) needs ${inputDuration.toFixed(2)}s. Refusing to loop a real recording to fill the ` +
+            `gap -- capture a longer range or shorten the scene.`,
+        );
+      }
+      inputArgs.push("-ss", start.toFixed(3), "-to", (start + inputDuration).toFixed(3), "-i", renderBasename(scene.clipPath));
     } else if (scene.clipPath) {
       // Loop the clip to fill the scene duration exactly
       inputArgs.push(
@@ -266,11 +293,47 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
           ? `,scale=w='trunc(${WIDTH}*(1+${HOOK_ZOOM_AMOUNT}*min(t/${HOOK_ZOOM_SECONDS},1))/2)*2':h=-2:eval=frame,crop=${WIDTH}:${HEIGHT},` +
             `drawbox=x=0:y=0:w=iw:h=ih:color=black@${HOOK_SCRIM_OPACITY}:t=fill`
           : "";
+      // A verified recording's own source crop (e.g. excluding a captured
+      // app's sidebar) plus any privacy masks, applied BEFORE the normal
+      // scale-to-fill/center-crop step below -- both are no-ops for
+      // ordinary stock footage, which declares neither. Mask coordinates
+      // are translated into the crop's own coordinate space (mask - crop
+      // origin) since everything downstream of the crop no longer has the
+      // original frame's coordinates.
+      let sourceTreatment = "";
+      if (scene.sourceCrop) {
+        const c = scene.sourceCrop;
+        sourceTreatment += `crop=${c.w}:${c.h}:${c.x}:${c.y},`;
+        for (const mask of scene.privacyMasks ?? []) {
+          const mx = mask.x - c.x;
+          const my = mask.y - c.y;
+          // Skip a mask that falls entirely outside the crop -- nothing left to hide once cropped out already.
+          if (mx + mask.w <= 0 || my + mask.h <= 0 || mx >= c.w || my >= c.h) continue;
+          sourceTreatment += `drawbox=x=${mx}:y=${my}:w=${mask.w}:h=${mask.h}:color=black:t=fill,`;
+        }
+      }
+      // A verified-evidence crop is typically wide and short (a UI table
+      // row, a form field) -- nothing like the ~16:9 stock/phone footage
+      // this "scale to cover, then crop off the overflow" treatment was
+      // built for. Applying it to an 800x140 crop zooms in by >13x and
+      // shows only a ~80px-wide sliver of it -- confirmed by direct frame
+      // inspection, not a theoretical concern. `sourceCrop` scenes instead
+      // FIT the whole crop into the SAME dark top/bottom-banded window the
+      // UI-screenshot path above already reserves (UI_TOP_BAND/
+      // UI_WINDOW_HEIGHT/UI_BOTTOM_BAND) -- centering in the full 1920px
+      // canvas (an earlier version of this fix) still let a tall crop's
+      // padding run into the caption band underneath it; confirmed by
+      // direct frame inspection, this reserves the SAME two bands captions
+      // and scene labels already live in, so a verified crop can never
+      // overlap either regardless of its own aspect ratio.
+      const fillTreatment = scene.sourceCrop
+        ? `scale=${WIDTH}:-2,${CROP_EDGE_FEATHER},pad=${WIDTH}:'max(ih,${UI_WINDOW_HEIGHT})':0:'(oh-ih)/2':color=${UI_BACKGROUND},crop=${WIDTH}:${UI_WINDOW_HEIGHT}:0:'(in_h-${UI_WINDOW_HEIGHT})/2',pad=${WIDTH}:${HEIGHT}:0:${UI_TOP_BAND}:color=${UI_BACKGROUND}`
+        : `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT}`;
       sceneFilterParts.push(
         // setsar=1:1 normalises the sample-aspect-ratio metadata that some
       // Pexels clips carry (e.g. SAR 10240:10239) -- without it, concat
       // rejects clips whose SAR differs even by one quantum.
-      `[${i}:v]scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},fps=${FRAME_RATE},setsar=1:1,setpts=PTS-STARTPTS${hookTreatment}[${label}]`,
+      `[${i}:v]${sourceTreatment}${fillTreatment},fps=${FRAME_RATE},setsar=1:1,setpts=PTS-STARTPTS${hookTreatment}[${label}]`,
       );
     } else {
       sceneFilterParts.push(`[${i}:v]setpts=PTS-STARTPTS[${label}]`);

@@ -37,7 +37,18 @@ interface GrowthOsRepository {
      * duplicate/invalid request surfaces as a plain [NetworkException]
      * with a real message from the backend's own 400/409 body.
      */
-    suspend fun requestVideoScript(topic: String?, opportunityId: String?): CampaignRunResult
+    suspend fun requestVideoScript(topic: String?, opportunityId: String?, motionConceptId: String? = null): CampaignRunResult
+    /**
+     * The small, fixed catalog of concepts that have REAL verified
+     * product-motion footage (backend's src/shortform/pilots.ts +
+     * verified-manifest.json) -- shown in "Create Fillbook Video" as a
+     * distinct third option from a custom topic (stock footage/
+     * screenshots) or an existing opportunity, so the owner never assumes
+     * an arbitrary topic will get a custom recording. Passing one of
+     * these ids as [requestVideoScript]'s motionConceptId is the ONLY way
+     * to get real motion -- the backend never infers it from topic text.
+     */
+    suspend fun getMotionConcepts(): List<MotionConcept>
     /**
      * Research Lab (2026-09-07): requests a private, internal research
      * report for EITHER a custom, owner-typed [topic] OR an existing
@@ -372,10 +383,16 @@ class FakeGrowthOsRepository : GrowthOsRepository {
         costUsd = 0.03,
     )
 
-    override suspend fun requestVideoScript(topic: String?, opportunityId: String?) = CampaignRunResult(
+    override suspend fun requestVideoScript(topic: String?, opportunityId: String?, motionConceptId: String?) = CampaignRunResult(
         finalStage = "ready_for_owner",
         blockReasons = emptyList(),
         costUsd = 0.09,
+    )
+
+    override suspend fun getMotionConcepts(): List<MotionConcept> = listOf(
+        MotionConcept(id = "pilot-1-green-month-losing-setup", title = "Green month. Losing setup.", hook = "Green month. Losing setup.", topic = "A positive month total can hide a setup that loses money"),
+        MotionConcept(id = "pilot-2-balance-isnt-your-buffer", title = "Balance isn't your buffer.", hook = "Balance isn't your buffer.", topic = "Profit or balance and the remaining drawdown buffer answer different questions"),
+        MotionConcept(id = "pilot-3-same-setup-bigger-size", title = "Same setup. Bigger size.", hook = "Same setup. Bigger size.", topic = "The same setup, at a size that broke the written trading plan"),
     )
 
     override suspend fun requestResearch(topic: String?, opportunityId: String?) = CampaignRunResult(

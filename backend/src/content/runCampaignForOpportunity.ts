@@ -1,5 +1,6 @@
 import type { RecentVideo } from "./videoHookVariety.js";
 import { MANUAL_VIDEO_TOPIC_TITLE_PREFIX } from "../opportunities/manualVideoTopic.js";
+import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../opportunities/manualMotionConcept.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { BrandConstitution } from "../knowledge/brandConstitution.js";
 import { SupabaseBrandConstitutionRepository } from "../knowledge/supabaseRepositories.js";
@@ -61,7 +62,11 @@ export interface RunCampaignOptions {
  * handler logic keyed on the caller's option, and nothing shows the same problem there.
  */
 export function assetTypeForManualRequest(title: string): "video_script" | undefined {
-  return title.startsWith(MANUAL_VIDEO_TOPIC_TITLE_PREFIX) ? "video_script" : undefined;
+  // Motion-concept requests (2026-09-23) are video requests too -- same
+  // failure mode otherwise: re-run from Radar or picked up by auto-draft
+  // without an explicit override, they'd be labeled a plain "post" and
+  // approving them would never queue a render.
+  return title.startsWith(MANUAL_VIDEO_TOPIC_TITLE_PREFIX) || title.startsWith(MANUAL_MOTION_CONCEPT_TITLE_PREFIX) ? "video_script" : undefined;
 }
 
 export async function runCampaignForOpportunity(

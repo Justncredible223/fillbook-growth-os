@@ -1,6 +1,8 @@
 import { findRepeatedHook, formatRecentVideos, type RecentVideo } from "./videoHookVariety.js";
 import type { LlmClient } from "./llmClient.js";
 import { capitalizationProblem, dashProblem } from "./xReplyGuardrails.js";
+import { computeScenePlanHash } from "../shortform/scenePlan.js";
+import { OFFICIAL_HANDLE, type ScenePlan } from "../shortform/types.js";
 
 const VIDEO_SCRIPT_SCHEMA = {
   type: "object",
@@ -76,6 +78,16 @@ export interface VideoScript {
   disclosureCta: string | null;
   /** YouTube thumbnail concept: bold text overlay + one-sentence visual description. */
   youtubeThumbnailConcept: string;
+  /**
+   * Present only when this script was generated for a specific verified
+   * ScenePlan (see motionCatalog.ts's MOTION_CONCEPT_REF_PREFIX /
+   * buildVideoScriptFromScenePlan) -- undefined/null for every ordinary
+   * LLM-drafted script (free topic or existing opportunity). A render-time
+   * consumer treats this as the ONLY valid authorization to use that
+   * plan's verified motion; a coincidental matching hook is never enough
+   * (see scripts/video-factory/motionCatalog.ts's resolveMotionScenePlan).
+   */
+  motionScenePlan?: { scenePlanId: string; scenePlanHash: string } | null;
 }
 
 const SYSTEM_PROMPT = `You are the lead short-form video strategist and scriptwriter for Fillbook (fillbookhq.com) --
@@ -469,6 +481,41 @@ export class VideoScriptTooLongError extends Error {
 /** Whitespace-separated tokens that contain a letter or digit (a stray "--" or "&" isn't a spoken word). */
 export function countSpokenWords(script: string): number {
   return script.split(/\s+/).filter((token) => /[\p{L}\p{N}]/u.test(token)).length;
+}
+
+/**
+ * Builds a full VideoScript DIRECTLY from a verified ScenePlan
+ * (src/shortform/pilots.ts) -- no LLM call at all, so a request for a
+ * supported motion concept costs nothing to draft (only the existing
+ * mechanical gate + nine-agent deep review, run exactly like any other
+ * script, still apply -- see campaignPipeline.ts). `script` is the
+ * concatenation of every scene's own real narration (so the review agents
+ * read and judge the ACTUAL words the video will speak, not a paraphrase),
+ * and `motionScenePlan` embeds the plan's id and a content hash of its
+ * hook/scenes/claims at THIS moment -- the render worker recomputes that
+ * hash from whatever pilots.ts says at render time and refuses to render
+ * on any mismatch (see motionCatalog.ts's resolveMotionScenePlan), so an
+ * approval can never be silently honored against stale or substituted
+ * content.
+ */
+export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
+  const script = plan.scenes.map((s) => s.narration).join(" ");
+  const shotList = plan.scenes.map((s) => s.headline || s.captionText || s.sceneId);
+  const disclosureCta = plan.scenes.find((s) => s.disclosure)?.disclosure ?? null;
+  const hashtags = ["FuturesTrading", "PropFirmTrading", "TradingJournal"];
+  return {
+    hook: plan.hook,
+    script,
+    shotList,
+    youtubeTitle: plan.title,
+    youtubeDescription: `${plan.topic} Real, verified Fillbook demo data -- see it in action, then track your own. ${OFFICIAL_HANDLE}`,
+    tiktokCaption: `${plan.hook} ${OFFICIAL_HANDLE}`,
+    instagramCaption: `${plan.hook} ${plan.topic} ${OFFICIAL_HANDLE}`,
+    hashtags,
+    disclosureCta,
+    youtubeThumbnailConcept: `${plan.hook} -- bold text overlay over the plan's own opening scene visual.`,
+    motionScenePlan: { scenePlanId: plan.planId, scenePlanHash: computeScenePlanHash(plan) },
+  };
 }
 
 /**

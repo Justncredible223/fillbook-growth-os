@@ -4,12 +4,41 @@
  * Reads VIDEO_RENDER_ID and CAMPAIGN_ASSET_ID from env, renders the video,
  * uploads to Supabase Storage, sends FCM push notifications, and exits.
  * Called by .github/workflows/video-render.yml — not the polling loop.
+ *
+ * `runRender` below is the whole worker as a plain, dependency-injected
+ * function (client/runner/workDir/sendPush all passed in) specifically so
+ * it's testable end-to-end (test/video-worker/render-single.test.ts) with
+ * a fake Supabase client/storage/push sender and the REAL local ffmpeg --
+ * `main()` is just the thin CLI wrapper that builds real dependencies from
+ * env vars and calls it. No behavior changed by this split: main() does
+ * exactly what it always did, just via runRender.
+ *
+ * Motion selection (2026-09-23, revised same day): before falling back to
+ * stock footage/UI screenshots, checks whether this approved script
+ * carries an EXPLICIT `motionScenePlan` reference (scenePlanId + a content
+ * hash) to one of the hand-authored, verified-evidence pilots
+ * (src/shortform/pilots.ts) -- see motionCatalog.ts's resolveMotionScenePlan
+ * for the full contract. Hook-TEXT matching alone was the original design
+ * and was found insufficient (a coincidentally identical hook on a script
+ * with different approved body/figures/claims would still have selected
+ * that pilot's canned narration) -- fixed by requiring an explicit
+ * reference embedded at generation time, hash-verified against the
+ * CURRENT plan at render time, so neither a same-hook-different-body
+ * script nor a stale/modified plan can select the wrong content. When it
+ * resolves, the whole video is built from that ScenePlan via
+ * scenePlanAdapter.ts (the same validated adapter proven in
+ * scripts/video-factory/renderScenePlanLocally.ts) instead of the
+ * shot-list/stock-footage path below -- narration comes from the SAME
+ * generateVoiceover (edge-tts) call every other campaign already uses,
+ * just once per scene. When no reference is present (the normal case for
+ * the vast majority of campaigns), the existing pipeline runs completely
+ * unchanged. Either way, `RenderRunResult.motionSelection` records exactly
+ * what was decided and why -- never a silent choice in either direction.
  */
-import { copyFileSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_URL } from "../../src/lib/supabaseClient.js";
 import {
   reserveVideoStorageBytes,
@@ -27,27 +56,50 @@ import { pickMusic } from "../video-factory/music.js";
 import { copyClipToDir, fetchStockClip, getSceneQuery, getVideoQuery, type StockFootageCredentials } from "../video-factory/stockFootage.js";
 import { inspectClip } from "../video-factory/clipQuality.js";
 import { runFfprobeJson, validateOutput } from "../video-factory/validate.js";
-import { createProcessRunner, requireExecutable } from "../video-factory/processRunner.js";
+import { createProcessRunner, requireExecutable, type ProcessRunner } from "../video-factory/processRunner.js";
 import { sendRenderNotification } from "./pushSender.js";
 import type { RenderPlan } from "../video-factory/types.js";
 import { JobQueue } from "../../src/jobs/jobQueue.js";
 import { SupabaseJobQueueRepository } from "../../src/jobs/supabaseJobQueueRepository.js";
 import { PUBLISH_YOUTUBE_JOB_TYPE } from "../../src/video/youtubePublishJob.js";
 import { PUBLISH_TIKTOK_JOB_TYPE } from "../../src/video/tiktokPublishJob.js";
+import { resolveMotionScenePlan, summarizeUsedAssets, type CatalogAssetSummary } from "../video-factory/motionCatalog.js";
+import { buildRenderPlanScenes, applyRealDurations, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio } from "../video-factory/scenePlanAdapter.js";
+import { loadManifest } from "../../src/shortform/scenePlan.js";
+import type { ScenePlan } from "../../src/shortform/types.js";
 
 const STORAGE_BUCKET = "rendered-videos";
 // Just enough tail that TTS/AAC never clips the last word. No brand card or
 // dead air after the voice: the script's last line flows back into the hook,
 // so the video loops cleanly (rewatches are a strong TikTok ranking signal).
 const SILENCE_PAD_SECONDS = 0.3;
-const WORK_DIR = process.env.VIDEO_WORKER_WORK_DIR ?? "/tmp/fillbook-video-worker";
+const DEFAULT_WORK_DIR = process.env.VIDEO_WORKER_WORK_DIR ?? "/tmp/fillbook-video-worker";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const PRODUCT_DEMO_SRC = join(__dirname, "../video-factory/assets/fillbook-product-demo.mp4");
 // Directory name kept generic (not "_shutterstock-cache") so a future
 // provider swap doesn't orphan an already-downloaded clip library.
-const STOCK_CLIP_CACHE = join(WORK_DIR, "_stock-footage-cache");
+const STOCK_CLIP_CACHE_NAME = "_stock-footage-cache";
+
+export interface RenderWorkerDeps {
+  client: SupabaseClient;
+  runner: ProcessRunner;
+  workDir: string;
+  sendPush: typeof sendRenderNotification;
+}
+
+export interface MotionSelectionReport {
+  usedVerifiedScenePlan: boolean;
+  /** Always populated, both when motion was used and when it wasn't -- see motionCatalog.ts's resolveMotionScenePlan. */
+  reason: string;
+  assetsUsed: CatalogAssetSummary[];
+  narrationProvenance: "edge_tts" | "offline_sapi" | "supplied" | null;
+}
+
+export interface RenderRunResult {
+  storagePath: string;
+  thumbnailPath: string | null;
+  durationSeconds: number;
+  motionSelection: MotionSelectionReport;
+}
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -55,30 +107,64 @@ function requireEnv(name: string): string {
   return value;
 }
 
-async function main(): Promise<void> {
-  const videoRenderId = requireEnv("VIDEO_RENDER_ID");
-  const campaignAssetId = requireEnv("CAMPAIGN_ASSET_ID");
+/**
+ * The verified-motion path: builds the ENTIRE RenderPlan from `plan`
+ * (a ScenePlan resolved via its explicit, hash-verified motionScenePlan reference -- see resolveMotionScenePlan)
+ * via scenePlanAdapter.ts, narrated with the same real edge-tts voice
+ * every other campaign uses (just once per scene instead of once for the
+ * whole script, so each scene's real spoken duration is known directly).
+ * Never falls back to stock footage/UI screenshots partway through: a
+ * script that matched a verified pilot's hook is that pilot's approved
+ * evidence-based content end to end, or the render fails loudly (via
+ * buildRenderPlanScenes' own validateScenePlan check) -- it never silently
+ * substitutes unrelated generic footage for a claim it can't back up.
+ */
+async function buildVerifiedMotionPlan(
+  scenePlan: ScenePlan,
+  outDir: string,
+  runner: ProcessRunner,
+  outputPath: string,
+): Promise<{ plan: RenderPlan; assetsUsed: CatalogAssetSummary[]; narrationProvenance: "edge_tts" | "offline_sapi" }> {
+  const manifest = loadManifest();
+  // VIDEO_WORKER_OFFLINE_NARRATION is a local-verification-only escape
+  // hatch (never set in the real GitHub Actions workflow) -- lets this
+  // exact production code path be exercised end to end with zero network
+  // calls, for a local proof render. Every caller must still report
+  // `narrationProvenance` honestly (see RenderRunResult) rather than
+  // implying the real edge-tts voice was used.
+  const narration = process.env.VIDEO_WORKER_OFFLINE_NARRATION === "true"
+    ? await synthesizeRealNarrationAudio(scenePlan, outDir, runner)
+    : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner);
+  const adjustedPlan = applyRealDurations(scenePlan, narration.durationsBySceneId);
+  const adapted = await buildRenderPlanScenes(adjustedPlan, manifest, outDir, runner);
 
-  const client = createClient(SUPABASE_URL, requireEnv("SUPABASE_SERVICE_ROLE_KEY"), {
-    auth: { persistSession: false },
-  });
+  const assPath = join(outDir, "captions.ass");
+  writeFileSync(assPath, buildAssFile(adapted.captionCues, adapted.sceneLabelCues), "utf-8");
 
-  const runner = createProcessRunner();
-  await requireExecutable(runner, "ffmpeg", ["-version"]);
-  await requireExecutable(runner, "ffprobe", ["-version"]);
-  await requireExecutable(runner, "python3", ["--version"]);
+  const seed = parseInt(outputPath.replace(/[^0-9a-f]/gi, "").slice(0, 8) || "0", 16) || 0;
+  const music = await pickMusic(seed, adapted.totalDurationSeconds, runner);
 
-  await client
-    .from("video_renders")
-    .update({ status: "rendering", updated_at: new Date().toISOString() })
-    .eq("id", videoRenderId);
+  const plan: RenderPlan = {
+    scenes: adapted.scenes,
+    totalDurationSeconds: adapted.totalDurationSeconds,
+    voiceoverPath: narration.voiceoverPath,
+    assPath,
+    outputPath,
+    silencePadSeconds: SILENCE_PAD_SECONDS,
+    musicFile: music?.file,
+    musicStartSeconds: music?.startSeconds,
+  };
+  return { plan, assetsUsed: summarizeUsedAssets(adjustedPlan, manifest), narrationProvenance: narration.provenance === "offline_sapi" ? "offline_sapi" : "edge_tts" };
+}
 
-  const pkg = await loadFromSupabase(campaignAssetId, client);
-  assertApproved(pkg);
-
-  const outDir = join(WORK_DIR, videoRenderId);
-  mkdirSync(outDir, { recursive: true });
-
+/** The existing, unchanged stock-footage/UI-screenshot path -- exactly the same logic this file always ran, just factored out so buildRenderPlan can choose between it and the verified-motion path above. */
+async function buildStockFootagePlan(
+  pkg: Awaited<ReturnType<typeof loadFromSupabase>>,
+  outDir: string,
+  runner: ProcessRunner,
+  workDir: string,
+  outputPath: string,
+): Promise<RenderPlan> {
   const voiceover = await generateVoiceover(pkg.videoScript.script, outDir, runner, DEFAULT_VOICE);
   const totalDurationSeconds = voiceover.durationSeconds + SILENCE_PAD_SECONDS;
   const wordCues = mergeBrandNameWordCues(voiceover.wordCues);
@@ -100,7 +186,8 @@ async function main(): Promise<void> {
   console.log(
     `[render-single] stock footage providers: pexels=${Boolean(stockCredentials.pexelsApiKey)} pixabay=${Boolean(stockCredentials.pixabayApiKey)}`,
   );
-  const seed = parseInt(videoRenderId.replace(/-/g, "").slice(0, 8), 16);
+  const videoRenderIdLike = outputPath;
+  const seed = parseInt(videoRenderIdLike.replace(/[^0-9a-f]/gi, "").slice(0, 8) || "0", 16) || 0;
   // Product scenes get a real Fillbook app screenshot (a slow vertical pan)
   // instead of stock B-roll or a flat card. Copying to outDir happens once,
   // below, after the hook fallback (next) has had its own chance to assign
@@ -110,6 +197,7 @@ async function main(): Promise<void> {
   console.log(`[render-single] UI screenshots: ${scenes.filter((s) => s.imagePath).length}/${scenes.length} scenes are real app screens`);
 
   let scenesWithClip = 0;
+  const stockClipCache = join(workDir, STOCK_CLIP_CACHE_NAME);
   // Every stock clip is looked at before it is used: the relevance filter only reads a clip's title and
   // tags, so blank-white and green-screen clips (both reached a real render on 2026-09-20) used to get through.
   const clipOptions = {
@@ -123,11 +211,11 @@ async function main(): Promise<void> {
       // comes back empty, fall back to the scene kind's generic rotation before giving up.
       const query = getSceneQuery(scene, seed + i);
       if (query) {
-        let cached = await fetchStockClip(query, scene.durationSeconds, STOCK_CLIP_CACHE, stockCredentials, clipOptions);
+        let cached = await fetchStockClip(query, scene.durationSeconds, stockClipCache, stockCredentials, clipOptions);
         if (!cached) {
           const fallbackQuery = getVideoQuery(scene.kind, seed + i);
           if (fallbackQuery && fallbackQuery !== query) {
-            cached = await fetchStockClip(fallbackQuery, scene.durationSeconds, STOCK_CLIP_CACHE, stockCredentials, clipOptions);
+            cached = await fetchStockClip(fallbackQuery, scene.durationSeconds, stockClipCache, stockCredentials, clipOptions);
           }
         }
         if (cached) {
@@ -161,8 +249,7 @@ async function main(): Promise<void> {
   const music = await pickMusic(seed, totalDurationSeconds, runner);
   if (music) console.log(`[render-single] music: ${music.file.split(/[\/]/).pop()} from ${music.startSeconds}s`);
 
-  const outputPath = join(outDir, "final.mp4");
-  const plan: RenderPlan = {
+  return {
     scenes,
     totalDurationSeconds,
     voiceoverPath: voiceover.mp3Path,
@@ -172,6 +259,41 @@ async function main(): Promise<void> {
     musicFile: music?.file,
     musicStartSeconds: music?.startSeconds,
   };
+}
+
+export async function runRender(videoRenderId: string, campaignAssetId: string, deps: RenderWorkerDeps): Promise<RenderRunResult> {
+  const { client, runner, workDir, sendPush } = deps;
+  await requireExecutable(runner, "ffmpeg", ["-version"]);
+  await requireExecutable(runner, "ffprobe", ["-version"]);
+  await requireExecutable(runner, "python3", ["--version"]);
+
+  await client
+    .from("video_renders")
+    .update({ status: "rendering", updated_at: new Date().toISOString() })
+    .eq("id", videoRenderId);
+
+  const pkg = await loadFromSupabase(campaignAssetId, client);
+  assertApproved(pkg);
+
+  const outDir = join(workDir, videoRenderId);
+  mkdirSync(outDir, { recursive: true });
+  const outputPath = join(outDir, "final.mp4");
+
+  const motionMatch = resolveMotionScenePlan(pkg.videoScript);
+  console.log(`[render-single] motion selection: ${motionMatch.reason}`);
+
+  let plan: RenderPlan;
+  let motionSelection: MotionSelectionReport;
+  if (motionMatch.plan) {
+    const built = await buildVerifiedMotionPlan(motionMatch.plan, outDir, runner, outputPath);
+    plan = built.plan;
+    motionSelection = { usedVerifiedScenePlan: true, reason: motionMatch.reason, assetsUsed: built.assetsUsed, narrationProvenance: built.narrationProvenance };
+  } else {
+    plan = await buildStockFootagePlan(pkg, outDir, runner, workDir, outputPath);
+    motionSelection = { usedVerifiedScenePlan: false, reason: motionMatch.reason, assetsUsed: [], narrationProvenance: null };
+  }
+  console.log(`[render-single] motion selection result: ${JSON.stringify(motionSelection)}`);
+
   await renderVideo(plan, runner);
 
   const ffprobeResult = await runFfprobeJson(outputPath, runner);
@@ -181,8 +303,8 @@ async function main(): Promise<void> {
   // real production failure this fixed 2026-09-17 by lowering CRF and
   // adding a bitrate cap -- has an actual number in the run log to
   // diagnose against, instead of only the opaque Supabase error message.
-  console.log(`[render-single] output size: ${(fileSizeBytes / 1024 / 1024).toFixed(1)} MB, duration: ${totalDurationSeconds.toFixed(1)}s`);
-  const validation = validateOutput(ffprobeResult, fileSizeBytes, totalDurationSeconds);
+  console.log(`[render-single] output size: ${(fileSizeBytes / 1024 / 1024).toFixed(1)} MB, duration: ${plan.totalDurationSeconds.toFixed(1)}s`);
+  const validation = validateOutput(ffprobeResult, fileSizeBytes, plan.totalDurationSeconds);
   if (!validation.passed) {
     throw new Error(
       `Render validation failed: ${validation.checks
@@ -228,7 +350,7 @@ async function main(): Promise<void> {
     console.error("[render-single] thumbnail generation failed (non-fatal):", (err as Error).message ?? err);
   }
 
-  const durationSeconds = Number(ffprobeResult.format.duration ?? totalDurationSeconds);
+  const durationSeconds = Number(ffprobeResult.format.duration ?? plan.totalDurationSeconds);
   await client
     .from("video_renders")
     // error: null clears any stale message from a prior failed attempt on
@@ -294,33 +416,59 @@ async function main(): Promise<void> {
       ?.campaign_assets?.campaigns?.thesis ?? "Your video";
 
   for (const device of (devices ?? []) as Array<{ fcm_token: string }>) {
-    await sendRenderNotification(device.fcm_token, { videoRenderId, kind: "ready", campaignTitle });
+    await sendPush(device.fcm_token, { videoRenderId, kind: "ready", campaignTitle });
   }
 
   console.log(`[render-single] done: ${videoRenderId} → ${storagePath}`);
+  return { storagePath, thumbnailPath, durationSeconds, motionSelection };
 }
 
-main().catch(async (err) => {
-  const message = (err as Error).message ?? String(err);
-  console.error("[render-single] fatal:", message);
-  // Write the failure back to the DB so the app shows the real error instead
-  // of leaving the render stuck in "rendering" forever (the old Oracle VM
-  // worker did this; this script previously did not).
-  try {
-    const videoRenderId = process.env.VIDEO_RENDER_ID;
-    if (videoRenderId) {
-      const { createClient } = await import("@supabase/supabase-js");
-      const { SUPABASE_URL } = await import("../../src/lib/supabaseClient.js");
-      const client = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY as string, {
-        auth: { persistSession: false },
-      });
-      await client
-        .from("video_renders")
-        .update({ status: "failed", error: message, updated_at: new Date().toISOString() })
-        .eq("id", videoRenderId);
+async function main(): Promise<void> {
+  const videoRenderId = requireEnv("VIDEO_RENDER_ID");
+  const campaignAssetId = requireEnv("CAMPAIGN_ASSET_ID");
+
+  const client = createClient(SUPABASE_URL, requireEnv("SUPABASE_SERVICE_ROLE_KEY"), {
+    auth: { persistSession: false },
+  });
+  const runner = createProcessRunner();
+
+  await runRender(videoRenderId, campaignAssetId, { client, runner, workDir: DEFAULT_WORK_DIR, sendPush: sendRenderNotification });
+}
+
+// Only runs main() (which needs real env vars and touches a real Supabase
+// project) when this file is actually invoked as the CLI entrypoint (the
+// GitHub Actions workflow's `npx tsx render-single.ts`) -- NOT merely
+// imported for its `runRender` export, which test/video-worker/
+// render-single.test.ts does. Before this check existed, importing this
+// module for testing unconditionally ran main() too, which failed
+// immediately (VIDEO_RENDER_ID unset in a test process) and set
+// process.exitCode = 1 as a side effect of the import itself -- silently
+// poisoning the whole test run's exit code regardless of whether the
+// actual tests passed.
+const isMainModule = process.argv[1] ? fileURLToPath(import.meta.url) === resolve(process.argv[1]) : false;
+if (isMainModule) {
+  main().catch(async (err) => {
+    const message = (err as Error).message ?? String(err);
+    console.error("[render-single] fatal:", message);
+    // Write the failure back to the DB so the app shows the real error instead
+    // of leaving the render stuck in "rendering" forever (the old Oracle VM
+    // worker did this; this script previously did not).
+    try {
+      const videoRenderId = process.env.VIDEO_RENDER_ID;
+      if (videoRenderId) {
+        const { createClient } = await import("@supabase/supabase-js");
+        const { SUPABASE_URL } = await import("../../src/lib/supabaseClient.js");
+        const client = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY as string, {
+          auth: { persistSession: false },
+        });
+        await client
+          .from("video_renders")
+          .update({ status: "failed", error: message, updated_at: new Date().toISOString() })
+          .eq("id", videoRenderId);
+      }
+    } catch (dbErr) {
+      console.error("[render-single] also failed to write failure to DB:", (dbErr as Error).message ?? dbErr);
     }
-  } catch (dbErr) {
-    console.error("[render-single] also failed to write failure to DB:", (dbErr as Error).message ?? dbErr);
-  }
-  process.exitCode = 1;
-});
+    process.exitCode = 1;
+  });
+}

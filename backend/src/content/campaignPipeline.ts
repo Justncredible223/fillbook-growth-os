@@ -3,9 +3,13 @@ import { CampaignFactory, type AssetStage } from "./campaignFactory.js";
 import type { ContentScoreRepository } from "./contentScoreRepository.js";
 import type { DeepReviewResult } from "./deepReviewGate.js";
 import { draftContent } from "./contentWriter.js";
-import { draftVideoScript, formatVideoScriptAsText, type VideoScript } from "./videoScriptWriter.js";
+import { draftVideoScript, formatVideoScriptAsText, buildVideoScriptFromScenePlan, type VideoScript } from "./videoScriptWriter.js";
 import type { RecentVideo } from "./videoHookVariety.js";
 import { draftResearch, formatResearchAsText, type ResearchReport } from "./researchWriter.js";
+import { extractMotionConceptRefFromRationale } from "../../scripts/video-factory/motionCatalog.js";
+import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../opportunities/manualMotionConcept.js";
+import { PILOTS } from "../shortform/pilots.js";
+import { loadManifest, validateScenePlan } from "../shortform/scenePlan.js";
 
 /**
  * Platforms whose native format is short-form video, not a text post --
@@ -75,6 +79,16 @@ export interface PipelineContext {
   pitchEvidenceExcerpts?: string[];
   /** Only meaningful when contentFormat is "partnership_pitch" -- a prior failed attempt's own review-gate feedback, passed to the writer on a bounded revision retry so a rewrite targets the ACTUAL rejection reasons instead of guessing again from scratch. */
   pitchPriorFeedback?: string;
+  /**
+   * Explicit request for a verified motion-backed concept (a ScenePlan's
+   * `planId`, see motionCatalog.ts's listMotionConcepts) -- when set, the
+   * script is built directly from that ScenePlan (no LLM call) instead of
+   * drafted by draftVideoScript. Normally arrives via the opportunity's own
+   * `rationale` marker (see manualMotionConcept.ts) rather than this field
+   * directly; this exists for a caller that already has a PipelineOpportunity
+   * and wants to skip that indirection (e.g. a direct test).
+   */
+  motionConceptId?: string;
 }
 
 export interface PipelineResult {
@@ -120,6 +134,39 @@ export async function runCampaignPipeline(
   // were previously the same boolean by construction, so this is the one
   // place they need to be reconciled.
   const isVideo = VIDEO_PLATFORMS.has(platform) || context.assetTypeOverride === "video_script";
+  // Motion-backed concept request (2026-09-23, "Create Fillbook Video"
+  // motion picker): the concept id rides inside the opportunity's own
+  // `rationale` field behind a fixed marker (see manualMotionConcept.ts's
+  // own doc comment for why -- reuses this exact opportunity-based
+  // pipeline with no schema change). `context.motionConceptId` is the
+  // same signal for a caller that already has a PipelineOpportunity in
+  // hand and wants to skip the rationale-marker indirection (e.g. a
+  // direct unit test, or a future first-class request field). Checked
+  // ahead of isVideo's own drafting branch below: when present, this
+  // REPLACES the LLM drafting step entirely (buildVideoScriptFromScenePlan
+  // is instant and free) but still flows through the exact same mechanical
+  // gate + nine-agent deep review as any other video script.
+  //
+  // The rationale-marker path ALSO requires the title to carry
+  // MANUAL_MOTION_CONCEPT_TITLE_PREFIX (2026-09-23, closed a real gap):
+  // `rationale` is a plain-text field a custom-topic request also writes
+  // to (see manualVideoTopicOpportunityInput), and that flow embeds the
+  // OWNER'S OWN TYPED TEXT verbatim inside it -- a topic that happened to
+  // contain the literal string "MOTION_CONCEPT_REF:pilot-2-..." would
+  // otherwise activate motion mode by pure textual coincidence. The title
+  // prefix is never derived from user-typed text (manualVideoTopicTitle
+  // always PREPENDS "Video request: " ahead of whatever the owner typed,
+  // so it can never equal MANUAL_MOTION_CONCEPT_TITLE_PREFIX by accident)
+  // -- requiring BOTH signals makes an ordinary custom-topic request
+  // structurally unable to trigger this path, regardless of its text.
+  const rationaleMotionConceptId =
+    opportunity.title.startsWith(MANUAL_MOTION_CONCEPT_TITLE_PREFIX) ? extractMotionConceptRefFromRationale(opportunity.rationale) : null;
+  const motionConceptId = context.motionConceptId ?? rationaleMotionConceptId;
+  // A motion-concept script IS a video script regardless of how this run
+  // was triggered (explicit override, Radar re-run, or auto-draft) -- it
+  // must be labeled asset_type "video_script" (only that queues a render
+  // on approval) and gated with the video mechanical rules.
+  const isVideoAsset = isVideo || Boolean(motionConceptId);
   // Owner-requested research (2026-09-07): a private, internal research
   // document for the owner to review, not public-facing content -- see
   // researchWriter.ts's own doc comment. Checked ahead of isVideo/isReply
@@ -135,6 +182,23 @@ export async function runCampaignPipeline(
   if (isResearch) {
     researchReport = await draftResearch(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
     draftText = formatResearchAsText(researchReport);
+  } else if (motionConceptId) {
+    const plan = PILOTS.find((p) => p.planId === motionConceptId);
+    if (!plan) {
+      throw new Error(`Motion concept "${motionConceptId}" is not a known verified ScenePlan (known: ${PILOTS.map((p) => p.planId).join(", ")}).`);
+    }
+    // Refuses to draft against a broken/incomplete verified plan rather
+    // than generating a script whose motionScenePlan reference would only
+    // fail later at render time -- the owner finds out immediately, before
+    // spending any review-agent budget on a request that could never
+    // actually render with motion.
+    const planValidation = validateScenePlan(plan, loadManifest(), { checkFiles: true });
+    if (!planValidation.ok) {
+      const errors = planValidation.issues.filter((i) => i.severity === "error").map((i) => `${i.sceneId}: ${i.code} -- ${i.message}`);
+      throw new Error(`Motion concept "${motionConceptId}" currently fails its own claim/evidence/timing validation, so no script was drafted:\n${errors.join("\n")}`);
+    }
+    videoScript = buildVideoScriptFromScenePlan(plan);
+    draftText = formatVideoScriptAsText(videoScript);
   } else if (isVideo) {
     videoScript = await draftVideoScript(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary, context.recentVideos);
     draftText = formatVideoScriptAsText(videoScript);
@@ -162,7 +226,7 @@ export async function runCampaignPipeline(
   const campaignAssetId = await campaignRepo.createCampaignAsset(
     campaignId,
     platform,
-    context.assetTypeOverride ?? (isVideo ? "video_script" : "post"),
+    motionConceptId ? "video_script" : (context.assetTypeOverride ?? (isVideo ? "video_script" : "post")),
   );
   const contentVersionId = await campaignRepo.insertContentVersion(
     campaignAssetId,
@@ -171,7 +235,7 @@ export async function runCampaignPipeline(
     videoScript ? { videoScript } : researchReport ? { research: researchReport } : undefined,
   );
 
-  const mechanical = await factory.submitDraft("draft", draftText, context.recentTextsForSameTopic, { isVideo });
+  const mechanical = await factory.submitDraft("draft", draftText, context.recentTextsForSameTopic, { isVideo: isVideoAsset });
   await campaignRepo.updateAssetStage(campaignAssetId, mechanical.newStage);
 
   if (!mechanical.advanced) {

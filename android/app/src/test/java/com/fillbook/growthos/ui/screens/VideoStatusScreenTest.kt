@@ -261,7 +261,8 @@ class VideoStatusScreenCreateVideoStructureTest {
         val source = screenSource()
         val fnIndex = source.indexOf("fun requestVideoScript() {")
         check(fnIndex >= 0)
-        val window = source.substring(fnIndex, minOf(fnIndex + 1600, source.length))
+        val fnEnd = source.indexOf("\n    fun ", fnIndex + 1).let { if (it < 0) source.length else it }
+        val window = source.substring(fnIndex, fnEnd)
         check(window.contains("extractVideoScriptRequestErrorMessage(e.httpCode, e.message)")) {
             "Expected requestVideoScript() to try extracting the real backend error message before falling back " +
                 "to a generic 'check your connection' message -- otherwise an off-topic-topic or duplicate-topic " +
@@ -270,15 +271,19 @@ class VideoStatusScreenCreateVideoStructureTest {
     }
 
     @Test
-    fun `Continue is disabled until a topic is typed or an opportunity is selected`() {
+    fun `Continue is disabled until a topic is typed, an opportunity is selected, or a motion concept is picked`() {
         val source = screenSource()
         val dialogIndex = source.indexOf("Create Fillbook Video")
         check(dialogIndex >= 0) { "Expected a 'Create Fillbook Video' entry dialog title." }
         val canContinueIndex = source.indexOf("val canContinue =")
         check(canContinueIndex >= 0) { "Expected a canContinue gate controlling the Continue button." }
-        val window = source.substring(canContinueIndex, minOf(canContinueIndex + 200, source.length))
-        check(window.contains("selectedOpportunityId != null") && window.contains("videoTopicInput.trim().length >= 3")) {
-            "Expected canContinue to require either a selected opportunity or a real (non-trivial) typed topic."
+        val window = source.substring(canContinueIndex, minOf(canContinueIndex + 300, source.length))
+        check(
+            window.contains("selectedOpportunityId != null") &&
+                window.contains("videoTopicInput.trim().length >= 3") &&
+                window.contains("selectedMotionConceptId != null"),
+        ) {
+            "Expected canContinue to require a selected opportunity, a real (non-trivial) typed topic, or a picked motion concept."
         }
     }
 
