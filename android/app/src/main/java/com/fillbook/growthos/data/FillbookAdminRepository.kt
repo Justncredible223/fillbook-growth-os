@@ -1,6 +1,7 @@
 package com.fillbook.growthos.data
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -44,7 +45,17 @@ class NetworkFillbookAdminRepository(
 
     override fun signOut() = auth.signOut()
 
-    override suspend fun getGrowthStats(period: String): GrowthStats = withContext(Dispatchers.IO) {
+    override suspend fun getGrowthStats(period: String): GrowthStats = try {
+        fetchGrowthStats(period)
+    } catch (e: NetworkException) {
+        // A token minted seconds ago (sign-in or hourly refresh) can be rejected once by the database's
+        // "JWT issued at future" check when its clock trails the auth server's; it passes a moment later.
+        if (e.message?.contains("issued at future", ignoreCase = true) != true) throw e
+        delay(2_000)
+        fetchGrowthStats(period)
+    }
+
+    private suspend fun fetchGrowthStats(period: String): GrowthStats = withContext(Dispatchers.IO) {
         val accessToken = auth.getValidAccessToken()
         val request = Request.Builder()
             .url("$baseUrl/api/admin?action=growth&period=$period")
