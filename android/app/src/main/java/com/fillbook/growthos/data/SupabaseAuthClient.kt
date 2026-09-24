@@ -74,11 +74,13 @@ class SupabaseAuthClient(
         client.newCall(request).execute().use { response ->
             val responseBody = response.body?.string() ?: "{}"
             if (!response.isSuccessful) {
-                // Supabase's own error body is {"error":"...", "error_description":"..."} --
-                // surfaced directly rather than a generic "sign-in failed" so a wrong
-                // password or an unconfirmed email shows the real reason.
-                val reason = runCatching { JSONObject(responseBody).optString("error_description") }.getOrNull()
-                throw NetworkException("Sign-in failed: HTTP ${response.code}${reason?.let { " -- $it" } ?: ""}", response.code)
+                // Current Supabase Auth returns {"error_code","msg"}; older versions {"error","error_description"}.
+                val reason = runCatching {
+                    val json = JSONObject(responseBody)
+                    listOf("msg", "error_description", "message").map { json.optString(it) }.firstOrNull { it.isNotBlank() }
+                }.getOrNull()
+                val hint = if (response.code == 400) " If you normally use \"Continue with Google\" on fillbookhq.com, set a password there first via \"Forgot password\"." else ""
+                throw NetworkException("Sign-in failed: ${reason ?: "HTTP ${response.code}"}.$hint", response.code)
             }
             storeSession(JSONObject(responseBody))
         }
