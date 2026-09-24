@@ -237,3 +237,15 @@ describe("buildAssFile", () => {
     expect(ass).toContain("Dialogue: 0,0:00:00.00,0:00:02.00,Caption,,0,0,0,,caption");
   });
 });
+
+describe("platform safe zone", () => {
+  it("keeps caption, hook and outro text 170px in from both edges, clear of the TikTok/Shorts/Reels right-hand action column", () => {
+    const ass = buildAssFile([], []);
+    for (const style of ["Caption", "Hook", "Outro"]) {
+      const fields = ass.split("\n").find((l) => l.startsWith(`Style: ${style},`))!.split(",");
+      const [marginL, marginR] = [Number(fields[fields.length - 4]), Number(fields[fields.length - 3])];
+      expect(marginL).toBeGreaterThanOrEqual(170);
+      expect(marginR).toBeGreaterThanOrEqual(170);
+    }
+  });
+});

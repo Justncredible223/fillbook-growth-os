@@ -30,6 +30,14 @@ const UI_WINDOW_HEIGHT = HEIGHT - UI_TOP_BAND - UI_BOTTOM_BAND;
 const UI_BACKGROUND = "0x060a0d";
 
 /**
+ * Where verified evidence crops sit: y 260-860. TikTok, YouTube Shorts and Reels overlay their like/comment/share
+ * column on the right edge from roughly y 880 down, so evidence placed lower ran under it (owner-reported on a real
+ * TikTok post, 2026-09-24). Above y 860 the full width is clear.
+ */
+const EVIDENCE_BAND_TOP = 260;
+const EVIDENCE_BAND_HEIGHT = 600;
+
+/**
  * Blends the outer 28px of a verified crop into UI_BACKGROUND (RGB 6,10,13), so a crop that cuts through a card
  * never shows a hard rectangular edge against the padding around it. Over page background it is invisible.
  */
@@ -312,22 +320,11 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
           sourceTreatment += `drawbox=x=${mx}:y=${my}:w=${mask.w}:h=${mask.h}:color=black:t=fill,`;
         }
       }
-      // A verified-evidence crop is typically wide and short (a UI table
-      // row, a form field) -- nothing like the ~16:9 stock/phone footage
-      // this "scale to cover, then crop off the overflow" treatment was
-      // built for. Applying it to an 800x140 crop zooms in by >13x and
-      // shows only a ~80px-wide sliver of it -- confirmed by direct frame
-      // inspection, not a theoretical concern. `sourceCrop` scenes instead
-      // FIT the whole crop into the SAME dark top/bottom-banded window the
-      // UI-screenshot path above already reserves (UI_TOP_BAND/
-      // UI_WINDOW_HEIGHT/UI_BOTTOM_BAND) -- centering in the full 1920px
-      // canvas (an earlier version of this fix) still let a tall crop's
-      // padding run into the caption band underneath it; confirmed by
-      // direct frame inspection, this reserves the SAME two bands captions
-      // and scene labels already live in, so a verified crop can never
-      // overlap either regardless of its own aspect ratio.
+      // A verified-evidence crop is FIT (never zoom-cropped) into the evidence safe band: below the scene label and
+      // above the point where TikTok/Shorts/Reels overlay their right-hand action column, so no card runs under it.
       const fillTreatment = scene.sourceCrop
-        ? `scale=${WIDTH}:-2,${CROP_EDGE_FEATHER},pad=${WIDTH}:'max(ih,${UI_WINDOW_HEIGHT})':0:'(oh-ih)/2':color=${UI_BACKGROUND},crop=${WIDTH}:${UI_WINDOW_HEIGHT}:0:'(in_h-${UI_WINDOW_HEIGHT})/2',pad=${WIDTH}:${HEIGHT}:0:${UI_TOP_BAND}:color=${UI_BACKGROUND}`
+        ? `scale=${WIDTH}:${EVIDENCE_BAND_HEIGHT}:force_original_aspect_ratio=decrease:force_divisible_by=2,${CROP_EDGE_FEATHER},` +
+          `pad=${WIDTH}:${HEIGHT}:'(ow-iw)/2':'${EVIDENCE_BAND_TOP}+(${EVIDENCE_BAND_HEIGHT}-ih)/2':color=${UI_BACKGROUND}`
         : `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT}`;
       sceneFilterParts.push(
         // setsar=1:1 normalises the sample-aspect-ratio metadata that some
