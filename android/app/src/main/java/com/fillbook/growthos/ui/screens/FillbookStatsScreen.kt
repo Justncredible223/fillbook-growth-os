@@ -1,5 +1,7 @@
 package com.fillbook.growthos.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -29,16 +31,19 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.FillbookAdminRepository
+import com.fillbook.growthos.data.FillbookAuthEvents
 import com.fillbook.growthos.data.GrowthStats
 import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.GrowthCard
@@ -65,6 +70,20 @@ private fun periodLabel(p: String) = when (p) { "today" -> "Today"; "7d" -> "7d"
 @Composable
 fun FillbookStatsScreen(repo: FillbookAdminRepository) {
     var signedIn by remember { mutableStateOf(repo.isSignedIn) }
+    val oauthOutcome by FillbookAuthEvents.latest.collectAsState()
+    var oauthError by remember { mutableStateOf<String?>(null) }
+    var handledOutcome by remember { mutableStateOf(0L) }
+    LaunchedEffect(oauthOutcome?.sequence) {
+        val outcome = oauthOutcome ?: return@LaunchedEffect
+        if (outcome.sequence == handledOutcome) return@LaunchedEffect
+        handledOutcome = outcome.sequence
+        if (outcome.succeeded) {
+            oauthError = null
+            signedIn = repo.isSignedIn
+        } else {
+            oauthError = outcome.errorMessage
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         ScreenHeader(
@@ -73,7 +92,7 @@ fun FillbookStatsScreen(repo: FillbookAdminRepository) {
             kicker = "Site statistics",
         )
         if (!signedIn) {
-            FillbookSignInForm(repo, onSignedIn = { signedIn = true })
+            FillbookSignInForm(repo, googleError = oauthError, onSignedIn = { signedIn = true })
         } else {
             FillbookStatsBody(repo, onSignedOut = { signedIn = false })
         }
@@ -81,7 +100,8 @@ fun FillbookStatsScreen(repo: FillbookAdminRepository) {
 }
 
 @Composable
-private fun FillbookSignInForm(repo: FillbookAdminRepository, onSignedIn: () -> Unit) {
+private fun FillbookSignInForm(repo: FillbookAdminRepository, googleError: String?, onSignedIn: () -> Unit) {
+    val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -95,6 +115,19 @@ private fun FillbookSignInForm(repo: FillbookAdminRepository, onSignedIn: () -> 
             color = TextTertiary,
         )
         Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = {
+                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(repo.beginGoogleSignIn())))
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Continue with Google") }
+        googleError?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(it, style = MaterialTheme.typography.bodySmall, color = Danger)
+        }
+        Spacer(Modifier.height(20.dp))
+        Text("Or use your fillbookhq.com password", style = MaterialTheme.typography.bodySmall, color = TextTertiary)
+        Spacer(Modifier.height(8.dp))
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },

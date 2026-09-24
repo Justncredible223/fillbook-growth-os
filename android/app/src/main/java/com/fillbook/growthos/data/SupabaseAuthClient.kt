@@ -10,6 +10,10 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import java.net.URLEncoder
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 
 /**
@@ -74,13 +78,40 @@ class SupabaseAuthClient(
         client.newCall(request).execute().use { response ->
             val responseBody = response.body?.string() ?: "{}"
             if (!response.isSuccessful) {
-                // Current Supabase Auth returns {"error_code","msg"}; older versions {"error","error_description"}.
-                val reason = runCatching {
-                    val json = JSONObject(responseBody)
-                    listOf("msg", "error_description", "message").map { json.optString(it) }.firstOrNull { it.isNotBlank() }
-                }.getOrNull()
+                val reason = supabaseErrorReason(responseBody)
                 val hint = if (response.code == 400) " If you normally use \"Continue with Google\" on fillbookhq.com, set a password there first via \"Forgot password\"." else ""
                 throw NetworkException("Sign-in failed: ${reason ?: "HTTP ${response.code}"}.$hint", response.code)
+            }
+            storeSession(JSONObject(responseBody))
+        }
+    }
+
+    /**
+     * Starts "Continue with Google" using Supabase's PKCE flow: the verifier stays on this device and only its
+     * SHA-256 challenge goes into the browser URL, so an intercepted redirect code is useless without it.
+     */
+    fun beginGoogleSignIn(redirectUri: String): String {
+        val bytes = ByteArray(32).also { SecureRandom().nextBytes(it) }
+        val verifier = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+        prefs.edit().putString(KEY_PKCE_VERIFIER, verifier).apply()
+        return googleAuthorizeUrl(supabaseUrl, redirectUri, pkceChallenge(verifier))
+    }
+
+    suspend fun completeOAuthSignIn(authCode: String): Unit = withContext(Dispatchers.IO) {
+        val verifier = prefs.getString(KEY_PKCE_VERIFIER, null)
+            ?: throw NetworkException("Google sign-in expired -- tap Continue with Google again.", null)
+        val body = JSONObject().put("auth_code", authCode).put("code_verifier", verifier)
+        val request = Request.Builder()
+            .url("$supabaseUrl/auth/v1/token?grant_type=pkce")
+            .header("apikey", supabaseAnonKey)
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string() ?: "{}"
+            prefs.edit().remove(KEY_PKCE_VERIFIER).apply()
+            if (!response.isSuccessful) {
+                throw NetworkException("Google sign-in failed: ${supabaseErrorReason(responseBody) ?: "HTTP ${response.code}"}.", response.code)
             }
             storeSession(JSONObject(responseBody))
         }
@@ -130,5 +161,21 @@ class SupabaseAuthClient(
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EXPIRES_AT = "expires_at"
+        private const val KEY_PKCE_VERIFIER = "pkce_verifier"
     }
+}
+
+/** Current Supabase Auth returns {"error_code","msg"}; older versions {"error","error_description"}. */
+internal fun supabaseErrorReason(responseBody: String): String? = runCatching {
+    val json = JSONObject(responseBody)
+    listOf("msg", "error_description", "message").map { json.optString(it) }.firstOrNull { it.isNotBlank() }
+}.getOrNull()
+
+internal fun pkceChallenge(verifier: String): String =
+    Base64.getUrlEncoder().withoutPadding().encodeToString(MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII)))
+
+internal fun googleAuthorizeUrl(supabaseUrl: String, redirectUri: String, challenge: String): String {
+    fun enc(v: String) = URLEncoder.encode(v, "UTF-8")
+    return "$supabaseUrl/auth/v1/authorize?provider=google&redirect_to=${enc(redirectUri)}" +
+        "&code_challenge=${enc(challenge)}&code_challenge_method=s256"
 }

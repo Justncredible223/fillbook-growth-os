@@ -19,6 +19,8 @@ import java.util.concurrent.TimeUnit
 interface FillbookAdminRepository {
     val isSignedIn: Boolean
     suspend fun signIn(email: String, password: String)
+    /** Browser URL for "Continue with Google"; the result comes back through AuthCallbackActivity. */
+    fun beginGoogleSignIn(): String
     fun signOut()
     /** [period]: "today" | "7d" | "30d" | "90d" | "all" -- same values AdminGrowth.tsx's own period selector sends. */
     suspend fun getGrowthStats(period: String): GrowthStats
@@ -37,6 +39,8 @@ class NetworkFillbookAdminRepository(
     override val isSignedIn: Boolean get() = auth.isSignedIn
 
     override suspend fun signIn(email: String, password: String) = auth.signIn(email, password)
+
+    override fun beginGoogleSignIn(): String = auth.beginGoogleSignIn(AppConfig.OAUTH_REDIRECT_URI)
 
     override fun signOut() = auth.signOut()
 
