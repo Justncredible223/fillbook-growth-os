@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -82,6 +83,7 @@ import androidx.fragment.app.FragmentActivity
 import com.fillbook.growthos.data.CrashReporter
 import com.fillbook.growthos.data.NetworkGrowthOsRepository
 import com.fillbook.growthos.ui.screens.AnalyticsScreen
+import com.fillbook.growthos.ui.screens.FillbookStatsScreen
 import com.fillbook.growthos.ui.screens.ApprovalsScreen
 import com.fillbook.growthos.ui.screens.BiometricGateScreen
 import com.fillbook.growthos.ui.screens.canUseDeviceLock
@@ -137,6 +139,7 @@ private sealed class Destination(val route: String, val label: String, val icon:
     data object XFeedPostHistory : Destination("x_feed_post_history", "Previous X Drafts", Icons.Filled.History)
     data object Partnerships : Destination("partnerships", "Partnerships", Icons.Filled.Handshake)
     data object VideoStatus : Destination("video_status", "Video Status", Icons.Filled.Movie)
+    data object FillbookStats : Destination("fillbook_stats", "Fillbook Stats", Icons.Filled.ShowChart)
 }
 
 /**
@@ -178,6 +181,7 @@ private val moreDestinations = listOf(
     Destination.MorningBrief,
     Destination.EveningReport,
     Destination.XFeedPostHistory,
+    Destination.FillbookStats,
 )
 
 private val allDestinations = primaryDestinations + moreDestinations
@@ -227,6 +231,7 @@ private fun GrowthOsRoot(activity: FragmentActivity, pendingDeepLinkRoute: andro
         BiometricGateScreen(activity = activity, onUnlocked = { unlocked = true })
     } else {
         val repo = remember { AppConfig.buildRepository() }
+        val fillbookAdminRepo = remember { AppConfig.buildFillbookAdminRepository(activity) }
 
         // POST_NOTIFICATIONS is a runtime permission on API 33+; below
         // that, notifications are granted at install time and this launcher
@@ -261,13 +266,17 @@ private fun GrowthOsRoot(activity: FragmentActivity, pendingDeepLinkRoute: andro
             }
         }
 
-        GrowthOsApp(repo = repo, pendingDeepLinkRoute = pendingDeepLinkRoute)
+        GrowthOsApp(repo = repo, fillbookAdminRepo = fillbookAdminRepo, pendingDeepLinkRoute = pendingDeepLinkRoute)
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, pendingDeepLinkRoute: androidx.compose.runtime.MutableState<String?>) {
+private fun GrowthOsApp(
+    repo: com.fillbook.growthos.data.GrowthOsRepository,
+    fillbookAdminRepo: com.fillbook.growthos.data.FillbookAdminRepository,
+    pendingDeepLinkRoute: androidx.compose.runtime.MutableState<String?>,
+) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
@@ -328,6 +337,7 @@ private fun GrowthOsApp(repo: com.fillbook.growthos.data.GrowthOsRepository, pen
             composable(Destination.XFeedPostHistory.route) { XFeedPostHistoryScreen(repo) }
             composable(Destination.Partnerships.route) { PartnershipsScreen(repo) }
             composable(Destination.VideoStatus.route) { VideoStatusScreen(repo) }
+            composable(Destination.FillbookStats.route) { FillbookStatsScreen(fillbookAdminRepo) }
         }
     }
 
