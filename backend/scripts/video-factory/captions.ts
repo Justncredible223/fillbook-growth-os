@@ -221,10 +221,10 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,Poppins ExtraBold,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,2,2,80,80,450,1
-Style: Hook,Poppins ExtraBold,92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,8,3,5,80,80,0,1
+Style: Caption,Poppins ExtraBold,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,6,2,2,170,170,450,1
+Style: Hook,Poppins ExtraBold,92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,8,3,5,170,170,0,1
 Style: SceneLabel,Poppins ExtraBold,48,&H00F4F6FA,&H00F4F6FA,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,5,2,8,80,80,140,1
-Style: Outro,Poppins ExtraBold,92,&H00EED322,&H00EED322,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,7,3,5,80,80,0,1
+Style: Outro,Poppins ExtraBold,92,&H00EED322,&H00EED322,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,7,3,5,170,170,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;

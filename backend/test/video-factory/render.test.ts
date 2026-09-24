@@ -165,11 +165,11 @@ describe("buildFfmpegArgs with a verified recording (clipTimeRangeSeconds/source
     expect(() => buildFfmpegArgs(tooShort)).toThrow(/Refusing to loop a real recording/);
   });
 
-  it("crops to the source rectangle, masks a privacy region inside it, and fits (never zoom-crops) the whole crop into the SAME dark banded window the UI-screenshot path reserves -- never the caption/scene-label bands", () => {
+  it("crops to the source rectangle and fits (never zoom-crops) it into the evidence band above the platforms' right-hand action column", () => {
     const filter = buildFfmpegArgs(recordingPlan)[buildFfmpegArgs(recordingPlan).indexOf("-filter_complex") + 1]!;
-    expect(filter).toContain("[0:v]crop=800:140:240:390,scale=1080:-2,format=gbrp,geq=");
+    expect(filter).toContain("[0:v]crop=800:140:240:390,scale=1080:600:force_original_aspect_ratio=decrease:force_divisible_by=2,format=gbrp,geq=");
     expect(filter).toContain(
-      ",format=yuv420p,pad=1080:'max(ih,1170)':0:'(oh-ih)/2':color=0x060a0d,crop=1080:1170:0:'(in_h-1170)/2',pad=1080:1920:0:230:color=0x060a0d,fps=30,setsar=1:1,setpts=PTS-STARTPTS[sv0]",
+      ",format=yuv420p,pad=1080:1920:'(ow-iw)/2':'260+(600-ih)/2':color=0x060a0d,fps=30,setsar=1:1,setpts=PTS-STARTPTS[sv0]",
     );
   });
 
