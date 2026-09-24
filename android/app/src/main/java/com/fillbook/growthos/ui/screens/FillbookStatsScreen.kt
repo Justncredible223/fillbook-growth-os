@@ -45,7 +45,6 @@ import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.FillbookAdminRepository
 import com.fillbook.growthos.data.FillbookAuthEvents
 import com.fillbook.growthos.data.GrowthStats
-import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.MetricTile
 import com.fillbook.growthos.ui.components.ScreenHeader
@@ -185,7 +184,8 @@ private fun FillbookStatsBody(repo: FillbookAdminRepository, onSignedOut: () -> 
             stats = repo.getGrowthStats(period)
             errorMessage = null
         } catch (e: Exception) {
-            errorMessage = authErrorMessage(e) ?: e.message ?: "Couldn't load stats. Check your connection and try again."
+            // Not authErrorMessage(): that text is about this app's own backend token, not the fillbookhq.com session.
+            errorMessage = e.message ?: "Couldn't load stats. Check your connection and try again."
         }
         loaded = true
     }

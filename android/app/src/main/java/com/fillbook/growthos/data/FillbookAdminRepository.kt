@@ -49,12 +49,15 @@ class NetworkFillbookAdminRepository(
         val request = Request.Builder()
             .url("$baseUrl/api/admin?action=growth&period=$period")
             .header("Authorization", "Bearer $accessToken")
+            // fillbookhq.com's middleware.ts blocks the default "okhttp/x" agent as a scraper ("Access denied").
+            .header("User-Agent", USER_AGENT)
             .build()
 
         client.newCall(request).execute().use { response ->
             val body = response.body?.string() ?: "{}"
             if (!response.isSuccessful) {
-                throw NetworkException("GET /api/admin?action=growth failed: HTTP ${response.code} -- $body", response.code)
+                val reason = runCatching { JSONObject(body).optString("error").ifBlank { null } }.getOrNull() ?: body.take(200)
+                throw NetworkException("fillbookhq.com refused the stats request (HTTP ${response.code}): $reason", response.code)
             }
             val json = JSONObject(body)
             val metrics = json.getJSONObject("metrics")
@@ -86,6 +89,8 @@ class NetworkFillbookAdminRepository(
         }
     }
 }
+
+internal const val USER_AGENT = "FillbookGrowthOS/1.0 (Android)"
 
 private fun JSONObject.optDoubleOrNull(key: String): Double? =
     if (isNull(key) || !has(key)) null else getDouble(key)
