@@ -22,8 +22,11 @@ export interface RunCampaignDeps {
   brandRulesSummary: string;
   verifiedKnowledgeSummary: string;
   recentTextsForSameTopic: string[];
-  /** Draft bodies this same opportunity already produced, excluded from the duplicate check so a retry isn't blocked by its own earlier attempt. */
-  listPriorDraftBodiesForOpportunity: (opportunityId: string) => Promise<string[]>;
+  /**
+   * Draft bodies this same request already produced -- for a motion concept, every earlier attempt at that concept --
+   * excluded from the duplicate check so a retry isn't blocked by its own earlier attempt.
+   */
+  listPriorDraftBodiesForOpportunity: (opportunity: { id: string; title: string }) => Promise<string[]>;
   /** Hooks and titles of recently made videos, passed to the video script writer so it avoids repeating them. */
   recentVideos?: RecentVideo[];
   /** Called only when the pipeline reaches ready_for_owner -- never otherwise. */
@@ -76,7 +79,7 @@ export async function runCampaignForOpportunity(
   opportunity: PipelineOpportunity,
   options: RunCampaignOptions = {},
 ): Promise<PipelineResult> {
-  const ownPriorDrafts = new Set(await deps.listPriorDraftBodiesForOpportunity(opportunity.id));
+  const ownPriorDrafts = new Set(await deps.listPriorDraftBodiesForOpportunity({ id: opportunity.id, title: opportunity.title }));
   const result = await runCampaignPipeline(deps.llmClient, deps.factory, deps.scoreRepo, deps.campaignRepo, opportunity, {
     brandRulesSummary: deps.brandRulesSummary,
     verifiedKnowledgeSummary: deps.verifiedKnowledgeSummary,
@@ -171,8 +174,15 @@ export async function buildSupabaseRunCampaignDeps(
     brandRulesSummary,
     verifiedKnowledgeSummary,
     recentTextsForSameTopic,
-    listPriorDraftBodiesForOpportunity: async (opportunityId) => {
-      const { data: campaigns, error: campaignsError } = await client.from("campaigns").select("id").eq("opportunity_id", opportunityId);
+    listPriorDraftBodiesForOpportunity: async (opportunity) => {
+      // A motion concept's script is fixed, so every earlier request for the same concept counts as its own attempt.
+      let opportunityIds = [opportunity.id];
+      if (opportunity.title.startsWith(MANUAL_MOTION_CONCEPT_TITLE_PREFIX)) {
+        const { data: sameConcept, error: sameConceptError } = await client.from("opportunities").select("id").eq("title", opportunity.title);
+        if (sameConceptError) throw new Error(`listPriorDraftBodiesForOpportunity (opportunities) failed: ${sameConceptError.message}`);
+        opportunityIds = [...new Set([opportunity.id, ...(sameConcept ?? []).map((row: { id: string }) => row.id)])];
+      }
+      const { data: campaigns, error: campaignsError } = await client.from("campaigns").select("id").in("opportunity_id", opportunityIds);
       if (campaignsError) throw new Error(`listPriorDraftBodiesForOpportunity (campaigns) failed: ${campaignsError.message}`);
       const campaignIds = (campaigns ?? []).map((row: { id: string }) => row.id);
       if (campaignIds.length === 0) return [];

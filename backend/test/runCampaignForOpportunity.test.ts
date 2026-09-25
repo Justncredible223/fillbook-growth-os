@@ -218,7 +218,7 @@ describe("runCampaignForOpportunity duplicate check on retries", () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(draftResponse(draft)).mockResolvedValue(verdictResponse(true));
     const deps = buildDeps(fetchMock, {
       recentTextsForSameTopic: [draft],
-      listPriorDraftBodiesForOpportunity: async (id) => (id === "opp-1" ? [draft] : []),
+      listPriorDraftBodiesForOpportunity: async (o) => (o.id === "opp-1" ? [draft] : []),
     });
 
     const result = await runCampaignForOpportunity(deps, opportunity);
