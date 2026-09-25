@@ -583,8 +583,17 @@ class NetworkGrowthOsRepository(
             // key rather than throwing, which is exactly the "older/unknown
             // API response" fallback case this is meant to represent.
             diagnostics = json.optJSONObject("diagnostics")?.toProspectingDiagnostics(),
+            pacing = json.optJSONObject("pacing")?.toProspectingPacing(),
         )
     }
+
+    private fun JSONObject.toProspectingPacing() = ProspectingPacing(
+        repliedLast24h = optInt("repliedLast24h"),
+        dailyCap = optInt("dailyCap", 5),
+        cooldownMinutes = optInt("cooldownMinutes", 20),
+        nextReplyAtMillis = if (isNull("nextReplyAt")) null else runCatching { java.time.Instant.parse(getString("nextReplyAt")).toEpochMilli() }.getOrNull(),
+        reason = if (isNull("reason")) null else optString("reason"),
+    )
 
     override suspend fun draftProspectingReply(id: String): ProspectingCandidate {
         val json = postExpectingDraftRejection("/api/approvals?resource=prospecting", JSONObject().put("action", "draft").put("id", id))

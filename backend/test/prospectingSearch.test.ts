@@ -40,6 +40,9 @@ class FakeProspectingRepo implements ProspectingRepository {
   async listByStatus(statuses: ProspectingStatus[]) {
     return [...this.rows.values()].filter((r) => statuses.includes(r.status));
   }
+  async listRepliedSince(since: Date) {
+    return [...this.rows.values()].filter((r) => r.status === "replied" && r.repliedAt !== null && new Date(r.repliedAt) >= since);
+  }
   async getById(id: string) {
     return this.rows.get(id) ?? null;
   }

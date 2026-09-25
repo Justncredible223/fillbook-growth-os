@@ -33,7 +33,7 @@ export interface DailySelectionResult {
   belowQualityBar: ProspectingCandidate[];
   /**
    * Excluded from today's set purely for being older than
-   * prospectingFreshness.ts's MAX_AGE_FOR_DAILY_SELECTION_MS (72h) --
+   * prospectingFreshness.ts's MAX_AGE_FOR_DAILY_SELECTION_MS (12h) --
    * never scored, never compared against MIN_DAILY_SET_SCORE. NOT
    * discarded: still real backlog, subject only to the existing, separate
    * 14-day discovered_at-based expireStale() lifecycle. Kept as its own
@@ -50,7 +50,7 @@ export interface DailySelectionResult {
  * no I/O, easy to test against real exported data.
  *
  * Rules, in order:
- * 1. Exclude anything older than the 72h freshness cutoff
+ * 1. Exclude anything older than the 12h freshness cutoff
  *    (prospectingFreshness.ts's isEligibleForDailySelection) -- never
  *    scored or compared, just set aside as tooOldForToday.
  * 2. Sort the rest by an EFFECTIVE score -- the stored (discovery-time)

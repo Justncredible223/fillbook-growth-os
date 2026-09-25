@@ -39,25 +39,25 @@
 const HOUR_MS = 60 * 60 * 1000;
 
 /** Below this age, a post's original discovery-time recency credit is still basically accurate -- no decay applied. */
-export const RECENCY_DECAY_START_MS = 24 * HOUR_MS;
+export const RECENCY_DECAY_START_MS = 4 * HOUR_MS;
 
 /**
- * Hard cutoff for today's active daily reply set (approved policy,
- * 2026-09-07): "do not select posts older than 72 hours." Exactly 72h is
- * still eligible; anything past it is not -- see
- * isEligibleForDailySelection's own boundary test coverage.
+ * Hard cutoff for the active reply set. Was 72h (2026-09-07); cut to 12h on 2026-09-25 after @FillbookHQ's
+ * replies dropped to 1-4 views: a reply to a post that's a day or two old gets almost no views even on a
+ * healthy account, and a stream of late replies looks automated. Exactly 12h is still eligible; anything
+ * past it is not -- see isEligibleForDailySelection's own boundary test coverage.
  */
-export const MAX_AGE_FOR_DAILY_SELECTION_MS = 72 * HOUR_MS;
+export const MAX_AGE_FOR_DAILY_SELECTION_MS = 12 * HOUR_MS;
 
 /**
  * Floor the decay multiplier can reach at exactly
  * MAX_AGE_FOR_DAILY_SELECTION_MS -- deliberately not 0 or too low:
- * eligibility itself (not scoring alone) is what enforces the 72h cutoff,
+ * eligibility itself (not scoring alone) is what enforces the cutoff,
  * so a candidate right at the boundary isn't crushed to a score that's
  * mathematically unreachable against MIN_DAILY_SET_SCORE (40) before that
  * cutoff even applies. 0.45 is chosen so the maximum possible score (100)
  * decayed to the floor (45) still clears the 40-point bar -- i.e. "still
- * eligible at 72h" is a real, reachable outcome for an exceptionally
+ * eligible at the cutoff" is a real, reachable outcome for an exceptionally
  * strong candidate, not merely a technicality that always loses to the
  * quality bar anyway.
  */
@@ -72,8 +72,8 @@ export function currentPostAgeMs(postCreatedAt: string | null, now: Date): numbe
 }
 
 /**
- * 1.0 for a post at or under 24h old (no penalty). Linearly decays from
- * 1.0 at 24h to DECAY_FLOOR at 72h for anything in between. Never called
+ * 1.0 for a post at or under RECENCY_DECAY_START_MS old (no penalty). Linearly decays from
+ * 1.0 there to DECAY_FLOOR at MAX_AGE_FOR_DAILY_SELECTION_MS for anything in between. Never called
  * for genuinely fresh (<=24h) candidates in a way that changes their
  * ranking -- this only ever reduces (never boosts) the stored score.
  */
@@ -82,7 +82,7 @@ export function recencyDecayMultiplier(postCreatedAt: string | null, now: Date):
   if (ageMs === null || ageMs <= RECENCY_DECAY_START_MS) return 1;
   const decayRangeMs = MAX_AGE_FOR_DAILY_SELECTION_MS - RECENCY_DECAY_START_MS;
   const overageMs = Math.min(ageMs - RECENCY_DECAY_START_MS, decayRangeMs);
-  const fraction = overageMs / decayRangeMs; // 0 at 24h -> 1 at 72h (and beyond, clamped)
+  const fraction = overageMs / decayRangeMs; // 0 at the decay start -> 1 at the cutoff (and beyond, clamped)
   return 1 - fraction * (1 - DECAY_FLOOR);
 }
 
@@ -97,7 +97,7 @@ export function effectiveScoreForSelection(storedScore: number, postCreatedAt: s
 }
 
 /**
- * Hard 72h cutoff for today's active reply set (approved policy). A
+ * Hard MAX_AGE_FOR_DAILY_SELECTION_MS cutoff for the active reply set. A
  * candidate excluded here is NOT discarded or marked terminal -- it simply
  * isn't chosen for today, same as any other backlog/deferred candidate,
  * and remains subject to the existing, separate 14-day

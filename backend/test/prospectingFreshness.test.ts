@@ -34,20 +34,20 @@ describe("recencyDecayMultiplier", () => {
     expect(recencyDecayMultiplier(hoursAgo(0), NOW)).toBe(1);
   });
 
-  it("applies no penalty anywhere up to and including 24h old", () => {
+  it("applies no penalty anywhere up to and including 4h old", () => {
     expect(recencyDecayMultiplier(hoursAgo(1), NOW)).toBe(1);
-    expect(recencyDecayMultiplier(hoursAgo(24), NOW)).toBe(1);
+    expect(recencyDecayMultiplier(hoursAgo(4), NOW)).toBe(1);
     expect(recencyDecayMultiplier(new Date(NOW.getTime() - RECENCY_DECAY_START_MS).toISOString(), NOW)).toBe(1);
   });
 
-  it("decays meaningfully for a 48h-old post -- partway between the 24h and 72h boundaries", () => {
-    const multiplier = recencyDecayMultiplier(hoursAgo(48), NOW);
+  it("decays meaningfully for an 8h-old post -- partway between the 4h and 12h boundaries", () => {
+    const multiplier = recencyDecayMultiplier(hoursAgo(8), NOW);
     expect(multiplier).toBeLessThan(1);
-    expect(multiplier).toBeGreaterThan(0.45); // still above the 72h floor
-    expect(multiplier).toBeCloseTo(0.725, 2); // halfway through the 24h-72h decay range
+    expect(multiplier).toBeGreaterThan(0.45); // still above the 12h floor
+    expect(multiplier).toBeCloseTo(0.725, 2); // halfway through the 4h-12h decay range
   });
 
-  it("reaches its floor at exactly the 72h cutoff, never below it", () => {
+  it("reaches its floor at exactly the 12h cutoff, never below it", () => {
     const atCutoff = recencyDecayMultiplier(new Date(NOW.getTime() - MAX_AGE_FOR_DAILY_SELECTION_MS).toISOString(), NOW);
     expect(atCutoff).toBeCloseTo(0.45, 5);
   });
@@ -56,7 +56,7 @@ describe("recencyDecayMultiplier", () => {
     expect(recencyDecayMultiplier(null, NOW)).toBe(1);
   });
 
-  it("clamps at the floor for a post far past 72h -- even though it will separately be excluded by eligibility, the multiplier itself never goes negative or keeps falling", () => {
+  it("clamps at the floor for a post far past 12h -- even though it will separately be excluded by eligibility, the multiplier itself never goes negative or keeps falling", () => {
     const wayOld = recencyDecayMultiplier(hoursAgo(24 * 30), NOW);
     expect(wayOld).toBeCloseTo(0.45, 5);
   });
@@ -67,8 +67,8 @@ describe("effectiveScoreForSelection", () => {
     expect(effectiveScoreForSelection(70, hoursAgo(1), NOW)).toBe(70);
   });
 
-  it("returns a reduced score for a 48h-old post", () => {
-    const effective = effectiveScoreForSelection(70, hoursAgo(48), NOW);
+  it("returns a reduced score for an 8h-old post", () => {
+    const effective = effectiveScoreForSelection(70, hoursAgo(8), NOW);
     expect(effective).toBeLessThan(70);
     expect(effective).toBeCloseTo(70 * 0.725, 1);
   });
@@ -83,20 +83,20 @@ describe("isEligibleForDailySelection", () => {
     expect(isEligibleForDailySelection(hoursAgo(1), NOW)).toBe(true);
   });
 
-  it("is eligible for a 24h-old post", () => {
-    expect(isEligibleForDailySelection(hoursAgo(24), NOW)).toBe(true);
+  it("is eligible for a 4h-old post", () => {
+    expect(isEligibleForDailySelection(hoursAgo(4), NOW)).toBe(true);
   });
 
-  it("is eligible for a 48h-old post", () => {
-    expect(isEligibleForDailySelection(hoursAgo(48), NOW)).toBe(true);
+  it("is eligible for an 8h-old post", () => {
+    expect(isEligibleForDailySelection(hoursAgo(8), NOW)).toBe(true);
   });
 
-  it("is still eligible at exactly the 72h boundary -- 'older than 72 hours' means strictly greater, not equal", () => {
+  it("is still eligible at exactly the 12h boundary -- 'older than 12 hours' means strictly greater, not equal", () => {
     const atCutoff = new Date(NOW.getTime() - MAX_AGE_FOR_DAILY_SELECTION_MS).toISOString();
     expect(isEligibleForDailySelection(atCutoff, NOW)).toBe(true);
   });
 
-  it("is NOT eligible one minute past the 72h boundary", () => {
+  it("is NOT eligible one minute past the 12h boundary", () => {
     const justPastCutoff = new Date(NOW.getTime() - MAX_AGE_FOR_DAILY_SELECTION_MS - 60_000).toISOString();
     expect(isEligibleForDailySelection(justPastCutoff, NOW)).toBe(false);
   });

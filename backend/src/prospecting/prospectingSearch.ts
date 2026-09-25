@@ -80,7 +80,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
 
   // Same non-terminal pool prospectingDailySelection.ts draws "today's set"
   // from -- QUEUE_FULL_THRESHOLD is derived from that pool's real target.
-  // Only candidates still within the 72h reply window count toward capacity:
+  // Only candidates still within the reply window (MAX_AGE_FOR_DAILY_SELECTION_MS) count toward capacity:
   // stale candidates that daily selection will reject anyway must not block
   // new fresh searches (deadlock: queue counted as full, but nothing shown).
   const backlog = await deps.repo.listByStatus(["new", "shown", "drafting", "ready"], QUEUE_FULL_THRESHOLD + 1);
@@ -110,7 +110,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     // Bounded discovery-time freshness (2026-09-07 review): X's recent-search
     // endpoint supports a real start_time filter (see xAdapter.ts's own doc
     // comment), so this asks X itself to never return anything older than
-    // the same 72h window prospectingFreshness.ts enforces at selection
+    // the same window prospectingFreshness.ts enforces at selection
     // time -- catching staleness at the source instead of only filtering it
     // out after paying to read it. Sharing the one MAX_AGE_FOR_DAILY_SELECTION_MS
     // constant keeps discovery and selection aligned; a sparse topic

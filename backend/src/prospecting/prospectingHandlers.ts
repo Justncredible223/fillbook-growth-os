@@ -1,3 +1,4 @@
+import { computeReplyPacing, type ReplyPacing } from "./prospectingPacing.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createLlmClient } from "../content/llmClient.js";
 import { recordCostEvent } from "../cost/costTracking.js";
@@ -67,7 +68,7 @@ export interface ProspectingSelectionDiagnostics {
   deferred: number;
   /** Did not clear MIN_DAILY_SET_SCORE using today's freshness-adjusted effective score. */
   belowQualityBar: number;
-  /** Excluded purely for being older than the 72h freshness cutoff -- see prospectingFreshness.ts. */
+  /** Excluded purely for being older than the 12h freshness cutoff -- see prospectingFreshness.ts. */
   tooOldForToday: number;
 }
 
@@ -103,7 +104,7 @@ export async function listProspectingQueue(
   client: SupabaseClient,
   now: Date = new Date(),
   deps: ProspectingHandlerDeps = {},
-): Promise<{ candidates: ProspectingCandidate[]; diagnostics: ProspectingSelectionDiagnostics }> {
+): Promise<{ candidates: ProspectingCandidate[]; diagnostics: ProspectingSelectionDiagnostics; pacing: ReplyPacing }> {
   const repo = repoFor(client, deps);
 
   const staleCutoff = new Date(now.getTime() - STALE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
@@ -121,8 +122,13 @@ export async function listProspectingQueue(
   await repo.markShown(newIds);
   const candidates = selected.map((c) => (newIds.includes(c.id) ? { ...c, status: "shown" as const } : c));
 
+  // Two days back covers the rolling 24h cap plus the cooldown after the newest reply.
+  const recentReplies = await repo.listRepliedSince(new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000));
+  const pacing = computeReplyPacing(recentReplies.map((c) => c.repliedAt), now);
+
   return {
     candidates,
+    pacing,
     diagnostics: {
       totalConsidered: eligible.length,
       selected: selected.length,

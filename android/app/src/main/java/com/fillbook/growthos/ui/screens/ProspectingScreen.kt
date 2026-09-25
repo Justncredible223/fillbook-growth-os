@@ -46,6 +46,7 @@ import com.fillbook.growthos.data.GrowthOsRepository
 import com.fillbook.growthos.data.authErrorMessage
 import com.fillbook.growthos.data.ProspectingCandidate
 import com.fillbook.growthos.data.ProspectingDiagnostics
+import com.fillbook.growthos.data.ProspectingPacing
 import com.fillbook.growthos.data.ProspectingSearchRunResult
 import com.fillbook.growthos.ui.components.ExpandableText
 import com.fillbook.growthos.ui.components.GrowthCard
@@ -69,6 +70,8 @@ import com.fillbook.growthos.ui.theme.Success
 import com.fillbook.growthos.ui.theme.TextPrimary
 import com.fillbook.growthos.ui.theme.TextSecondary
 import com.fillbook.growthos.ui.theme.TextTertiary
+import com.fillbook.growthos.ui.theme.Warning
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -94,6 +97,8 @@ import kotlinx.coroutines.launch
 fun ProspectingScreen(repo: GrowthOsRepository) {
     var items by remember { mutableStateOf<List<ProspectingCandidate>>(emptyList()) }
     var diagnostics by remember { mutableStateOf<ProspectingDiagnostics?>(null) }
+    var pacing by remember { mutableStateOf<ProspectingPacing?>(null) }
+    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     var loaded by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
@@ -116,6 +121,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
             val result = repo.getProspectingQueue()
             items = result.candidates
             diagnostics = result.diagnostics
+            pacing = result.pacing
             errorMessage = null
         } catch (e: Exception) {
             errorMessage = authErrorMessage(e) ?: "Couldn't load Prospecting. Check your connection and try again."
@@ -124,6 +130,14 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
     }
 
     LaunchedEffect(Unit) { refresh() }
+    // Keeps the "next reply in N min" countdown and the held reply button current.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(15_000)
+            nowMillis = System.currentTimeMillis()
+        }
+    }
+    val replyHold = replyHoldLabel(pacing, nowMillis)
 
     // Owner-triggered "search now" -- bypasses the 08:00/13:00/18:00
     // schedule so a tap has a real chance at surfacing something new right
@@ -183,7 +197,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
         }
     }
 
-    fun runOutcome(candidate: ProspectingCandidate, action: suspend () -> Unit) {
+    fun runOutcome(candidate: ProspectingCandidate, afterSuccess: suspend () -> Unit = {}, action: suspend () -> Unit) {
         scope.launch {
             busyId = candidate.id
             try {
@@ -191,6 +205,7 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                 items = items.filterNot { it.id == candidate.id }
                 editedDrafts.remove(candidate.id)
                 actionError = null
+                afterSuccess()
             } catch (e: Exception) {
                 actionError = "Couldn't record that. Check your connection and try again."
             }
@@ -213,6 +228,14 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
         }
         searchNowStatusLine(lastSearchNowRun)?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = TextTertiary, modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp))
+        }
+        replyPacingLine(pacing, nowMillis)?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (replyHold != null) Warning else TextTertiary,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+            )
         }
 
         (errorMessage ?: actionError)?.let { message ->
@@ -274,10 +297,12 @@ fun ProspectingScreen(repo: GrowthOsRepository) {
                                 onEditedTextChange = { editedDrafts[candidate.id] = it },
                                 drafting = draftingId == candidate.id,
                                 busy = busyId == candidate.id,
+                                replyHold = replyHold,
                                 onDraft = { startDraft(candidate) },
                                 onCopyAndOpen = { copyAndOpen(candidate) },
                                 onReplied = {
-                                    runOutcome(candidate) {
+                                    // Refresh afterwards so the pacing line and the held button reflect this reply.
+                                    runOutcome(candidate, afterSuccess = { refresh() }) {
                                         repo.markProspectingReplied(
                                             candidate.id,
                                             editedDrafts[candidate.id]?.takeIf { it != candidate.draftReply },
@@ -308,6 +333,7 @@ private fun ProspectingCard(
     onEditedTextChange: (String) -> Unit,
     drafting: Boolean,
     busy: Boolean,
+    replyHold: String?,
     onDraft: () -> Unit,
     onCopyAndOpen: () -> Unit,
     onReplied: () -> Unit,
@@ -417,7 +443,12 @@ private fun ProspectingCard(
         } else if (draft == null) {
             PrimaryButton(text = "Draft reply", onClick = onDraft, enabled = !drafting, busy = drafting, modifier = Modifier.fillMaxWidth())
         } else {
-            PrimaryButton(text = PlatformActions.copyAndOpenLabel(candidate.platform, hasLink = true), onClick = onCopyAndOpen, enabled = !busy, modifier = Modifier.fillMaxWidth())
+            PrimaryButton(
+                text = replyHold ?: PlatformActions.copyAndOpenLabel(candidate.platform, hasLink = true),
+                onClick = onCopyAndOpen,
+                enabled = !busy && replyHold == null,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
 
         Spacer(Modifier.height(6.dp))
@@ -432,6 +463,33 @@ private fun ProspectingCard(
             TextButton(onClick = onAlreadyHandled, enabled = !busy) { Text("Handled", maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
     }
+}
+
+/**
+ * The pacing status line under the header (2026-09-25): replies posted in a burst got @FillbookHQ's replies
+ * hidden on X, so the queue says when the next reply is sensible. Null when the API sent no pacing.
+ */
+internal fun replyPacingLine(pacing: ProspectingPacing?, nowMillis: Long): String? {
+    if (pacing == null) return null
+    val waitMillis = pacing.nextReplyAtMillis?.minus(nowMillis)?.takeIf { it > 0 }
+    val count = "${pacing.repliedLast24h} of ${pacing.dailyCap} replies in the last 24h."
+    if (waitMillis == null) return "$count Space them at least ${pacing.cooldownMinutes} min apart."
+    return if (pacing.reason == "daily_cap") {
+        "$count Next reply ${waitLabel(waitMillis)}. Posting in bursts gets replies hidden on X."
+    } else {
+        "Next reply ${waitLabel(waitMillis)}. Posting in bursts gets replies hidden on X."
+    }
+}
+
+/** The label that replaces "Copy & open" while the next reply should wait, or null when it can go now. */
+internal fun replyHoldLabel(pacing: ProspectingPacing?, nowMillis: Long): String? {
+    val waitMillis = pacing?.nextReplyAtMillis?.minus(nowMillis)?.takeIf { it > 0 } ?: return null
+    return "Next reply ${waitLabel(waitMillis)}"
+}
+
+private fun waitLabel(waitMillis: Long): String {
+    val minutes = (waitMillis + 59_999) / 60_000
+    return if (minutes < 60) "in $minutes min" else "in ${minutes / 60}h ${minutes % 60}m"
 }
 
 /**
