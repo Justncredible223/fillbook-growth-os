@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -119,7 +121,7 @@ class SupabaseAuthClient(
 
     private suspend fun refresh(): String = withContext(Dispatchers.IO) {
         val refreshToken = prefs.getString(KEY_REFRESH_TOKEN, null)
-            ?: throw NetworkException("Not signed in.", null)
+            ?: throw SignInRequiredException("Sign in to load site statistics.")
         val body = JSONObject().put("refresh_token", refreshToken)
         val request = Request.Builder()
             .url("$supabaseUrl/auth/v1/token?grant_type=refresh_token")
@@ -129,12 +131,14 @@ class SupabaseAuthClient(
 
         client.newCall(request).execute().use { response ->
             val responseBody = response.body?.string() ?: "{}"
-            if (!response.isSuccessful) {
-                // A refresh token is only ever rejected because it's been revoked/expired --
-                // clear the stored session so the caller re-prompts sign-in instead of
-                // retrying a refresh that will just fail again every time.
+            if (response.code in 400..499) {
+                // Supabase rejected the refresh token itself (revoked, expired, or already rotated): the session is over.
                 signOut()
-                throw NetworkException("Session expired -- sign in again.", response.code)
+                throw SignInRequiredException("Your session ended (${supabaseErrorReason(responseBody) ?: "HTTP ${response.code}"}). Sign in again.")
+            }
+            if (!response.isSuccessful) {
+                // A server or network problem says nothing about the session -- keep it and let the caller retry.
+                throw NetworkException("Couldn't refresh the session (HTTP ${response.code}). Try again.", response.code)
             }
             val json = JSONObject(responseBody)
             storeSession(json)
@@ -150,14 +154,21 @@ class SupabaseAuthClient(
      * like a transient network failure.
      */
     suspend fun getValidAccessToken(): String {
+        cachedValidToken()?.let { return it }
+        // One refresh at a time across every client instance: Supabase rotates the refresh token, so a second,
+        // concurrent refresh with the old token would fail and sign the owner out.
+        return refreshLock.withLock { cachedValidToken() ?: refresh() }
+    }
+
+    private fun cachedValidToken(): String? {
         val expiresAt = prefs.getLong(KEY_EXPIRES_AT, 0L)
         val cached = prefs.getString(KEY_ACCESS_TOKEN, null)
         val nowSeconds = System.currentTimeMillis() / 1000
-        if (cached != null && expiresAt - nowSeconds > 60) return cached
-        return refresh()
+        return if (cached != null && expiresAt - nowSeconds > 60) cached else null
     }
 
     companion object {
+        private val refreshLock = Mutex()
         private const val KEY_ACCESS_TOKEN = "access_token"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EXPIRES_AT = "expires_at"
@@ -179,3 +190,6 @@ internal fun googleAuthorizeUrl(supabaseUrl: String, redirectUri: String, challe
     return "$supabaseUrl/auth/v1/authorize?provider=google&redirect_to=${enc(redirectUri)}" +
         "&code_challenge=${enc(challenge)}&code_challenge_method=s256"
 }
+
+/** The stored session is missing or was rejected by Supabase: the UI should show sign-in, not a retryable error. */
+class SignInRequiredException(message: String) : Exception(message)
