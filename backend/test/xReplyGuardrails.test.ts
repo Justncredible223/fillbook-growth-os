@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { capitalizationProblem, dashProblem, checkReplyGuardrails, checkReplySoftStyle, draftWithRetries, MAX_DRAFT_ATTEMPTS, MAX_SOFT_ATTEMPTS, containsAiTell, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
+import { checkShowcaseShown, capitalizationProblem, dashProblem, checkReplyGuardrails, checkReplySoftStyle, draftWithRetries, MAX_DRAFT_ATTEMPTS, MAX_SOFT_ATTEMPTS, containsAiTell, containsBannedGenericPhrase, containsLink, containsUnverifiedClaim, impliesContactOrLinkRequest } from "../src/content/xReplyGuardrails";
 
 describe("checkReplyGuardrails", () => {
   it("passes a purely helpful reply where promotion would be inappropriate -- no Fillbook mention at all", () => {
@@ -383,4 +383,24 @@ describe("dashProblem (video copy rule, owner direction 2026-09-21)", () => {
       expect(dashProblem(text)).toBeNull();
     });
   }
+});
+
+describe("checkShowcaseShown (owner direction 2026-09-25)", () => {
+  it("passes a reply that names Fillbook for the view it picked", () => {
+    expect(checkShowcaseShown("Fillbook puts each setup on its own row with its own net P&L.", "setup_breakdown")).toBeNull();
+  });
+
+  it("passes a reply that picked no view", () => {
+    expect(checkShowcaseShown("Tuesday's CPI print moved it, not your entry.", "none")).toBeNull();
+    expect(checkShowcaseShown("Tuesday's CPI print moved it, not your entry.", undefined)).toBeNull();
+    expect(checkShowcaseShown("Fillbook tracks that.", undefined)).toBeNull(); // older drafts carry no showcase
+  });
+
+  it("flags a reply that picked no view but names Fillbook anyway", () => {
+    expect(checkShowcaseShown("Fillbook puts every trade in one place.", "none")?.reason).toMatch(/without picking one of its views/);
+  });
+
+  it("flags a reply that picked a view but never shows it", () => {
+    expect(checkShowcaseShown("One setup is usually eating the rest.", "setup_breakdown")?.reason).toMatch(/setup_breakdown/);
+  });
 });

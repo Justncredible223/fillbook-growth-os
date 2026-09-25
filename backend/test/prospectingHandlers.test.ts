@@ -401,6 +401,26 @@ describe("draftProspectingCandidateReply -- the candidate's platform reaches the
     expect(updated.draftReply).toBe(softDraft.reply);
   });
 
+  it("retries once when the draft picked a Fillbook view but never shows it, and keeps the retry that does", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-showcase", platform: "x", status: "shown", draftReply: null }));
+    const vague = { isRelevant: true, reply: "One setup is usually eating what the others make.", mentionsFillbook: false, usesLink: false, showcase: "setup_breakdown" };
+    const shown = {
+      isRelevant: true,
+      reply: "One setup is usually eating what the others make. Fillbook puts each setup on its own row with its own win rate and net P&L.",
+      mentionsFillbook: true,
+      usesLink: false,
+      showcase: "setup_breakdown",
+    };
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => (drafter.mock.calls.length === 1 ? vague : shown));
+
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-showcase", { repo, drafter, loadGrounding, cheapRelevanceCheck });
+
+    expect(drafter).toHaveBeenCalledTimes(2);
+    expect(drafter.mock.calls[1]![0].retryFeedback).toMatch(/setup_breakdown/);
+    expect(updated.draftReply).toBe(shown.reply);
+  });
+
   it("does not retry when the model says the post is not relevant", async () => {
     const repo = new InMemoryProspectingRepository();
     repo.seed(candidate({ id: "x-irrelevant", platform: "x", status: "shown", draftReply: null }));

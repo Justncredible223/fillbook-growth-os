@@ -7,6 +7,7 @@ import {
   prospectingPlatformProfile,
   PROSPECTING_TRACKABLE_LINK,
 } from "../src/prospecting/prospectingReplyWriter";
+import { FILLBOOK_SHOWCASE_VIEWS } from "../src/content/fillbookShowcase";
 
 /** The system value is a plain string, or an array of text blocks when prompt caching is on. */
 function systemText(system: unknown): string {
@@ -66,29 +67,37 @@ describe("draftProspectingReply", () => {
     expect(body.messages[0].content).toContain("From: @unknown");
   });
 
-  it("REFINED (2026-09-05): X's system prompt gives a structure for an earned mention instead of a blanket 90%+ no-mention default -- still value-first, still silence-by-default when unsure, but no longer reads as pure advice with no path to awareness", async () => {
+  it("REFINED (2026-09-25): on X, a reply to a problem Fillbook answers shows what Fillbook would show them, as the point of the reply rather than an aside", async () => {
     const { system } = await capturePrompt("x");
 
-    // The old blanket rule is gone for X specifically.
     expect(system).not.toMatch(/90%\+/);
-    expect(system).not.toContain("mentionsFillbook=false");
-    // The new structure and its hard rules are present.
-    expect(system).toContain("thoughtful trader or builder joining the conversation");
-    expect(system).toMatch(/respond specifically to what they actually said/i);
-    expect(system).toContain("connect their problem to journaling");
-    expect(system).toContain("That's one of the things we're trying to make easier with Fillbook");
-    expect(system).toContain("Never include a link by default");
-    expect(system).toContain("check out our platform");
+    expect(system).not.toContain("thoughtful trader or builder joining the conversation");
+    expect(system).not.toContain("Conversation beats performing expertise");
+    expect(system).toContain("show them what Fillbook would\nshow them about that exact problem");
+    expect(system).toContain("The Fillbook sentence is the point of the reply, not an aside");
+    expect(system).toMatch(/When NO view fits/);
+    expect(system).toContain("never \"check it out\"");
     expect(system).toContain("Never impersonate an individual trader or conceal");
   });
 
-  it("includes a worked example of what an earned Fillbook mention looks like, so the model has a concrete shape to follow instead of just abstract rules", async () => {
+  it("lists every verified Fillbook view with what it shows, so the reply can only describe real screens", async () => {
     const { system } = await capturePrompt("x");
 
-    expect(system).toMatch(/worked example of an earned mention/i);
-    expect(system).toContain("Blew up my funded account again revenge trading after a red day.");
-    expect(system).toContain("which is part\nof why we built Fillbook around it.");
-    expect(system).toMatch(/never copy this verbatim/i);
+    for (const view of FILLBOOK_SHOWCASE_VIEWS) {
+      expect(system).toContain(`- ${view.id}: for ${view.problems}. Fillbook shows ${view.shows}.`);
+    }
+    expect(system).toMatch(/Worked examples/);
+    expect(system).toMatch(/never copy these/);
+  });
+
+  it("asks the model to declare which view it showed, or none", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(replyResponse("x", false, false));
+    const llmClient = new LlmClient("test-key", fetchMock);
+    await draftProspectingReply(llmClient, { platform: "x", authorHandle: null, postText: "hi", discoveryQuery: "drawdown" }, "", "");
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body);
+    const schema = body.tools[0].input_schema;
+    expect(schema.required).toContain("showcase");
+    expect(schema.properties.showcase.enum).toEqual([...FILLBOOK_SHOWCASE_VIEWS.map((view) => view.id), "none"]);
   });
 
   it("an unrecognized platform also keeps the conservative default, never X's more structured one", async () => {

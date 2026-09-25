@@ -1,5 +1,6 @@
 import { MODEL_HAIKU, type LlmClient } from "../content/llmClient.js";
 import { HUMAN_REPLY_VOICE_RULES } from "../content/humanReplyVoice.js";
+import { SHOWCASE_IDS, SHOWCASE_REPLY_GUIDANCE } from "../content/fillbookShowcase.js";
 import { formatStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
 
 const CHEAP_RELEVANCE_SCHEMA = {
@@ -28,8 +29,13 @@ const DRAFT_SCHEMA = {
     },
     mentionsFillbook: { type: "boolean", description: "True only if the reply actually names Fillbook." },
     usesLink: { type: "boolean", description: "True only if the reply includes a Fillbook link placeholder." },
+    showcase: {
+      type: "string",
+      enum: SHOWCASE_IDS,
+      description: 'The id of the ONE Fillbook view the reply shows, or "none" when no view fits the post and the reply leaves Fillbook out.',
+    },
   },
-  required: ["isRelevant", "reply", "mentionsFillbook", "usesLink"],
+  required: ["isRelevant", "reply", "mentionsFillbook", "usesLink", "showcase"],
 };
 
 /**
@@ -64,51 +70,11 @@ export interface ProspectingPlatformProfile {
 }
 
 /**
- * X-specific (2026-09-05): genuinely useful first, sounds human, and can
- * naturally create awareness of Fillbook when the conversation is
- * actually relevant -- a thoughtful trader/builder joining the
- * conversation, never a salesperson using advice as a pretext to pitch.
- * Replaces the old blanket "90%+ mention NOT AT ALL" default with a
- * structure for recognizing when a mention is earned, while keeping every
- * hard boundary (no link by default, no generic marketing phrases, no
- * unverified claims, no impersonation/concealment) at least as strict as
- * before.
+ * X-specific (2026-09-25): when the post describes a problem Fillbook answers, the reply shows what
+ * Fillbook would show them about it (see fillbookShowcase.ts). Replaces the 2026-09-05 "earned mention
+ * as an aside" structure, which the owner found too conversational to make anyone want to try it.
  */
-const X_REPLY_NO_PITCH_GUIDANCE = `Sound like a thoughtful trader or builder joining the conversation -- genuinely useful first, human,
-and something that can naturally create awareness of Fillbook when the conversation is actually
-relevant. Never a salesperson using advice as a pretext to pitch.
-
-When the conversation is genuinely relevant to trade journaling, rule tracking, consistency,
-drawdown discipline, or reviewing trades, use this shape where it fits -- skip steps that don't
-apply; this is not a rigid template to fill in mechanically:
-1. Respond specifically to what they actually said, not a generic reaction anyone could have posted.
-2. Add one concrete insight, example, or a real practical question.
-3. Only if it fits naturally, connect their problem to journaling/rule-tracking/consistency/drawdown
-   discipline/reviewing trades -- never force this connection where it doesn't belong.
-4. Only once steps 1-3 already made a real, earned connection to that problem, you MAY optionally
-   note that Fillbook is built around it.
-5. A soft invitation is fine when it's earned -- for example: "That's one of the things we're trying to make easier with Fillbook." Never a link, never a call to action, never "check it out."
-
-Worked example of an earned mention (write your own, specific to the actual post in front of you --
-never copy this verbatim):
-Their post: "Blew up my funded account again revenge trading after a red day."
-A reply that earns the mention: "The urge to make it back same-day is exactly when most drawdown
-violations happen. What's helped some traders is logging the losing trade the second it closes,
-before opening anything else. That pause is hardest to build on your own, which is part
-of why we built Fillbook around it." Notice steps 1-3 already did the real work (specific response,
-one concrete insight, an earned connection to drawdown discipline) before step 4's mention shows up
-almost as an aside, not the point of the reply.
-
-Hard rules, no exceptions:
-- Never add a Fillbook mention when it doesn't logically fit the conversation -- when genuinely
-  unsure, leave it out; silence is always the safe default, not a missed opportunity.
-- Never include a link by default -- see the link policy below for the rare exception.
-- Never use generic marketing phrases or close variants of them: "check out our platform", "learn
-  more", "DM me", "sign up today", "click here", "link in bio".
-- Never claim a personal trading result, a customer/user result, or a product capability that isn't
-  in the verified knowledge given to you.
-- Never impersonate an individual trader or conceal that this is the Fillbook account replying --
-  the VOICE sounds like a real person, but the affiliation is never hidden or denied.`;
+const X_REPLY_NO_PITCH_GUIDANCE = SHOWCASE_REPLY_GUIDANCE;
 
 /** The original, unchanged conservative guidance -- see this constant's own docstring above on why this stays conservative while X gets more structure. Used as the fallback for any platform other than X. */
 const CONSERVATIVE_NO_PITCH_GUIDANCE = `90%+ of good replies here mention Fillbook NOT AT ALL. Your default assumption should be
@@ -194,8 +160,7 @@ A good reply does ONE of: answers their question, explains a rule (drawdown/cons
 mechanics), clarifies a misconception, gives a useful number or calculation, shares a practical
 trading-journal or trade-review insight, offers a genuine observation, empathizes without sounding
 fake, or asks a real follow-up question. Never engagement-bait ("Great post!", "Facts.", "100%",
-"This."). Conversation beats performing expertise -- sometimes the best reply is a sharp question, not
-a confident answer.
+"This."). When a Fillbook view fits, the useful point sets up the view; it never replaces it.
 
 Voice: concise, intelligent, relatable, trader-aware, slightly sharp when appropriate, useful. No
 corporate SaaS language, no generic motivation, no AI clichés, no forced controversy. Fillbook is a
@@ -233,6 +198,8 @@ export interface ProspectingDraftResult {
   reply: string;
   mentionsFillbook: boolean;
   usesLink: boolean;
+  /** The Fillbook view the reply shows (a fillbookShowcase.ts id), or "none". Absent from older drafts. */
+  showcase?: string;
 }
 
 /**
