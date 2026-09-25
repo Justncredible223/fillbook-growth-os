@@ -85,6 +85,17 @@ export class SupabaseProspectingRepository implements ProspectingRepository {
     return { id: data.id as string, created: true };
   }
 
+  async listRepliedSince(since: Date): Promise<ProspectingCandidate[]> {
+    const { data, error } = await this.client
+      .from("prospecting_candidates")
+      .select()
+      .eq("status", "replied")
+      .gte("replied_at", since.toISOString())
+      .order("replied_at", { ascending: false });
+    if (error) throw new Error(`listRepliedSince failed: ${error.message}`);
+    return (data ?? []).map(fromRow);
+  }
+
   async listByStatus(statuses: ProspectingStatus[], limit = 50): Promise<ProspectingCandidate[]> {
     const { data, error } = await this.client
       .from("prospecting_candidates")

@@ -63,6 +63,8 @@ export interface ProspectingRepository {
   /** Insert-if-new by (platform, externalId) -- the dedup key. Returns created=false if already known (no duplicate re-surfacing). */
   upsertIfNew(candidate: NewProspectingCandidate): Promise<{ id: string; created: boolean }>;
   listByStatus(statuses: ProspectingStatus[], limit?: number): Promise<ProspectingCandidate[]>;
+  /** Replied candidates whose repliedAt is at or after `since` -- feeds reply pacing (prospectingPacing.ts). */
+  listRepliedSince(since: Date): Promise<ProspectingCandidate[]>;
   getById(id: string): Promise<ProspectingCandidate | null>;
   markShown(ids: string[]): Promise<void>;
   updateStatus(

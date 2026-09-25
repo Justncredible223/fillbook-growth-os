@@ -113,7 +113,7 @@ describe("selectDailyWorkingSet -- freshness-adjusted ranking", () => {
   const HOUR = 60 * 60 * 1000;
   const hoursAgo = (h: number) => new Date(NOW.getTime() - h * HOUR).toISOString();
 
-  it("excludes a post older than 72h from today's set entirely, regardless of how high its stored score is -- it's set aside as tooOldForToday, not scored or deferred", () => {
+  it("excludes a post older than 12h from today's set entirely, regardless of how high its stored score is -- it's set aside as tooOldForToday, not scored or deferred", () => {
     const pool = [candidate({ id: "ancient", opportunityScore: 95, postCreatedAt: hoursAgo(24 * 10), authorExternalId: "a" })];
     const result = selectDailyWorkingSet(pool, NOW);
     expect(result.selected).toHaveLength(0);
@@ -121,8 +121,8 @@ describe("selectDailyWorkingSet -- freshness-adjusted ranking", () => {
     expect(result.tooOldForToday.map((c) => c.id)).toEqual(["ancient"]);
   });
 
-  it("still selects a post at exactly the 72h boundary -- 'older than 72 hours' is strictly greater, not equal", () => {
-    const pool = [candidate({ id: "boundary", opportunityScore: 90, postCreatedAt: hoursAgo(72), authorExternalId: "a" })];
+  it("still selects a post at exactly the 12h boundary -- 'older than 12 hours' is strictly greater, not equal", () => {
+    const pool = [candidate({ id: "boundary", opportunityScore: 90, postCreatedAt: hoursAgo(12), authorExternalId: "a" })];
     const result = selectDailyWorkingSet(pool, NOW);
     expect(result.tooOldForToday).toHaveLength(0);
     expect(result.selected.map((c) => c.id)).toEqual(["boundary"]);
@@ -130,9 +130,9 @@ describe("selectDailyWorkingSet -- freshness-adjusted ranking", () => {
 
   it("a fresh, relevant candidate outranks an older candidate that has a higher FROZEN score -- proves ranking now uses today's effective score, not the stored one", () => {
     const pool = [
-      // Frozen at 68 when it was fresh; now 70h old (near the 72h cutoff, still technically eligible)
+      // Frozen at 68 when it was fresh; now 11.7h old (near the 12h cutoff, still technically eligible)
       // -- heavily decayed today, and should no longer beat a fresh candidate scored much lower at discovery.
-      candidate({ id: "old-but-was-high-scoring", opportunityScore: 68, postCreatedAt: hoursAgo(70), authorExternalId: "a" }),
+      candidate({ id: "old-but-was-high-scoring", opportunityScore: 68, postCreatedAt: hoursAgo(11.7), authorExternalId: "a" }),
       // Discovered just now, frozen score lower, but nothing to decay -- keeps its full value.
       candidate({ id: "fresh", opportunityScore: 42, postCreatedAt: hoursAgo(1), authorExternalId: "b" }),
     ];

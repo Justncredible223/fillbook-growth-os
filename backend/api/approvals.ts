@@ -152,8 +152,8 @@ async function handleProspecting(req: VercelRequest, res: VercelResponse): Promi
         // distinguishable from "everything's just too old right now" or
         // "plenty of backlog, none of it clears today's quality bar" (see
         // prospectingHandlers.ts's ProspectingSelectionDiagnostics).
-        const { candidates, diagnostics } = await listProspectingQueue(client);
-        res.status(200).json({ items: candidates.map(toProspectingJson), diagnostics });
+        const { candidates, diagnostics, pacing } = await listProspectingQueue(client);
+        res.status(200).json({ items: candidates.map(toProspectingJson), diagnostics, pacing });
       }
     } catch (err) {
       res.status(500).json({ error: errorMessage(err) });

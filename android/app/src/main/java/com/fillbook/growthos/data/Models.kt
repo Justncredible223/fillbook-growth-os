@@ -301,10 +301,26 @@ data class ProspectingDiagnostics(
     val tooOldForToday: Int,
 )
 
+/**
+ * Reply pacing from backend/src/prospecting/prospectingPacing.ts (2026-09-25): replies posted in a burst got
+ * @FillbookHQ's replies hidden on X, so the app holds the next reply until [nextReplyAtMillis]. Null when the
+ * API response predates the field.
+ */
+data class ProspectingPacing(
+    val repliedLast24h: Int,
+    val dailyCap: Int,
+    val cooldownMinutes: Int,
+    /** When the next reply is fine to post (epoch millis), or null if it already is. */
+    val nextReplyAtMillis: Long?,
+    /** "cooldown" or "daily_cap" while waiting, else null. */
+    val reason: String?,
+)
+
 /** Return shape for GrowthOsRepository.getProspectingQueue() -- pairs today's selected candidates with the diagnostics explaining why the list looks the way it does (see ProspectingDiagnostics). */
 data class ProspectingQueueResult(
     val candidates: List<ProspectingCandidate>,
     val diagnostics: ProspectingDiagnostics?,
+    val pacing: ProspectingPacing? = null,
 )
 
 /** The result of one Prospecting search run (scheduled or owner-triggered "Search now") -- see backend/src/prospecting/prospectingSearch.ts's ProspectingRunResult. */

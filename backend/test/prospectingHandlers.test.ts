@@ -28,6 +28,10 @@ class InMemoryProspectingRepository implements ProspectingRepository {
     return [...this.rows.values()].filter((r) => statuses.includes(r.status));
   }
 
+  async listRepliedSince(since: Date): Promise<ProspectingCandidate[]> {
+    return [...this.rows.values()].filter((r) => r.status === "replied" && r.repliedAt !== null && new Date(r.repliedAt) >= since);
+  }
+
   async getById(id: string): Promise<ProspectingCandidate | null> {
     return this.rows.get(id) ?? null;
   }
@@ -151,6 +155,21 @@ describe("listProspectingQueue -- selection diagnostics", () => {
  * This closes it at the one place every non-terminal candidate passes
  * through before ever becoming visible: listProspectingQueue itself.
  */
+describe("listProspectingQueue -- reply pacing", () => {
+  const NOW = new Date("2026-09-25T12:00:00Z");
+  const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60000).toISOString();
+
+  it("returns pacing from the replies actually posted, so the app can hold the next one", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "r1", status: "replied", repliedAt: minutesAgo(10), authorExternalId: "a" }));
+    repo.seed(candidate({ id: "r2", status: "replied", repliedAt: minutesAgo(3000), authorExternalId: "b" }));
+
+    const { pacing } = await listProspectingQueue(fakeClient, NOW, { repo });
+
+    expect(pacing).toMatchObject({ repliedLast24h: 1, lastRepliedAt: minutesAgo(10), reason: "cooldown", nextReplyAt: minutesAgo(-10) });
+  });
+});
+
 describe("listProspectingQueue -- filters out irrelevant candidates before they become actionable", () => {
   const NOW = new Date("2026-09-07T12:00:00Z");
 

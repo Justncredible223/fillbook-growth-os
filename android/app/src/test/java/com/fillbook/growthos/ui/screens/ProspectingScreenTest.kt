@@ -1,6 +1,8 @@
 package com.fillbook.growthos.ui.screens
 
 import com.fillbook.growthos.data.ProspectingDiagnostics
+import com.fillbook.growthos.data.ProspectingPacing
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -217,5 +219,41 @@ class ProspectingScreenEmptyStateStructureTest {
                 "non-scrollable PolishedEmptyState makes the pull-to-refresh gesture silently inert, " +
                 "confirmed with a real finger on-device (2026-09-07)."
         }
+    }
+}
+
+/** Reply pacing (2026-09-25): burst posting got @FillbookHQ's replies hidden on X, so the queue holds the next reply. */
+class ReplyPacingTest {
+    private val now = 1_000_000_000L
+    private fun pacing(replied: Int, nextInMinutes: Long?, reason: String?) =
+        ProspectingPacing(replied, 5, 20, nextInMinutes?.let { now + it * 60_000 }, reason)
+
+    @Test
+    fun noPacingFromAnOlderApiShowsNothingAndHoldsNothing() {
+        assertNull(replyPacingLine(null, now))
+        assertNull(replyHoldLabel(null, now))
+    }
+
+    @Test
+    fun readyToReplyShowsTheCountAndDoesNotHoldTheButton() {
+        assertEquals("2 of 5 replies in the last 24h. Space them at least 20 min apart.", replyPacingLine(pacing(2, null, null), now))
+        assertNull(replyHoldLabel(pacing(2, null, null), now))
+    }
+
+    @Test
+    fun cooldownHoldsTheButtonWithAMinuteCountdown() {
+        assertEquals("Next reply in 14 min", replyHoldLabel(pacing(1, 14, "cooldown"), now))
+        assertEquals("Next reply in 14 min. Posting in bursts gets replies hidden on X.", replyPacingLine(pacing(1, 14, "cooldown"), now))
+    }
+
+    @Test
+    fun dailyCapShowsHoursAndTheCount() {
+        assertEquals("Next reply in 3h 5m", replyHoldLabel(pacing(5, 185, "daily_cap"), now))
+        assertEquals("5 of 5 replies in the last 24h. Next reply in 3h 5m. Posting in bursts gets replies hidden on X.", replyPacingLine(pacing(5, 185, "daily_cap"), now))
+    }
+
+    @Test
+    fun aWaitThatHasAlreadyPassedNoLongerHolds() {
+        assertNull(replyHoldLabel(pacing(1, -1, "cooldown"), now))
     }
 }
