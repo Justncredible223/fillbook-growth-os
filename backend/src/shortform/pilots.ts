@@ -795,7 +795,7 @@ export const PILOT_9: ScenePlan = {
   ],
 };
 
-export const PILOTS: ScenePlan[] = [PILOT_1, PILOT_2, PILOT_3, PILOT_4, PILOT_5, PILOT_6, PILOT_7, PILOT_8, PILOT_9];
+
 
 /* ---------------------------------------------------------------------------------------------- */
 /* Platform metadata for each pilot (built now, saved only after the owner publishes by hand).     */
@@ -861,8 +861,331 @@ const PILOT_COPY: Record<string, { topic: string; cta: string; captionBody: stri
   },
 };
 
+/* ---------------------------------------------------------------------------------------------- */
+/* Angles (2026-09-25): the owner now posts 3 videos a day. Each angle re-cuts one verified concept  */
+/* with a new hook and narration over the SAME footage, crops, clip windows and fact citations, so   */
+/* every number stays checked against its recording. Numbers in narration must come from the facts  */
+/* the scene already cites; validateScenePlan enforces that for every plan in PILOTS.               */
+/* ---------------------------------------------------------------------------------------------- */
+
+interface AngleScene {
+  narration: string;
+  headline: string;
+  caption: string;
+  takeaway: string;
+  /** A different window of the same recording; only where the scene's cited facts are on screen for all of it. */
+  clip?: { start: number; end: number };
+}
+
+interface AngleSpec {
+  key: string;
+  title: string;
+  hook: string;
+  topic: string;
+  /** One entry per scene of the base plan, in the same order. */
+  scenes: AngleScene[];
+  captionBody: string;
+  youtubeTitle: string;
+}
+
+/** Speech runs about 2.7 words a second at the production voice's +8% rate; padded to the next half second. */
+function estimateSeconds(narration: string): number {
+  const words = narration.trim().split(/\s+/).length;
+  return Math.max(2.5, Math.ceil((words / 2.7 + 0.4) * 2) / 2);
+}
+
+const ANGLE_COPY: Record<string, { topic: string; cta: string; captionBody: string; youtubeTitle: string }> = {};
+
+function angleOf(base: ScenePlan, spec: AngleSpec): ScenePlan {
+  if (spec.scenes.length !== base.scenes.length) throw new Error(`${base.planId}/${spec.key}: ${spec.scenes.length} scene texts for ${base.scenes.length} scenes`);
+  const variationId = `${base.variationId}-${spec.key}`;
+  const plan: ScenePlan = {
+    ...base,
+    planId: `${base.planId}--${spec.key}`,
+    title: spec.title,
+    hook: spec.hook,
+    topic: spec.topic,
+    variationId,
+    scenes: base.scenes.map((s, i) => {
+      const text = spec.scenes[i]!;
+      return {
+        ...s,
+        sceneId: `${s.sceneId}-${spec.key}`,
+        variationId,
+        narration: text.narration,
+        takeaway: text.takeaway,
+        headline: text.headline,
+        captionText: text.caption,
+        durationSeconds: estimateSeconds(text.narration),
+        clipTimeRangeSeconds: text.clip ?? s.clipTimeRangeSeconds,
+        claims: s.claims.map((c) => ({ ...c, id: `${c.id}-${spec.key}` })),
+      };
+    }),
+  };
+  const baseCopy = PILOT_COPY[base.planId]!;
+  ANGLE_COPY[plan.planId] = { topic: spec.topic, cta: baseCopy.cta, captionBody: spec.captionBody, youtubeTitle: spec.youtubeTitle };
+  return plan;
+}
+
+export const PILOT_ANGLES: ScenePlan[] = [
+  angleOf(PILOT_1, {
+    key: "b",
+    title: "64% win rate. One setup still loses.",
+    hook: "64% win rate. One setup still loses.",
+    topic: "A strong overall win rate can sit on top of one losing setup",
+    scenes: [
+      { narration: "64% win rate. One setup still loses.", headline: "64% win rate", caption: "22 trades, $387.08 net.", takeaway: "A good overall win rate can hide one bad setup." },
+      { narration: "Sorted worst first, it's Opening Range Break: 8 trades, 25% win, down $421.76.", headline: "The setup behind the losses", caption: "Opening Range Break: 8 trades, -$421.76.", takeaway: "Sort setups worst first to find the leak." },
+      { narration: "This is one example month of recorded trades. Your own setups will sort differently.", headline: "One example month", caption: "Your own setups will sort differently.", takeaway: "Check your own setups, not these numbers." },
+      { narration: "Sort your own setups, worst first.", headline: "Sort your setups worst first.", caption: "See your breakdown at fillbookhq.com.", takeaway: "Start the review from the weakest setup." },
+    ],
+    captionBody: "A 64% win rate can still hide a setup that loses. Demo data, so sort your own setups worst first.",
+    youtubeTitle: "64% Win Rate, One Losing Setup: Sort Your Setups Worst First",
+  }),
+  angleOf(PILOT_1, {
+    key: "c",
+    title: "The month total hides your worst setup.",
+    hook: "A green month. Here's what it hides.",
+    topic: "A month total averages a losing setup away",
+    scenes: [
+      { narration: "A green month. Here's what it hides.", headline: "The total hides something", caption: "$387.08 net across 22 trades.", takeaway: "A month total blends every setup together." },
+      { narration: "One setup, Opening Range Break, lost $421.76 over 8 trades at a 25% win rate.", headline: "One setup: -$421.76", caption: "Opening Range Break, 8 trades, 25% win.", takeaway: "One setup can carry most of the losses." },
+      { narration: "These are recorded demo trades from one month. Yours will tell a different story.", headline: "Recorded demo trades", caption: "Your month will tell a different story.", takeaway: "The check matters more than these numbers." },
+      { narration: "Look past the total this month.", headline: "Look past the total.", caption: "Break your month down by setup.", takeaway: "Break the month down before you judge it." },
+    ],
+    captionBody: "A positive month can average away a setup that keeps losing. Demo data, so check your own month by setup.",
+    youtubeTitle: "What Your Month Total Hides: One Losing Setup",
+  }),
+  angleOf(PILOT_2, {
+    key: "b",
+    title: "Up $387. How much room is left?",
+    hook: "You're up. How much room is left?",
+    topic: "Being up on the account says nothing about the drawdown room left",
+    scenes: [
+      { narration: "You're up. How much room is left?", headline: "Up $387.08", caption: "14 wins, 8 losses.", takeaway: "Profit and room left are different questions." },
+      { narration: "The trailing drawdown buffer is $1,725.12, with $1,000.00 left on today's loss limit. That's the real room.", headline: "Room left: $1,725.12", caption: "Today's loss limit left: $1,000.00.", takeaway: "The buffer is the number that ends accounts." },
+      { narration: "These figures come from the trades you record and the rules you configure. Your firm's rules are the official limits.", headline: "From your recorded trades", caption: "Your firm's rules are the official limits.", takeaway: "The figures depend on the trades and rules entered." },
+      { narration: "Check the room, not the balance.", headline: "Check the room.", caption: "Your buffer, not your balance.", takeaway: "Know the room before you size up." },
+    ],
+    captionBody: "Profit tells you how you're doing. The buffer tells you how much room is left. Demo account, based on recorded trades and configured rules.",
+    youtubeTitle: "Up $387, but How Much Room Is Left? The Drawdown Buffer",
+  }),
+  angleOf(PILOT_2, {
+    key: "c",
+    title: "14 wins and 13% of the target.",
+    hook: "14 wins. Still far from the target.",
+    topic: "Progress toward a profit target is its own number, separate from wins and losses",
+    scenes: [
+      { narration: "14 wins. Still far from the target.", headline: "14 wins, 8 losses", caption: "Net P&L: +$387.08.", takeaway: "A winning record isn't the same as progress." },
+      { narration: "The profit target is $3,000.00, currently $387.08. Today's loss limit remaining is $1,000.00.", headline: "13% of the target", caption: "Target $3,000.00. Loss limit left $1,000.00.", takeaway: "Track the target separately from the record." },
+      { narration: "These numbers depend on the trades you record and the rules you configure. Confirm the targets with your prop firm.", headline: "Based on recorded trades", caption: "Confirm the targets with your firm.", takeaway: "The firm's own rules set the real target." },
+      { narration: "Track the target, not just the wins.", headline: "Track the target.", caption: "Not just the win count.", takeaway: "Measure progress against the target." },
+    ],
+    captionBody: "A winning record and progress toward the profit target are two different numbers. Demo account, based on recorded trades and configured rules.",
+    youtubeTitle: "14 Wins and Only 13% of the Target: Tracking Profit Target Progress",
+  }),
+  angleOf(PILOT_3, {
+    key: "b",
+    title: "One trade broke the plan.",
+    hook: "One trade broke the plan.",
+    topic: "A single trade sized above the written plan's contract limit",
+    scenes: [
+      { narration: "One trade broke the plan. Five contracts, Opening Range Break, a $257.40 loss.", headline: "One trade broke the plan.", caption: "5 contracts, -$257.40.", takeaway: "Check a losing trade's size against the plan." },
+      { narration: "This is one trade from one recorded log. Your own log will show your own sizes.", headline: "One recorded trade", caption: "Your own log will show your own sizes.", takeaway: "The check is your size against your plan." },
+      { narration: "The written plan caps every trade at 3 contracts. That trade was over it before it ever lost.", headline: "The plan said 3", caption: "Max contracts per trade: 3.", takeaway: "Size above the plan is a fact you can check." },
+      { narration: "Check your last loss against your plan.", headline: "Check your last loss.", caption: "Compare its size to your plan.", takeaway: "Start with the size, not the story." },
+    ],
+    captionBody: "Five contracts on a plan that allows three. Demo data, so check your own trades against your own plan.",
+    youtubeTitle: "One Trade Broke the Plan: Checking Size Against Your Trading Plan",
+  }),
+  angleOf(PILOT_3, {
+    key: "c",
+    title: "Your plan has a size limit. Check it.",
+    hook: "Your plan has a size limit. This trade used 5 contracts.",
+    topic: "Comparing a real trade's size to the plan's written maximum",
+    scenes: [
+      { narration: "Your plan has a size limit. This trade used 5 contracts.", headline: "5 contracts", caption: "Opening Range Break, September 21st.", takeaway: "Every trade's size can be checked." },
+      { narration: "One trade, from one recorded demo log. The point is the check, not this trade.", headline: "One recorded demo trade", caption: "The point is the check, not this trade.", takeaway: "Run the same check on your own trades." },
+      { narration: "Max contracts per trade here is 3, written into the trading plan before the trade.", headline: "Plan limit: 3 contracts", caption: "Written before the trade, not after.", takeaway: "A written limit turns size into a yes or no." },
+      { narration: "Write your size limit down first.", headline: "Write your limit down.", caption: "Then check every trade against it.", takeaway: "A limit only works if it's written." },
+    ],
+    captionBody: "A written size limit makes every trade checkable. Demo data from one recorded log.",
+    youtubeTitle: "Your Plan Has a Size Limit: 5 Contracts vs a Max of 3",
+  }),
+  angleOf(PILOT_4, {
+    key: "b",
+    title: "Healthy account. Payout still at risk.",
+    hook: "Health score 80. Payout still at risk.",
+    topic: "A healthy account score can still carry a consistency-rule problem",
+    scenes: [
+      { narration: "Health score 80. Payout still at risk.", headline: "Health: 80 out of 100", caption: "Healthy, with one problem.", takeaway: "A good score can still hide a payout problem." },
+      { narration: "The most important action: one day is 46% of total profit, and this firm caps it at 40%.", headline: "One day: 46% of profit", caption: "This firm's cap is 40%.", takeaway: "The flag names the day's share and the cap." },
+      { narration: "This is demo data from a sample account. Every firm writes its consistency rule differently.", headline: "Every firm differs", caption: "Read your own firm's consistency rule.", takeaway: "Confirm the rule in your own agreement." },
+      { narration: "Check your best day before you request a payout.", headline: "Check your best day.", caption: "Before you request a payout.", takeaway: "Catch the cap before the request." },
+    ],
+    captionBody: "An account can look healthy and still be over a consistency cap. Demo data, so check your own firm's rule.",
+    youtubeTitle: "Healthy Account, Payout Still at Risk: The Consistency Cap",
+  }),
+  angleOf(PILOT_4, {
+    key: "c",
+    title: "The rule that blocks profitable traders.",
+    hook: "The rule that blocks profitable traders from payouts.",
+    topic: "How a consistency cap can hold up a payout for a profitable account",
+    scenes: [
+      { narration: "The rule that blocks profitable traders from payouts.", headline: "The payout blocker", caption: "Account health: 80 out of 100.", takeaway: "Being profitable isn't the only payout test." },
+      { narration: "It's the consistency cap. Here one day made 46% of the profit, over a 40% cap, and Fillbook flags it first.", headline: "Consistency cap: 40%", caption: "Best day: 46% of total profit.", takeaway: "The biggest day can be the problem." },
+      { narration: "Sample account, demo data. Caps and how they're measured vary by firm.", headline: "Caps vary by firm", caption: "Check how your firm measures it.", takeaway: "Know your firm's exact rule." },
+      { narration: "Know your cap before your best day happens.", headline: "Know your cap first.", caption: "Try Fillbook on your own trades.", takeaway: "Plan around the cap, not after it." },
+    ],
+    captionBody: "A consistency cap can hold up a payout even when the account is profitable. Demo data, so check your own firm's rule.",
+    youtubeTitle: "The Consistency Rule That Blocks Profitable Traders",
+  }),
+  angleOf(PILOT_5, {
+    key: "b",
+    title: "No breach doesn't mean you passed.",
+    hook: "No breach doesn't mean you passed.",
+    topic: "Surviving an evaluation's limits and passing it are different results",
+    scenes: [
+      { narration: "No breach doesn't mean you passed.", headline: "No breach. Passed?", caption: "The rule simulator checks both.", takeaway: "Survival and passing are different tests." },
+      { narration: "Replaying the logged trades, nothing would have ended the account, but a requirement is still unmet. That's not a pass.", headline: "Survived isn't passed.", caption: "A requirement is still unmet.", takeaway: "Check every requirement, not just the limits." },
+      { narration: "This is a simulation on demo data. The firm's own published rules decide the real result.", headline: "A simulation, not the result", caption: "The firm's published rules decide.", takeaway: "Use the firm's rules as the final word." },
+      { narration: "Check every requirement, not just the limits.", headline: "Check every requirement.", caption: "Not just the drawdown limits.", takeaway: "Passing needs every box checked." },
+    ],
+    captionBody: "Not breaching a rule and passing an evaluation are different results. Demo data, and a simulation can differ from a real evaluation.",
+    youtubeTitle: "No Breach Isn't a Pass: Replaying Trades Against Evaluation Rules",
+  }),
+  angleOf(PILOT_5, {
+    key: "c",
+    title: "Test a prop firm before you pay for it.",
+    hook: "Test a prop firm before you pay for it.",
+    topic: "Replaying past trades against a firm's rules before buying an evaluation",
+    scenes: [
+      { narration: "Test a prop firm before you pay for it.", headline: "Test the firm first", caption: "Replay trades you already took.", takeaway: "Your past trades can test a firm's rules." },
+      { narration: "The simulator replays your logged trades against the firm's rules, requirement by requirement.", headline: "Requirement by requirement", caption: "No breach, but not a pass yet.", takeaway: "See which requirement is the one you miss." },
+      { narration: "Simulated results on demo data can differ from a real evaluation. Always read the firm's published rules.", headline: "Simulated, not official", caption: "Read the firm's published rules.", takeaway: "The published rules are the real rules." },
+      { narration: "Know which firm fits your trading before you buy.", headline: "Know before you buy.", caption: "Try the rule simulator at fillbookhq.com.", takeaway: "Pick the firm your trades fit." },
+    ],
+    captionBody: "Replay trades you already took against a firm's rules before paying for the evaluation. Demo data, and a simulation can differ from a real evaluation.",
+    youtubeTitle: "Test a Prop Firm Before You Pay: The Rule Simulator",
+  }),
+  angleOf(PILOT_6, {
+    key: "b",
+    title: "Your P&L is only part of the picture.",
+    hook: "Your P&L is only part of the picture.",
+    topic: "A score that shows which habit, not just which trade, is weakest",
+    scenes: [
+      { narration: "Your P&L is only part of the picture.", headline: "P&L is one part", caption: "Edge Score: 67, Developing.", takeaway: "One number can hide several habits." },
+      { narration: "Risk control scores 69 and consistency 63, while profitability trails at 59.", headline: "Profitability is the weak spot", caption: "Profitability 59. Consistency 63. Risk 69.", takeaway: "The breakdown shows what to work on." },
+      { narration: "Demo data, built from past trades. It describes what happened, not what will.", headline: "A look back", caption: "Built from past trades, not a forecast.", takeaway: "The score reviews the past." },
+      { narration: "Find the habit that's holding you back.", headline: "Find your weak spot.", caption: "See your own score at fillbookhq.com.", takeaway: "Work on the lowest part first." },
+    ],
+    captionBody: "P&L is one number. The breakdown shows which habit is weakest. Demo data.",
+    youtubeTitle: "Your P&L Is Only Part of the Picture: The Edge Score Breakdown",
+  }),
+  angleOf(PILOT_6, {
+    key: "c",
+    title: "Rules 87. Still trending down.",
+    hook: "Edge Score 67. Here's what's dragging it.",
+    topic: "A trend line that falls even while rule adherence stays high",
+    scenes: [
+      { narration: "Edge Score 67. Here's what's dragging it.", headline: "Edge Score: 67", caption: "Developing.", takeaway: "Look under the score, not just at it." },
+      { narration: "Over the last 3 weeks the trend is down 20, even with rule adherence at 87.", headline: "Trend: down 20", caption: "Rule adherence still 87.", takeaway: "Following rules and trending well are different." },
+      { narration: "This is a sample account's demo data. It looks back at trades, it doesn't predict them.", headline: "Demo data, looking back", caption: "It describes, it doesn't predict.", takeaway: "Treat it as a review, not a forecast." },
+      { narration: "Watch the trend, not just the score.", headline: "Watch the trend.", caption: "Log your trades at fillbookhq.com.", takeaway: "Direction matters as much as level." },
+    ],
+    captionBody: "Rule adherence can stay high while the overall trend falls. Demo data.",
+    youtubeTitle: "Rules 87, Still Trending Down: Reading the Edge Score",
+  }),
+  angleOf(PILOT_7, {
+    key: "b",
+    title: "Your best hour, before you trade.",
+    hook: "Your best hour, before you trade.",
+    topic: "Knowing your strongest trading window before the session starts",
+    scenes: [
+      { narration: "Your best hour, before you trade.", headline: "Your best hour", caption: "From the Daily Brief.", takeaway: "Know when you trade best.", clip: { start: 1.7, end: 5.2 } },
+      { narration: "The brief shows the strongest window: the open, 9:30 to 10:30, 22 trades at a 64% win rate.", headline: "Strongest window: the open", caption: "22 trades, 64% win rate.", takeaway: "Your best window is worth knowing daily.", clip: { start: 5.0, end: 17.6 } },
+      { narration: "It comes from your logged trades and the rules you set. This one is demo data.", headline: "From your logged trades", caption: "Past results don't predict future ones.", takeaway: "The brief reflects what you entered." },
+      { narration: "Trade your best window on purpose.", headline: "Trade it on purpose.", caption: "Get your own brief at fillbookhq.com.", takeaway: "Plan the session around your strongest hour." },
+    ],
+    captionBody: "Your strongest trading window, shown before the first trade. Demo data.",
+    youtubeTitle: "Your Best Trading Hour, Before You Trade: The Daily Brief",
+  }),
+  angleOf(PILOT_7, {
+    key: "c",
+    title: "Know your limit before the open.",
+    hook: "Know your limit before the open.",
+    topic: "Checking today's loss limit and buffer before the session",
+    scenes: [
+      { narration: "Know your limit before the open.", headline: "Your limit, first", caption: "From the Daily Brief.", takeaway: "Start with the limit, not the chart.", clip: { start: 1.7, end: 5.2 } },
+      { narration: "The brief says $1,000 of today's loss limit is available, with $1,725 above the drawdown floor. Yesterday cost $17 on a single trade.", headline: "$1,000 of room today", caption: "Buffer to the floor: $1,725.", takeaway: "Two limits, both worth knowing before you trade.", clip: { start: 5.0, end: 17.7 } },
+      { narration: "Sample account, demo numbers. The brief only knows what you log and the limits you enter.", headline: "Only what you enter", caption: "Past results don't predict future ones.", takeaway: "The limits are only as good as the rules entered." },
+      { narration: "Read your limits before the first trade.", headline: "Read your limits first.", caption: "Get your own brief at fillbookhq.com.", takeaway: "Know the room before you use it." },
+    ],
+    captionBody: "Today's loss limit and your buffer to the floor, before the first trade. Demo data.",
+    youtubeTitle: "Know Your Loss Limit Before the Open: The Daily Brief",
+  }),
+  angleOf(PILOT_8, {
+    key: "b",
+    title: "Mondays cost this account money.",
+    hook: "Mondays cost this account money.",
+    topic: "One weekday that loses while the rest are green",
+    scenes: [
+      { narration: "Mondays cost this account money.", headline: "The red day: Monday", caption: "Monday: -$57.32.", takeaway: "One weekday can be the leak.", clip: { start: 1.9, end: 5.4 } },
+      { narration: "Monday: five trades, down $57.32. Every other weekday finished green, and Tuesday was best at $157.12.", headline: "Monday -$57.32", caption: "Tuesday was best at +$157.12.", takeaway: "Compare each weekday on its own.", clip: { start: 5.2, end: 17.8 } },
+      { narration: "One sample account, demo data. Your weekdays will split differently.", headline: "One sample account", caption: "Your weekdays will split differently.", takeaway: "Check your own weekdays." },
+      { narration: "Check your own Mondays.", headline: "Check your Mondays.", caption: "Find out at fillbookhq.com.", takeaway: "Look for your own red day." },
+    ],
+    captionBody: "Four weekdays green, Mondays red. Demo data from one sample account.",
+    youtubeTitle: "Mondays Cost This Account Money: Results by Day of Week",
+  }),
+  angleOf(PILOT_8, {
+    key: "c",
+    title: "Is one weekday losing you money?",
+    hook: "Is one weekday losing you money?",
+    topic: "Splitting a week by session day to find the one that loses",
+    scenes: [
+      { narration: "Is one weekday losing you money?", headline: "One red weekday?", caption: "Split by session day.", takeaway: "Split the week before judging it.", clip: { start: 1.9, end: 5.4 } },
+      { narration: "Split by session day: Thursday up $104.60, Friday up $122.08, and Monday the only red day at negative $57.32.", headline: "Only one red day", caption: "Monday: 5 trades, -$57.32.", takeaway: "The red day stands out once the week is split.", clip: { start: 5.2, end: 17.8 } },
+      { narration: "This is demo data from a single sample account, not a pattern to assume.", headline: "A single sample account", caption: "Not a pattern to assume.", takeaway: "Find your own pattern, not this one." },
+      { narration: "Split your week by day.", headline: "Split your week.", caption: "Find out at fillbookhq.com.", takeaway: "See which day costs you." },
+    ],
+    captionBody: "Split the week by session day and the losing day stands out. Demo data from one sample account.",
+    youtubeTitle: "Is One Weekday Losing You Money? Results by Session Day",
+  }),
+  angleOf(PILOT_9, {
+    key: "b",
+    title: "$20.37 a day. How far is the payout?",
+    hook: "$20.37 a day. How far is the payout?",
+    topic: "Turning a daily average into the distance to payout",
+    scenes: [
+      { narration: "$20.37 a day. How far is the payout?", headline: "$20.37 a day", caption: "129 trading days to payout-ready.", takeaway: "A daily average becomes a timeline." },
+      { narration: "The target is 13% done, with $2,612.92 to go. Minimum days are met at 19, and the best day is over the consistency cap.", headline: "13% of the target", caption: "$2,612.92 still to go.", takeaway: "Each payout requirement moves separately." },
+      { narration: "A projection from demo data, not a forecast. Your firm's payout policy is the one that counts.", headline: "A projection, not a forecast", caption: "Your firm's payout policy counts.", takeaway: "Confirm the policy with your firm." },
+      { narration: "Turn your daily average into a date.", headline: "Turn it into a date.", caption: "Track yours at fillbookhq.com.", takeaway: "Know how far the payout really is." },
+    ],
+    captionBody: "A daily average turned into distance from a payout. A projection from demo data, not a prediction.",
+    youtubeTitle: "$20.37 a Day: How Far Is the Payout Really?",
+  }),
+  angleOf(PILOT_9, {
+    key: "c",
+    title: "Payout-ready isn't one check.",
+    hook: "Payout-ready isn't one check.",
+    topic: "Payout readiness is several requirements, each tracked on its own",
+    scenes: [
+      { narration: "Payout-ready isn't one check.", headline: "Not one check", caption: "129 trading days at $20.37 a day.", takeaway: "Readiness is a list, not a number." },
+      { narration: "19 trading days logged meets the 10-day minimum. But the best day is 46% of profit, over the 40% cap.", headline: "Days met. Consistency isn't.", caption: "Best day: 46% of profit, cap 40%.", takeaway: "One unmet check holds the payout." },
+      { narration: "Demo data and a projection. Check your firm's actual payout requirements.", headline: "Check your firm's list", caption: "Demo data and a projection.", takeaway: "The firm's list is the real list." },
+      { narration: "Check every payout requirement, one by one.", headline: "Check them one by one.", caption: "Track yours at fillbookhq.com.", takeaway: "Clear each requirement on its own." },
+    ],
+    captionBody: "Payout readiness is several checks, and one unmet check holds the payout. A projection from demo data.",
+    youtubeTitle: "Payout-Ready Isn't One Check: Tracking Each Requirement",
+  }),
+];
+
+export const PILOTS: ScenePlan[] = [PILOT_1, PILOT_2, PILOT_3, PILOT_4, PILOT_5, PILOT_6, PILOT_7, PILOT_8, PILOT_9, ...PILOT_ANGLES];
+
 export function pilotMetadata(plan: ScenePlan, platform: Platform): PublishedVideoMetadata {
-  const copy = PILOT_COPY[plan.planId];
+  const copy = PILOT_COPY[plan.planId] ?? ANGLE_COPY[plan.planId];
   if (!copy) throw new Error(`No metadata copy for ${plan.planId}`);
   return buildPublishedMetadata(plan, platform, {
     title: platform === "youtube_shorts" ? copy.youtubeTitle : plan.title,
