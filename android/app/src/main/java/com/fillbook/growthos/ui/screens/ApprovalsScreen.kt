@@ -279,7 +279,7 @@ fun ApprovalsScreen(repo: GrowthOsRepository) {
             title = { Text("Render this video?") },
             text = {
                 Text(
-                    "\"${asset.campaignTitle}\" will queue on the render server now, unless today's 1-video limit " +
+                    "\"${asset.campaignTitle}\" will queue on the render server now, unless today's video limit (3) " +
                         "is already used (then it waits and renders automatically after the midnight reset). " +
                         "Once it renders you'll get a notification and can download it from Video Status. " +
                         "This never posts anywhere on its own; you still choose to share it yourself.",
@@ -390,7 +390,7 @@ internal fun approvalSnackbarMessage(approve: Boolean, outcome: VideoRenderOutco
     val reason = outcome.reason.orEmpty()
     return when {
         reason.startsWith("daily_render_cap_reached") ->
-            "Approved, but not rendering yet: today's 1-video limit is used. It will render automatically after the daily reset at midnight."
+            "Approved, but not rendering yet: today's video limit is used. It will render automatically at the first check after midnight (usually late morning)."
         reason.startsWith("monthly_render_cap_reached") ->
             "Approved, but not rendering: this month's video limit is used."
         reason.isNotBlank() -> "Approved, but the video was not queued: $reason"

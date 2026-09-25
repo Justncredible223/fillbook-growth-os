@@ -14,9 +14,10 @@
  * still bounding worst-case Storage/bandwidth impact from a burst of
  * approvals. Enforced inside enqueue_video_render's own transaction
  * (migration 0027), not in application code, so it can never be
- * bypassed by a caller that forgets to check it.
+ * bypassed by a caller that forgets to check it. Raised from 30 to 100 on
+ * 2026-09-25 with the 3-per-day cap below (3 x 31 = 93).
  */
-export const MAX_VIDEO_RENDERS_PER_MONTH = 30;
+export const MAX_VIDEO_RENDERS_PER_MONTH = 100;
 
 /**
  * Hard daily ceiling on how many renders can be QUEUED, added 2026-09-12
@@ -34,8 +35,9 @@ export const MAX_VIDEO_RENDERS_PER_MONTH = 30;
  * "Day" is the owner's calendar day in America/Phoenix (migration 0037), so
  * the cap resets at local midnight; it was the UTC day (5 PM Phoenix time)
  * until 2026-09-20, when an afternoon approval was silently blocked.
+ * Raised from 1 to 3 on 2026-09-25: the owner's posting plan is now 3 videos a day.
  */
-export const MAX_VIDEO_RENDERS_PER_DAY = 1;
+export const MAX_VIDEO_RENDERS_PER_DAY = 3;
 
 /**
  * Hard total-bytes ceiling on committed video Storage usage -- half of
