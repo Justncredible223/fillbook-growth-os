@@ -129,3 +129,15 @@ describe("runReviewAgent -- partnership pitch context", () => {
     expect(systemPrompt.toLowerCase()).toContain("proportionate");
   });
 });
+
+describe("normalizeIssues", () => {
+  it("accepts every shape the model has returned for issues", async () => {
+    const { normalizeIssues } = await import("../src/content/reviewAgents");
+    expect(normalizeIssues(["a", "b"])).toEqual(["a", "b"]);
+    expect(normalizeIssues("one issue")).toEqual(["one issue"]);
+    expect(normalizeIssues('["x", "y"]')).toEqual(["x", "y"]);
+    expect(normalizeIssues("")).toEqual([]);
+    expect(normalizeIssues(undefined)).toEqual([]);
+    expect(normalizeIssues(null)).toEqual([]);
+  });
+});
