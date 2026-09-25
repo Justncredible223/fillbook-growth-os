@@ -13,6 +13,16 @@ export interface QualityGateResult {
 const ORIGINALITY_THRESHOLD = 0.6;
 
 /**
+ * The spoken narration of a video-script draft (formatVideoScriptAsText's SCRIPT section), or the text unchanged when
+ * it has none. Video drafts share a lot of fixed template copy (headings, description, hashtags), which made two
+ * different motion concepts look ~60% identical; originality is judged on what is actually said.
+ */
+export function spokenScriptOf(text: string): string {
+  const match = /(?:^|\n)SCRIPT:\n([\s\S]*?)\n\nSHOT LIST:/.exec(text);
+  return match ? match[1]! : text;
+}
+
+/**
  * Combines the mechanical checks (brand vocabulary, anti-slop, originality)
  * into a single pass/fail gate that content must clear before advancing
  * past 'anti_slop_review'/'originality_review' stages in the Campaign
@@ -28,7 +38,9 @@ export class ContentQualityGate {
   async check(candidateText: string, recentTextsForSameTopic: string[], options: { isVideo?: boolean } = {}): Promise<QualityGateResult> {
     const vocabularyViolations = await this.brandConstitution.checkVocabulary(candidateText);
     const slopFindings = checkAntiSlop(candidateText, { isVideo: options.isVideo });
-    const similarities = this.originality.compareAgainstRecent(candidateText, recentTextsForSameTopic);
+    const similarities = options.isVideo
+      ? this.originality.compareAgainstRecent(spokenScriptOf(candidateText), recentTextsForSameTopic.map(spokenScriptOf))
+      : this.originality.compareAgainstRecent(candidateText, recentTextsForSameTopic);
     const maxSimilarity = similarities[0]?.similarity ?? 0;
 
     const blockReasons: string[] = [];
