@@ -79,6 +79,7 @@ function buildStepDeps(fetchMock: ReturnType<typeof vi.fn>, opportunityRepo: InM
     brandRulesSummary: "",
     verifiedKnowledgeSummary: "",
     recentTextsForSameTopic: [],
+    listPriorDraftBodiesForOpportunity: async () => [],
     markOpportunityActioned: vi.fn().mockResolvedValue(undefined),
     markCampaignInReview: vi.fn().mockResolvedValue(undefined),
   };

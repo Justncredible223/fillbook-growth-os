@@ -84,6 +84,7 @@ function buildDeps(fetchMock: ReturnType<typeof vi.fn>, overrides: Partial<RunCa
     brandRulesSummary: "",
     verifiedKnowledgeSummary: "",
     recentTextsForSameTopic: [],
+    listPriorDraftBodiesForOpportunity: async () => [],
     markOpportunityActioned: vi.fn().mockResolvedValue(undefined),
     markCampaignInReview: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -207,5 +208,32 @@ describe("a 'Video request:' opportunity always runs as a video (owner report 20
     expect(assetTypeForManualRequest("Research request: anything")).toBeUndefined();
     expect(assetTypeForManualRequest("A video request: anything")).toBeUndefined();
     expect(assetTypeForManualRequest("video request: lowercase prefix")).toBeUndefined();
+  });
+});
+
+describe("runCampaignForOpportunity duplicate check on retries", () => {
+  const draft = "Most funded accounts get pulled for violating a rule nobody reads twice.";
+
+  it("does not block a retry because of this same opportunity's own earlier draft", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(draftResponse(draft)).mockResolvedValue(verdictResponse(true));
+    const deps = buildDeps(fetchMock, {
+      recentTextsForSameTopic: [draft],
+      listPriorDraftBodiesForOpportunity: async (id) => (id === "opp-1" ? [draft] : []),
+    });
+
+    const result = await runCampaignForOpportunity(deps, opportunity);
+
+    expect(result.mechanicalGatePassed).toBe(true);
+    expect(result.finalStage).toBe("ready_for_owner");
+  });
+
+  it("still blocks the same text when it came from a different opportunity", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(draftResponse(draft)).mockResolvedValue(verdictResponse(true));
+    const deps = buildDeps(fetchMock, { recentTextsForSameTopic: [draft], listPriorDraftBodiesForOpportunity: async () => [] });
+
+    const result = await runCampaignForOpportunity(deps, opportunity);
+
+    expect(result.mechanicalGatePassed).toBe(false);
+    expect(result.mechanicalBlockReasons.join(" ")).toMatch(/too similar to recent content/);
   });
 });
