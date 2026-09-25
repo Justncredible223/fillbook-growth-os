@@ -166,6 +166,28 @@ export async function runReviewAgent(
     pass: input.pass,
     score: input.score,
     reasoning: input.reasoning,
-    issues: input.issues,
+    issues: normalizeIssues(input.issues),
   };
+}
+
+/**
+ * The model occasionally returns `issues` as a single string (or a JSON-encoded array string) instead of the schema's
+ * string array, which crashed the campaign worker on `issues.join`. Coerce every shape to string[].
+ */
+export function normalizeIssues(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((item) => String(item)).filter((item) => item.trim().length > 0);
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length === 0) return [];
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) return normalizeIssues(parsed);
+      } catch {
+        // Not JSON; keep it as one issue.
+      }
+    }
+    return [trimmed];
+  }
+  return [];
 }
