@@ -508,9 +508,10 @@ export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
     script,
     shotList,
     youtubeTitle: plan.title,
-    youtubeDescription: `${plan.topic} Real, verified Fillbook demo data -- see it in action, then track your own. ${OFFICIAL_HANDLE}`,
-    tiktokCaption: `${plan.hook} ${OFFICIAL_HANDLE}`,
-    instagramCaption: `${plan.hook} ${plan.topic} ${OFFICIAL_HANDLE}`,
+    // Plain about what the numbers are: a sample account's demo data, shown inside a trading journal -- never "real" results.
+    youtubeDescription: `${plan.topic}. Every number shown is demo data from a sample Fillbook account, not a real trader's results. Fillbook is a trading journal: log your own trades and check them against your own rules. ${OFFICIAL_HANDLE}`,
+    tiktokCaption: `${plan.hook} Demo account data. ${OFFICIAL_HANDLE}`,
+    instagramCaption: `${plan.hook} ${plan.topic}. Demo data from a sample account, not a real trader. ${OFFICIAL_HANDLE}`,
     hashtags,
     disclosureCta,
     youtubeThumbnailConcept: `${plan.hook} -- bold text overlay over the plan's own opening scene visual.`,
