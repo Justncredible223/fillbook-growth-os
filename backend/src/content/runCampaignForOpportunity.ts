@@ -22,6 +22,8 @@ export interface RunCampaignDeps {
   brandRulesSummary: string;
   verifiedKnowledgeSummary: string;
   recentTextsForSameTopic: string[];
+  /** Draft bodies this same opportunity already produced, excluded from the duplicate check so a retry isn't blocked by its own earlier attempt. */
+  listPriorDraftBodiesForOpportunity: (opportunityId: string) => Promise<string[]>;
   /** Hooks and titles of recently made videos, passed to the video script writer so it avoids repeating them. */
   recentVideos?: RecentVideo[];
   /** Called only when the pipeline reaches ready_for_owner -- never otherwise. */
@@ -74,10 +76,11 @@ export async function runCampaignForOpportunity(
   opportunity: PipelineOpportunity,
   options: RunCampaignOptions = {},
 ): Promise<PipelineResult> {
+  const ownPriorDrafts = new Set(await deps.listPriorDraftBodiesForOpportunity(opportunity.id));
   const result = await runCampaignPipeline(deps.llmClient, deps.factory, deps.scoreRepo, deps.campaignRepo, opportunity, {
     brandRulesSummary: deps.brandRulesSummary,
     verifiedKnowledgeSummary: deps.verifiedKnowledgeSummary,
-    recentTextsForSameTopic: deps.recentTextsForSameTopic,
+    recentTextsForSameTopic: deps.recentTextsForSameTopic.filter((text) => !ownPriorDrafts.has(text)),
     recentVideos: deps.recentVideos,
     assetTypeOverride: options.assetTypeOverride ?? assetTypeForManualRequest(opportunity.title),
   });
@@ -168,6 +171,19 @@ export async function buildSupabaseRunCampaignDeps(
     brandRulesSummary,
     verifiedKnowledgeSummary,
     recentTextsForSameTopic,
+    listPriorDraftBodiesForOpportunity: async (opportunityId) => {
+      const { data: campaigns, error: campaignsError } = await client.from("campaigns").select("id").eq("opportunity_id", opportunityId);
+      if (campaignsError) throw new Error(`listPriorDraftBodiesForOpportunity (campaigns) failed: ${campaignsError.message}`);
+      const campaignIds = (campaigns ?? []).map((row: { id: string }) => row.id);
+      if (campaignIds.length === 0) return [];
+      const { data: assets, error: assetsError } = await client.from("campaign_assets").select("id").in("campaign_id", campaignIds);
+      if (assetsError) throw new Error(`listPriorDraftBodiesForOpportunity (campaign_assets) failed: ${assetsError.message}`);
+      const assetIds = (assets ?? []).map((row: { id: string }) => row.id);
+      if (assetIds.length === 0) return [];
+      const { data: versions, error: versionsError } = await client.from("content_versions").select("body").in("campaign_asset_id", assetIds);
+      if (versionsError) throw new Error(`listPriorDraftBodiesForOpportunity (content_versions) failed: ${versionsError.message}`);
+      return (versions ?? []).map((row: { body: string }) => row.body);
+    },
     recentVideos,
     markOpportunityActioned: async (id) => {
       await client.from("opportunities").update({ status: "actioned", updated_at: new Date().toISOString() }).eq("id", id);
