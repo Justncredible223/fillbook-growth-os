@@ -393,6 +393,11 @@ describe("checkShowcaseShown (owner direction 2026-09-25)", () => {
   it("passes a reply that picked no view", () => {
     expect(checkShowcaseShown("Tuesday's CPI print moved it, not your entry.", "none")).toBeNull();
     expect(checkShowcaseShown("Tuesday's CPI print moved it, not your entry.", undefined)).toBeNull();
+    expect(checkShowcaseShown("Fillbook tracks that.", undefined)).toBeNull(); // older drafts carry no showcase
+  });
+
+  it("flags a reply that picked no view but names Fillbook anyway", () => {
+    expect(checkShowcaseShown("Fillbook puts every trade in one place.", "none")?.reason).toMatch(/without picking one of its views/);
   });
 
   it("flags a reply that picked a view but never shows it", () => {

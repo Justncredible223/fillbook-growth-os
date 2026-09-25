@@ -232,11 +232,18 @@ export function checkReplySoftStyle(reply: string): GuardrailViolation | null {
 /**
  * Owner direction (2026-09-25): a reply whose post fits a Fillbook view should actually show that view.
  * The model declares the view it picked; a reply that picked one but never names Fillbook is back to
- * plain conversation. A soft check (one retry), since the owner still edits every reply.
+ * plain conversation, and a reply that picked none but names Fillbook anyway is a vague mention tied to no
+ * real screen. A soft check (one retry), since the owner still edits every reply.
  */
 export function checkShowcaseShown(reply: string, showcase: string | undefined): GuardrailViolation | null {
-  if (!showcase || showcase === "none") return null;
-  if (/\bfillbook/i.test(reply)) return null;
+  if (!showcase) return null;
+  const namesFillbook = /\bfillbook/i.test(reply);
+  if (showcase === "none") {
+    return namesFillbook
+      ? { reason: "names Fillbook without picking one of its views: pick the view that fits and say what it would show them, or leave Fillbook out" }
+      : null;
+  }
+  if (namesFillbook) return null;
   return { reason: `picked the Fillbook "${showcase}" view but never shows it: name Fillbook and say what that view would show them` };
 }
 

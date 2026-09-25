@@ -79,6 +79,9 @@ export function formatShowcaseViews(): string {
  */
 export const SHOWCASE_REPLY_GUIDANCE = `YOUR JOB IN THIS REPLY: when their post describes a problem Fillbook answers, show them what Fillbook would
 show them about that exact problem. The goal is a reader thinking "I want to see that for my own trades."
+A post also fits a view when it explains, asks about, or complains about a rule or habit that view tracks: a thread
+explaining trailing vs static drawdown fits account_buffer; a list of live-trading weaknesses like size creeping up
+fits size_vs_plan or setup_breakdown.
 
 The Fillbook views you may show (the ONLY product capabilities you may describe):
 ${formatShowcaseViews()}
@@ -101,7 +104,9 @@ Reply: "That rule usually measures your best day's share of total profit, so one
 Fillbook's account health puts that share next to your firm's cap before you ever hit request."
 
 When NO view fits (a market call, news, a meme, a pure price question, small talk), just answer or react well and
-leave Fillbook out. Forcing a view onto a post it doesn't fit reads as spam and costs trust.
+leave Fillbook out entirely. Never name Fillbook without one of the views above: a vague "Fillbook puts every trade in
+one place" line is neither a view nor a reason to look. Forcing a view onto a post it doesn't fit reads as spam and
+costs trust.
 
 Hard rules, no exceptions:
 - No link unless the link policy below allows it, and no call to action: never "check it out", "try it", "sign up",
