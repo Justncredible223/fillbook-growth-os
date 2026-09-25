@@ -25,7 +25,8 @@ describe("evaluateVideoRenderDailyCap", () => {
     expect(result.reason).toMatch(/daily_render_cap_reached/);
   });
 
-  it("defaults to MAX_VIDEO_RENDERS_PER_DAY (1) when no cap is given", () => {
+  it("defaults to MAX_VIDEO_RENDERS_PER_DAY (3) when no cap is given", () => {
+    expect(MAX_VIDEO_RENDERS_PER_DAY).toBe(3);
     expect(evaluateVideoRenderDailyCap(0).eligible).toBe(true);
     expect(evaluateVideoRenderDailyCap(MAX_VIDEO_RENDERS_PER_DAY).eligible).toBe(false);
   });
