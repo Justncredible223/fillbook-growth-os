@@ -764,7 +764,7 @@
     {
       "id": "rec.p4-account-health-consistency.v1",
       "file": "motion/p4-mobile-account-health-consistency.mp4",
-      "sha256": "6bcf7b7a9a947b7be6db6596a74d73f67e04dbf9ca113b8f164918c51c973048",
+      "sha256": "04448dbff240b3f8c1f5884abee40459727f0560f4158288912f194356add4d1",
       "width": 1080,
       "height": 1920,
       "kind": "screen_recording",
@@ -805,10 +805,10 @@
             "account_health"
           ],
           "region": {
-            "x": 40,
-            "y": 150,
-            "w": 1000,
-            "h": 360
+            "x": 38,
+            "y": 196,
+            "w": 1004,
+            "h": 868
           },
           "timeRangeSeconds": {
             "start": 1.7,
@@ -826,10 +826,10 @@
             "consistency"
           ],
           "region": {
-            "x": 40,
-            "y": 900,
-            "w": 1000,
-            "h": 340
+            "x": 84,
+            "y": 908,
+            "w": 912,
+            "h": 326
           },
           "timeRangeSeconds": {
             "start": 7.2,
@@ -841,7 +841,7 @@
     {
       "id": "rec.p5-rule-simulator.v1",
       "file": "motion/p5-mobile-rule-simulator.mp4",
-      "sha256": "be31545bd04a7dd981ab38f5389bfa4adc84c09b188f22c5cb575e7d7da0eb46",
+      "sha256": "16438bb6cb386ce4ab9183add310cfc0cf18f35d2ee2e467198243d3d3e765c0",
       "width": 1080,
       "height": 1920,
       "kind": "screen_recording",
@@ -880,9 +880,9 @@
           ],
           "region": {
             "x": 40,
-            "y": 180,
+            "y": 185,
             "w": 1000,
-            "h": 225
+            "h": 330
           },
           "timeRangeSeconds": {
             "start": 0,
@@ -900,10 +900,10 @@
             "rule_simulator"
           ],
           "region": {
-            "x": 40,
-            "y": 170,
-            "w": 1000,
-            "h": 760
+            "x": 38,
+            "y": 197,
+            "w": 1004,
+            "h": 833
           },
           "timeRangeSeconds": {
             "start": 5.7,
@@ -915,7 +915,7 @@
     {
       "id": "rec.p6-edge-score.v1",
       "file": "motion/p6-mobile-edge-score.mp4",
-      "sha256": "670babaa59b78f34387b783d4980d761d68d700cc63df4fccc7ea4324d7212ff",
+      "sha256": "4da7571fba173f5d4929cd9fefefdb0215ae8712b0169d5eacbfb7f6dbd78b52",
       "width": 1080,
       "height": 1920,
       "kind": "screen_recording",
@@ -955,10 +955,10 @@
             "edge_score"
           ],
           "region": {
-            "x": 40,
-            "y": 170,
-            "w": 1000,
-            "h": 280
+            "x": 38,
+            "y": 192,
+            "w": 1004,
+            "h": 328
           },
           "timeRangeSeconds": {
             "start": 1.9,
@@ -979,10 +979,10 @@
             "edge_score"
           ],
           "region": {
-            "x": 40,
-            "y": 170,
-            "w": 1000,
-            "h": 720
+            "x": 38,
+            "y": 235,
+            "w": 1004,
+            "h": 875
           },
           "timeRangeSeconds": {
             "start": 7.4,
@@ -994,7 +994,7 @@
     {
       "id": "rec.p7-daily-brief.v1",
       "file": "motion/p7-mobile-daily-brief.mp4",
-      "sha256": "10c1d983548ac0eb402c43bd61dd90fd38121130ba15e3e8f2efd6f2f6a8c098",
+      "sha256": "03f5e2c1f3816ac6cd20a5b2584f461ab40590ed2bf71ae4f0b7ba89040269bb",
       "width": 1080,
       "height": 1920,
       "kind": "screen_recording",
@@ -1035,10 +1035,10 @@
             "daily_brief"
           ],
           "region": {
-            "x": 40,
-            "y": 150,
-            "w": 1000,
-            "h": 250
+            "x": 38,
+            "y": 205,
+            "w": 1004,
+            "h": 712
           },
           "timeRangeSeconds": {
             "start": 1.7,
@@ -1056,10 +1056,10 @@
             "daily_brief"
           ],
           "region": {
-            "x": 40,
-            "y": 430,
-            "w": 1000,
-            "h": 110
+            "x": 38,
+            "y": 205,
+            "w": 1004,
+            "h": 712
           },
           "timeRangeSeconds": {
             "start": 1.7,
@@ -1077,10 +1077,10 @@
             "daily_brief"
           ],
           "region": {
-            "x": 40,
-            "y": 560,
-            "w": 1000,
-            "h": 100
+            "x": 38,
+            "y": 205,
+            "w": 1004,
+            "h": 712
           },
           "timeRangeSeconds": {
             "start": 1.7,
@@ -1092,7 +1092,7 @@
     {
       "id": "rec.p8-day-of-week.v1",
       "file": "motion/p8-mobile-day-of-week.mp4",
-      "sha256": "af8f3988a27a6519e588f3896885192175462fdb8c5717ea80461ab0365e07fb",
+      "sha256": "155ec34620fe78b5c0334c7086ef2607fd23b394333cb6b99548a257a51fd373",
       "width": 1080,
       "height": 1920,
       "kind": "screen_recording",
@@ -1133,10 +1133,10 @@
             "day_of_week"
           ],
           "region": {
-            "x": 40,
-            "y": 330,
-            "w": 1000,
-            "h": 60
+            "x": 38,
+            "y": 205,
+            "w": 1004,
+            "h": 566
           },
           "timeRangeSeconds": {
             "start": 1.9,
@@ -1157,10 +1157,10 @@
             "day_of_week"
           ],
           "region": {
-            "x": 40,
-            "y": 150,
-            "w": 1000,
-            "h": 530
+            "x": 38,
+            "y": 205,
+            "w": 1004,
+            "h": 566
           },
           "timeRangeSeconds": {
             "start": 1.9,
@@ -1172,7 +1172,7 @@
     {
       "id": "rec.p9-payout-timeline.v1",
       "file": "motion/p9-mobile-payout-timeline.mp4",
-      "sha256": "c1b0451f4d7b71c06e7fe7daac9a3aabbc8856b6ba322879ab123f4c86befe59",
+      "sha256": "d521e2b259ab081fce84ab38631ad5f085d8e87412670f4f7f72d195665c5817",
       "width": 1080,
       "height": 1920,
       "kind": "screen_recording",
@@ -1213,10 +1213,10 @@
             "payouts"
           ],
           "region": {
-            "x": 40,
-            "y": 580,
-            "w": 1000,
-            "h": 220
+            "x": 38,
+            "y": 577,
+            "w": 1004,
+            "h": 588
           },
           "timeRangeSeconds": {
             "start": 1.7,
@@ -1237,10 +1237,10 @@
             "payouts"
           ],
           "region": {
-            "x": 40,
-            "y": 350,
-            "w": 1000,
-            "h": 610
+            "x": 38,
+            "y": 205,
+            "w": 1004,
+            "h": 1030
           },
           "timeRangeSeconds": {
             "start": 7.2,

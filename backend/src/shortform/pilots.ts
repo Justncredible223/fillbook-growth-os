@@ -70,8 +70,8 @@ function scene(i: SceneInput): SceneSpec {
 const P1 = "p1-c"; // -c: phone-layout capture (2026-09-23), replacing the -b desktop capture
 const P1_REC = "rec.p1-reports-setup-breakdown.v2";
 /** Measured off the settled 1080x1920 frames: the Overview card grid, then the By setup card after the swipe. */
-const P1_TOTAL_CROP: Rect = { x: 0, y: 615, w: 1080, h: 825 };
-const P1_SETUP_CROP: Rect = { x: 0, y: 805, w: 1080, h: 507 };
+const P1_TOTAL_CROP: Rect = { x: 38, y: 635, w: 1004, h: 776 };
+const P1_SETUP_CROP: Rect = { x: 38, y: 836, w: 1004, h: 458 };
 
 export const PILOT_1: ScenePlan = {
   planId: "pilot-1-green-month-losing-setup",
@@ -154,8 +154,8 @@ export const PILOT_1: ScenePlan = {
 const P2 = "p2-c"; // -c: phone-layout capture (2026-09-23): dashboard account context, then the rules card
 const P2_REC = "rec.p2-rules-buffer.v2";
 /** Dashboard Net P&L + Today cards (0-4.23s), then the account rules card after navigating to /rules. */
-const P2_ACCOUNT_CROP: Rect = { x: 0, y: 1160, w: 1080, h: 430 };
-const P2_RULES_CARD_CROP: Rect = { x: 0, y: 725, w: 1080, h: 465 };
+const P2_ACCOUNT_CROP: Rect = { x: 38, y: 1183, w: 1004, h: 384 };
+const P2_RULES_CARD_CROP: Rect = { x: 38, y: 757, w: 1004, h: 405 };
 
 export const PILOT_2: ScenePlan = {
   planId: "pilot-2-balance-isnt-your-buffer",
@@ -239,7 +239,7 @@ export const PILOT_2: ScenePlan = {
 const P3 = "p3-c"; // -c: phone-layout capture (2026-09-23): the trade card, then the plan's own limit, one recording
 const P3_REC = "rec.p3-trades-orb-size.v2";
 /** The 2026-09-21 Opening Range Break trade card after the swipe, then the plan's "Max contracts per trade" field on /plan. */
-const P3_RECENT_CROP: Rect = { x: 0, y: 831, w: 1080, h: 379 };
+const P3_RECENT_CROP: Rect = { x: 36, y: 840, w: 1008, h: 364 };
 const P3_PLAN_CROP: Rect = { x: 60, y: 915, w: 960, h: 195 };
 
 /**
@@ -295,8 +295,8 @@ export const PILOT_3: ScenePlan = {
       seconds: 3,
       disclosure: "Demo data",
       topics: ["trade_size"],
-      // Starts on the top of the list so the swipe (0.6-1.8s) that brings the trade into view is on screen.
-      clipTimeRangeSeconds: { start: 0.2, end: 10.2 },
+      // Starts once the swipe (0.6-1.8s) has settled the trade inside the card crop; mid-swipe the crop shows a sliding, misaligned card.
+      clipTimeRangeSeconds: { start: 1.8, end: 10.2 },
       claims: [{ id: "p3-c1", type: "data_point", text: "The most recent Opening Range Break trade used 5 contracts, on 2026-09-21.", evidence: [{ assetId: P3_REC, factKey: "trade.orb_qty5_most_recent" }] }],
     }),
     scene({
@@ -374,7 +374,7 @@ export const PILOT_4: ScenePlan = {
       narration: "Your best day can block your payout.",
       takeaway: "A consistency cap limits how much of your profit one day can be.",
       assetId: P4_REC,
-      crop: { x: 0, y: 142, w: 1080, h: 388 },
+      crop: { x: 38, y: 196, w: 1004, h: 868 },
       headline: "Your best day can block your payout.",
       caption: "Account health: 80 out of 100.",
       seconds: 3,
@@ -389,7 +389,7 @@ export const PILOT_4: ScenePlan = {
       narration: "Fillbook flagged it: one day accounts for 46% of total profit, over this firm's 40% consistency cap.",
       takeaway: "The check names the exact number and the cap it crosses.",
       assetId: P4_REC,
-      crop: { x: 0, y: 895, w: 1080, h: 360 },
+      crop: { x: 84, y: 908, w: 912, h: 326 },
       headline: "46% from one day. The cap is 40%.",
       caption: "Flagged as the most important action.",
       seconds: 7,
@@ -447,7 +447,8 @@ export const PILOT_5: ScenePlan = {
       narration: "Would your trades pass a prop firm evaluation?",
       takeaway: "You can test a rule set against trades you already took.",
       assetId: P5_REC,
-      crop: { x: 0, y: 175, w: 1080, h: 235 },
+      // A page heading, not a card: padded 40px on every side so its text sits inside the rounded card with a margin.
+      crop: { x: 0, y: 160, w: 1080, h: 385 },
       headline: "Would your trades pass?",
       caption: "Fillbook's rule simulator replays them.",
       seconds: 3,
@@ -462,7 +463,7 @@ export const PILOT_5: ScenePlan = {
       narration: "It replays every logged trade against the rules. This sample had no breach, but missed the profit target, so it's not a pass.",
       takeaway: "No breach and a pass are different results.",
       assetId: P5_REC,
-      crop: { x: 0, y: 165, w: 1080, h: 770 },
+      crop: { x: 38, y: 197, w: 1004, h: 833 },
       headline: "No breach. Still not a pass.",
       caption: "The profit target is unmet on this sample.",
       seconds: 8,
@@ -520,7 +521,7 @@ export const PILOT_6: ScenePlan = {
       narration: "One score for how you actually trade.",
       takeaway: "A single score summarizes several habits at once.",
       assetId: P6_REC,
-      crop: { x: 0, y: 160, w: 1080, h: 300 },
+      crop: { x: 38, y: 192, w: 1004, h: 328 },
       headline: "One score for how you trade.",
       caption: "Edge Score: 67, Developing.",
       seconds: 3,
@@ -535,7 +536,7 @@ export const PILOT_6: ScenePlan = {
       narration: "It blends profitability, consistency, risk control and rule adherence. Rule adherence scores 87. Profitability, 59.",
       takeaway: "The breakdown shows which part is holding the score back.",
       assetId: P6_REC,
-      crop: { x: 0, y: 160, w: 1080, h: 740 },
+      crop: { x: 38, y: 235, w: 1004, h: 875 },
       headline: "Rules 87. Profitability 59.",
       caption: "Trend over the last 3 weeks: down 20.",
       seconds: 8,
@@ -593,7 +594,7 @@ export const PILOT_7: ScenePlan = {
       narration: "Read this before your first trade.",
       takeaway: "A pre-session check takes seconds.",
       assetId: P7_REC,
-      crop: { x: 0, y: 142, w: 1080, h: 398 },
+      crop: { x: 38, y: 205, w: 1004, h: 712 },
       headline: "Read this before your first trade.",
       caption: "Fillbook's Daily Brief.",
       seconds: 2.5,
@@ -608,7 +609,7 @@ export const PILOT_7: ScenePlan = {
       narration: "Last session: down $17. $1,725 of buffer left, $1,000 of today's loss limit. Strongest window: the open, 64% win rate.",
       takeaway: "Three numbers worth knowing before the first trade.",
       assetId: P7_REC,
-      crop: { x: 0, y: 142, w: 1080, h: 698 },
+      crop: { x: 38, y: 205, w: 1004, h: 712 },
       headline: "Your day in three lines",
       caption: "Last session, buffer left, strongest window.",
       seconds: 10,
@@ -670,7 +671,7 @@ export const PILOT_8: ScenePlan = {
       narration: "Four green weekdays. One red one.",
       takeaway: "A weekly total can hide one losing weekday.",
       assetId: P8_REC,
-      crop: { x: 0, y: 142, w: 1080, h: 258 },
+      crop: { x: 38, y: 205, w: 1004, h: 566 },
       headline: "Four green days. One red.",
       caption: "By day of week, Monday is -$57.32.",
       seconds: 2.5,
@@ -685,7 +686,7 @@ export const PILOT_8: ScenePlan = {
       narration: "Fillbook splits results by session day. Monday: five trades, negative $57.32. Tuesday: positive $157.12.",
       takeaway: "Look at each weekday on its own.",
       assetId: P8_REC,
-      crop: { x: 0, y: 142, w: 1080, h: 543 },
+      crop: { x: 38, y: 205, w: 1004, h: 566 },
       headline: "Monday: -$57.32",
       caption: "Tuesday +$157.12. Friday +$122.08.",
       seconds: 7,
@@ -743,7 +744,7 @@ export const PILOT_9: ScenePlan = {
       narration: "At this pace, the payout is 129 trading days away.",
       takeaway: "Pace turns a profit target into a timeline.",
       assetId: P9_REC,
-      crop: { x: 0, y: 570, w: 1080, h: 240 },
+      crop: { x: 38, y: 577, w: 1004, h: 588 },
       headline: "129 trading days to payout",
       caption: "At $20.37 per trading day.",
       seconds: 3.5,
@@ -758,7 +759,7 @@ export const PILOT_9: ScenePlan = {
       narration: "Fillbook tracks each payout requirement: 13% of the profit target, minimum trading days met, and the best day over the consistency cap.",
       takeaway: "Every requirement is checked separately.",
       assetId: P9_REC,
-      crop: { x: 0, y: 340, w: 1080, h: 630 },
+      crop: { x: 38, y: 205, w: 1004, h: 1030 },
       headline: "Payout readiness, check by check",
       caption: "Target 13%. Days met. Consistency over the cap.",
       seconds: 9,

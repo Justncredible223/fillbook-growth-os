@@ -10,6 +10,7 @@ import {
   renderThumbnailCard,
   computeSceneTransitions,
   computeSyncedSceneTimeline,
+  computeCardLayout,
 } from "../../scripts/video-factory/render";
 import { VideoFactoryError, type RenderPlan } from "../../scripts/video-factory/types";
 import type { ProcessRunner } from "../../scripts/video-factory/processRunner";
@@ -402,4 +403,76 @@ describe("renderThumbnailCard", () => {
       await expect(renderThumbnailCard("Hook", "Topic", thumbnailPath, runner)).rejects.toThrow(VideoFactoryError);
       await expect(renderThumbnailCard("Hook", "Topic", thumbnailPath, runner)).rejects.toThrow(/unknown filter subtitles/);
     }));
+});
+
+describe("computeCardLayout", () => {
+  it("a tall card is capped at 760px wide so it never reaches the platforms' right-hand action column", () => {
+    const layout = computeCardLayout(1004, 868);
+    expect(layout.width).toBeLessThanOrEqual(760);
+    expect(layout.x + layout.width).toBeLessThanOrEqual(920);
+    expect(layout.y).toBeGreaterThanOrEqual(280);
+    expect(layout.textTop).toBe(layout.y + layout.height + 64);
+  });
+
+  it("a short card runs up to 1000px wide when it still ends above the action column", () => {
+    const layout = computeCardLayout(1004, 326);
+    expect(layout.width).toBe(1000);
+    expect(layout.x).toBe(40);
+    expect(layout.y + layout.height).toBeLessThanOrEqual(870);
+    expect(layout.y).toBeGreaterThanOrEqual(280);
+  });
+
+  it("a card too tall for the wide slot falls back to the narrow layout", () => {
+    const layout = computeCardLayout(1004, 776);
+    expect(layout.width).toBeLessThanOrEqual(760);
+  });
+
+  it("dimensions are always even (yuv420p needs even sizes)", () => {
+    for (const [w, h] of [[1003, 327], [999, 861], [37, 11]] as const) {
+      const layout = computeCardLayout(w, h);
+      expect(layout.width % 2).toBe(0);
+      expect(layout.height % 2).toBe(0);
+    }
+  });
+});
+
+describe("buildFfmpegArgs card presentation", () => {
+  const cardPlan: RenderPlan = {
+    ...plan,
+    scenes: [
+      {
+        kind: "product",
+        label: "",
+        durationSeconds: 3,
+        backgroundColor: "0x05070a",
+        clipPath: "C:\\out\\draft-1\\recording.mp4",
+        clipTimeRangeSeconds: { start: 1, end: 4.5 },
+        sourceCrop: { x: 38, y: 300, w: 1004, h: 326 },
+        card: {
+          backgroundPath: "C:\\out\\draft-1\\card-background.png",
+          evidence: { x: 42, y: 400, width: 996, height: 324, maskPath: "C:\\out\\draft-1\\card-mask-0.png", shadowPath: "C:\\out\\draft-1\\card-shadow-0.png" },
+        },
+      },
+      { kind: "cta", label: "", durationSeconds: 5, backgroundColor: "0x05070a", card: { backgroundPath: "C:\\out\\draft-1\\card-background.png" } },
+    ],
+  };
+
+  it("composites the rounded, shadowed evidence card onto the designed background", () => {
+    const args = buildFfmpegArgs(cardPlan);
+    const filter = args[args.indexOf("-filter_complex") + 1]!;
+    expect(args.join(" ")).toContain("card-mask-0.png");
+    expect(args.join(" ")).toContain("card-shadow-0.png");
+    expect(filter).toContain("[0:v]crop=1004:326:38:300,");
+    expect(filter).toContain("scale=996:324,format=rgba[cr0]");
+    expect(filter).toContain("[cr0][mk0]alphamerge[cd0]");
+    expect(filter).toContain("[bg0][sh0]overlay=2:382[cb0]");
+    expect(filter).toContain("[cb0][cd0]overlay=42:400:shortest=1");
+  });
+
+  it("a text-only card scene loops the background still instead of a solid color", () => {
+    const args = buildFfmpegArgs(cardPlan);
+    const filter = args[args.indexOf("-filter_complex") + 1]!;
+    expect(args.join(" ")).toMatch(/-loop 1 -framerate 30 -t [\d.]+ -i card-background\.png/);
+    expect(filter).toContain("[1:v]scale=1080:1920,fps=30,format=yuv420p,setsar=1:1,setpts=PTS-STARTPTS[sv1]");
+  });
 });

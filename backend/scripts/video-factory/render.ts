@@ -195,6 +195,69 @@ export function computeSyncedSceneTimeline(durations: number[]): { inputDuration
  * Every file is referenced by basename only (see renderBasename): the
  * filter graph must never see an absolute path.
  */
+/** A verified recording's source crop plus any privacy masks (translated into the crop's own coordinates), as filter steps ending in ",". */
+function sourceCropTreatment(scene: RenderPlan["scenes"][number]): string {
+  if (!scene.sourceCrop) return "";
+  const c = scene.sourceCrop;
+  let treatment = `crop=${c.w}:${c.h}:${c.x}:${c.y},`;
+  for (const mask of scene.privacyMasks ?? []) {
+    const mx = mask.x - c.x;
+    const my = mask.y - c.y;
+    // Skip a mask that falls entirely outside the crop -- nothing left to hide once cropped out already.
+    if (mx + mask.w <= 0 || my + mask.h <= 0 || mx >= c.w || my >= c.h) continue;
+    treatment += `drawbox=x=${mx}:y=${my}:w=${mask.w}:h=${mask.h}:color=black:t=fill,`;
+  }
+  return treatment;
+}
+
+/**
+ * Card layout for verified-evidence scenes: the crop is scaled to fit CARD_MAX_WIDTH x CARD_MAX_HEIGHT (at most
+ * 1.25x up) and centered in the band starting at CARD_BAND_TOP. 760px wide keeps its right edge (x<=920) clear of
+ * the TikTok/Shorts/Reels action column at any height; the headline and caption start just below it. A short card
+ * that still ends above ACTION_COLUMN_TOP when scaled to CARD_WIDE_MAX_WIDTH uses that width instead.
+ */
+export const CARD_MAX_WIDTH = 760;
+export const CARD_MAX_HEIGHT = 860;
+export const CARD_BAND_TOP = 280;
+export const CARD_UNIT_CENTER_Y = 980;
+/** Width a card may use when it ends above ACTION_COLUMN_TOP, where TikTok/Shorts/Reels start their right-hand buttons. */
+const CARD_WIDE_MAX_WIDTH = 1000;
+const ACTION_COLUMN_TOP = 870;
+const CARD_TEXT_GAP = 64;
+const CARD_TEXT_BLOCK_ESTIMATE = 260;
+export const CARD_SHADOW_SPREAD = 40;
+export const CARD_SHADOW_DROP = 22;
+/** App cards are 16 CSS px rounded at 2.5x capture scale. */
+const SOURCE_CARD_RADIUS = 40;
+
+export interface CardLayout {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  radius: number;
+  textTop: number;
+}
+
+export function computeCardLayout(cropWidth: number, cropHeight: number): CardLayout {
+  const even = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+  const centeredTop = (h: number) => Math.round(CARD_UNIT_CENTER_Y - (h + CARD_TEXT_GAP + CARD_TEXT_BLOCK_ESTIMATE) / 2);
+  // A short card may run nearly full width, as long as it ends above the platforms' action column.
+  const wideScale = Math.min(CARD_WIDE_MAX_WIDTH / cropWidth, 1.25);
+  const wideHeight = even(cropHeight * wideScale);
+  if (CARD_BAND_TOP + wideHeight <= ACTION_COLUMN_TOP) {
+    const width = even(cropWidth * wideScale);
+    const y = Math.min(ACTION_COLUMN_TOP - wideHeight, Math.max(CARD_BAND_TOP, centeredTop(wideHeight)));
+    return { x: (WIDTH - width) / 2, y, width, height: wideHeight, radius: Math.round(SOURCE_CARD_RADIUS * wideScale), textTop: y + wideHeight + CARD_TEXT_GAP };
+  }
+  const scale = Math.min(CARD_MAX_WIDTH / cropWidth, CARD_MAX_HEIGHT / cropHeight, 1.25);
+  const width = even(cropWidth * scale);
+  const height = even(cropHeight * scale);
+  // Center the card plus its text block (estimated) around CARD_UNIT_CENTER_Y, never above CARD_BAND_TOP.
+  const y = Math.max(CARD_BAND_TOP, Math.round(CARD_UNIT_CENTER_Y - (height + CARD_TEXT_GAP + CARD_TEXT_BLOCK_ESTIMATE) / 2));
+  return { x: (WIDTH - width) / 2, y, width, height, radius: Math.round(SOURCE_CARD_RADIUS * scale), textTop: y + height + CARD_TEXT_GAP };
+}
+
 export function buildFfmpegArgs(plan: RenderPlan): string[] {
   if (plan.scenes.length === 0) throw new VideoFactoryError("Render plan has no scenes.");
 
@@ -205,7 +268,9 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     const scene = plan.scenes[i]!;
     // Each input runs a transition-length past its planned duration -- see computeSyncedSceneTimeline.
     const inputDuration = inputDurations[i]!;
-    if (scene.imagePath) {
+    if (scene.card && !scene.clipPath && !scene.imagePath) {
+      inputArgs.push("-loop", "1", "-framerate", String(FRAME_RATE), "-t", inputDuration.toFixed(3), "-i", renderBasename(scene.card.backgroundPath));
+    } else if (scene.imagePath) {
       // UI screenshot: a still looped at the render's frame rate for the
       // scene's duration; the filter graph below pans down over it.
       inputArgs.push(
@@ -264,6 +329,19 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     "-i", plan.musicFile ? renderBasename(plan.musicFile) : MUSIC_BASENAME,
   );
 
+  // Card evidence scenes composite onto three stills (background, shadow, rounded mask), appended after the audio inputs.
+  const cardInputIndex = new Map<number, { background: number; shadow: number; mask: number }>();
+  let nextInputIndex = musicInputIndex + 1;
+  for (const [i, scene] of plan.scenes.entries()) {
+    const evidence = scene.card?.evidence;
+    if (!scene.card || !evidence || !scene.clipPath) continue;
+    const still = (path: string) => {
+      inputArgs.push("-loop", "1", "-framerate", String(FRAME_RATE), "-t", inputDurations[i]!.toFixed(3), "-i", renderBasename(path));
+      return nextInputIndex++;
+    };
+    cardInputIndex.set(i, { background: still(scene.card.backgroundPath), shadow: still(evidence.shadowPath), mask: still(evidence.maskPath) });
+  }
+
   // Scale each scene clip to 1080×1920 (center-crop to fill, maintain no distortion)
   const sceneFilterParts: string[] = [];
   const sceneOutputLabels: string[] = [];
@@ -274,6 +352,24 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     const scene = plan.scenes[i]!;
     const label = `sv${i}`;
     sceneOutputLabels.push(label);
+    const cardInputs = cardInputIndex.get(i);
+    if (scene.card && cardInputs && scene.card.evidence) {
+      const e = scene.card.evidence;
+      sceneFilterParts.push(
+        `[${i}:v]${sourceCropTreatment(scene)}scale=${e.width}:${e.height},format=rgba[cr${i}]`,
+        `[${cardInputs.mask}:v]format=gray[mk${i}]`,
+        `[cr${i}][mk${i}]alphamerge[cd${i}]`,
+        `[${cardInputs.background}:v]format=rgba[bg${i}]`,
+        `[${cardInputs.shadow}:v]format=rgba[sh${i}]`,
+        `[bg${i}][sh${i}]overlay=${e.x - CARD_SHADOW_SPREAD}:${e.y - CARD_SHADOW_SPREAD + CARD_SHADOW_DROP}[cb${i}]`,
+        `[cb${i}][cd${i}]overlay=${e.x}:${e.y}:shortest=1,fps=${FRAME_RATE},format=yuv420p,setsar=1:1,setpts=PTS-STARTPTS[${label}]`,
+      );
+      continue;
+    }
+    if (scene.card && !scene.clipPath && !scene.imagePath) {
+      sceneFilterParts.push(`[${i}:v]scale=${WIDTH}:${HEIGHT},fps=${FRAME_RATE},format=yuv420p,setsar=1:1,setpts=PTS-STARTPTS[${label}]`);
+      continue;
+    }
     if (scene.imagePath) {
       // Fit to canvas width, pad short screenshots to the window height on
       // the brand-dark background, then scroll a 1080xUI_WINDOW_HEIGHT window
@@ -308,18 +404,7 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
       // are translated into the crop's own coordinate space (mask - crop
       // origin) since everything downstream of the crop no longer has the
       // original frame's coordinates.
-      let sourceTreatment = "";
-      if (scene.sourceCrop) {
-        const c = scene.sourceCrop;
-        sourceTreatment += `crop=${c.w}:${c.h}:${c.x}:${c.y},`;
-        for (const mask of scene.privacyMasks ?? []) {
-          const mx = mask.x - c.x;
-          const my = mask.y - c.y;
-          // Skip a mask that falls entirely outside the crop -- nothing left to hide once cropped out already.
-          if (mx + mask.w <= 0 || my + mask.h <= 0 || mx >= c.w || my >= c.h) continue;
-          sourceTreatment += `drawbox=x=${mx}:y=${my}:w=${mask.w}:h=${mask.h}:color=black:t=fill,`;
-        }
-      }
+      const sourceTreatment = sourceCropTreatment(scene);
       // A verified-evidence crop is FIT (never zoom-cropped) into the evidence safe band: below the scene label and
       // above the point where TikTok/Shorts/Reels overlay their right-hand action column, so no card runs under it.
       const fillTreatment = scene.sourceCrop
