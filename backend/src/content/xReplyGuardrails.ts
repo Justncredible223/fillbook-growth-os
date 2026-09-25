@@ -230,6 +230,17 @@ export function checkReplySoftStyle(reply: string): GuardrailViolation | null {
 }
 
 /**
+ * Owner direction (2026-09-25): a reply whose post fits a Fillbook view should actually show that view.
+ * The model declares the view it picked; a reply that picked one but never names Fillbook is back to
+ * plain conversation. A soft check (one retry), since the owner still edits every reply.
+ */
+export function checkShowcaseShown(reply: string, showcase: string | undefined): GuardrailViolation | null {
+  if (!showcase || showcase === "none") return null;
+  if (/\bfillbook/i.test(reply)) return null;
+  return { reason: `picked the Fillbook "${showcase}" view but never shows it: name Fillbook and say what that view would show them` };
+}
+
+/**
  * Copy rules the video scripts share with replies (owner direction 2026-09-21). The dash rule already
  * applied to replies through AI_TELL_PATTERNS; this standalone check lets the video script writer apply the
  * same rule to its titles, descriptions, captions and script without pulling in the reply-only rules

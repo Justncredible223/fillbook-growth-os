@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { LlmClient } from "../src/content/llmClient";
 import { draftInboundResponse } from "../src/inbound/inboundResponseWriter";
+import { SHOWCASE_REPLY_GUIDANCE } from "../src/content/fillbookShowcase";
 
 /** The system value is a plain string, or an array of text blocks when prompt caching is on. */
 function systemText(system: unknown): string {
@@ -83,13 +84,11 @@ describe("draftInboundResponse", () => {
     expect(user).toContain("From: @someone");
   });
 
-  it("REFINED (2026-09-05): X's prompt gives the same earned-mention structure as Prospecting's X refresh, not the old blanket 'unless specifically about journaling tools' rule", async () => {
+  it("REFINED (2026-09-25): X's prompt uses the same show-what-Fillbook-shows guidance as Prospecting replies", async () => {
     const { system } = await capture({ platform: "x", authorHandle: "someone", messageText: "hi", inResponseToText: null, isRepeatEngager: false, priorInteractionCount: 0 });
 
-    expect(system).toContain("only earned once the reply has already added a concrete insight");
-    expect(system).toContain("That's one of the things we're trying to make easier with Fillbook");
-    expect(system).toContain("Never conceal that this is the Fillbook account replying");
-    expect(system).toContain("check out our platform");
+    expect(system).toContain(SHOWCASE_REPLY_GUIDANCE);
+    expect(system).toContain("Never impersonate an individual trader or conceal");
   });
 
   it("an unrecognized platform keeps the original conservative pitch guidance, unchanged by X's refresh", async () => {
@@ -97,7 +96,7 @@ describe("draftInboundResponse", () => {
 
     expect(system).toContain("unless the conversation itself is");
     expect(system).toContain("specifically about trade journaling/tracking tools");
-    expect(system).not.toContain("only earned once the reply has already added a concrete insight");
+    expect(system).not.toContain("The Fillbook sentence is the point of the reply");
   });
 
   it("a YouTube engagement is framed as a YouTube comment, with no @ handle prefix (display names aren't real handles)", async () => {
@@ -114,7 +113,7 @@ describe("draftInboundResponse", () => {
 
     expect(system).toContain("unless the conversation itself is");
     expect(system).toContain("specifically about trade journaling/tracking tools");
-    expect(system).not.toContain("only earned once the reply has already added a concrete insight");
+    expect(system).not.toContain("The Fillbook sentence is the point of the reply");
   });
 });
 

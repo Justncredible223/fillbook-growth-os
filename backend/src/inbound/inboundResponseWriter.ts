@@ -1,5 +1,6 @@
 import type { LlmClient } from "../content/llmClient.js";
 import { HUMAN_REPLY_VOICE_RULES } from "../content/humanReplyVoice.js";
+import { SHOWCASE_REPLY_GUIDANCE } from "../content/fillbookShowcase.js";
 import { formatStyleExamples, type StyleExample } from "../prospecting/prospectingStyleExamples.js";
 
 const DRAFT_SCHEMA = {
@@ -59,23 +60,11 @@ const INBOUND_LINK_POLICY =
   `even if it feels helpful.`;
 
 /**
- * X-specific (2026-09-05): a mention is earned only after the reply has
- * already added real value and made a genuine connection to journaling/
- * rule-tracking/consistency/drawdown/trade-review -- never a pretext.
- * Mirrors prospectingReplyWriter.ts's X_REPLY_NO_PITCH_GUIDANCE; kept as
- * its own copy here (not imported) since inbound's reply has no
- * mentionsFillbook/usesLink flags to check against and the two callers
- * shouldn't be coupled just to save a few lines.
+ * X-specific (2026-09-25): same "show what Fillbook would show them" guidance as Prospecting replies
+ * (fillbookShowcase.ts). Someone who engaged with our post is the warmest audience there is, so a
+ * reply to a real problem should show the view that answers it, not just keep the conversation going.
  */
-const X_INBOUND_NO_PITCH_GUIDANCE =
-  "Do NOT pitch Fillbook, mention pricing, or drop a link by default. A mention is only earned once the reply " +
-  "has already added a concrete insight and made a genuine connection to journaling/rule-tracking/consistency/" +
-  "drawdown discipline/reviewing trades -- never as a pretext for advice. When it's earned, a soft, specific " +
-  "invitation is fine (e.g. \"That's one of the things we're trying to make easier with Fillbook\") -- never a " +
-  "link, never \"check it out\", never a call to action. Never use generic marketing phrases (\"check out our " +
-  "platform\", \"learn more\", \"DM me\"). Never claim a personal trading result, a customer result, or a " +
-  "capability that isn't in the verified knowledge given. Never conceal that this is the Fillbook account " +
-  "replying. When genuinely unsure whether a mention fits, leave it out.";
+const X_INBOUND_NO_PITCH_GUIDANCE = SHOWCASE_REPLY_GUIDANCE;
 
 const CONSERVATIVE_INBOUND_NO_PITCH_GUIDANCE =
   "Do NOT pitch Fillbook, mention pricing, or drop a link unless the conversation itself is " +

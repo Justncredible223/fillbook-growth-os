@@ -5,7 +5,7 @@ import { loadGroundingContext } from "../inbound/inboundHandlers.js";
 import { selectDailyWorkingSet } from "./prospectingDailySelection.js";
 import { STALE_EXPIRY_DAYS } from "./prospectingEligibility.js";
 import { checkRelevanceCheap, draftProspectingReply, PROSPECTING_TRACKABLE_LINK, type ProspectingDraftContext, type ProspectingDraftResult } from "./prospectingReplyWriter.js";
-import { checkReplyGuardrails, checkReplySoftStyle, draftWithRetries } from "../content/xReplyGuardrails.js";
+import { checkReplyGuardrails, checkReplySoftStyle, checkShowcaseShown, draftWithRetries } from "../content/xReplyGuardrails.js";
 import { buildTrackableReplyLink, substituteTrackableLink } from "../content/trackableLinks.js";
 import { isPlausiblyTradingRelated } from "./prospectingRelevance.js";
 import { loadStyleExamples, type StyleExample } from "./prospectingStyleExamples.js";
@@ -230,7 +230,7 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
       // say. A hard violation is never persisted or shown to the owner.
       return {
         hard: checkReplyGuardrails(candidate.reply, candidate.usesLink)?.reason ?? null,
-        soft: checkReplySoftStyle(candidate.reply)?.reason ?? null,
+        soft: (checkReplySoftStyle(candidate.reply) ?? checkShowcaseShown(candidate.reply, candidate.showcase))?.reason ?? null,
       };
     },
   }).catch(async (err) => {
