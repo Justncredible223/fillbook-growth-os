@@ -418,8 +418,13 @@ describe("computeCardLayout", () => {
     const layout = computeCardLayout(1004, 326);
     expect(layout.width).toBe(1000);
     expect(layout.x).toBe(40);
-    expect(layout.y + layout.height).toBeLessThanOrEqual(870);
+    expect(layout.y + layout.height).toBeLessThanOrEqual(700);
     expect(layout.y).toBeGreaterThanOrEqual(280);
+  });
+
+  it("the P8 day-of-week card (566px tall) stays narrow, clear of TikTok's buttons on a 20:9 phone (owner screenshot 2026-09-25)", () => {
+    const layout = computeCardLayout(1004, 566);
+    expect(layout.x + layout.width).toBeLessThanOrEqual(920);
   });
 
   it("a card too tall for the wide slot falls back to the narrow layout", () => {

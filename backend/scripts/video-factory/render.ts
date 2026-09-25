@@ -220,9 +220,13 @@ export const CARD_MAX_WIDTH = 760;
 export const CARD_MAX_HEIGHT = 860;
 export const CARD_BAND_TOP = 280;
 export const CARD_UNIT_CENTER_Y = 980;
-/** Width a card may use when it ends above ACTION_COLUMN_TOP, where TikTok/Shorts/Reels start their right-hand buttons. */
+/**
+ * Width a card may use when it ends above ACTION_COLUMN_TOP, where TikTok starts its right-hand buttons. Measured on a
+ * 20:9 phone (owner screenshot 2026-09-25): the top button (profile/analytics) starts near y=740 of the 1080x1920
+ * frame, well above the y~870 of the generic 16:9 safe-zone templates, so this keeps a margin under that.
+ */
 const CARD_WIDE_MAX_WIDTH = 1000;
-const ACTION_COLUMN_TOP = 870;
+const ACTION_COLUMN_TOP = 700;
 const CARD_TEXT_GAP = 64;
 const CARD_TEXT_BLOCK_ESTIMATE = 260;
 export const CARD_SHADOW_SPREAD = 40;
