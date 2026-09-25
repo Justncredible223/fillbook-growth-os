@@ -44,6 +44,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.fillbook.growthos.data.FillbookAdminRepository
 import com.fillbook.growthos.data.FillbookAuthEvents
+import com.fillbook.growthos.data.SignInRequiredException
 import com.fillbook.growthos.data.GrowthStats
 import com.fillbook.growthos.ui.components.GrowthCard
 import com.fillbook.growthos.ui.components.MetricTile
@@ -93,7 +94,7 @@ fun FillbookStatsScreen(repo: FillbookAdminRepository) {
         if (!signedIn) {
             FillbookSignInForm(repo, googleError = oauthError, onSignedIn = { signedIn = true })
         } else {
-            FillbookStatsBody(repo, onSignedOut = { signedIn = false })
+            FillbookStatsBody(repo, onSignedOut = { notice -> oauthError = notice; signedIn = false })
         }
     }
 }
@@ -171,7 +172,7 @@ private fun FillbookSignInForm(repo: FillbookAdminRepository, googleError: Strin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FillbookStatsBody(repo: FillbookAdminRepository, onSignedOut: () -> Unit) {
+private fun FillbookStatsBody(repo: FillbookAdminRepository, onSignedOut: (notice: String?) -> Unit) {
     var period by remember { mutableStateOf("30d") }
     var stats by remember { mutableStateOf<GrowthStats?>(null) }
     var loaded by remember { mutableStateOf(false) }
@@ -185,6 +186,10 @@ private fun FillbookStatsBody(repo: FillbookAdminRepository, onSignedOut: () -> 
             errorMessage = null
         } catch (e: Exception) {
             // Not authErrorMessage(): that text is about this app's own backend token, not the fillbookhq.com session.
+            if (e is SignInRequiredException) {
+                onSignedOut(e.message)
+                return
+            }
             errorMessage = e.message ?: "Couldn't load stats. Check your connection and try again."
         }
         loaded = true
@@ -206,7 +211,7 @@ private fun FillbookStatsBody(repo: FillbookAdminRepository, onSignedOut: () -> 
                     ) { Text(periodLabel(p)) }
                 }
             }
-            TextButton(onClick = { repo.signOut(); onSignedOut() }) { Text("Sign out") }
+            TextButton(onClick = { repo.signOut(); onSignedOut(null) }) { Text("Sign out") }
         }
 
         errorMessage?.let { message ->
