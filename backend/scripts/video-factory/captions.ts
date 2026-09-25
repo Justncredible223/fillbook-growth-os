@@ -225,6 +225,8 @@ Style: Caption,Poppins ExtraBold,64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,
 Style: Hook,Poppins ExtraBold,92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,8,3,5,170,170,0,1
 Style: SceneLabel,Poppins ExtraBold,48,&H00F4F6FA,&H00F4F6FA,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,5,2,8,80,80,140,1
 Style: Outro,Poppins ExtraBold,92,&H00EED322,&H00EED322,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,7,3,5,170,170,0,1
+Style: Card,Poppins ExtraBold,76,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,8,170,170,0,1
+Style: CardLabel,Poppins ExtraBold,30,&H00DED4C9,&H00DED4C9,&H00362A1D,&H00362A1D,1,0,0,0,100,100,2,0,3,14,0,8,80,80,168,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;
@@ -233,6 +235,7 @@ export interface SceneLabelCue {
   label: string;
   startSeconds: number;
   endSeconds: number;
+  style?: "SceneLabel" | "CardLabel";
 }
 
 /**
@@ -248,11 +251,11 @@ export interface SceneLabelCue {
  */
 export function buildAssFile(captionCues: CaptionCue[], sceneLabelCues: SceneLabelCue[]): string {
   const captionLines = captionCues.map(
-    (cue) => `Dialogue: 0,${secondsToAssTime(cue.startSeconds)},${secondsToAssTime(cue.endSeconds)},${cue.style},,0,0,0,,${cue.text}`,
+    (cue) => `Dialogue: 0,${secondsToAssTime(cue.startSeconds)},${secondsToAssTime(cue.endSeconds)},${cue.style},,0,0,${cue.marginV ?? 0},,${cue.text}`,
   );
   const sceneLines = sceneLabelCues.map(
     (cue) =>
-      `Dialogue: 1,${secondsToAssTime(cue.startSeconds)},${secondsToAssTime(cue.endSeconds)},SceneLabel,,0,0,0,,${escapeAssText(cue.label)}`,
+      `Dialogue: 1,${secondsToAssTime(cue.startSeconds)},${secondsToAssTime(cue.endSeconds)},${cue.style ?? "SceneLabel"},,0,0,0,,${escapeAssText(cue.label)}`,
   );
   return [ASS_HEADER, ...sceneLines, ...captionLines].join("\n") + "\n";
 }

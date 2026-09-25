@@ -69,7 +69,9 @@ export interface CaptionCue {
   text: string;
   startSeconds: number;
   endSeconds: number;
-  style: "Hook" | "Caption" | "Outro";
+  style: "Hook" | "Caption" | "Outro" | "Card";
+  /** Per-cue vertical margin (the "Card" style is top-anchored, so this is the text block's top y). */
+  marginV?: number;
 }
 
 export type SceneKind = "hook" | "product" | "metric" | "cta" | "explanation";
@@ -111,6 +113,15 @@ export interface Scene {
    * out already).
    */
   privacyMasks?: { x: number; y: number; w: number; h: number }[];
+  /** Card presentation (verified-motion videos): a designed full-canvas background, plus a rounded, shadowed evidence card on evidence scenes. */
+  card?: CardPresentation;
+}
+
+export interface CardPresentation {
+  /** 1080x1920 still used as the scene's full-canvas background. */
+  backgroundPath: string;
+  /** Evidence scenes only: where the scaled `sourceCrop` card sits, plus its rounded alpha mask and pre-blurred shadow. */
+  evidence?: { x: number; y: number; width: number; height: number; maskPath: string; shadowPath: string };
 }
 
 export interface RenderPlan {

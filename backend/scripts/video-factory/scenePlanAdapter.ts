@@ -30,6 +30,7 @@ import type { CaptionCue } from "./types.js";
 import type { ScenePlan, SceneSpec, VerifiedManifest, VerifiedAsset } from "../../src/shortform/types.js";
 import { synthesizeOfflineNarration } from "./localTts.js";
 import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
+import { CARD_SHADOW_SPREAD, computeCardLayout, type CardLayout } from "./render.js";
 
 export interface AdaptedScenes {
   scenes: RenderScene[];
@@ -67,6 +68,42 @@ async function buildCroppedStill(asset: VerifiedAsset, crop: { x: number; y: num
   return outPath;
 }
 
+/** Where a text-only card scene's headline block starts. */
+const TEXT_ONLY_CARD_TOP = 880;
+
+/** The designed full-canvas background shared by every card scene: a deep blue-to-near-black vertical gradient. */
+async function buildCardBackground(outDir: string, runner: ProcessRunner): Promise<string> {
+  const outPath = join(outDir, "card-background.png");
+  const result = await runner.run("ffmpeg", [
+    "-y", "-f", "lavfi", "-i", "gradients=s=1080x1920:c0=0x10263a:c1=0x05080c:x0=540:y0=0:x1=540:y1=1500:nb_colors=2",
+    "-frames:v", "1", outPath,
+  ], {});
+  if (result.exitCode !== 0) throw new VideoFactoryError(`Adapter: failed to build the card background: ${result.stderr || result.stdout}`);
+  return outPath;
+}
+
+/** A rounded-rectangle alpha mask for the card, and a soft pre-blurred shadow CARD_SHADOW_SPREAD larger on every side. */
+async function buildCardMaskAndShadow(layout: CardLayout, outDir: string, runner: ProcessRunner, index: number): Promise<{ maskPath: string; shadowPath: string }> {
+  const r = layout.radius;
+  const inside = (pad: number) =>
+    `if(gt(abs(X-W/2),W/2-${pad})+gt(abs(Y-H/2),H/2-${pad}),0,` +
+    `if(gt(abs(X-W/2),W/2-${pad + r})*gt(abs(Y-H/2),H/2-${pad + r}),lte(hypot(abs(X-W/2)-(W/2-${pad + r}),abs(Y-H/2)-(H/2-${pad + r})),${r}),1))`;
+  const maskPath = join(outDir, `card-mask-${index}.png`);
+  const mask = await runner.run("ffmpeg", [
+    "-y", "-f", "lavfi", "-i", `color=c=black:s=${layout.width}x${layout.height},format=gray`,
+    "-vf", `geq=lum='255*${inside(0)}'`, "-frames:v", "1", maskPath,
+  ], {});
+  if (mask.exitCode !== 0) throw new VideoFactoryError(`Adapter: failed to build card mask ${index}: ${mask.stderr || mask.stdout}`);
+  const shadowPath = join(outDir, `card-shadow-${index}.png`);
+  const spread = CARD_SHADOW_SPREAD;
+  const shadow = await runner.run("ffmpeg", [
+    "-y", "-f", "lavfi", "-i", `color=c=black@0:s=${layout.width + 2 * spread}x${layout.height + 2 * spread},format=rgba`,
+    "-vf", `geq=r=0:g=0:b=0:a='150*${inside(spread)}',boxblur=24:2`, "-frames:v", "1", shadowPath,
+  ], {});
+  if (shadow.exitCode !== 0) throw new VideoFactoryError(`Adapter: failed to build card shadow ${index}: ${shadow.stderr || shadow.stdout}`);
+  return { maskPath, shadowPath };
+}
+
 /**
  * Validates `plan` against `manifest` (throws on any error-severity issue
  * -- never renders an invalid plan), then builds everything render.ts's
@@ -85,6 +122,7 @@ export async function buildRenderPlanScenes(plan: ScenePlan, manifest: VerifiedM
     throw new VideoFactoryError(`Adapter: refusing to render "${plan.planId}" -- it fails its own claim/evidence/timing validation:\n${errors.join("\n")}`);
   }
   mkdirSync(outDir, { recursive: true });
+  const backgroundPath = await buildCardBackground(outDir, runner);
 
   const scenes: RenderScene[] = [];
   const captionCues: CaptionCue[] = [];
@@ -103,6 +141,8 @@ export async function buildRenderPlanScenes(plan: ScenePlan, manifest: VerifiedM
     const backgroundColor = "0x05070a"; // brand-dark fallback for a text-only scene, matches scenes.ts's own hook/explanation color
 
     const renderScene: RenderScene = { kind, label, durationSeconds: s.durationSeconds, backgroundColor, narration: s.narration };
+    let cardLayout: CardLayout | null = null;
+    if (!s.assetId) renderScene.card = { backgroundPath };
 
     if (s.assetId) {
       const asset = findAsset(manifest, s.assetId);
@@ -119,6 +159,14 @@ export async function buildRenderPlanScenes(plan: ScenePlan, manifest: VerifiedM
         renderScene.clipTimeRangeSeconds = s.clipTimeRangeSeconds;
         if (s.crop) renderScene.sourceCrop = s.crop;
         if (asset.privateRegions?.length) renderScene.privacyMasks = asset.privateRegions.map((pr) => pr.region);
+        if (s.crop) {
+          cardLayout = computeCardLayout(s.crop.w, s.crop.h);
+          const { maskPath, shadowPath } = await buildCardMaskAndShadow(cardLayout, outDir, runner, i);
+          renderScene.card = {
+            backgroundPath,
+            evidence: { x: cardLayout.x, y: cardLayout.y, width: cardLayout.width, height: cardLayout.height, maskPath, shadowPath },
+          };
+        }
       } else if (s.crop) {
         renderScene.imagePath = await buildCroppedStill(asset, s.crop, outDir, runner, i);
       } else {
@@ -133,18 +181,29 @@ export async function buildRenderPlanScenes(plan: ScenePlan, manifest: VerifiedM
 
     const start = elapsed;
     const end = elapsed + s.durationSeconds;
-    const captionText = [s.headline, s.captionText].filter(Boolean).map(escapeAssText).join("\\N");
-    // Hook style is middle-centered and reserves no space for anything
-    // else -- correct for a pure opening beat, wrong for a scene that also
-    // shows real evidence (kind "product" here). Caption is bottom-anchored,
-    // clear of the evidence band render.ts's sourceCrop treatment reserves.
-    if (captionText) captionCues.push({ text: captionText, startSeconds: start, endSeconds: end, style: kind === "hook" ? "Hook" : "Caption" });
+    if (renderScene.card) {
+      // Card layout: the headline and a smaller, softer caption as one block, directly under the evidence card, or
+      // in the upper-middle of the frame on a text-only scene. The closing scene's caption uses the accent color.
+      const captionColor = s.cta ? "&HCFB822&" : "&HC4B39F&";
+      // Text-only scenes get a short accent bar (an ASS vector drawing) above the headline.
+      const parts = [cardLayout ? "" : `{\\p1\\c&HCFB822&}m 0 0 l 140 0 140 10 0 10{\\p0\\c&HFFFFFF&}`, s.headline ? escapeAssText(s.headline) : ""];
+      if (s.captionText) parts.push(`{\\fs22} `, `{\\fs46\\c${captionColor}}${escapeAssText(s.captionText)}`);
+      const text = parts.filter(Boolean).join("\\N");
+      if (text) captionCues.push({ text, startSeconds: start, endSeconds: end, style: "Card", marginV: cardLayout ? cardLayout.textTop : TEXT_ONLY_CARD_TOP });
+    } else {
+      const captionText = [s.headline, s.captionText].filter(Boolean).map(escapeAssText).join("\\N");
+      // Hook style is middle-centered and reserves no space for anything
+      // else -- correct for a pure opening beat, wrong for a scene that also
+      // shows real evidence (kind "product" here). Caption is bottom-anchored,
+      // clear of the evidence band render.ts's sourceCrop treatment reserves.
+      if (captionText) captionCues.push({ text: captionText, startSeconds: start, endSeconds: end, style: kind === "hook" ? "Hook" : "Caption" });
+    }
     // The fade into scene i+1 runs from this scene's nominal end for that transition's duration, with this
     // scene's footage still visible -- so an evidence scene keeps its label through that fade, and the next
     // scene's label waits for it to finish, never leaving fading evidence unlabeled or under another label.
     const outgoingFade = s.assetId ? (plan.scenes[i + 1]?.transition.durationSeconds ?? 0) : 0;
     const incomingDelay = i > 0 && plan.scenes[i - 1]!.assetId ? s.transition.durationSeconds : 0;
-    if (label) sceneLabelCues.push({ label, startSeconds: start + incomingDelay, endSeconds: end + outgoingFade });
+    if (label) sceneLabelCues.push({ label, startSeconds: start + incomingDelay, endSeconds: end + outgoingFade, ...(renderScene.card ? { style: "CardLabel" as const } : {}) });
     elapsed = end;
   }
 

@@ -65,6 +65,75 @@ const SHOTS: Record<string, { id: string; steps: Step[] }> = {
       { kind: "hold", seconds: 8.5 },
     ],
   },
+  "pilot-4": {
+    id: "p4-mobile-account-health-consistency",
+    steps: [
+      { kind: "goto", route: "/dashboard", waitFor: "text=22 trades logged" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Account health", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "health_heading", selector: "text=Account health" },
+      { kind: "hold", seconds: 4.5 },
+      { kind: "scroll", selector: "text=Most important action", seconds: 1.0, block: "center" },
+      { kind: "measure", name: "action_heading", selector: "text=Most important action" },
+      { kind: "hold", seconds: 12 },
+    ],
+  },
+  "pilot-5": {
+    id: "p5-mobile-rule-simulator",
+    steps: [
+      { kind: "goto", route: "/simulate", waitFor: "text=No active breach" },
+      { kind: "hold", seconds: 4.5 },
+      { kind: "scroll", selector: "text=No active breach", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "result_heading", selector: "text=No active breach" },
+      { kind: "hold", seconds: 12 },
+    ],
+  },
+  "pilot-6": {
+    id: "p6-mobile-edge-score",
+    steps: [
+      { kind: "goto", route: "/dashboard", waitFor: "text=22 trades logged" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Edge Score", seconds: 1.4, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "edge_heading", selector: "text=Edge Score" },
+      { kind: "hold", seconds: 4.5 },
+      { kind: "scroll", selector: "text=Edge map", seconds: 1.0, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "edge_map_heading", selector: "text=Edge map" },
+      { kind: "hold", seconds: 12 },
+    ],
+  },
+  "pilot-7": {
+    id: "p7-mobile-daily-brief",
+    steps: [
+      { kind: "goto", route: "/dashboard", waitFor: "text=22 trades logged" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Daily Brief", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "brief_heading", selector: "text=Daily Brief" },
+      { kind: "hold", seconds: 16 },
+    ],
+  },
+  "pilot-8": {
+    id: "p8-mobile-day-of-week",
+    steps: [
+      { kind: "goto", route: "/reports", waitFor: "text=$387.08" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=By day of week", seconds: 1.4, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "dow_heading", selector: "text=By day of week" },
+      { kind: "hold", seconds: 16 },
+    ],
+  },
+  "pilot-9": {
+    id: "p9-mobile-payout-timeline",
+    steps: [
+      { kind: "goto", route: "/payouts", waitFor: "text=payout timeline" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=payout timeline", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "timeline_heading", selector: "text=payout timeline" },
+      { kind: "hold", seconds: 4.5 },
+      { kind: "scroll", selector: "text=payout readiness", seconds: 1.0, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "readiness_heading", selector: "text=payout readiness" },
+      { kind: "hold", seconds: 12 },
+    ],
+  },
 };
 
 async function signIn(statePath: string): Promise<void> {

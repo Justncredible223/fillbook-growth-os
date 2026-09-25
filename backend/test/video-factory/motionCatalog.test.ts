@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { resolveMotionScenePlan, extractMotionConceptRefFromRationale, listMotionConcepts, MOTION_CONCEPT_REF_PREFIX } from "../../scripts/video-factory/motionCatalog";
 import { computeScenePlanHash } from "../../src/shortform/scenePlan";
-import { PILOT_1, PILOT_2, PILOT_3 } from "../../src/shortform/pilots";
+import { PILOTS, PILOT_1, PILOT_2, PILOT_3 } from "../../src/shortform/pilots";
 import { buildVideoScriptFromScenePlan } from "../../src/content/videoScriptWriter";
 
 describe("resolveMotionScenePlan", () => {
@@ -94,7 +94,8 @@ describe("extractMotionConceptRefFromRationale", () => {
 describe("listMotionConcepts", () => {
   it("lists exactly the known verified pilots, never an open-ended/inferred set", () => {
     const concepts = listMotionConcepts();
-    expect(concepts.map((c) => c.id).sort()).toEqual([PILOT_1.planId, PILOT_2.planId, PILOT_3.planId].sort());
+    expect(concepts.map((c) => c.id).sort()).toEqual(PILOTS.map((p) => p.planId).sort());
+    expect(concepts).toHaveLength(9);
     for (const c of concepts) expect(c.hook.length).toBeGreaterThan(0);
   });
 });
