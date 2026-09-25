@@ -760,6 +760,494 @@
           }
         }
       ]
+    },
+    {
+      "id": "rec.p4-account-health-consistency.v1",
+      "file": "motion/p4-mobile-account-health-consistency.mp4",
+      "sha256": "6bcf7b7a9a947b7be6db6596a74d73f67e04dbf9ca113b8f164918c51c973048",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-fixture-account.2026-09-23",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server (main @ c2bf97f) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920; every frame is a real screenshot of the app, holds verified unchanged start-to-end, scrolls rendered at their real offsets. Signed into a throwaway account (Pilot Fixture Account) seeded by frontend/scripts/seed-pilot-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: dashboard top held 0-0.5s, swipe to Account health 0.5-1.7s, held 1.7-6.2s, swipe to Most important action 6.2-7.2s, held 7.2-19.2s.",
+      "capturedAt": "2026-09-25",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "account_health",
+        "consistency"
+      ],
+      "durationSeconds": 19.2,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "health.score",
+          "text": "Dashboard, Account health: 80 /100, HEALTHY, 80% of checks active",
+          "values": [
+            "80"
+          ],
+          "topics": [
+            "account_health"
+          ],
+          "region": {
+            "x": 40,
+            "y": 150,
+            "w": 1000,
+            "h": 360
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 6.2
+          }
+        },
+        {
+          "key": "health.consistency_action",
+          "text": "Account health, Most important action: One day accounts for 46% of your total profit, over your firm's 40% consistency cap.",
+          "values": [
+            "46%",
+            "40%"
+          ],
+          "topics": [
+            "consistency"
+          ],
+          "region": {
+            "x": 40,
+            "y": 900,
+            "w": 1000,
+            "h": 340
+          },
+          "timeRangeSeconds": {
+            "start": 7.2,
+            "end": 19.2
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.p5-rule-simulator.v1",
+      "file": "motion/p5-mobile-rule-simulator.mp4",
+      "sha256": "be31545bd04a7dd981ab38f5389bfa4adc84c09b188f22c5cb575e7d7da0eb46",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-fixture-account.2026-09-23",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server (main @ c2bf97f) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920; every frame is a real screenshot of the app, holds verified unchanged start-to-end, scrolls rendered at their real offsets. Signed into a throwaway account (Pilot Fixture Account) seeded by frontend/scripts/seed-pilot-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: simulator top held 0-4.5s (firm/rule preset selectors are below this crop), swipe to the result card 4.5-5.7s, held 5.7-17.7s.",
+      "capturedAt": "2026-09-25",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "rule_simulator"
+      ],
+      "durationSeconds": 17.7,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "simulator.description",
+          "text": "Rule simulator: Replay your logged trades against a firm's evaluation rules and see, instantly, whether you'd have passed",
+          "values": [],
+          "topics": [
+            "rule_simulator"
+          ],
+          "region": {
+            "x": 40,
+            "y": 180,
+            "w": 1000,
+            "h": 225
+          },
+          "timeRangeSeconds": {
+            "start": 0,
+            "end": 4.5
+          }
+        },
+        {
+          "key": "simulator.result",
+          "text": "No active breach - evaluation incomplete. Nothing in your history would have ended the account, but at least one requirement (profit target or minimum trading days) hasn't been satisfied yet. This is not a pass. Requirements checklist: Profit target Unmet; Drawdown limit Met",
+          "values": [
+            "Unmet",
+            "Met"
+          ],
+          "topics": [
+            "rule_simulator"
+          ],
+          "region": {
+            "x": 40,
+            "y": 170,
+            "w": 1000,
+            "h": 760
+          },
+          "timeRangeSeconds": {
+            "start": 5.7,
+            "end": 17.7
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.p6-edge-score.v1",
+      "file": "motion/p6-mobile-edge-score.mp4",
+      "sha256": "670babaa59b78f34387b783d4980d761d68d700cc63df4fccc7ea4324d7212ff",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-fixture-account.2026-09-23",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server (main @ c2bf97f) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920; every frame is a real screenshot of the app, holds verified unchanged start-to-end, scrolls rendered at their real offsets. Signed into a throwaway account (Pilot Fixture Account) seeded by frontend/scripts/seed-pilot-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: dashboard top held 0-0.5s, swipe to Edge Score 0.5-1.9s, held 1.9-6.4s, swipe to Edge map 6.4-7.4s, held 7.4-19.4s.",
+      "capturedAt": "2026-09-25",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "edge_score"
+      ],
+      "durationSeconds": 19.4,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "edge.score",
+          "text": "Edge Score 67, Developing. Blends profitability, consistency, risk control, stop & rule adherence",
+          "values": [
+            "67"
+          ],
+          "topics": [
+            "edge_score"
+          ],
+          "region": {
+            "x": 40,
+            "y": 170,
+            "w": 1000,
+            "h": 280
+          },
+          "timeRangeSeconds": {
+            "start": 1.9,
+            "end": 6.4
+          }
+        },
+        {
+          "key": "edge.map",
+          "text": "Edge map: Profitability 59, Consistency 63, Risk control 69, Stop adherence -, Rule adherence 87; Trend, last 3 weeks -20",
+          "values": [
+            "59",
+            "63",
+            "69",
+            "87",
+            "-20"
+          ],
+          "topics": [
+            "edge_score"
+          ],
+          "region": {
+            "x": 40,
+            "y": 170,
+            "w": 1000,
+            "h": 720
+          },
+          "timeRangeSeconds": {
+            "start": 7.4,
+            "end": 19.4
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.p7-daily-brief.v1",
+      "file": "motion/p7-mobile-daily-brief.mp4",
+      "sha256": "10c1d983548ac0eb402c43bd61dd90fd38121130ba15e3e8f2efd6f2f6a8c098",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-fixture-account.2026-09-23",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server (main @ c2bf97f) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920; every frame is a real screenshot of the app, holds verified unchanged start-to-end, scrolls rendered at their real offsets. Signed into a throwaway account (Pilot Fixture Account) seeded by frontend/scripts/seed-pilot-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: dashboard top held 0-0.5s, swipe to Daily Brief 0.5-1.7s, held 1.7-17.7s.",
+      "capturedAt": "2026-09-25",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "daily_brief"
+      ],
+      "durationSeconds": 17.7,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "brief.last_session",
+          "text": "Daily Brief, Last session: -$17 on 1 trade",
+          "values": [
+            "-$17",
+            "1"
+          ],
+          "topics": [
+            "daily_brief"
+          ],
+          "region": {
+            "x": 40,
+            "y": 150,
+            "w": 1000,
+            "h": 250
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 17.7
+          }
+        },
+        {
+          "key": "brief.account",
+          "text": "Daily Brief, Account: $1,725 of buffer to the floor · $1,000 of today's loss limit",
+          "values": [
+            "$1,725",
+            "$1,000"
+          ],
+          "topics": [
+            "daily_brief"
+          ],
+          "region": {
+            "x": 40,
+            "y": 430,
+            "w": 1000,
+            "h": 110
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 17.7
+          }
+        },
+        {
+          "key": "brief.window",
+          "text": "Daily Brief, Your strongest window: Open (9:30-10:30am ET) · 22 trades, 64% win rate",
+          "values": [
+            "22",
+            "64%"
+          ],
+          "topics": [
+            "daily_brief"
+          ],
+          "region": {
+            "x": 40,
+            "y": 560,
+            "w": 1000,
+            "h": 100
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 17.7
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.p8-day-of-week.v1",
+      "file": "motion/p8-mobile-day-of-week.mp4",
+      "sha256": "af8f3988a27a6519e588f3896885192175462fdb8c5717ea80461ab0365e07fb",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-fixture-account.2026-09-23",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server (main @ c2bf97f) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920; every frame is a real screenshot of the app, holds verified unchanged start-to-end, scrolls rendered at their real offsets. Signed into a throwaway account (Pilot Fixture Account) seeded by frontend/scripts/seed-pilot-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: reports top held 0-0.5s, swipe to By day of week 0.5-1.9s, held 1.9-17.9s.",
+      "capturedAt": "2026-09-25",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "day_of_week"
+      ],
+      "durationSeconds": 17.9,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "dow.monday",
+          "text": "Reports, By day of week: Monday 5 trades -$57.32",
+          "values": [
+            "5",
+            "-$57.32"
+          ],
+          "topics": [
+            "day_of_week"
+          ],
+          "region": {
+            "x": 40,
+            "y": 330,
+            "w": 1000,
+            "h": 60
+          },
+          "timeRangeSeconds": {
+            "start": 1.9,
+            "end": 17.9
+          }
+        },
+        {
+          "key": "dow.all",
+          "text": "Reports, By day of week: Monday 5 trades -$57.32; Tuesday 5 trades $157.12; Wednesday 4 trades $60.60; Thursday 4 trades $104.60; Friday 4 trades $122.08",
+          "values": [
+            "-$57.32",
+            "$157.12",
+            "$60.60",
+            "$104.60",
+            "$122.08"
+          ],
+          "topics": [
+            "day_of_week"
+          ],
+          "region": {
+            "x": 40,
+            "y": 150,
+            "w": 1000,
+            "h": 530
+          },
+          "timeRangeSeconds": {
+            "start": 1.9,
+            "end": 17.9
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.p9-payout-timeline.v1",
+      "file": "motion/p9-mobile-payout-timeline.mp4",
+      "sha256": "c1b0451f4d7b71c06e7fe7daac9a3aabbc8856b6ba322879ab123f4c86befe59",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-fixture-account.2026-09-23",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server (main @ c2bf97f) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920; every frame is a real screenshot of the app, holds verified unchanged start-to-end, scrolls rendered at their real offsets. Signed into a throwaway account (Pilot Fixture Account) seeded by frontend/scripts/seed-pilot-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: payouts top held 0-0.5s, swipe to payout timeline 0.5-1.7s, held 1.7-6.2s, swipe up to payout readiness 6.2-7.2s, held 7.2-19.2s (a keyframe-only difference at 7.8s; the held frame is settled).",
+      "capturedAt": "2026-09-25",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "payouts"
+      ],
+      "durationSeconds": 19.2,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "payout.timeline",
+          "text": "Payouts, payout timeline: 129 more trading days to payout-ready at your current pace of $20.37/day",
+          "values": [
+            "129",
+            "$20.37"
+          ],
+          "topics": [
+            "payouts"
+          ],
+          "region": {
+            "x": 40,
+            "y": 580,
+            "w": 1000,
+            "h": 220
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 6.2
+          }
+        },
+        {
+          "key": "payout.readiness",
+          "text": "Payout readiness: No active rule breach; Profit target reached - Net P&L 387.08 of 3000 target (2612.92 to go), 13% of the way there; Minimum trading days met - 19 trading days logged, meets the 10-day minimum; Consistency rule - Best single day is 46% of total profit, over the 40% cap",
+          "values": [
+            "13%",
+            "19",
+            "10",
+            "46%",
+            "40%"
+          ],
+          "topics": [
+            "payouts"
+          ],
+          "region": {
+            "x": 40,
+            "y": 350,
+            "w": 1000,
+            "h": 610
+          },
+          "timeRangeSeconds": {
+            "start": 7.2,
+            "end": 19.2
+          }
+        }
+      ]
     }
   ]
 }
