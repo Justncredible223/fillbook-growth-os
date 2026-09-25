@@ -10,6 +10,26 @@ import { validateResearchTopicShape, manualResearchTopicTitle, manualResearchTop
 import { manualMotionConceptTitle, manualMotionConceptOpportunityInput } from "../src/opportunities/manualMotionConcept.js";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
 
+/**
+ * Motion concepts that must not be offered again, keyed by their opportunity title: "made" once a campaign for the
+ * concept is approved (it has a video), "waiting" while one sits in Approvals. A rejected (retired) or blocked draft
+ * leaves the concept available.
+ */
+export async function motionConceptStates(client: ReturnType<typeof getServiceClient>): Promise<Map<string, "made" | "waiting">> {
+  const { data, error } = await client
+    .from("campaigns")
+    .select("thesis, status")
+    .like("thesis", "Motion concept request:%")
+    .in("status", ["approved", "in_review"]);
+  if (error) throw new Error(`Motion concept state lookup failed: ${error.message}`);
+  const states = new Map<string, "made" | "waiting">();
+  for (const row of (data ?? []) as Array<{ thesis: string; status: string }>) {
+    if (row.status === "approved") states.set(row.thesis, "made");
+    else if (row.status === "in_review" && !states.has(row.thesis)) states.set(row.thesis, "waiting");
+  }
+  return states;
+}
+
 /** The only asset-type overrides this endpoint will ever accept from a caller -- see the `assetType` handling below for why this is validated as an exact-match allowlist, never passed through freely. */
 export const ALLOWED_ASSET_TYPE_OVERRIDES = ["video_script", "research"] as const;
 export type AllowedAssetTypeOverride = (typeof ALLOWED_ASSET_TYPE_OVERRIDES)[number];
@@ -96,7 +116,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // The Android "Create Fillbook Video" picker calls this to show which
   // concepts get real recordings vs. the free-text custom-topic fallback.
   if (req.method === "GET") {
-    res.status(200).json({ motionConcepts: listMotionConcepts() });
+    try {
+      const states = await motionConceptStates(getServiceClient());
+      res.status(200).json({
+        motionConcepts: listMotionConcepts().filter((c) => !states.has(manualMotionConceptTitle(c))),
+        unavailableMotionConcepts: listMotionConcepts()
+          .filter((c) => states.has(manualMotionConceptTitle(c)))
+          .map((c) => ({ id: c.id, title: c.title, state: states.get(manualMotionConceptTitle(c)) })),
+      });
+    } catch (err) {
+      res.status(500).json({ error: errorMessage(err) });
+    }
     return;
   }
   if (req.method !== "POST") {
@@ -137,15 +167,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const opportunityRepo: OpportunityRepository = new SupabaseOpportunityRepository(client);
       const canonicalTitle = manualMotionConceptTitle(concept);
+      const state = (await motionConceptStates(client)).get(canonicalTitle);
+      if (state) {
+        res.status(409).json({
+          error: state === "made"
+            ? `A video for "${concept.title}" has already been made. Pick another concept.`
+            : `"${concept.title}" is already waiting in Approvals.`,
+        });
+        return;
+      }
       const { data: existingDup, error: dupError } = await client
         .from("opportunities")
         .select("id, status")
         .ilike("title", canonicalTitle)
+        .eq("status", "open")
         .limit(1);
       if (dupError) throw new Error(`Duplicate-concept check failed: ${dupError.message}`);
 
       let motionOpportunity: Awaited<ReturnType<typeof opportunityRepo.listOpen>>[number] | undefined;
-      if (existingDup && existingDup.length > 0 && existingDup[0]!.status === "open") {
+      if (existingDup && existingDup.length > 0) {
         // Still open = stuck draft (failed a prior quality gate, e.g. the plan's own
         // evidence validation, or the review gate). Re-run the exact same request.
         const openList = await opportunityRepo.listOpen();

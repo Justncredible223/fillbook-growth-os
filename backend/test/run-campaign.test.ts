@@ -36,7 +36,9 @@ function fakeRes() {
 }
 
 /** Minimal, chainable, thenable Supabase client fake -- records every rpc()/insert() call so a test can assert on exactly what was sent. */
-function createFakeClient(opts: { existingOpportunity?: { id: string; status: string } | null } = {}) {
+function createFakeClient(
+  opts: { existingOpportunity?: { id: string; status: string } | null; campaignRows?: Array<{ thesis: string; status: string }> } = {},
+) {
   const calls: { kind: string; args: unknown }[] = [];
   const insertedOpportunities: Record<string, unknown>[] = [];
 
@@ -48,6 +50,10 @@ function createFakeClient(opts: { existingOpportunity?: { id: string; status: st
       },
       eq: () => builder,
       ilike: () => builder,
+      like: () => builder,
+      in: () => builder,
+      // Awaiting the builder itself (motionConceptStates' campaigns lookup) resolves the table's rows.
+      then: (resolve: (v: unknown) => void) => resolve({ data: table === "campaigns" ? (opts.campaignRows ?? []) : [], error: null }),
       // SupabaseOpportunityRepository.listOpen awaits `.order(...)` directly -- resolve to full DB-row-shaped opportunities.
       order: async () => {
         if (table === "opportunities" && opts.existingOpportunity) {
@@ -208,5 +214,57 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     await handler(fakeReq({ motionConceptId: PILOT_2_ID }), res);
     expect(result.statusCode).toBe(409);
     expect(fakeClientState.calls).toHaveLength(0);
+  });
+});
+
+describe("api/run-campaign.ts handler -- concepts already made or waiting", () => {
+  const made = { thesis: "Motion concept request: Balance isn't your buffer.", status: "approved" };
+  const waiting = { thesis: "Motion concept request: Same setup. Bigger size.", status: "in_review" };
+  let handler: typeof import("../api/run-campaign").default;
+  let state: ReturnType<typeof createFakeClient>;
+
+  beforeEach(async () => {
+    process.env.APP_API_TOKEN = "test-app-token";
+    state = createFakeClient({ campaignRows: [made, waiting, { thesis: "Motion concept request: Green month. Losing setup.", status: "retired" }] });
+    vi.resetModules();
+    vi.doMock("../src/lib/supabaseClient.js", () => ({ getServiceClient: () => state.client }));
+    handler = (await import("../api/run-campaign")).default;
+  });
+
+  afterEach(() => {
+    vi.doUnmock("../src/lib/supabaseClient.js");
+    vi.resetModules();
+  });
+
+  it("GET leaves out a concept that already has a video or is waiting in Approvals, but keeps a rejected one", async () => {
+    const { res, result } = fakeRes();
+    await handler(fakeReq(undefined, "GET"), res);
+    const body = result.body as { motionConcepts: { id: string }[]; unavailableMotionConcepts: { id: string; state: string }[] };
+    const ids = body.motionConcepts.map((c) => c.id);
+    expect(ids).not.toContain("pilot-2-balance-isnt-your-buffer");
+    expect(ids).not.toContain("pilot-3-same-setup-bigger-size");
+    expect(ids).toContain("pilot-1-green-month-losing-setup");
+    expect(body.unavailableMotionConcepts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "pilot-2-balance-isnt-your-buffer", state: "made" }),
+        expect.objectContaining({ id: "pilot-3-same-setup-bigger-size", state: "waiting" }),
+      ]),
+    );
+  });
+
+  it("POST for a concept that already has a video is refused with 409 before anything is created or enqueued", async () => {
+    const { res, result } = fakeRes();
+    await handler(fakeReq({ motionConceptId: "pilot-2-balance-isnt-your-buffer" }), res);
+    expect(result.statusCode).toBe(409);
+    expect((result.body as { error: string }).error).toContain("already been made");
+    expect(state.insertedOpportunities).toHaveLength(0);
+    expect(state.calls).toHaveLength(0);
+  });
+
+  it("POST for a concept waiting in Approvals is refused with 409", async () => {
+    const { res, result } = fakeRes();
+    await handler(fakeReq({ motionConceptId: "pilot-3-same-setup-bigger-size" }), res);
+    expect(result.statusCode).toBe(409);
+    expect((result.body as { error: string }).error).toContain("waiting in Approvals");
   });
 });
