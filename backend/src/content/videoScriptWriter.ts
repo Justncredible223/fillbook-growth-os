@@ -20,7 +20,7 @@ const VIDEO_SCRIPT_SCHEMA = {
     },
     youtubeTitle: {
       type: "string",
-      description: "YouTube Shorts video title, written the way a trader would search for it: the specific prop-firm rule, mechanic or comparison in the first three words (e.g. 'X vs Y: ...', 'How X works for funded traders'), then the useful angle. Under 70 characters, never first-person, no emoji, no ALL CAPS words, no clickbait.",
+      description: "YouTube Shorts video title, written the way a trader would search for it: the specific prop-firm rule, mechanic or comparison in the first three words (e.g. 'X vs Y: ...', 'How X works for funded traders'), then the useful angle. Under 70 characters, never first-person, no emoji, no hashtags, no ALL CAPS words, no clickbait.",
     },
     youtubeDescription: {
       type: "string",
@@ -410,6 +410,8 @@ export function youtubeTitleProblems(video: VideoScript): Array<{ field: string;
   if (title.trim().length > 70) problems.push({ field: "YouTube title", reason: `is ${title.trim().length} characters; it must be under 70` });
   if (/^\s*(i|i'm|i've|my)\b/i.test(title)) problems.push({ field: "YouTube title", reason: "is written in the first person; write it as a search-style explainer instead" });
   if (/\p{Extended_Pictographic}/u.test(title)) problems.push({ field: "YouTube title", reason: "contains an emoji" });
+  // Owner rule (2026-09-26): hashtags belong in the description and captions, never the title.
+  if (/#[\p{L}\p{N}_]/u.test(title)) problems.push({ field: "YouTube title", reason: "contains a hashtag; keep hashtags out of the title" });
   const shouted = (title.match(/\b[A-Z]{3,}\b/g) ?? []).filter((word) => !TITLE_ACRONYM_ALLOWLIST.has(word));
   if (shouted.length > 0) problems.push({ field: "YouTube title", reason: `contains an ALL CAPS word (${shouted[0]})` });
   return problems;

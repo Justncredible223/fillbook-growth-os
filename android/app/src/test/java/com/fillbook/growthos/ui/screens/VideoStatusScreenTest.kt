@@ -73,6 +73,12 @@ class VideoStatusScreenShareTextTest {
     }
 
     @Test
+    fun `YouTube share text is the plain title, with any hashtags stripped`() {
+        val m = meta(hashtags = listOf("FuturesTrading")).copy(youtubeTitle = "Drawdown Rules Explained #shorts #FuturesTrading")
+        assertEquals("Drawdown Rules Explained", buildYoutubeShareText(m))
+    }
+
+    @Test
     fun `omits the disclosure line entirely when null, rather than leaving a blank line`() {
         val text = buildTiktokShareText(meta(tiktokCaption = "Watch this", hashtags = listOf("FuturesTrading"), disclosureCta = null))
         assertEquals("Watch this\n#FuturesTrading", text)

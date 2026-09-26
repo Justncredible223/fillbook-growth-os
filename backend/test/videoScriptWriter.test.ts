@@ -428,6 +428,12 @@ describe("youtubeTitleProblems (search-first titles, 2026-09-21)", () => {
     expect(youtubeTitleProblems(withTitle("Funded Trader Drawdown Rules Explained"))).toEqual([]);
   });
 
+  it("flags a hashtag in the title", () => {
+    expect(youtubeTitleProblems(withTitle("Funded Trader Drawdown Rules Explained #shorts")).map((p) => p.reason)).toEqual([
+      "contains a hashtag; keep hashtags out of the title",
+    ]);
+  });
+
   it("flags a first-person title, like the one with the lowest watch rate", () => {
     expect(youtubeTitleProblems(withTitle("I Blew a Funded Account Over a Number I Didn't Track")).some((p) => p.reason.includes("first person"))).toBe(true);
     expect(youtubeTitleProblems(withTitle("My Trailing Drawdown Mistake")).some((p) => p.reason.includes("first person"))).toBe(true);
