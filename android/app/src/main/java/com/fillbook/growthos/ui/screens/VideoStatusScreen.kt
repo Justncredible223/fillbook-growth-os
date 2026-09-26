@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.net.Uri
+import android.os.Bundle
 import android.os.Environment
 import androidx.core.content.FileProvider
 import java.io.File
@@ -315,7 +316,15 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
         // <queries> manifest declaration to see installed apps like TikTok
         // or YouTube -- that visibility restriction only applies to intents
         // naming a specific target package.
-        context.startActivity(Intent.createChooser(shareIntent, "Share video"))
+        val chooser = Intent.createChooser(shareIntent, "Share video")
+        // YouTube fills its upload TITLE from EXTRA_TEXT, so the TikTok
+        // caption (hashtags and all) became the Shorts title. When the owner
+        // picks YouTube, the chooser swaps in the plain YouTube title instead.
+        render.videoMetadata?.let { meta ->
+            val youtubeExtras = Bundle().apply { putString(Intent.EXTRA_TEXT, buildYoutubeShareText(meta)) }
+            chooser.putExtra(Intent.EXTRA_REPLACEMENT_EXTRAS, Bundle().apply { putBundle(YOUTUBE_PACKAGE, youtubeExtras) })
+        }
+        context.startActivity(chooser)
 
         // ACTION_SEND is fire-and-forget: Android gives the sender no result
         // and no way to ask what the receiving app did with EXTRA_TEXT, so
@@ -806,6 +815,12 @@ internal fun buildTiktokShareText(meta: VideoRenderMetadata): String =
         meta.hashtags.takeIf { it.isNotEmpty() }?.joinToString(" ") { "#$it" },
         meta.disclosureCta,
     ).joinToString("\n")
+
+internal const val YOUTUBE_PACKAGE = "com.google.android.youtube"
+
+/** What the share sheet hands YouTube, which uses it as the video title: the YouTube title alone, never hashtags. */
+internal fun buildYoutubeShareText(meta: VideoRenderMetadata): String =
+    meta.youtubeTitle.replace(Regex("""\s*#[\p{L}\p{N}_]+"""), "").trim()
 
 internal fun statusTone(status: String): StatusTone = when (status) {
     "ready" -> StatusTone.READY
