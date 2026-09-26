@@ -1006,6 +1006,23 @@ class NetworkGrowthOsRepository(
         )
     }
 
+    override suspend fun getPostingOverview(): PostingOverview = get("/api/approvals?resource=posting").toPostingOverview()
+
+    override suspend fun recordVideoPost(campaignAssetId: String, videoRenderId: String?, platform: PostingPlatform, url: String) {
+        val body = JSONObject().put("action", "record-post").put("campaignAssetId", campaignAssetId).put("platform", platform.apiName).put("url", url)
+        if (videoRenderId != null) body.put("videoRenderId", videoRenderId)
+        post("/api/approvals?resource=posting", body)
+    }
+
+    override suspend fun recordPostStats(videoPostId: String, views: Int?, likes: Int?, comments: Int?, shares: Int?) {
+        val body = JSONObject().put("action", "record-stats").put("videoPostId", videoPostId)
+        views?.let { body.put("views", it) }
+        likes?.let { body.put("likes", it) }
+        comments?.let { body.put("comments", it) }
+        shares?.let { body.put("shares", it) }
+        post("/api/approvals?resource=posting", body)
+    }
+
     override suspend fun getEveningReport(): EveningReport {
         val json = get("/api/summary?resource=evening-report")
         return EveningReport(

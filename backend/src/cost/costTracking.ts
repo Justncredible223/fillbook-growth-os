@@ -108,6 +108,28 @@ export async function recordXSearchCostEvent(
   return costUsd;
 }
 
+/** X Owned Reads rate: tweets the authenticated account itself posted (results tracking). */
+export const X_OWNED_READ_COST_USD = 0.001;
+
+/** Persists one read of the account's own tweets, at the Owned Reads rate. Same silent-failure contract as recordCostEvent. */
+export async function recordXOwnedReadCostEvent(client: SupabaseClient, resultsReturned: number, context: Record<string, unknown> = {}): Promise<number> {
+  const costUsd = resultsReturned * X_OWNED_READ_COST_USD;
+  try {
+    await client.from("cost_events").insert({
+      event_type: "x_owned_read",
+      provider: "x",
+      model: "users/tweets",
+      input_tokens: 0,
+      output_tokens: resultsReturned,
+      cost_usd: costUsd,
+      context,
+    });
+  } catch {
+    // Deliberately swallowed -- see recordCostEvent's docstring above.
+  }
+  return costUsd;
+}
+
 /**
  * Same $0.005/read rate as recordXSearchCostEvent, but its OWN event_type
  * -- Partnerships discovery must never inflate Prospecting's separate

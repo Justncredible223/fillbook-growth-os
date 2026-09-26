@@ -1,0 +1,73 @@
+import { describe, it, expect } from "vitest";
+import { assessReplyVisibility, buildPostingPlan, phoenixDate, phoenixInstant, type PlanVideo } from "../src/posting/postingPlan";
+
+// 2026-09-25 10:00 Arizona = 17:00 UTC.
+const NOW = new Date("2026-09-25T17:00:00Z");
+const video = (id: string, readyAt: string, posts: PlanVideo["posts"] = []): PlanVideo => ({ campaignAssetId: id, videoRenderId: `r-${id}`, title: id, readyAt, posts });
+
+describe("Arizona time helpers", () => {
+  it("uses Arizona's fixed UTC-7 for the date and slot instants", () => {
+    expect(phoenixDate(new Date("2026-09-26T05:30:00Z"))).toBe("2026-09-25"); // 22:30 Arizona, still the 25th
+    expect(phoenixInstant("2026-09-25", "06:30").toISOString()).toBe("2026-09-25T13:30:00.000Z");
+    expect(phoenixInstant("2026-09-25", "17:30").toISOString()).toBe("2026-09-26T00:30:00.000Z");
+  });
+});
+
+describe("buildPostingPlan (3 videos a day at 6:30am, 12pm, 5:30pm Arizona)", () => {
+  it("fills slots with unposted videos, oldest first, and marks passed slots as due", () => {
+    const plan = buildPostingPlan([video("b", "2026-09-24T02:00:00Z"), video("a", "2026-09-23T02:00:00Z"), video("c", "2026-09-25T02:00:00Z"), video("d", "2026-09-25T03:00:00Z")], NOW);
+    expect(plan.date).toBe("2026-09-25");
+    expect(plan.slots.map((s) => s.video?.campaignAssetId)).toEqual(["a", "b", "c"]);
+    expect(plan.slots.map((s) => s.status)).toEqual(["due", "upcoming", "upcoming"]);
+    expect(plan.slots[0]!.remaining).toEqual(["tiktok", "youtube_shorts", "instagram"]);
+    expect(plan.backlog).toBe(1);
+  });
+
+  it("keeps a video posted today in its slot, done once all three platforms are in", () => {
+    const posts: PlanVideo["posts"] = [
+      { platform: "tiktok", url: "https://tiktok.com/x", postedAt: "2026-09-25T13:40:00Z" },
+      { platform: "youtube_shorts", url: "https://youtube.com/shorts/x", postedAt: "2026-09-25T13:42:00Z" },
+      { platform: "instagram", url: "https://instagram.com/reel/x", postedAt: "2026-09-25T13:45:00Z" },
+    ];
+    const plan = buildPostingPlan([video("new", "2026-09-25T01:00:00Z"), video("posted", "2026-09-24T01:00:00Z", posts)], NOW);
+    expect(plan.slots[0]).toMatchObject({ status: "done", remaining: [] });
+    expect(plan.slots[0]!.video?.campaignAssetId).toBe("posted");
+    expect(plan.slots[1]!.video?.campaignAssetId).toBe("new");
+  });
+
+  it("shows what's left for a partly posted video", () => {
+    const plan = buildPostingPlan([video("p", "2026-09-24T01:00:00Z", [{ platform: "tiktok", url: "https://tiktok.com/x", postedAt: "2026-09-25T13:40:00Z" }])], NOW);
+    expect(plan.slots[0]).toMatchObject({ status: "due", remaining: ["youtube_shorts", "instagram"] });
+  });
+
+  it("never brings back a video first posted on an earlier day, and leaves slots empty when nothing is ready", () => {
+    const old = video("old", "2026-09-20T01:00:00Z", [{ platform: "tiktok", url: "https://tiktok.com/x", postedAt: "2026-09-24T14:00:00Z" }]);
+    const plan = buildPostingPlan([old], NOW);
+    expect(plan.slots.every((s) => s.status === "empty" && s.video === null)).toBe(true);
+    expect(plan.backlog).toBe(0);
+  });
+});
+
+describe("assessReplyVisibility (X hid the account's replies on 2026-09-24)", () => {
+  const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3600000);
+  const baseline = [96, 120, 150, 200, 260, 300].map((h, i) => ({ createdAt: hoursAgo(h), impressions: [12, 18, 7, 23, 9, 15][i]! }));
+
+  it("flags a drop when recent replies get a fraction of the account's normal views", () => {
+    const recent = [20, 30, 40, 50].map((h) => ({ createdAt: hoursAgo(h), impressions: [2, 1, 4, 3][[20, 30, 40, 50].indexOf(h)]! }));
+    const v = assessReplyVisibility([...recent, ...baseline], NOW);
+    expect(v).toMatchObject({ status: "dropped", recentCount: 4, baselineCount: 6 });
+    expect(v.recentMedian).toBe(2.5);
+    expect(v.baselineMedian).toBe(13.5);
+  });
+
+  it("is ok when recent replies are close to normal", () => {
+    const recent = [20, 30, 40].map((h) => ({ createdAt: hoursAgo(h), impressions: 11 }));
+    expect(assessReplyVisibility([...recent, ...baseline], NOW).status).toBe("ok");
+  });
+
+  it("ignores replies under 12 hours old (still gathering views) and waits for enough data", () => {
+    const tooFresh = [1, 2, 3, 4].map((h) => ({ createdAt: hoursAgo(h), impressions: 0 }));
+    expect(assessReplyVisibility([...tooFresh, ...baseline], NOW).status).toBe("not_enough_data");
+    expect(assessReplyVisibility(baseline.slice(0, 3), NOW).status).toBe("not_enough_data");
+  });
+});

@@ -232,6 +232,15 @@ interface GrowthOsRepository {
      * a real http(s) URL") on rejection -- never silently swallowed.
      */
     suspend fun setVideoPublishedUrl(videoRenderId: String, publishedUrl: String)
+
+    /** Today's posting plan plus the last 30 days of results -- see Posting.kt. */
+    suspend fun getPostingOverview(): PostingOverview
+
+    /** Records where a video was posted on one platform (re-recording the same platform replaces the link). */
+    suspend fun recordVideoPost(campaignAssetId: String, videoRenderId: String?, platform: PostingPlatform, url: String)
+
+    /** Records numbers typed in for a TikTok or Instagram post. */
+    suspend fun recordPostStats(videoPostId: String, views: Int?, likes: Int?, comments: Int?, shares: Int?)
 }
 
 /**
@@ -1323,6 +1332,27 @@ class FakeGrowthOsRepository : GrowthOsRepository {
     }
 
     override suspend fun setVideoPublishedUrl(videoRenderId: String, publishedUrl: String) {
+        // No-op in fake mode.
+    }
+
+    override suspend fun getPostingOverview(): PostingOverview = PostingOverview(
+        plan = PostingPlan(
+            date = "2026-09-25",
+            backlog = 0,
+            slots = listOf(
+                PlanSlot("06:30", "done", PlanVideo("asset-1", "render-1", "Green month. Losing setup.", PostingPlatform.entries.map { PlanPost(it, "https://example.com/${it.apiName}", "2026-09-25T13:40:00Z") }), emptyList()),
+                PlanSlot("12:00", "due", PlanVideo("asset-2", "render-2", "Would your trades pass?", emptyList()), PostingPlatform.entries),
+                PlanSlot("17:30", "empty", null, emptyList()),
+            ),
+        ),
+        results = PostingResults(videos = emptyList(), xReplies = emptyList(), replyVisibility = ReplyVisibility("not_enough_data", null, 0, null, 0)),
+    )
+
+    override suspend fun recordVideoPost(campaignAssetId: String, videoRenderId: String?, platform: PostingPlatform, url: String) {
+        // No-op in fake mode.
+    }
+
+    override suspend fun recordPostStats(videoPostId: String, views: Int?, likes: Int?, comments: Int?, shares: Int?) {
         // No-op in fake mode.
     }
 }

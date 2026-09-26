@@ -107,8 +107,10 @@ import com.fillbook.growthos.ui.screens.EveningReportScreen
 import com.fillbook.growthos.ui.screens.PartnershipsScreen
 import com.fillbook.growthos.ui.screens.SystemScreen
 import com.fillbook.growthos.ui.screens.XFeedPostHistoryScreen
+import com.fillbook.growthos.ui.screens.ResultsScreen
 import com.fillbook.growthos.ui.screens.VideoStatusScreen
 import com.fillbook.growthos.data.AppConfig
+import com.fillbook.growthos.data.PostingReminders
 import com.fillbook.growthos.data.VideoNotifications
 import kotlinx.coroutines.tasks.await
 import com.fillbook.growthos.ui.theme.Accent
@@ -143,6 +145,7 @@ private sealed class Destination(val route: String, val label: String, val icon:
     data object Partnerships : Destination("partnerships", "Partnerships", Icons.Filled.Handshake)
     data object VideoStatus : Destination("video_status", "Video Status", Icons.Filled.Movie)
     data object FillbookStats : Destination("fillbook_stats", "Fillbook Stats", Icons.Filled.ShowChart)
+    data object Results : Destination("results", "Results", Icons.Filled.QueryStats)
 }
 
 /**
@@ -170,6 +173,7 @@ private val primaryDestinations =
 
 /** Secondary screens: real but lower-frequency, reached via the More sheet instead of eating a nav slot. */
 private val moreDestinations = listOf(
+    Destination.Results,
     Destination.Partnerships,
     Destination.Analytics,
     Destination.Campaigns,
@@ -195,6 +199,8 @@ class MainActivity : FragmentActivity() {
         enableEdgeToEdge()
         CrashReporter.install(this, AppConfig.BASE_URL, AppConfig.PROTECTION_BYPASS_SECRET, AppConfig.APP_TOKEN)
         VideoNotifications.createChannel(this)
+        PostingReminders.createChannel(this)
+        PostingReminders.scheduleNext(this)
         // The deep-link route (if this activity was launched by tapping a
         // video-render push notification) is read once here and threaded
         // down through GrowthOsRoot/GrowthOsApp as initial nav state --
@@ -365,6 +371,7 @@ private fun GrowthOsApp(
             composable(Destination.Partnerships.route) { PartnershipsScreen(repo) }
             composable(Destination.VideoStatus.route) { VideoStatusScreen(repo) }
             composable(Destination.FillbookStats.route) { FillbookStatsScreen(fillbookAdminRepo) }
+            composable(Destination.Results.route) { ResultsScreen(repo) }
         }
     }
 

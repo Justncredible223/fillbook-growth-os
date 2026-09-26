@@ -169,12 +169,23 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
     // instead of showing the same static set for the whole session.
     val suggestedVideoTopics = remember(showCreateVideoDialog) { getSuggestedTopics() }
 
+    // Today's posting plan (Posting.kt). Loaded alongside the renders but separately: if it fails (e.g. migration 0043
+    // not applied yet) the card just doesn't show, and the render list still works.
+    var postingPlan by remember { mutableStateOf<com.fillbook.growthos.data.PostingPlan?>(null) }
+    var linkTarget by remember { mutableStateOf<Pair<com.fillbook.growthos.data.PlanVideo, com.fillbook.growthos.data.PostingPlatform>?>(null) }
+    var savingLink by remember { mutableStateOf(false) }
+
     suspend fun refresh() {
         try {
             renders = repo.getVideoRenderStatuses()
             errorMessage = null
         } catch (e: Exception) {
             errorMessage = authErrorMessage(e) ?: "Couldn't load video status. Check your connection and try again."
+        }
+        postingPlan = try {
+            repo.getPostingOverview().plan
+        } catch (e: Exception) {
+            null
         }
         loaded = true
     }
@@ -546,6 +557,11 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
+                            postingPlan?.let { plan ->
+                                item(key = "posting-plan") {
+                                    PostingPlanCard(plan = plan, onAddLink = { video, platform -> linkTarget = video to platform })
+                                }
+                            }
                             items(renders, key = { it.id }) { render ->
                                 VideoRenderCard(
                                     render = render,
@@ -565,6 +581,29 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             }
         }
         SnackbarHost(hostState = snackbarHostState, modifier = Modifier.align(Alignment.BottomCenter))
+    }
+
+    linkTarget?.let { (video, platform) ->
+        AddPostLinkDialog(
+            video = video,
+            platform = platform,
+            saving = savingLink,
+            onSave = { url ->
+                scope.launch {
+                    savingLink = true
+                    try {
+                        repo.recordVideoPost(video.campaignAssetId, video.videoRenderId, platform, url)
+                        linkTarget = null
+                        refresh()
+                        snackbarHostState.showSnackbar("${platform.label} link saved.")
+                    } catch (e: Exception) {
+                        snackbarHostState.showSnackbar(e.message?.takeIf { it.isNotBlank() } ?: "Couldn't save the link. Try again.")
+                    }
+                    savingLink = false
+                }
+            },
+            onDismiss = { if (!savingLink) linkTarget = null },
+        )
     }
 
     if (showCreateVideoDialog) {
