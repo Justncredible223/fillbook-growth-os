@@ -2,6 +2,17 @@ import { describe, it, expect, vi } from "vitest";
 import { LlmClient } from "../src/content/llmClient";
 import { runReviewAgent } from "../src/content/reviewAgents";
 
+/**
+ * Review agents send their system prompt as a cached content-block array
+ * ([{ type: "text", text, cache_control }]) since a975258 added prompt caching,
+ * while other LlmClient callers still send a plain string. Normalize both to
+ * the prompt text so assertions check what the model actually reads.
+ */
+function systemText(init: RequestInit): string {
+  const system = JSON.parse(init.body as string).system as string | Array<{ type: string; text: string }>;
+  return typeof system === "string" ? system : system.map((b) => b.text).join("\n");
+}
+
 function jsonResponse(body: unknown) {
   return { ok: true, status: 200, json: async () => body, text: async () => JSON.stringify(body) } as Response;
 }
@@ -64,8 +75,8 @@ describe("runReviewAgent", () => {
     await runReviewAgent(client, "brand_guardian", "some content", context);
     await runReviewAgent(client, "trader", "some content", context);
 
-    const brandGuardianSystem = JSON.parse(fetchMock.mock.calls[0]![1].body as string).system;
-    const traderSystem = JSON.parse(fetchMock.mock.calls[1]![1].body as string).system;
+    const brandGuardianSystem = systemText(fetchMock.mock.calls[0]![1]);
+    const traderSystem = systemText(fetchMock.mock.calls[1]![1]);
     expect(brandGuardianSystem).not.toBe(traderSystem);
     expect(brandGuardianSystem).toContain("Brand Constitution");
     expect(traderSystem).toContain("futures day trader");
@@ -113,7 +124,7 @@ describe("runReviewAgent -- partnership pitch context", () => {
       const fetchMock = fetchMockPass();
       const client = new LlmClient("test-key", fetchMock);
       await runReviewAgent(client, agent, "some pitch text", pitchContext);
-      const systemPrompt = JSON.parse(fetchMock.mock.calls[0]![1].body as string).system as string;
+      const systemPrompt = systemText(fetchMock.mock.calls[0]![1]);
       expect(systemPrompt).toContain("PARTNERSHIP PITCH");
     }
   });
@@ -124,7 +135,7 @@ describe("runReviewAgent -- partnership pitch context", () => {
 
     await runReviewAgent(client, "conversion_reviewer", "Would you be open to a quick call?", pitchContext);
 
-    const systemPrompt = JSON.parse(fetchMock.mock.calls[0]![1].body as string).system as string;
+    const systemPrompt = systemText(fetchMock.mock.calls[0]![1]);
     expect(systemPrompt).toContain("PARTNERSHIP PITCH");
     expect(systemPrompt.toLowerCase()).toContain("proportionate");
   });

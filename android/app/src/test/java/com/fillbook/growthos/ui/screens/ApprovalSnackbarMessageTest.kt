@@ -38,15 +38,18 @@ class ApprovalSnackbarMessageTest {
         assertTrue(message, message.contains("already rendering"))
     }
 
+    // Since #37 (daily cap 1 -> 3) the copy says the held render is picked up
+    // at the first scheduled check after midnight rather than "at the reset",
+    // so the timing promise is asserted via "midnight".
     @Test
-    fun `the daily limit is explained and promises an automatic render after the reset`() {
+    fun `the daily limit is explained and promises an automatic render after midnight`() {
         val message = approvalSnackbarMessage(
             true,
-            VideoRenderOutcome(queued = false, alreadyExisted = false, reason = "daily_render_cap_reached (1 renders today, cap is 1)"),
+            VideoRenderOutcome(queued = false, alreadyExisted = false, reason = "daily_render_cap_reached (3 renders today, cap is 3)"),
         )
         assertTrue(message, message.contains("not rendering yet"))
         assertTrue(message, message.contains("automatically"))
-        assertTrue(message, message.contains("reset"))
+        assertTrue(message, message.contains("midnight"))
     }
 
     @Test

@@ -190,9 +190,15 @@ class VideoStatusScreenDownloadGuardStructureTest {
         val onReceiveIndex = source.indexOf("override fun onReceive(")
         check(onReceiveIndex >= 0) { "Could not find the download-completion BroadcastReceiver's onReceive()." }
 
-        // Bounded window covering the whole onReceive body (success branch,
-        // failure/cancellation branch, and the shared cleanup after both).
-        val window = source.substring(onReceiveIndex, minOf(onReceiveIndex + 2200, source.length))
+        // Window covering the whole onReceive body (success branch,
+        // failure/cancellation branch, and the shared cleanup after both),
+        // bounded by the receiver's registration right after it rather than
+        // a fixed character count -- a fixed 2200-char window broke when
+        // cb6bdc4 legitimately grew the success branch (FileProvider share
+        // URI), even though the guard was still released.
+        val receiverEndIndex = source.indexOf("IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE)", onReceiveIndex)
+        check(receiverEndIndex >= 0) { "Could not find the receiver's IntentFilter registration after onReceive()." }
+        val window = source.substring(onReceiveIndex, receiverEndIndex)
         check(window.contains("downloadingIds = downloadingIds - videoRenderId")) {
             "Expected the completion receiver to release this render's id from downloadingIds after handling " +
                 "the result -- otherwise the Download button stays disabled forever once a real download " +

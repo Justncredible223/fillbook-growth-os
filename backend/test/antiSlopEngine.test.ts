@@ -17,14 +17,32 @@ describe("antiSlopEngine", () => {
     expect(findings.some((f) => f.rule === "fake_urgency")).toBe(true);
   });
 
+  // Threshold is >= 6 (raised from 3 in f5717c8: a few em dashes across a
+  // multi-section piece is natural; only a wall of them reads as AI slop).
   it("flags excessive em dashes", () => {
-    const findings = checkAntiSlop("Trading — like life — is hard — but journaling helps.");
+    const findings = checkAntiSlop(
+      "Trading — like life — is hard — but journaling — done daily — helps — a lot."
+    );
     expect(findings.some((f) => f.rule === "excessive_em_dashes")).toBe(true);
   });
 
+  it("does not flag a handful of em dashes below the threshold", () => {
+    const findings = checkAntiSlop("Trading — like life — is hard — but journaling helps.");
+    expect(findings.some((f) => f.rule === "excessive_em_dashes")).toBe(false);
+  });
+
+  // Threshold is >= 10 (raised from 5 in f5717c8: the video script prompt asks
+  // for 5-8 hashtags, so the old threshold failed every generated script).
   it("flags hashtag spam", () => {
-    const findings = checkAntiSlop("Great trade today #trading #futures #propfirm #daytrading #nq #es");
+    const findings = checkAntiSlop(
+      "Great trade today #trading #futures #propfirm #daytrading #nq #es #ym #rty #cl #gc"
+    );
     expect(findings.some((f) => f.rule === "hashtag_spam")).toBe(true);
+  });
+
+  it("does not flag a normal hashtag count below the threshold", () => {
+    const findings = checkAntiSlop("Great trade today #trading #futures #propfirm #daytrading #nq #es");
+    expect(findings.some((f) => f.rule === "hashtag_spam")).toBe(false);
   });
 
   it("passes genuinely clean, specific content", () => {
