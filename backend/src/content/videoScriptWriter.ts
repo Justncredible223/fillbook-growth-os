@@ -500,7 +500,13 @@ export function countSpokenWords(script: string): number {
  */
 export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
   const script = plan.scenes.map((s) => s.narration).join(" ");
-  const shotList = plan.scenes.map((s) => s.headline || s.captionText || s.sceneId);
+  // Each shot also names the duo's line, so the reviewer approving the script sees what Rook or Tilt says on screen.
+  const shotList = plan.scenes.map((s) => {
+    const shot = s.headline || s.captionText || s.sceneId;
+    if (!s.character) return shot;
+    const who = s.character.speaker === "rook" ? "Rook" : "Tilt";
+    return `${shot} -- ${who}: "${s.character.quip}"`;
+  });
   const disclosureCta = plan.scenes.find((s) => s.disclosure)?.disclosure ?? null;
   const hashtags = ["FuturesTrading", "PropFirmTrading", "TradingJournal"];
   return {

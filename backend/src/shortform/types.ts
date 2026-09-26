@@ -217,6 +217,23 @@ export interface SceneSpec {
    * a scene moves from "spec only" to "spec + real captured asset."
    */
   motionCapture?: MotionCaptureSpec;
+  /** What the Rook-and-Tilt duo does in the stage under the card while this scene plays (see characterBeats.ts). */
+  character?: CharacterBeat;
+}
+
+export type CharacterName = "rook" | "tilt";
+export type CharacterPose = "idle" | "point" | "shock" | "facepalm" | "think" | "cheer" | "shrug";
+
+/**
+ * One scene's worth of the character duo: a pose for each, and one short reaction line in a speech bubble.
+ * The quip is entertainment, never evidence -- validateScenePlan rejects any digit, $ or % in it, so a figure can
+ * only ever reach the screen through a cited claim.
+ */
+export interface CharacterBeat {
+  speaker: CharacterName;
+  quip: string;
+  rook: CharacterPose;
+  tilt: CharacterPose;
 }
 
 export interface ScenePlan {

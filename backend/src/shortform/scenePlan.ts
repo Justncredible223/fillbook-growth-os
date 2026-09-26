@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CHARACTER_QUIP_MAX_CHARS } from "./characterBeats.js";
 import { validateSceneClaims } from "./claims.js";
 import { TEXT_LIMITS, validateMotionTiming, validatePrivacyMasks, validateSceneFraming, validateSceneText } from "./layout.js";
 import { OFFICIAL_HANDLE, type PlanIssue, type PlanValidation, type RequiredAsset, type SceneSpec, type ScenePlan, type VerifiedAsset, type VerifiedManifest } from "./types.js";
@@ -32,6 +33,11 @@ export function sha256File(path: string): string {
  * exact hash, computed from the plan version it was generated against, so
  * a coincidental same-hook-different-body script (or pilots.ts changing
  * after generation) can never silently select the wrong content.
+ *
+ * The Rook-and-Tilt `character` beats are left out on purpose (2026-09-26):
+ * they carry no figures or claims (validateScenePlan rejects any digit, $
+ * or % in a quip), so recasting or rewording them must not strand every
+ * already-approved concept script behind a hash mismatch.
  */
 export function computeScenePlanHash(plan: ScenePlan): string {
   const canonical = {
@@ -109,6 +115,12 @@ export function validateScenePlan(plan: ScenePlan, manifest: VerifiedManifest, o
     }
 
     issues.push(...validateSceneText(scene));
+    if (scene.character) {
+      const quip = scene.character.quip;
+      if (!quip.trim()) add("error", "missing_character_quip", `Scene ${scene.sceneId}'s character beat has no quip.`, scene.sceneId);
+      if (quip.length > CHARACTER_QUIP_MAX_CHARS) add("error", "character_quip_too_long", `Quip is ${quip.length} characters; the speech bubble fits ${CHARACTER_QUIP_MAX_CHARS}.`, scene.sceneId);
+      if (/[0-9$%]/.test(quip)) add("error", "character_quip_has_figure", `Quip "${quip}" carries a number; figures only reach the screen through cited claims.`, scene.sceneId);
+    }
 
     if (scene.assetId === null) {
       issues.push(...validateSceneClaims(scene, undefined));

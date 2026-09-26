@@ -153,6 +153,7 @@ async function buildVerifiedMotionPlan(
     silencePadSeconds: SILENCE_PAD_SECONDS,
     musicFile: music?.file,
     musicStartSeconds: music?.startSeconds,
+    characterTrack: adapted.characterTrack,
   };
   return { plan, assetsUsed: summarizeUsedAssets(adjustedPlan, manifest), narrationProvenance: narration.provenance === "offline_sapi" ? "offline_sapi" : "edge_tts" };
 }

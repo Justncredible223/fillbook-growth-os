@@ -6,6 +6,7 @@ import type { ProcessRunner } from "./processRunner.js";
 import type { RenderPlan } from "./types.js";
 import { VideoFactoryError } from "./types.js";
 import { escapeAssText } from "./captions.js";
+import { CHARACTER_STAGE_HEIGHT } from "./characters.js";
 
 const WIDTH = 1080;
 const HEIGHT = 1920;
@@ -224,9 +225,15 @@ function sourceCropTreatment(scene: RenderPlan["scenes"][number]): string {
  * that still ends above ACTION_COLUMN_TOP when scaled to CARD_WIDE_MAX_WIDTH uses that width instead.
  */
 export const CARD_MAX_WIDTH = 760;
-export const CARD_MAX_HEIGHT = 860;
+/** 700 (was 860) and centered at 800 (was 980) since 2026-09-26, so the card and its text end above the character stage. */
+export const CARD_MAX_HEIGHT = 700;
 export const CARD_BAND_TOP = 280;
-export const CARD_UNIT_CENTER_Y = 980;
+export const CARD_UNIT_CENTER_Y = 800;
+/**
+ * Where the Rook-and-Tilt stage (characters.ts) sits: CHARACTER_STAGE_HEIGHT tall, ending exactly at the platforms'
+ * caption line (y=1600), and drawn only left of x=910 so it stays clear of the right-hand buttons.
+ */
+export const CHARACTER_STAGE_TOP = 1600 - CHARACTER_STAGE_HEIGHT;
 /**
  * Width a card may use when it ends above ACTION_COLUMN_TOP, where TikTok starts its right-hand buttons. Measured on a
  * 20:9 phone (owner screenshot 2026-09-25): the top button (profile/analytics) starts near y=740 of the 1080x1920
@@ -292,6 +299,9 @@ export function assertCardClearsOverlays(layout: CardLayout): void {
     throw new VideoFactoryError(
       `Card or its text (to y ${Math.max(bottom, textBottom)}) would run into the platforms' caption area (y >= ${captionTop}).`,
     );
+  }
+  if (textBottom > CHARACTER_STAGE_TOP) {
+    throw new VideoFactoryError(`Card text (to y ${textBottom}) would run into the character stage (y >= ${CHARACTER_STAGE_TOP}).`);
   }
 }
 
@@ -378,6 +388,9 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     };
     cardInputIndex.set(i, { background: still(scene.card.backgroundPath), shadow: still(evidence.shadowPath), mask: still(evidence.maskPath) });
   }
+  // The character stage: one transparent PNG per frame, read at the render's frame rate.
+  const characterInputIndex = plan.characterTrack ? nextInputIndex++ : null;
+  if (plan.characterTrack) inputArgs.push("-framerate", String(FRAME_RATE), "-i", plan.characterTrack.framePattern);
 
   // Scale each scene clip to 1080×1920 (center-crop to fill, maintain no distortion)
   const sceneFilterParts: string[] = [];
@@ -473,9 +486,18 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     bgLabel = nextLabel;
   }
 
+  // The stage goes over the scene footage but under the captions. eof_action=pass leaves the plain background if the
+  // frames ever end before the video does.
+  const characterParts: string[] = [];
+  if (characterInputIndex !== null) {
+    characterParts.push(`[${bgLabel}][${characterInputIndex}:v]overlay=0:${CHARACTER_STAGE_TOP}:eof_action=pass:format=auto,format=yuv420p[chars]`);
+    bgLabel = "chars";
+  }
+
   const filterComplex = [
     ...sceneFilterParts,
     ...xfadeParts,
+    ...characterParts,
     // fontsdir=fonts (relative to ffmpeg's own cwd, the render's output
     // directory -- see renderVideo) points libass at the bundled caption
     // font copied there below, and nothing else (see FONT_DIR).
