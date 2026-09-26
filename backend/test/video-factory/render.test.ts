@@ -11,7 +11,9 @@ import {
   computeSceneTransitions,
   computeSyncedSceneTimeline,
   computeCardLayout,
+  assertCardClearsOverlays,
 } from "../../scripts/video-factory/render";
+import { PILOTS } from "../../src/shortform/pilots";
 import { VideoFactoryError, type RenderPlan } from "../../scripts/video-factory/types";
 import type { ProcessRunner } from "../../scripts/video-factory/processRunner";
 
@@ -479,5 +481,24 @@ describe("buildFfmpegArgs card presentation", () => {
     const filter = args[args.indexOf("-filter_complex") + 1]!;
     expect(args.join(" ")).toMatch(/-loop 1 -framerate 30 -t [\d.]+ -i card-background\.png/);
     expect(filter).toContain("[1:v]scale=1080:1920,fps=30,format=yuv420p,setsar=1:1,setpts=PTS-STARTPTS[sv1]");
+  });
+});
+
+describe("platform overlay zones (owner rule 2026-09-25: nothing under TikTok/Shorts buttons or captions)", () => {
+  it("every evidence card in every verified concept clears the right-hand buttons and the caption area", () => {
+    for (const plan of PILOTS) {
+      for (const scene of plan.scenes) {
+        if (!scene.crop) continue;
+        expect(() => assertCardClearsOverlays(computeCardLayout(scene.crop!.w, scene.crop!.h)), `${plan.planId} ${scene.sceneId}`).not.toThrow();
+      }
+    }
+  });
+
+  it("rejects a card that would run under the button column", () => {
+    expect(() => assertCardClearsOverlays({ x: 40, y: 300, width: 1000, height: 600, radius: 40, textTop: 964 })).toThrow(/right-hand buttons/);
+  });
+
+  it("rejects a card whose text would reach the caption area", () => {
+    expect(() => assertCardClearsOverlays({ x: 160, y: 500, width: 760, height: 900, radius: 30, textTop: 1464 })).toThrow(/caption area/);
   });
 });

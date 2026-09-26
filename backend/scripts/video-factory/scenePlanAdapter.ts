@@ -30,7 +30,7 @@ import type { CaptionCue } from "./types.js";
 import type { ScenePlan, SceneSpec, VerifiedManifest, VerifiedAsset } from "../../src/shortform/types.js";
 import { synthesizeOfflineNarration } from "./localTts.js";
 import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
-import { CARD_SHADOW_SPREAD, computeCardLayout, type CardLayout } from "./render.js";
+import { CARD_SHADOW_SPREAD, assertCardClearsOverlays, computeCardLayout, type CardLayout } from "./render.js";
 
 export interface AdaptedScenes {
   scenes: RenderScene[];
@@ -161,6 +161,7 @@ export async function buildRenderPlanScenes(plan: ScenePlan, manifest: VerifiedM
         if (asset.privateRegions?.length) renderScene.privacyMasks = asset.privateRegions.map((pr) => pr.region);
         if (s.crop) {
           cardLayout = computeCardLayout(s.crop.w, s.crop.h);
+          assertCardClearsOverlays(cardLayout);
           const { maskPath, shadowPath } = await buildCardMaskAndShadow(cardLayout, outDir, runner, i);
           renderScene.card = {
             backgroundPath,
