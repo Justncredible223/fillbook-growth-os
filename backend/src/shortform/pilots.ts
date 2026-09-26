@@ -862,6 +862,246 @@ const PILOT_COPY: Record<string, { topic: string; cta: string; captionBody: stri
 };
 
 /* ---------------------------------------------------------------------------------------------- */
+/* Batch 3 (2026-09-25): behavior-led concepts recorded against a second demo account, "Pilot       */
+/* Behavior Account" (the fillbook repo's frontend/scripts/seed-pilot-behavior-fixtures.mjs), see   */
+/* runPilotCapture.ts's BATCH_3_SHOTS. Crops are measured card edges in the 1080x1920 recordings.   */
+/* ---------------------------------------------------------------------------------------------- */
+
+const B3_BEHAVIOR_REC = "rec.b3-insights-behavior.v1";
+const B3_REPORTS_REC = "rec.b3-reports-timing-conviction.v1";
+const B3_PLAN_REC = "rec.b3-plan-vs-reality.v1";
+const B3_PROGRESS_REC = "rec.b3-progress.v1";
+const B3_ACCOUNTS_REC = "rec.b3-accounts-overview.v1";
+const B3_EDGE_REC = "rec.b3-your-edge.v1";
+const B3_REVENGE_CROP: Rect = { x: 38, y: 213, w: 1004, h: 775 };
+const B3_BEHAVIOR_LOWER_CROP: Rect = { x: 38, y: 995, w: 1004, h: 505 };
+const B3_TAGS_CROP: Rect = { x: 38, y: 452, w: 1004, h: 731 };
+const B3_TIMING_CROP: Rect = { x: 38, y: 207, w: 1004, h: 362 };
+const B3_CONVICTION_CROP: Rect = { x: 38, y: 1087, w: 1004, h: 552 };
+const B3_PLAN_CROP: Rect = { x: 38, y: 198, w: 1004, h: 784 };
+const B3_FOCUS_CROP: Rect = { x: 80, y: 1208, w: 920, h: 302 };
+const B3_WIN_RATE_CROP: Rect = { x: 38, y: 207, w: 1004, h: 370 };
+const B3_PROGRESS_BEHAVIOR_CROP: Rect = { x: 38, y: 860, w: 1004, h: 780 };
+const B3_ACCOUNTS_CROP: Rect = { x: 38, y: 208, w: 1004, h: 957 };
+const B3_EDGE_CROP: Rect = { x: 38, y: 820, w: 1004, h: 647 };
+
+interface B3Scene {
+  narration: string;
+  headline: string;
+  caption: string;
+  takeaway: string;
+  topics: string[];
+  /** Evidence scenes only. */
+  asset?: { id: string; crop: Rect; clip: { start: number; end: number }; claim: string; factKey: string };
+}
+
+/** Builds a four-scene concept (hook, evidence, qualify, close) in the same shape as P1-P9. */
+function batch3Plan(p: {
+  n: number;
+  slug: string;
+  title: string;
+  series: string;
+  topic: string;
+  scenes: [B3Scene, B3Scene, B3Scene, B3Scene];
+}): ScenePlan {
+  const variationId = `p${p.n}-a`;
+  const ids = ["hook", "evidence", "qualify", "close"];
+  return {
+    planId: `pilot-${p.n}-${p.slug}`,
+    title: p.title,
+    series: p.series,
+    topic: p.topic,
+    hook: p.scenes[0].narration,
+    experimentId: PILOT_EXPERIMENT_ID,
+    variationId,
+    platforms: ["tiktok", "youtube_shorts"],
+    voice: VOICE,
+    visualStyle: VISUAL_STYLE,
+    requiredAssets: [],
+    scenes: p.scenes.map((s, i) =>
+      scene({
+        sceneId: `p${p.n}-s${i + 1}-${ids[i]}`,
+        variationId,
+        first: i === 0,
+        narration: s.narration,
+        takeaway: s.takeaway,
+        assetId: s.asset?.id,
+        crop: s.asset?.crop,
+        headline: s.headline,
+        caption: s.caption,
+        seconds: estimateSeconds(s.narration),
+        disclosure: i < 2 ? "Demo data" : i === 2 ? QUALIFY_DEMO : null,
+        cta: i === 3 ? `Follow ${OFFICIAL_HANDLE}` : null,
+        topics: s.topics,
+        clipTimeRangeSeconds: s.asset?.clip,
+        claims: s.asset
+          ? [{ id: `p${p.n}-c${i + 1}`, type: "data_point", text: s.asset.claim, evidence: [{ assetId: s.asset.id, factKey: s.asset.factKey }] }]
+          : [{ id: `p${p.n}-c${i + 1}`, type: i === 3 ? "invitation" : "concept", text: s.takeaway, evidence: [] }],
+      }),
+    ),
+  };
+}
+
+export const PILOT_10 = batch3Plan({
+  n: 10,
+  slug: "sized-up-after-a-loss",
+  title: "Sized up 3 minutes after a loss.",
+  series: "What Your Journal Shows",
+  topic: "Revenge trades show up as a bigger size right after a loss",
+  scenes: [
+    { narration: "Sized up 3 minutes after a loss.", headline: "3 minutes after a loss", caption: "Sized 2.5x the usual.", takeaway: "Size right after a loss is worth checking.", topics: ["revenge_trading"],
+      asset: { id: B3_BEHAVIOR_REC, crop: B3_REVENGE_CROP, clip: { start: 1.7, end: 6.2 }, claim: "A trade opened 3 min after losing $127, sized 2.5x the average.", factKey: "behavior.revenge" } },
+    { narration: "Fillbook flagged it 5 times. Each one opened within 12 minutes of a loss, at up to 2.5 times the usual size.", headline: "5 revenge trades flagged", caption: "Opened 3 to 12 min after a loss.", takeaway: "The pattern repeats, and it can be counted.", topics: ["revenge_trading"],
+      asset: { id: B3_BEHAVIOR_REC, crop: B3_REVENGE_CROP, clip: { start: 6.0, end: 17.7 }, claim: "5 possible revenge trades, opened 3 to 12 min after a loss at 1.5x to 2.5x the average size.", factKey: "behavior.revenge" } },
+    { narration: "This is a demo account with seeded trades. A flag is a pattern to review, not a verdict.", headline: "A pattern, not a verdict", caption: "Demo account, seeded trades.", takeaway: "Treat a flag as something to review.", topics: ["revenge_trading"] },
+    { narration: "Check what you do right after a loss.", headline: "Check your next trade.", caption: "See your own patterns at fillbookhq.com.", takeaway: "Look at the trade after the loss.", topics: ["revenge_trading"] },
+  ],
+});
+
+export const PILOT_11 = batch3Plan({
+  n: 11,
+  slug: "six-trade-days",
+  title: "Six trades on a 2.7-trade day.",
+  series: "What Your Journal Shows",
+  topic: "Overtrading shows up as sessions far above your normal trade count",
+  scenes: [
+    { narration: "Six trades. Your normal day is 2.7.", headline: "6 trades vs 2.7", caption: "Flagged as overtrading, three times.", takeaway: "Trade count is a behavior you can measure.", topics: ["overtrading"],
+      asset: { id: B3_BEHAVIOR_REC, crop: B3_BEHAVIOR_LOWER_CROP, clip: { start: 1.7, end: 6.2 }, claim: "Overtraded sessions of 6 trades against a 2.7/day norm.", factKey: "behavior.overtraded" } },
+    { narration: "Three sessions ran to 6 trades against a 2.7 a day norm. Two of them finished down $468.20 and $464.72.", headline: "3 sessions flagged", caption: "Two of them finished red.", takeaway: "The extra trades are where the damage lands.", topics: ["overtrading"],
+      asset: { id: B3_BEHAVIOR_REC, crop: B3_BEHAVIOR_LOWER_CROP, clip: { start: 6.0, end: 17.7 }, claim: "3 overtraded sessions of 6 trades against a 2.7/day norm, two net -$468.20 and -$464.72.", factKey: "behavior.overtraded" } },
+    { narration: "Demo account, seeded trades. Your own normal pace is the number that matters.", headline: "Your pace, not this one", caption: "Demo account, seeded trades.", takeaway: "Compare against your own normal.", topics: ["overtrading"] },
+    { narration: "Know your normal before you break it.", headline: "Know your normal.", caption: "Track your pace at fillbookhq.com.", takeaway: "Set a cap from your own average.", topics: ["overtrading"] },
+  ],
+});
+
+export const PILOT_12 = batch3Plan({
+  n: 12,
+  slug: "the-11-oclock-trades",
+  title: "Your 11 o'clock trades win 25%.",
+  series: "What the Total Hides",
+  topic: "One hour of the day can lose while the rest of the session wins",
+  scenes: [
+    { narration: "These 11 o'clock trades win 25% of the time.", headline: "11:00: 25% win rate", caption: "Against 62% overall.", takeaway: "One hour can drag the whole day.", topics: ["time_of_day"],
+      asset: { id: B3_BEHAVIOR_REC, crop: B3_BEHAVIOR_LOWER_CROP, clip: { start: 1.7, end: 6.2 }, claim: "Weak hour 11:00: 25% win rate across 20 timed trades, against 62% overall.", factKey: "behavior.weak_hour" } },
+    { narration: "By time of day, the open wins 71% for $2,967.96. Late morning wins 24% and gives back $1,406.00.", headline: "Open vs late morning", caption: "Late morning: -$1,406.00.", takeaway: "Your best and worst hours are both in the log.", topics: ["time_of_day"],
+      asset: { id: B3_REPORTS_REC, crop: B3_TIMING_CROP, clip: { start: 1.9, end: 17.9 }, claim: "Open 106 trades, 71% win, $2,967.96; late morning 25 trades, 24% win, -$1,406.00.", factKey: "timing.buckets" } },
+    { narration: "This is seeded demo data. Your own hours will split differently.", headline: "Your hours will differ", caption: "Seeded demo data.", takeaway: "Check your own hours, not these.", topics: ["time_of_day"] },
+    { narration: "Find the hour that costs you.", headline: "Find your worst hour.", caption: "Split your trades at fillbookhq.com.", takeaway: "Stop trading the hour that loses.", topics: ["time_of_day"] },
+  ],
+});
+
+export const PILOT_13 = batch3Plan({
+  n: 13,
+  slug: "what-moving-your-stop-costs",
+  title: "What does moving your stop cost?",
+  series: "What Your Journal Shows",
+  topic: "Tagging mistakes turns habits like moving a stop into a dollar figure",
+  scenes: [
+    { narration: "What does moving your stop actually cost?", headline: "The cost of a moved stop", caption: "Tagged habits, worst first.", takeaway: "A habit has a price once you tag it.", topics: ["mistake_tags"],
+      asset: { id: B3_BEHAVIOR_REC, crop: B3_TAGS_CROP, clip: { start: 18.9, end: 22.8 }, claim: "Tagged habits ranked by net impact, worst first.", factKey: "tags.all" } },
+    { narration: "Fillbook adds up your tagged mistakes. Moved stop: 4 trades, $655.84 lost. Chased price: $629.60.", headline: "Moved stop: -$655.84", caption: "Chased price: -$629.60.", takeaway: "The tags show which habit costs the most.", topics: ["mistake_tags"],
+      asset: { id: B3_BEHAVIOR_REC, crop: B3_TAGS_CROP, clip: { start: 22.6, end: 34.9 }, claim: "Moved stop 4 trades, -$655.84; Chased price 10 trades, -$629.60.", factKey: "tags.all" } },
+    { narration: "Demo account, seeded trades. The tags only count what you mark.", headline: "Only what you tag", caption: "Demo account, seeded trades.", takeaway: "Honest tags make honest totals.", topics: ["mistake_tags"] },
+    { narration: "Put a price on your worst habit.", headline: "Price your worst habit.", caption: "Tag your trades at fillbookhq.com.", takeaway: "Start with the most expensive habit.", topics: ["mistake_tags"] },
+  ],
+});
+
+export const PILOT_14 = batch3Plan({
+  n: 14,
+  slug: "would-you-take-it-again",
+  title: "You already know your bad trades.",
+  series: "What Your Journal Shows",
+  topic: "Asking whether you would take a trade again separates good trades from bad ones",
+  scenes: [
+    { narration: "You already know which trades you shouldn't take.", headline: "Would you take it again?", caption: "One question after every trade.", takeaway: "Your own answer is a signal.", topics: ["conviction"],
+      asset: { id: B3_REPORTS_REC, crop: B3_CONVICTION_CROP, clip: { start: 19.1, end: 22.9 }, claim: "By conviction: trades split by whether you would take them again.", factKey: "conviction.all" } },
+    { narration: "Trades you'd take again: 84% win, $3,822.00. Trades you wouldn't: 18% win, down $2,575.96.", headline: "84% vs 18%", caption: "Wouldn't take again: -$2,575.96.", takeaway: "The trades you doubted are the ones that lost.", topics: ["conviction"],
+      asset: { id: B3_REPORTS_REC, crop: B3_CONVICTION_CROP, clip: { start: 22.7, end: 35.1 }, claim: "Would take again 84% win, $3,822.00; wouldn't take again 18% win, -$2,575.96.", factKey: "conviction.all" } },
+    { narration: "This is seeded demo data. Your answers are what make this work.", headline: "Your answers, your data", caption: "Seeded demo data.", takeaway: "Answer honestly and the split means something.", topics: ["conviction"] },
+    { narration: "Ask yourself after every trade.", headline: "Ask after every trade.", caption: "Log yours at fillbookhq.com.", takeaway: "Skip the trades you wouldn't take again.", topics: ["conviction"] },
+  ],
+});
+
+export const PILOT_15 = batch3Plan({
+  n: 15,
+  slug: "92-percent-on-plan",
+  title: "92% on plan. The misses cost money.",
+  series: "Read the Rule",
+  topic: "Plan adherence per rule, and what the trades outside the plan did",
+  scenes: [
+    { narration: "92% on plan. The misses aren't random.", headline: "92% on plan", caption: "Checked rule by rule.", takeaway: "A plan score shows where you slip.", topics: ["plan_adherence"],
+      asset: { id: B3_PLAN_REC, crop: B3_PLAN_CROP, clip: { start: 1.9, end: 6.4 }, claim: "Plan vs reality: 92% overall adherence.", factKey: "plan.adherence" } },
+    { narration: "20 trades came outside the 9:30 to 11:30 window. They averaged negative $39.16 each, against $21.13 inside it.", headline: "Outside the window: -$39.16", caption: "Inside it: +$21.13 a trade.", takeaway: "The trades outside the plan are the losing ones.", topics: ["plan_adherence"],
+      asset: { id: B3_PLAN_REC, crop: B3_FOCUS_CROP, clip: { start: 19.1, end: 35.1 }, claim: "20 trades outside 09:30-11:30 averaged -$39.16 each, against $21.13 inside.", factKey: "plan.focus" } },
+    { narration: "Demo account and a sample plan. Your own rules decide the score.", headline: "Your rules, your score", caption: "Demo account, sample plan.", takeaway: "Write your own rules down first.", topics: ["plan_adherence"] },
+    { narration: "Check your trades against your plan.", headline: "Check it against your plan.", caption: "Score yours at fillbookhq.com.", takeaway: "See which rule you break most.", topics: ["plan_adherence"] },
+  ],
+});
+
+export const PILOT_16 = batch3Plan({
+  n: 16,
+  slug: "win-rate-76-to-55",
+  title: "Win rate 76% to 55%. Here's why.",
+  series: "What Your Journal Shows",
+  topic: "Comparing recent trading against your own baseline shows what changed",
+  scenes: [
+    { narration: "Win rate: 76% before, 55% lately.", headline: "76% to 55%", caption: "Baseline vs recent trades.", takeaway: "Compare yourself against your own past.", topics: ["progress"],
+      asset: { id: B3_PROGRESS_REC, crop: B3_WIN_RATE_CROP, clip: { start: 1.7, end: 6.2 }, claim: "Win rate baseline 76%, recent 55%.", factKey: "progress.win_rate" } },
+    { narration: "Over the same stretch, flagged revenge trades went from 0% to 6%, and flagged overtrading days from 0% to 17%.", headline: "Flagged revenge: 0% to 6%", caption: "Flagged overtrading days: 0% to 17%.", takeaway: "The behavior changed before the results did.", topics: ["progress"],
+      asset: { id: B3_PROGRESS_REC, crop: B3_PROGRESS_BEHAVIOR_CROP, clip: { start: 18.9, end: 34.9 }, claim: "Revenge-trade rate 0% to 6%; overtrading-day rate 0% to 17%.", factKey: "progress.behavior" } },
+    { narration: "This is seeded demo data. Your own baseline is what you'd compare against.", headline: "Your own baseline", caption: "Seeded demo data.", takeaway: "Measure against yourself, not others.", topics: ["progress"] },
+    { narration: "Find out what changed in your trading.", headline: "Find what changed.", caption: "Compare yours at fillbookhq.com.", takeaway: "Catch the change early.", topics: ["progress"] },
+  ],
+});
+
+export const PILOT_17 = batch3Plan({
+  n: 17,
+  slug: "two-accounts-one-screen",
+  title: "Two funded accounts. One screen.",
+  series: "Read the Rule",
+  topic: "Every prop account's buffer, limits and health side by side",
+  scenes: [
+    { narration: "Two funded accounts. Which one is closer to trouble?", headline: "Two accounts", caption: "All accounts at a glance.", takeaway: "Multiple accounts means multiple limits.", topics: ["accounts_overview"],
+      asset: { id: B3_ACCOUNTS_REC, crop: B3_ACCOUNTS_CROP, clip: { start: 1.9, end: 6.4 }, claim: "All accounts at a glance lists 2 accounts.", factKey: "accounts.overview" } },
+    { narration: "Each account shows its buffer, today's limit, target progress and health. This one's best day is 46% of profit, over its 40% cap.", headline: "Best day: 46% of 40% cap", caption: "Health 80 out of 100.", takeaway: "The problem account stands out on one screen.", topics: ["accounts_overview"],
+      asset: { id: B3_ACCOUNTS_REC, crop: B3_ACCOUNTS_CROP, clip: { start: 6.2, end: 19.9 }, claim: "Each account shows buffer, today's limit, % to target and health; one account's best day is 46% of a 40% cap.", factKey: "accounts.overview" } },
+    { narration: "Demo accounts with seeded trades. Your firm's own rules set the real limits.", headline: "Your firm sets the limits", caption: "Demo accounts, seeded trades.", takeaway: "Confirm limits with your firm.", topics: ["accounts_overview"] },
+    { narration: "See every account before you trade.", headline: "See every account.", caption: "Track yours at fillbookhq.com.", takeaway: "Check the weakest account first.", topics: ["accounts_overview"] },
+  ],
+});
+
+export const PILOT_18 = batch3Plan({
+  n: 18,
+  slug: "your-best-setup-by-the-numbers",
+  title: "Your best setup, by the numbers.",
+  series: "What Your Journal Shows",
+  topic: "Finding the setup and time window that actually work",
+  scenes: [
+    { narration: "Your best setup, by the numbers.", headline: "Your strongest edge", caption: "Found in your own trades.", takeaway: "Know what to do more of.", topics: ["edge"],
+      asset: { id: B3_EDGE_REC, crop: B3_EDGE_CROP, clip: { start: 1.7, end: 6.2 }, claim: "Your Edge: strongest setup and strongest window.", factKey: "edge.strongest" } },
+    { narration: "Order Block Retest: 48 trades, 88% win rate. The strongest window is the open, 71% across 106 trades.", headline: "Order Block Retest: 88%", caption: "Best window: the open, 71%.", takeaway: "Your edge has a setup and a time.", topics: ["edge"],
+      asset: { id: B3_EDGE_REC, crop: B3_EDGE_CROP, clip: { start: 6.0, end: 19.7 }, claim: "Order Block Retest 48 trades, 88% win rate; strongest window the open, 106 trades, 71% win rate.", factKey: "edge.strongest" } },
+    { narration: "This is seeded demo data. Past patterns don't promise future ones.", headline: "Past, not a forecast", caption: "Seeded demo data.", takeaway: "Treat an edge as a pattern to keep testing.", topics: ["edge"] },
+    { narration: "Find the setup that's working for you.", headline: "Find your edge.", caption: "See yours at fillbookhq.com.", takeaway: "Do more of what works.", topics: ["edge"] },
+  ],
+});
+
+const BATCH_3_PLANS: ScenePlan[] = [PILOT_10, PILOT_11, PILOT_12, PILOT_13, PILOT_14, PILOT_15, PILOT_16, PILOT_17, PILOT_18];
+const BATCH_3_COPY: Record<string, { captionBody: string; youtubeTitle: string; cta: string }> = {
+  [PILOT_10.planId]: { captionBody: "Five trades opened minutes after a loss, at up to 2.5x the usual size. Demo data from a seeded account.", youtubeTitle: "Sized Up 3 Minutes After a Loss: Flagging Possible Revenge Trades", cta: "Follow for more trade reviews" },
+  [PILOT_11.planId]: { captionBody: "Sessions that ran to 6 trades against a 2.7-trade normal day. Demo data from a seeded account.", youtubeTitle: "Six Trades on a 2.7-Trade Day: Flagging Possible Overtrading", cta: "Follow for more trade reviews" },
+  [PILOT_12.planId]: { captionBody: "The open wins, late morning loses. Split your trades by hour to find yours. Demo data.", youtubeTitle: "Your 11 O'Clock Trades Win 25%: Results by Time of Day", cta: "Follow for more trade reviews" },
+  [PILOT_13.planId]: { captionBody: "Tag your mistakes and see what each habit costs. Demo data from a seeded account.", youtubeTitle: "What Moving Your Stop Costs: Pricing Your Trading Habits", cta: "Follow for more trade reviews" },
+  [PILOT_14.planId]: { captionBody: "Trades you'd take again vs trades you wouldn't: 84% win vs 18%. Demo data.", youtubeTitle: "Would You Take It Again? What Your Doubts Are Telling You", cta: "Follow for more trade reviews" },
+  [PILOT_15.planId]: { captionBody: "92% on plan, and the trades outside the window lost money. Demo account and a sample plan.", youtubeTitle: "92% on Plan: What the Trades Outside It Cost", cta: "Follow for more rule reads" },
+  [PILOT_16.planId]: { captionBody: "Compare recent trading to your own baseline to see what changed. Demo data.", youtubeTitle: "Win Rate Fell From 76% to 55%: Comparing Against Your Baseline", cta: "Follow for more trade reviews" },
+  [PILOT_17.planId]: { captionBody: "Every prop account's buffer, limits and health on one screen. Demo accounts with seeded trades.", youtubeTitle: "Two Funded Accounts, One Screen: Tracking Every Account's Limits", cta: "Follow for more rule reads" },
+  [PILOT_18.planId]: { captionBody: "The setup and time window that actually work, from your own trades. Demo data.", youtubeTitle: "Your Best Setup by the Numbers: Finding Your Edge", cta: "Follow for more trade reviews" },
+};
+
+for (const plan of BATCH_3_PLANS) PILOT_COPY[plan.planId] = { topic: plan.topic, ...BATCH_3_COPY[plan.planId]! };
+
+/* ---------------------------------------------------------------------------------------------- */
 /* Angles (2026-09-25): the owner now posts 3 videos a day. Each angle re-cuts one verified concept  */
 /* with a new hook and narration over the SAME footage, crops, clip windows and fact citations, so   */
 /* every number stays checked against its recording. Numbers in narration must come from the facts  */
@@ -1182,7 +1422,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
   }),
 ];
 
-export const PILOTS: ScenePlan[] = [PILOT_1, PILOT_2, PILOT_3, PILOT_4, PILOT_5, PILOT_6, PILOT_7, PILOT_8, PILOT_9, ...PILOT_ANGLES];
+export const PILOTS: ScenePlan[] = [PILOT_1, PILOT_2, PILOT_3, PILOT_4, PILOT_5, PILOT_6, PILOT_7, PILOT_8, PILOT_9, ...BATCH_3_PLANS, ...PILOT_ANGLES];
 
 export function pilotMetadata(plan: ScenePlan, platform: Platform): PublishedVideoMetadata {
   const copy = PILOT_COPY[plan.planId] ?? ANGLE_COPY[plan.planId];

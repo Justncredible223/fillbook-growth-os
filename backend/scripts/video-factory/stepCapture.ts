@@ -28,6 +28,8 @@ export interface StepCaptureSpec {
   viewportCss: { width: number; height: number };
   deviceScaleFactor: number;
   storageStatePath: string;
+  /** IANA zone for the browser, e.g. "America/New_York"; omitted keeps the machine's own zone. */
+  timezoneId?: string;
   steps: Step[];
 }
 
@@ -83,6 +85,7 @@ export async function runStepCapture(spec: StepCaptureSpec, outDir: string): Pro
     isMobile: true,
     hasTouch: true,
     storageState: spec.storageStatePath,
+    timezoneId: spec.timezoneId,
   });
   const page = await ctx.newPage();
 

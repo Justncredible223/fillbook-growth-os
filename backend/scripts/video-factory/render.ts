@@ -262,6 +262,32 @@ export function computeCardLayout(cropWidth: number, cropHeight: number): CardLa
   return { x: (WIDTH - width) / 2, y, width, height, radius: Math.round(SOURCE_CARD_RADIUS * scale), textTop: y + height + CARD_TEXT_GAP };
 }
 
+/**
+ * Where TikTok and YouTube Shorts draw over the video, in the 1080x1920 frame (owner rule, 2026-09-25): the right-hand
+ * button column from x=930 down from y=740 (the profile icon's top on a 20:9 phone; Shorts' buttons sit inside the same
+ * column), and the caption/username block from y=1600. No card, and no headline or caption under a card, may reach
+ * into either -- assertCardClearsOverlays enforces it for every evidence card before anything renders.
+ */
+export const PLATFORM_OVERLAY_ZONES = { rightColumn: { x: 930, y: 740 }, captionTop: 1600 } as const;
+
+/** Throws if this card, or the headline/caption block set under it, would sit under a platform overlay. */
+export function assertCardClearsOverlays(layout: CardLayout): void {
+  const { rightColumn, captionTop } = PLATFORM_OVERLAY_ZONES;
+  const right = layout.x + layout.width;
+  const bottom = layout.y + layout.height;
+  if (right > rightColumn.x && bottom > rightColumn.y) {
+    throw new VideoFactoryError(
+      `Card at x ${layout.x}-${right}, y ${layout.y}-${bottom} would run under the platforms' right-hand buttons (x >= ${rightColumn.x}, y >= ${rightColumn.y}).`,
+    );
+  }
+  const textBottom = layout.textTop + CARD_TEXT_BLOCK_ESTIMATE;
+  if (bottom > captionTop || textBottom > captionTop) {
+    throw new VideoFactoryError(
+      `Card or its text (to y ${Math.max(bottom, textBottom)}) would run into the platforms' caption area (y >= ${captionTop}).`,
+    );
+  }
+}
+
 export function buildFfmpegArgs(plan: RenderPlan): string[] {
   if (plan.scenes.length === 0) throw new VideoFactoryError("Render plan has no scenes.");
 
