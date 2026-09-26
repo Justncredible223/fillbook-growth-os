@@ -95,7 +95,7 @@ describe("listMotionConcepts", () => {
   it("lists exactly the known verified pilots, never an open-ended/inferred set", () => {
     const concepts = listMotionConcepts();
     expect(concepts.map((c) => c.id).sort()).toEqual(PILOTS.map((p) => p.planId).sort());
-    expect(concepts).toHaveLength(36); // 18 recorded concepts plus two angles for each of the first 9 (2026-09-25)
+    expect(concepts).toHaveLength(54); // 18 recorded concepts plus two angles each (2026-09-25)
     expect(new Set(concepts.map((c) => c.title)).size).toBe(concepts.length); // availability is tracked by title
     for (const c of concepts) expect(c.hook.length).toBeGreaterThan(0);
   });
