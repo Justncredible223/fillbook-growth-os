@@ -7,25 +7,50 @@ import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 import { isPlausiblyTradingRelated } from "../src/prospecting/prospectingRelevance.js";
 import { validateVideoTopicShape, manualVideoTopicTitle, manualVideoTopicOpportunityInput } from "../src/opportunities/manualVideoTopic.js";
 import { validateResearchTopicShape, manualResearchTopicTitle, manualResearchTopicOpportunityInput } from "../src/opportunities/manualResearchTopic.js";
-import { manualMotionConceptTitle, manualMotionConceptOpportunityInput } from "../src/opportunities/manualMotionConcept.js";
+import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX, manualMotionConceptTitle, manualMotionConceptOpportunityInput } from "../src/opportunities/manualMotionConcept.js";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
 
 /**
- * Motion concepts that must not be offered again, keyed by their opportunity title: "made" once a campaign for the
- * concept is approved (it has a video), "waiting" while one sits in Approvals. A rejected (retired) or blocked draft
- * leaves the concept available.
+ * Motion concepts that must not be offered again, keyed by their opportunity title (owner rule 2026-09-25: a concept
+ * is used up the moment it's requested, so it's never run twice by accident):
+ * - "waiting" from the moment it's requested -- a queued or running campaign-run request, or a script in Approvals;
+ * - "made" once its script is approved (it has a video);
+ * - "rejected" once the owner rejects its script. A concept's narration is fixed, so a new request would produce the
+ *   identical script.
+ * Only a run that failed or a draft the quality gate blocked leaves the concept available, so it can be retried.
  */
-export async function motionConceptStates(client: ReturnType<typeof getServiceClient>): Promise<Map<string, "made" | "waiting">> {
+export type MotionConceptState = "made" | "waiting" | "rejected";
+const STATE_PRIORITY: Record<MotionConceptState, number> = { made: 3, waiting: 2, rejected: 1 };
+
+export async function motionConceptStates(client: ReturnType<typeof getServiceClient>): Promise<Map<string, MotionConceptState>> {
+  const states = new Map<string, MotionConceptState>();
+  const mark = (title: string, state: MotionConceptState) => {
+    const current = states.get(title);
+    if (!current || STATE_PRIORITY[state] > STATE_PRIORITY[current]) states.set(title, state);
+  };
+
   const { data, error } = await client
     .from("campaigns")
     .select("thesis, status")
-    .like("thesis", "Motion concept request:%")
-    .in("status", ["approved", "in_review"]);
+    .like("thesis", `${MANUAL_MOTION_CONCEPT_TITLE_PREFIX}%`)
+    .in("status", ["approved", "in_review", "retired"]);
   if (error) throw new Error(`Motion concept state lookup failed: ${error.message}`);
-  const states = new Map<string, "made" | "waiting">();
   for (const row of (data ?? []) as Array<{ thesis: string; status: string }>) {
-    if (row.status === "approved") states.set(row.thesis, "made");
-    else if (row.status === "in_review" && !states.has(row.thesis)) states.set(row.thesis, "waiting");
+    if (row.status === "approved") mark(row.thesis, "made");
+    else if (row.status === "in_review") mark(row.thesis, "waiting");
+    else if (row.status === "retired") mark(row.thesis, "rejected");
+  }
+
+  // A request still queued or running has no campaign yet; without this, the concept stayed on offer until the run finished.
+  const { data: pending, error: pendingError } = await client.from("campaign_run_requests").select("opportunity_id").in("status", ["queued", "running"]);
+  if (pendingError) throw new Error(`Motion concept pending-run lookup failed: ${pendingError.message}`);
+  const pendingIds = [...new Set(((pending ?? []) as Array<{ opportunity_id: string }>).map((r) => r.opportunity_id))];
+  if (pendingIds.length > 0) {
+    const { data: opps, error: oppError } = await client.from("opportunities").select("title").in("id", pendingIds);
+    if (oppError) throw new Error(`Motion concept pending-run lookup failed: ${oppError.message}`);
+    for (const o of (opps ?? []) as Array<{ title: string }>) {
+      if (o.title.startsWith(MANUAL_MOTION_CONCEPT_TITLE_PREFIX)) mark(o.title, "waiting");
+    }
   }
   return states;
 }
@@ -172,7 +197,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         res.status(409).json({
           error: state === "made"
             ? `A video for "${concept.title}" has already been made. Pick another concept.`
-            : `"${concept.title}" is already waiting in Approvals.`,
+            : state === "rejected"
+              ? `You already rejected the script for "${concept.title}", and a new request would produce the same script. Pick another concept.`
+              : `"${concept.title}" is already in progress or waiting in Approvals.`,
         });
         return;
       }
