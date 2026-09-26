@@ -334,7 +334,9 @@ export function buildStageSvg(beats: TimedBeat[], t: number): string {
     const sceneLeft = current.endSeconds - t;
     const pop = clamp01((dt - BUBBLE_DELAY) / BUBBLE_POP);
     const scale = dt < BUBBLE_DELAY ? 0 : easeOutBack(pop);
-    const opacity = sceneLeft < BUBBLE_FADE ? clamp01(sceneLeft / BUBBLE_FADE) : 1;
+    // The closing line stays up through the video's tail instead of fading with its scene.
+    const isLast = current === beats[beats.length - 1];
+    const opacity = !isLast && sceneLeft < BUBBLE_FADE ? clamp01(sceneLeft / BUBBLE_FADE) : 1;
     bubble = drawBubble(current.beat.speaker, current.beat.quip, scale, opacity);
     // The speaker is drawn last so a raised hand never tucks behind the other character.
     const order: CharacterName[] = current.beat.speaker === "rook" ? ["tilt", "rook"] : ["rook", "tilt"];
