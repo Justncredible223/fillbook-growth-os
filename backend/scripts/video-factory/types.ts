@@ -134,6 +134,8 @@ export interface RenderPlan {
   /** Background music track (absolute path) and where in it to start; omitted = the renderer's default bed from the start. */
   musicFile?: string;
   musicStartSeconds?: number;
+  /** Verified-motion videos only: the Rook-and-Tilt stage as a transparent PNG sequence (characters.ts), overlaid at CHARACTER_STAGE_TOP. */
+  characterTrack?: { framePattern: string; frameCount: number };
 }
 
 export interface FfprobeStream {

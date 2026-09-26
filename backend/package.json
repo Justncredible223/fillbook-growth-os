@@ -10,6 +10,7 @@
     "video:render": "tsx scripts/video-factory/index.ts"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@supabase/supabase-js": "^2.45.0",
     "firebase-admin": "^14.3.0"
   },

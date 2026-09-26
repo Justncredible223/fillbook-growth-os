@@ -1,4 +1,5 @@
 import { buildPublishedMetadata, type PublishedVideoMetadata } from "./metadata.js";
+import { withCharacterBeats } from "./characterBeats.js";
 import { OFFICIAL_HANDLE, type Claim, type Mask, type Platform, type Rect, type SceneSpec, type ScenePlan } from "./types.js";
 
 /**
@@ -1678,7 +1679,10 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
   }),
 ];
 
-export const PILOTS: ScenePlan[] = [PILOT_1, PILOT_2, PILOT_3, PILOT_4, PILOT_5, PILOT_6, PILOT_7, PILOT_8, PILOT_9, ...BATCH_3_PLANS, ...PILOT_ANGLES, ...PILOT_ANGLES_B3];
+/** Every concept, each scene carrying its Rook-and-Tilt beat (characterBeats.ts). */
+export const PILOTS: ScenePlan[] = [PILOT_1, PILOT_2, PILOT_3, PILOT_4, PILOT_5, PILOT_6, PILOT_7, PILOT_8, PILOT_9, ...BATCH_3_PLANS, ...PILOT_ANGLES, ...PILOT_ANGLES_B3].map(
+  withCharacterBeats,
+);
 
 export function pilotMetadata(plan: ScenePlan, platform: Platform): PublishedVideoMetadata {
   const copy = PILOT_COPY[plan.planId] ?? ANGLE_COPY[plan.planId];
