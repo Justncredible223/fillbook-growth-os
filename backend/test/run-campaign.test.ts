@@ -37,7 +37,12 @@ function fakeRes() {
 
 /** Minimal, chainable, thenable Supabase client fake -- records every rpc()/insert() call so a test can assert on exactly what was sent. */
 function createFakeClient(
-  opts: { existingOpportunity?: { id: string; status: string } | null; campaignRows?: Array<{ thesis: string; status: string }> } = {},
+  opts: {
+    existingOpportunity?: { id: string; status: string } | null;
+    campaignRows?: Array<{ thesis: string; status: string }>;
+    /** Campaign-run requests still queued or running, with their opportunity's title. */
+    pendingRuns?: Array<{ opportunity_id: string; title: string }>;
+  } = {},
 ) {
   const calls: { kind: string; args: unknown }[] = [];
   const insertedOpportunities: Record<string, unknown>[] = [];
@@ -53,7 +58,18 @@ function createFakeClient(
       like: () => builder,
       in: () => builder,
       // Awaiting the builder itself (motionConceptStates' campaigns lookup) resolves the table's rows.
-      then: (resolve: (v: unknown) => void) => resolve({ data: table === "campaigns" ? (opts.campaignRows ?? []) : [], error: null }),
+      then: (resolve: (v: unknown) => void) =>
+        resolve({
+          data:
+            table === "campaigns"
+              ? (opts.campaignRows ?? [])
+              : table === "campaign_run_requests"
+                ? (opts.pendingRuns ?? []).map((r) => ({ opportunity_id: r.opportunity_id }))
+                : table === "opportunities"
+                  ? (opts.pendingRuns ?? []).map((r) => ({ title: r.title }))
+                  : [],
+          error: null,
+        }),
       // SupabaseOpportunityRepository.listOpen awaits `.order(...)` directly -- resolve to full DB-row-shaped opportunities.
       order: async () => {
         if (table === "opportunities" && opts.existingOpportunity) {
@@ -217,7 +233,7 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
   });
 });
 
-describe("api/run-campaign.ts handler -- concepts already made or waiting", () => {
+describe("api/run-campaign.ts handler -- a concept is used up once requested (owner rule 2026-09-25)", () => {
   const made = { thesis: "Motion concept request: Balance isn't your buffer.", status: "approved" };
   const waiting = { thesis: "Motion concept request: Same setup. Bigger size.", status: "in_review" };
   let handler: typeof import("../api/run-campaign").default;
@@ -225,7 +241,15 @@ describe("api/run-campaign.ts handler -- concepts already made or waiting", () =
 
   beforeEach(async () => {
     process.env.APP_API_TOKEN = "test-app-token";
-    state = createFakeClient({ campaignRows: [made, waiting, { thesis: "Motion concept request: Green month. Losing setup.", status: "retired" }] });
+    state = createFakeClient({
+      campaignRows: [
+        made,
+        waiting,
+        { thesis: "Motion concept request: Green month. Losing setup.", status: "retired" },
+        { thesis: "Motion concept request: Would your trades pass?", status: "draft" },
+      ],
+      pendingRuns: [{ opportunity_id: "opp-queued", title: "Motion concept request: Your best day can block your payout." }],
+    });
     vi.resetModules();
     vi.doMock("../src/lib/supabaseClient.js", () => ({ getServiceClient: () => state.client }));
     handler = (await import("../api/run-campaign")).default;
@@ -236,18 +260,22 @@ describe("api/run-campaign.ts handler -- concepts already made or waiting", () =
     vi.resetModules();
   });
 
-  it("GET leaves out a concept that already has a video or is waiting in Approvals, but keeps a rejected one", async () => {
+  it("GET leaves out a concept that's queued, waiting in Approvals, made or rejected, and keeps one whose draft was blocked", async () => {
     const { res, result } = fakeRes();
     await handler(fakeReq(undefined, "GET"), res);
     const body = result.body as { motionConcepts: { id: string }[]; unavailableMotionConcepts: { id: string; state: string }[] };
     const ids = body.motionConcepts.map((c) => c.id);
     expect(ids).not.toContain("pilot-2-balance-isnt-your-buffer");
     expect(ids).not.toContain("pilot-3-same-setup-bigger-size");
-    expect(ids).toContain("pilot-1-green-month-losing-setup");
+    expect(ids).not.toContain("pilot-1-green-month-losing-setup");
+    expect(ids).not.toContain("pilot-4-best-day-blocks-payout");
+    expect(ids).toContain("pilot-5-would-you-pass");
     expect(body.unavailableMotionConcepts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "pilot-2-balance-isnt-your-buffer", state: "made" }),
         expect.objectContaining({ id: "pilot-3-same-setup-bigger-size", state: "waiting" }),
+        expect.objectContaining({ id: "pilot-1-green-month-losing-setup", state: "rejected" }),
+        expect.objectContaining({ id: "pilot-4-best-day-blocks-payout", state: "waiting" }),
       ]),
     );
   });
@@ -266,5 +294,20 @@ describe("api/run-campaign.ts handler -- concepts already made or waiting", () =
     await handler(fakeReq({ motionConceptId: "pilot-3-same-setup-bigger-size" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("waiting in Approvals");
+  });
+
+  it("POST for a concept whose request is still queued is refused with 409, so it can't be run twice", async () => {
+    const { res, result } = fakeRes();
+    await handler(fakeReq({ motionConceptId: "pilot-4-best-day-blocks-payout" }), res);
+    expect(result.statusCode).toBe(409);
+    expect((result.body as { error: string }).error).toContain("already in progress");
+    expect(state.calls).toHaveLength(0);
+  });
+
+  it("POST for a concept whose script was rejected is refused with 409", async () => {
+    const { res, result } = fakeRes();
+    await handler(fakeReq({ motionConceptId: "pilot-1-green-month-losing-setup" }), res);
+    expect(result.statusCode).toBe(409);
+    expect((result.body as { error: string }).error).toContain("already rejected");
   });
 });

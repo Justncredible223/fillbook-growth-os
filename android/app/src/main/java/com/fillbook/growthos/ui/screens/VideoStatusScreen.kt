@@ -437,6 +437,9 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                 showCreateVideoDialog = false
                 videoTopicInput = ""
                 selectedOpportunityId = null
+                // A concept is used up once requested (owner rule 2026-09-25): drop it now, and the next open reloads
+                // the list from the server, which also leaves out anything queued, waiting, made or rejected.
+                if (motionConceptId != null) motionConcepts = motionConcepts.filterNot { it.id == motionConceptId }
                 selectedMotionConceptId = null
                 useExistingOpportunity = false
                 useMotionConcept = false
@@ -471,6 +474,8 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                         videoTopicInput = ""
                         selectedOpportunityId = null
                         selectedMotionConceptId = null
+                        // Always fetch a fresh concept list: the server hides concepts used since the last load.
+                        motionConcepts = emptyList()
                         useExistingOpportunity = false
                         useMotionConcept = false
                         showCreateVideoDialog = true
