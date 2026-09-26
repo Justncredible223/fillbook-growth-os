@@ -19,6 +19,8 @@ import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery.js";
 import { reconcileVideoRenders, sweepStuckVideoRenderDispatches } from "../src/video/videoRenderReconciliation.js";
 import { createYoutubeCommentAdapter } from "../src/signals/adapters/youtubeAdapter.js";
 import { extractYoutubeVideoId } from "../src/video/youtubeUrl.js";
+import { isMissingPostingTables, saveOwnTweets, syncYoutubeStats } from "../src/posting/postingRepository.js";
+import { recordXOwnedReadCostEvent } from "../src/cost/costTracking.js";
 
 interface StepResult {
   step: string;
@@ -39,6 +41,8 @@ export interface StepGroups {
   partnerships: boolean;
   videoReconciliation: boolean;
   youtubeComments: boolean;
+  /** Results tracking (2026-09-25): YouTube stats for posted videos, and the account's own X replies with their views. */
+  results: boolean;
 }
 
 /**
@@ -53,7 +57,7 @@ export interface StepGroups {
  */
 export function resolveStepGroups(query: Record<string, unknown>): StepGroups {
   const isTrue = (v: unknown) => v === "1" || v === "true";
-  const anyFlagPresent = ["x", "partnerships", "videoReconciliation", "youtubeComments"].some((k) => k in query);
+  const anyFlagPresent = ["x", "partnerships", "videoReconciliation", "youtubeComments", "results"].some((k) => k in query);
   return {
     x: !anyFlagPresent || isTrue(query.x),
     // discovery.ts's own SCHEDULED_CADENCE_DAYS=7 gate means most of these
@@ -72,6 +76,8 @@ export function resolveStepGroups(query: Record<string, unknown>): StepGroups {
     // only ever fetches genuinely new comments, so there's no reason to
     // poll more or less often than the rest of this endpoint already does.
     youtubeComments: !anyFlagPresent || isTrue(query.youtubeComments),
+    // Own flag and own try/catch like the rest; cheap (one X read of ~60 own tweets, one YouTube videos.list call).
+    results: !anyFlagPresent || isTrue(query.results),
   };
 }
 
@@ -136,6 +142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     partnerships: runPartnerships,
     videoReconciliation: runVideoReconciliation,
     youtubeComments: runYoutubeComments,
+    results: runResults,
   } = resolveStepGroups(req.query as Record<string, unknown>);
 
   const client = getServiceClient();
@@ -288,12 +295,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .not("published_url", "is", null);
         if (error) throw error;
 
+        // Links saved through the posting plan (video_posts) outlive the render row, so poll those too.
+        const { data: postRows, error: postError } = await client.from("video_posts").select("external_id").eq("platform", "youtube_shorts").not("external_id", "is", null);
+        if (postError) throw postError;
         const videoIds = [
-          ...new Set(
-            ((rows ?? []) as Array<{ published_url: string | null }>)
+          ...new Set([
+            ...((rows ?? []) as Array<{ published_url: string | null }>)
               .map((r) => (r.published_url ? extractYoutubeVideoId(r.published_url) : null))
               .filter((id): id is string => id !== null),
-          ),
+            ...((postRows ?? []) as Array<{ external_id: string }>).map((r) => r.external_id),
+          ]),
         ];
         if (videoIds.length === 0) return "0 videos with a recorded YouTube URL to poll";
 
@@ -310,9 +321,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
   }
 
+  if (runResults) {
+    results.push(
+      await runStep("youtube_stats", async () => {
+        const apiKey = process.env.YOUTUBE_API_KEY;
+        if (!apiKey) return "skipped -- YOUTUBE_API_KEY not configured";
+        try {
+          return await syncYoutubeStats(client, apiKey, fetch, now);
+        } catch (err) {
+          if (isMissingPostingTables(err)) return "skipped -- migration 0043 not applied yet";
+          throw err;
+        }
+      }),
+    );
+    results.push(
+      await runStep("x_own_posts", async () => {
+        // Checked first so a missing table never spends an X read.
+        const { error: tableError } = await client.from("x_own_posts").select("tweet_id").limit(1);
+        if (tableError && isMissingPostingTables(new Error(`x_own_posts: ${tableError.message} ${tableError.code ?? ""}`))) return "skipped -- migration 0043 not applied yet";
+        const adapter = createXSignalAdapter(client);
+        const userId = await adapter.resolveOwnUserId(now);
+        const tweets = await adapter.fetchOwnTweets(userId, 60, now);
+        const cost = await recordXOwnedReadCostEvent(client, tweets.length, { endpoint: "users/tweets", purpose: "results_tracking" });
+        const saved = await saveOwnTweets(client, tweets, now);
+        return `${saved.saved} own tweets (${saved.replies} replies, ${saved.matched} matched to Prospecting), $${cost.toFixed(3)}`;
+      }),
+    );
+  }
+
   const allOk = results.every((r) => r.ok);
   res.status(allOk ? 200 : 207).json({
     results,
-    ranGroups: { x: runX, partnerships: runPartnerships, videoReconciliation: runVideoReconciliation, youtubeComments: runYoutubeComments },
+    ranGroups: { x: runX, partnerships: runPartnerships, videoReconciliation: runVideoReconciliation, youtubeComments: runYoutubeComments, results: runResults },
   });
 }

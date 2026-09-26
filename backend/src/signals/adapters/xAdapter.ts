@@ -32,6 +32,18 @@ export interface XMention {
 
 export class XApiError extends Error {}
 
+/** One of the account's own tweets, as read back for results tracking. */
+export interface XOwnTweet {
+  id: string;
+  text: string;
+  createdAt: Date;
+  inReplyToTweetId: string | null;
+  impressions: number | null;
+  likes: number | null;
+  replies: number | null;
+  reposts: number | null;
+}
+
 /** One public post found by a recent-search query -- someone else's post, not @FillbookHQ's own. */
 export interface XSearchResult {
   id: string;
@@ -136,6 +148,29 @@ export class XSignalAdapter {
     const json = (await this.authedGet("/users/me", {}, now)) as { data?: { id: string } };
     if (!json.data?.id) throw new XApiError("X API /users/me returned no user id");
     return json.data.id;
+  }
+
+  /**
+   * The account's own latest tweets (replies and posts, no retweets) with their current public metrics, including
+   * impression_count. Owned Reads pricing, $0.001 per tweet returned. Feeds results tracking and the reply-visibility
+   * alert (src/posting/xOwnPosts.ts).
+   */
+  async fetchOwnTweets(userId: string, maxResults = 60, now: Date = new Date()): Promise<XOwnTweet[]> {
+    const json = (await this.authedGet(
+      `/users/${userId}/tweets`,
+      { max_results: String(Math.min(100, Math.max(5, maxResults))), exclude: "retweets", "tweet.fields": "created_at,public_metrics,referenced_tweets" },
+      now,
+    )) as { data?: Array<{ id: string; text: string; created_at?: string; public_metrics?: Record<string, number>; referenced_tweets?: Array<{ type: string; id: string }> }> };
+    return (json.data ?? []).map((t) => ({
+      id: t.id,
+      text: t.text,
+      createdAt: t.created_at ? new Date(t.created_at) : now,
+      inReplyToTweetId: t.referenced_tweets?.find((r) => r.type === "replied_to")?.id ?? null,
+      impressions: t.public_metrics?.impression_count ?? null,
+      likes: t.public_metrics?.like_count ?? null,
+      replies: t.public_metrics?.reply_count ?? null,
+      reposts: t.public_metrics?.retweet_count ?? null,
+    }));
   }
 
   /**

@@ -3,17 +3,18 @@ import { resolveStepGroups } from "../api/growth-pulse";
 
 describe("resolveStepGroups", () => {
   it("runs every group when no flags are present at all (manual run-now)", () => {
-    expect(resolveStepGroups({})).toEqual({ x: true, partnerships: true, videoReconciliation: true, youtubeComments: true });
+    expect(resolveStepGroups({})).toEqual({ x: true, partnerships: true, videoReconciliation: true, youtubeComments: true, results: true });
   });
 
-  it("the 08:00/13:00/18:00 Phoenix slots: X + partnerships + video reconciliation + YouTube comments", () => {
+  it("the 08:00/13:00/18:00 Phoenix slots: X + partnerships + video reconciliation + YouTube comments + results", () => {
     expect(
-      resolveStepGroups({ x: "true", partnerships: "true", videoReconciliation: "true", youtubeComments: "true" }),
+      resolveStepGroups({ x: "true", partnerships: "true", videoReconciliation: "true", youtubeComments: "true", results: "true" }),
     ).toEqual({
       x: true,
       partnerships: true,
       videoReconciliation: true,
       youtubeComments: true,
+      results: true,
     });
   });
 
@@ -23,6 +24,7 @@ describe("resolveStepGroups", () => {
       partnerships: false,
       videoReconciliation: true,
       youtubeComments: true,
+      results: false,
     });
   });
 
@@ -32,6 +34,7 @@ describe("resolveStepGroups", () => {
       partnerships: false,
       videoReconciliation: false,
       youtubeComments: false,
+      results: false,
     });
   });
 
@@ -41,6 +44,7 @@ describe("resolveStepGroups", () => {
       partnerships: true,
       videoReconciliation: false,
       youtubeComments: false,
+      results: false,
     });
   });
 
@@ -50,6 +54,11 @@ describe("resolveStepGroups", () => {
       partnerships: false,
       videoReconciliation: false,
       youtubeComments: true,
+      results: false,
     });
+  });
+
+  it("results flag alone runs only results tracking", () => {
+    expect(resolveStepGroups({ results: "true" })).toEqual({ x: false, partnerships: false, videoReconciliation: false, youtubeComments: false, results: true });
   });
 });

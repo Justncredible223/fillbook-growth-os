@@ -72,6 +72,10 @@ on:
         description: "Run YouTube comment monitoring (own posted videos only)"
         type: boolean
         default: true
+      results:
+        description: "Run results tracking (YouTube stats for posted videos, own X replies' views)"
+        type: boolean
+        default: true
 
 concurrency:
   # Prevents two invocations from overlapping (a slow run plus the next
@@ -95,6 +99,7 @@ jobs:
             echo "partnerships=${{ inputs.partnerships }}" >> "$GITHUB_OUTPUT"
             echo "videoReconciliation=${{ inputs.videoReconciliation }}" >> "$GITHUB_OUTPUT"
             echo "youtubeComments=${{ inputs.youtubeComments }}" >> "$GITHUB_OUTPUT"
+            echo "results=${{ inputs.results }}" >> "$GITHUB_OUTPUT"
           else
             # 08:00 / 13:00 / 18:00 America/Phoenix -- X's 3x/day slots,
             # with Partnerships discovery, the video-render reconciliation
@@ -104,6 +109,7 @@ jobs:
             echo "partnerships=true" >> "$GITHUB_OUTPUT"
             echo "videoReconciliation=true" >> "$GITHUB_OUTPUT"
             echo "youtubeComments=true" >> "$GITHUB_OUTPUT"
+            echo "results=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Call /api/growth-pulse
@@ -115,7 +121,7 @@ jobs:
             echo "::error::BACKEND_BASE_URL and/or CRON_SECRET repo secrets are not set -- see docs/PROGRESS_LEDGER.md / this workflow's own comment for setup steps. Refusing to call an unauthenticated/unknown endpoint."
             exit 1
           fi
-          url="${BACKEND_BASE_URL%/}/api/growth-pulse?x=${{ steps.which.outputs.x }}&partnerships=${{ steps.which.outputs.partnerships }}&videoReconciliation=${{ steps.which.outputs.videoReconciliation }}&youtubeComments=${{ steps.which.outputs.youtubeComments }}"
+          url="${BACKEND_BASE_URL%/}/api/growth-pulse?x=${{ steps.which.outputs.x }}&partnerships=${{ steps.which.outputs.partnerships }}&videoReconciliation=${{ steps.which.outputs.videoReconciliation }}&youtubeComments=${{ steps.which.outputs.youtubeComments }}&results=${{ steps.which.outputs.results }}"
           http_status=$(curl -sS -o response.json -w "%{http_code}" -X POST "$url" \
             -H "Authorization: Bearer $CRON_SECRET")
           echo "HTTP status: $http_status"

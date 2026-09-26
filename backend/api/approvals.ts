@@ -56,6 +56,7 @@ import { createXSignalAdapter } from "../src/signals/adapters/xAdapter.js";
 import { listVideoRenderStatuses, registerDevicePushToken, dismissVideoRender, setPublishedUrl, VideoStatusActionError } from "../src/video/videoStatusHandlers.js";
 import { MAX_VIDEO_RENDERS_PER_MONTH, MAX_VIDEO_RENDERS_PER_DAY } from "../src/video/videoRenderEligibility.js";
 import { listResearchRecords } from "../src/research/researchHandlers.js";
+import { PostingActionError, isMissingPostingTables, isPostingPlatform, loadPostingPlan, loadResults, recordManualStats, recordVideoPost } from "../src/posting/postingRepository.js";
 
 /**
  * `?resource=inbound` handles the Inbound Engagement Queue -- a
@@ -512,6 +513,63 @@ async function handleVideoStatus(req: VercelRequest, res: VercelResponse): Promi
  * into this file for the same Vercel Hobby 12-function-cap reason as
  * inbound/prospecting/partnerships/video-status above.
  */
+/**
+ * `?resource=posting` -- the daily posting plan and results (2026-09-25). Folded into this file for the same Vercel
+ * Hobby 12-function-cap reason as the other resources. GET returns today's plan (3 Arizona-time slots) and the last
+ * 30 days of results with the X reply-visibility check. POST: `record-post` saves where a video went on one platform;
+ * `record-stats` saves numbers the owner typed in for TikTok or Instagram.
+ */
+async function handlePosting(req: VercelRequest, res: VercelResponse): Promise<void> {
+  const client = getServiceClient();
+  try {
+    if (req.method === "GET") {
+      const [plan, results] = await Promise.all([loadPostingPlan(client), loadResults(client)]);
+      res.status(200).json({ plan, results });
+      return;
+    }
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    if (body.action === "record-post") {
+      if (typeof body.campaignAssetId !== "string" || !isPostingPlatform(body.platform) || typeof body.url !== "string") {
+        res.status(400).json({ error: "Body must be { action: 'record-post', campaignAssetId, platform: 'tiktok'|'youtube_shorts'|'instagram', url, videoRenderId? }" });
+        return;
+      }
+      await recordVideoPost(client, {
+        campaignAssetId: body.campaignAssetId,
+        videoRenderId: typeof body.videoRenderId === "string" ? body.videoRenderId : null,
+        platform: body.platform,
+        url: body.url,
+      });
+      res.status(200).json({ saved: true });
+      return;
+    }
+    if (body.action === "record-stats") {
+      const num = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+      if (typeof body.videoPostId !== "string") {
+        res.status(400).json({ error: "Body must be { action: 'record-stats', videoPostId, views?, likes?, comments?, shares? }" });
+        return;
+      }
+      await recordManualStats(client, { videoPostId: body.videoPostId, views: num(body.views), likes: num(body.likes), comments: num(body.comments), shares: num(body.shares) });
+      res.status(200).json({ saved: true });
+      return;
+    }
+    res.status(400).json({ error: "Unknown action. Use 'record-post' or 'record-stats'." });
+  } catch (err) {
+    if (err instanceof PostingActionError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    if (isMissingPostingTables(err)) {
+      res.status(503).json({ error: "Posting plan isn't set up yet: apply migration 0043 in Supabase." });
+      return;
+    }
+    res.status(500).json({ error: errorMessage(err) });
+  }
+}
+
 async function handleResearch(req: VercelRequest, res: VercelResponse): Promise<void> {
   const client = getServiceClient();
 
@@ -574,6 +632,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   if (req.query.resource === "research") {
     await handleResearch(req, res);
+    return;
+  }
+  if (req.query.resource === "posting") {
+    await handlePosting(req, res);
     return;
   }
   const client = getServiceClient();
