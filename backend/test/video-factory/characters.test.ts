@@ -59,6 +59,11 @@ describe("stage animation", () => {
     expect(buildStageSvg(beats, 4)).toContain("It has a price tag.");
   });
 
+  it("keeps the closing line up after the last scene ends", () => {
+    expect(buildStageSvg(beats, 9)).toContain("It has a price tag.");
+    expect(buildStageSvg(beats, 2.95)).toContain('opacity="0.417"');
+  });
+
   it("moves the speaker's mouth only while they talk", () => {
     const talking = buildStageSvg(beats, 3 + 0.3 + 0.1);
     const after = buildStageSvg(beats, 3 + 0.3 + talkSeconds(beats[1]!.beat.quip) + 0.2);
