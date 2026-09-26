@@ -124,11 +124,11 @@ export const PILOT_1: ScenePlan = {
     scene({
       sceneId: "p1-s3-qualify",
       variationId: P1,
-      narration: "This is one example month, from recorded trades. Your own breakdown will look different.",
+      narration: "Quick note: this is a sample account, not a real trader. Your own setups will tell their own story.",
       takeaway: "The pattern is what to check for, not this specific month's numbers.",
-      headline: "Based on recorded trades",
-      caption: "Your own breakdown will look different.",
-      seconds: 4,
+      headline: "A sample account, not a real trader",
+      caption: "Your own setups will tell their own story.",
+      seconds: 7.5,
       disclosure: "Not investment advice.",
       topics: ["setup_breakdown"],
       claims: [{ id: "p1-c3", type: "concept", text: "Qualifies that this is one example month's recorded trades, not a claim about any specific viewer's results.", evidence: [] }],
@@ -209,11 +209,11 @@ export const PILOT_2: ScenePlan = {
     scene({
       sceneId: "p2-s3-qualify",
       variationId: P2,
-      narration: "These numbers depend on the trades you record and the rules you configure. Check your prop firm's own rules for the official limits.",
+      narration: "Sample account here. The numbers come from the trades you record and the rules you configure, and your prop firm's rulebook is the one that counts.",
       takeaway: "The figures are only as good as the trades recorded and the settings entered.",
-      headline: "Based on recorded trades",
-      caption: "Results depend on the trades you record and the rules you set.",
-      seconds: 7.3, // real edge-tts speech is 6.7s; was 8.5s authored-guess
+      headline: "Sample account, sample rules",
+      caption: "Your prop firm's rulebook is the one that counts.",
+      seconds: 9, // estimate for the 2026-09-26 rewrite; real renders use the measured narration length
       disclosure: "Not a broker or risk system.",
       topics: ["buffer"],
       claims: [{ id: "p2-c4", type: "concept", text: "Qualifies that results depend on recorded trades and correct settings.", evidence: [] }],
@@ -303,11 +303,11 @@ export const PILOT_3: ScenePlan = {
     scene({
       sceneId: "p3-s2-qualify",
       variationId: P3,
-      narration: "This is one trade from one recorded log. Your own trade log will look different.",
+      narration: "This trade comes from a sample account, not a real trader. Your own log will show your own sizes.",
       takeaway: "The pattern to check is your own size against your own plan, not this specific trade.",
-      headline: "Based on one recorded trade",
-      caption: "Your own trade log will look different.",
-      seconds: 4,
+      headline: "From a sample account",
+      caption: "Your own log will show your own sizes.",
+      seconds: 7.5,
       disclosure: "Not investment advice.",
       topics: ["trade_size"],
       claims: [{ id: "p3-c2", type: "concept", text: "Qualifies that this is one example trade from one recorded log, not a claim about any specific viewer's trades.", evidence: [] }],
@@ -402,11 +402,11 @@ export const PILOT_4: ScenePlan = {
     scene({
       sceneId: "p4-s3-qualify",
       variationId: P4,
-      narration: "This is a sample account with demo data. Consistency rules differ by firm, so check your own agreement.",
+      narration: "This is a sample account, and every firm writes its consistency rule a little differently. Check yours.",
       takeaway: "Confirm the rule in your own firm's agreement.",
-      headline: "Rules differ by firm",
+      headline: "Sample account. Rules vary by firm.",
       caption: "Check the exact rule in your firm's agreement.",
-      seconds: 6,
+      seconds: 7,
       disclosure: QUALIFY_DEMO,
       topics: ["consistency"],
       claims: [{ id: "p4-c3", type: "concept", text: "Qualifies that this is demo data and that consistency rules vary by firm.", evidence: [] }],
@@ -476,11 +476,11 @@ export const PILOT_5: ScenePlan = {
     scene({
       sceneId: "p5-s3-qualify",
       variationId: P5,
-      narration: "A simulation on demo data can differ from a real evaluation. Confirm the firm's own published rules before you rely on it.",
+      narration: "This is a dress rehearsal on a sample account. The firm's published rules decide the real result.",
       takeaway: "Always check the firm's published rules.",
-      headline: "Simulated, not official",
-      caption: "Confirm the firm's own published rules.",
-      seconds: 6,
+      headline: "A dress rehearsal, not the real exam",
+      caption: "The firm's published rules decide.",
+      seconds: 7,
       disclosure: QUALIFY_DEMO,
       topics: ["rule_simulator"],
       claims: [{ id: "p5-c3", type: "concept", text: "Qualifies that a simulation on demo data can differ from a real evaluation.", evidence: [] }],
@@ -549,11 +549,11 @@ export const PILOT_6: ScenePlan = {
     scene({
       sceneId: "p6-s3-qualify",
       variationId: P6,
-      narration: "This is demo data from a sample account. The score describes past trades, not future results.",
+      narration: "This score belongs to a sample account. It looks back at past trades, it doesn't predict the next one.",
       takeaway: "The score is a look back, not a forecast.",
-      headline: "Built from past trades",
-      caption: "It describes what happened, not what will.",
-      seconds: 5,
+      headline: "A look back, not a forecast",
+      caption: "Sample account. It describes, it doesn't predict.",
+      seconds: 7.5,
       disclosure: QUALIFY_DEMO,
       topics: ["edge_score"],
       claims: [{ id: "p6-c3", type: "concept", text: "Qualifies that the score is built from past demo trades and does not predict results.", evidence: [] }],
@@ -626,11 +626,11 @@ export const PILOT_7: ScenePlan = {
     scene({
       sceneId: "p7-s3-qualify",
       variationId: P7,
-      narration: "It's built from your logged trades and the rules you configure. This one is demo data.",
+      narration: "This brief comes from a sample account. Yours would be built from your own trades and your own limits.",
       takeaway: "The brief is only as good as the trades and rules entered.",
-      headline: "Built from your own trades",
-      caption: "Past results don't predict future ones.",
-      seconds: 5,
+      headline: "A sample account's brief",
+      caption: "Yours is built from your own trades and limits.",
+      seconds: 7.5,
       disclosure: QUALIFY_DEMO,
       topics: ["daily_brief"],
       claims: [{ id: "p7-c4", type: "concept", text: "Qualifies that the brief comes from logged trades and configured rules, shown with demo data.", evidence: [] }],
@@ -699,11 +699,11 @@ export const PILOT_8: ScenePlan = {
     scene({
       sceneId: "p8-s3-qualify",
       variationId: P8,
-      narration: "This is one sample account's demo data. Your own weekdays will look different.",
+      narration: "These weekdays belong to a sample account. Your own week will split its own way.",
       takeaway: "The pattern to check is your own, not these numbers.",
-      headline: "Your days will differ",
-      caption: "One sample account, demo data.",
-      seconds: 5,
+      headline: "A sample account's week",
+      caption: "Your week will split its own way.",
+      seconds: 6,
       disclosure: QUALIFY_DEMO,
       topics: ["day_of_week"],
       claims: [{ id: "p8-c3", type: "concept", text: "Qualifies that this is one sample account's demo data.", evidence: [] }],
@@ -772,11 +772,11 @@ export const PILOT_9: ScenePlan = {
     scene({
       sceneId: "p9-s3-qualify",
       variationId: P9,
-      narration: "It's a projection from demo data, not a prediction. Confirm your firm's actual payout policy.",
+      narration: "It's a projection on a sample account, not a promise. Your firm's payout policy is the one that counts.",
       takeaway: "Check the payout policy with your firm.",
-      headline: "A projection from demo data",
-      caption: "Confirm your firm's payout policy.",
-      seconds: 5,
+      headline: "A projection, not a promise",
+      caption: "Your firm's payout policy counts.",
+      seconds: 7.5,
       disclosure: QUALIFY_DEMO,
       topics: ["payouts"],
       claims: [{ id: "p9-c3", type: "concept", text: "Qualifies that the timeline is a projection from demo data.", evidence: [] }],
@@ -954,7 +954,7 @@ export const PILOT_10 = batch3Plan({
       asset: { id: B3_BEHAVIOR_REC, crop: B3_REVENGE_CROP, clip: { start: 1.7, end: 6.2 }, claim: "A trade opened 3 min after losing $127, sized 2.5x the average.", factKey: "behavior.revenge" } },
     { narration: "Fillbook flagged it 5 times. Each one opened within 12 minutes of a loss, at up to 2.5 times the usual size.", headline: "5 revenge trades flagged", caption: "Opened 3 to 12 min after a loss.", takeaway: "The pattern repeats, and it can be counted.", topics: ["revenge_trading"],
       asset: { id: B3_BEHAVIOR_REC, crop: B3_REVENGE_CROP, clip: { start: 6.0, end: 17.7 }, claim: "5 possible revenge trades, opened 3 to 12 min after a loss at 1.5x to 2.5x the average size.", factKey: "behavior.revenge" } },
-    { narration: "This is a demo account with seeded trades. A flag is a pattern to review, not a verdict.", headline: "A pattern, not a verdict", caption: "Demo account, seeded trades.", takeaway: "Treat a flag as something to review.", topics: ["revenge_trading"] },
+    { narration: "These are sample trades from a sample account. A flag is a pattern to look at, not a verdict on you.", headline: "A pattern, not a verdict", caption: "Sample account, not a real trader.", takeaway: "Treat a flag as something to review.", topics: ["revenge_trading"] },
     { narration: "Check what you do right after a loss.", headline: "Check your next trade.", caption: "See your own patterns at fillbookhq.com.", takeaway: "Look at the trade after the loss.", topics: ["revenge_trading"] },
   ],
 });
@@ -970,7 +970,7 @@ export const PILOT_11 = batch3Plan({
       asset: { id: B3_BEHAVIOR_REC, crop: B3_BEHAVIOR_LOWER_CROP, clip: { start: 1.7, end: 6.2 }, claim: "Overtraded sessions of 6 trades against a 2.7/day norm.", factKey: "behavior.overtraded" } },
     { narration: "Three sessions ran to 6 trades against a 2.7 a day norm. Two of them finished down $468.20 and $464.72.", headline: "3 sessions flagged", caption: "Two of them finished red.", takeaway: "The extra trades are where the damage lands.", topics: ["overtrading"],
       asset: { id: B3_BEHAVIOR_REC, crop: B3_BEHAVIOR_LOWER_CROP, clip: { start: 6.0, end: 17.7 }, claim: "3 overtraded sessions of 6 trades against a 2.7/day norm, two net -$468.20 and -$464.72.", factKey: "behavior.overtraded" } },
-    { narration: "Demo account, seeded trades. Your own normal pace is the number that matters.", headline: "Your pace, not this one", caption: "Demo account, seeded trades.", takeaway: "Compare against your own normal.", topics: ["overtrading"] },
+    { narration: "It's a sample account, so this pace isn't yours. Your own normal is the number that matters.", headline: "Your pace, not this one", caption: "Sample account, not a real trader.", takeaway: "Compare against your own normal.", topics: ["overtrading"] },
     { narration: "Know your normal before you break it.", headline: "Know your normal.", caption: "Track your pace at fillbookhq.com.", takeaway: "Set a cap from your own average.", topics: ["overtrading"] },
   ],
 });
@@ -986,7 +986,7 @@ export const PILOT_12 = batch3Plan({
       asset: { id: B3_BEHAVIOR_REC, crop: B3_BEHAVIOR_LOWER_CROP, clip: { start: 1.7, end: 6.2 }, claim: "Weak hour 11:00: 25% win rate across 20 timed trades, against 62% overall.", factKey: "behavior.weak_hour" } },
     { narration: "By time of day, the open wins 71% for $2,967.96. Late morning wins 24% and gives back $1,406.00.", headline: "Open vs late morning", caption: "Late morning: -$1,406.00.", takeaway: "Your best and worst hours are both in the log.", topics: ["time_of_day"],
       asset: { id: B3_REPORTS_REC, crop: B3_TIMING_CROP, clip: { start: 1.9, end: 17.9 }, claim: "Open 106 trades, 71% win, $2,967.96; late morning 25 trades, 24% win, -$1,406.00.", factKey: "timing.buckets" } },
-    { narration: "This is seeded demo data. Your own hours will split differently.", headline: "Your hours will differ", caption: "Seeded demo data.", takeaway: "Check your own hours, not these.", topics: ["time_of_day"] },
+    { narration: "These hours belong to a sample account. Yours will split differently.", headline: "Your hours will differ", caption: "Sample account, not a real trader.", takeaway: "Check your own hours, not these.", topics: ["time_of_day"] },
     { narration: "Find the hour that costs you.", headline: "Find your worst hour.", caption: "Split your trades at fillbookhq.com.", takeaway: "Stop trading the hour that loses.", topics: ["time_of_day"] },
   ],
 });
@@ -1002,7 +1002,7 @@ export const PILOT_13 = batch3Plan({
       asset: { id: B3_BEHAVIOR_REC, crop: B3_TAGS_CROP, clip: { start: 18.9, end: 22.8 }, claim: "Tagged habits ranked by net impact, worst first.", factKey: "tags.all" } },
     { narration: "Fillbook adds up your tagged mistakes. Moved stop: 4 trades, $655.84 lost. Chased price: $629.60.", headline: "Moved stop: -$655.84", caption: "Chased price: -$629.60.", takeaway: "The tags show which habit costs the most.", topics: ["mistake_tags"],
       asset: { id: B3_BEHAVIOR_REC, crop: B3_TAGS_CROP, clip: { start: 22.6, end: 34.9 }, claim: "Moved stop 4 trades, -$655.84; Chased price 10 trades, -$629.60.", factKey: "tags.all" } },
-    { narration: "Demo account, seeded trades. The tags only count what you mark.", headline: "Only what you tag", caption: "Demo account, seeded trades.", takeaway: "Honest tags make honest totals.", topics: ["mistake_tags"] },
+    { narration: "This is a sample account, and the tags only count what you mark.", headline: "Only what you tag", caption: "Sample account, not a real trader.", takeaway: "Honest tags make honest totals.", topics: ["mistake_tags"] },
     { narration: "Put a price on your worst habit.", headline: "Price your worst habit.", caption: "Tag your trades at fillbookhq.com.", takeaway: "Start with the most expensive habit.", topics: ["mistake_tags"] },
   ],
 });
@@ -1018,7 +1018,7 @@ export const PILOT_14 = batch3Plan({
       asset: { id: B3_REPORTS_REC, crop: B3_CONVICTION_CROP, clip: { start: 19.1, end: 22.9 }, claim: "By conviction: trades split by whether you would take them again.", factKey: "conviction.all" } },
     { narration: "Trades you'd take again: 84% win, $3,822.00. Trades you wouldn't: 18% win, down $2,575.96.", headline: "84% vs 18%", caption: "Wouldn't take again: -$2,575.96.", takeaway: "The trades you doubted are the ones that lost.", topics: ["conviction"],
       asset: { id: B3_REPORTS_REC, crop: B3_CONVICTION_CROP, clip: { start: 22.7, end: 35.1 }, claim: "Would take again 84% win, $3,822.00; wouldn't take again 18% win, -$2,575.96.", factKey: "conviction.all" } },
-    { narration: "This is seeded demo data. Your answers are what make this work.", headline: "Your answers, your data", caption: "Seeded demo data.", takeaway: "Answer honestly and the split means something.", topics: ["conviction"] },
+    { narration: "These answers come from a sample account. Yours are what make it work.", headline: "Your answers, your data", caption: "Sample account, not a real trader.", takeaway: "Answer honestly and the split means something.", topics: ["conviction"] },
     { narration: "Ask yourself after every trade.", headline: "Ask after every trade.", caption: "Log yours at fillbookhq.com.", takeaway: "Skip the trades you wouldn't take again.", topics: ["conviction"] },
   ],
 });
@@ -1034,7 +1034,7 @@ export const PILOT_15 = batch3Plan({
       asset: { id: B3_PLAN_REC, crop: B3_PLAN_CROP, clip: { start: 1.9, end: 6.4 }, claim: "Plan vs reality: 92% overall adherence.", factKey: "plan.adherence" } },
     { narration: "20 trades came outside the 9:30 to 11:30 window. They averaged negative $39.16 each, against $21.13 inside it.", headline: "Outside the window: -$39.16", caption: "Inside it: +$21.13 a trade.", takeaway: "The trades outside the plan are the losing ones.", topics: ["plan_adherence"],
       asset: { id: B3_PLAN_REC, crop: B3_FOCUS_CROP, clip: { start: 19.1, end: 35.1 }, claim: "20 trades outside 09:30-11:30 averaged -$39.16 each, against $21.13 inside.", factKey: "plan.focus" } },
-    { narration: "Demo account and a sample plan. Your own rules decide the score.", headline: "Your rules, your score", caption: "Demo account, sample plan.", takeaway: "Write your own rules down first.", topics: ["plan_adherence"] },
+    { narration: "That's a sample account with a sample plan. Your own rules decide the score.", headline: "Your rules, your score", caption: "Sample account, sample plan.", takeaway: "Write your own rules down first.", topics: ["plan_adherence"] },
     { narration: "Check your trades against your plan.", headline: "Check it against your plan.", caption: "Score yours at fillbookhq.com.", takeaway: "See which rule you break most.", topics: ["plan_adherence"] },
   ],
 });
@@ -1050,7 +1050,7 @@ export const PILOT_16 = batch3Plan({
       asset: { id: B3_PROGRESS_REC, crop: B3_WIN_RATE_CROP, clip: { start: 1.7, end: 6.2 }, claim: "Win rate baseline 76%, recent 55%.", factKey: "progress.win_rate" } },
     { narration: "Over the same stretch, flagged revenge trades went from 0% to 6%, and flagged overtrading days from 0% to 17%.", headline: "Flagged revenge: 0% to 6%", caption: "Flagged overtrading days: 0% to 17%.", takeaway: "The behavior changed before the results did.", topics: ["progress"],
       asset: { id: B3_PROGRESS_REC, crop: B3_PROGRESS_BEHAVIOR_CROP, clip: { start: 18.9, end: 34.9 }, claim: "Revenge-trade rate 0% to 6%; overtrading-day rate 0% to 17%.", factKey: "progress.behavior" } },
-    { narration: "This is seeded demo data. Your own baseline is what you'd compare against.", headline: "Your own baseline", caption: "Seeded demo data.", takeaway: "Measure against yourself, not others.", topics: ["progress"] },
+    { narration: "This is a sample account. Your own baseline is the one you'd compare against.", headline: "Your own baseline", caption: "Sample account, not a real trader.", takeaway: "Measure against yourself, not others.", topics: ["progress"] },
     { narration: "Find out what changed in your trading.", headline: "Find what changed.", caption: "Compare yours at fillbookhq.com.", takeaway: "Catch the change early.", topics: ["progress"] },
   ],
 });
@@ -1066,7 +1066,7 @@ export const PILOT_17 = batch3Plan({
       asset: { id: B3_ACCOUNTS_REC, crop: B3_ACCOUNTS_CROP, clip: { start: 1.9, end: 6.4 }, claim: "All accounts at a glance lists 2 accounts.", factKey: "accounts.overview" } },
     { narration: "Each account shows its buffer, today's limit, target progress and health. This one's best day is 46% of profit, over its 40% cap.", headline: "Best day: 46% of 40% cap", caption: "Health 80 out of 100.", takeaway: "The problem account stands out on one screen.", topics: ["accounts_overview"],
       asset: { id: B3_ACCOUNTS_REC, crop: B3_ACCOUNTS_CROP, clip: { start: 6.2, end: 19.9 }, claim: "Each account shows buffer, today's limit, % to target and health; one account's best day is 46% of a 40% cap.", factKey: "accounts.overview" } },
-    { narration: "Demo accounts with seeded trades. Your firm's own rules set the real limits.", headline: "Your firm sets the limits", caption: "Demo accounts, seeded trades.", takeaway: "Confirm limits with your firm.", topics: ["accounts_overview"] },
+    { narration: "These are sample accounts. Your firm's own rules set the real limits.", headline: "Your firm sets the limits", caption: "Sample accounts, not a real trader.", takeaway: "Confirm limits with your firm.", topics: ["accounts_overview"] },
     { narration: "See every account before you trade.", headline: "See every account.", caption: "Track yours at fillbookhq.com.", takeaway: "Check the weakest account first.", topics: ["accounts_overview"] },
   ],
 });
@@ -1082,21 +1082,21 @@ export const PILOT_18 = batch3Plan({
       asset: { id: B3_EDGE_REC, crop: B3_EDGE_CROP, clip: { start: 1.7, end: 6.2 }, claim: "Your Edge: strongest setup and strongest window.", factKey: "edge.strongest" } },
     { narration: "Order Block Retest: 48 trades, 88% win rate. The strongest window is the open, 71% across 106 trades.", headline: "Order Block Retest: 88%", caption: "Best window: the open, 71%.", takeaway: "Your edge has a setup and a time.", topics: ["edge"],
       asset: { id: B3_EDGE_REC, crop: B3_EDGE_CROP, clip: { start: 6.0, end: 19.7 }, claim: "Order Block Retest 48 trades, 88% win rate; strongest window the open, 106 trades, 71% win rate.", factKey: "edge.strongest" } },
-    { narration: "This is seeded demo data. Past patterns don't promise future ones.", headline: "Past, not a forecast", caption: "Seeded demo data.", takeaway: "Treat an edge as a pattern to keep testing.", topics: ["edge"] },
+    { narration: "This is a sample account, and past patterns don't promise future ones.", headline: "Past, not a forecast", caption: "Sample account, not a real trader.", takeaway: "Treat an edge as a pattern to keep testing.", topics: ["edge"] },
     { narration: "Find the setup that's working for you.", headline: "Find your edge.", caption: "See yours at fillbookhq.com.", takeaway: "Do more of what works.", topics: ["edge"] },
   ],
 });
 
 const BATCH_3_PLANS: ScenePlan[] = [PILOT_10, PILOT_11, PILOT_12, PILOT_13, PILOT_14, PILOT_15, PILOT_16, PILOT_17, PILOT_18];
 const BATCH_3_COPY: Record<string, { captionBody: string; youtubeTitle: string; cta: string }> = {
-  [PILOT_10.planId]: { captionBody: "Five trades opened minutes after a loss, at up to 2.5x the usual size. Demo data from a seeded account.", youtubeTitle: "Sized Up 3 Minutes After a Loss: Flagging Possible Revenge Trades", cta: "Follow for more trade reviews" },
-  [PILOT_11.planId]: { captionBody: "Sessions that ran to 6 trades against a 2.7-trade normal day. Demo data from a seeded account.", youtubeTitle: "Six Trades on a 2.7-Trade Day: Flagging Possible Overtrading", cta: "Follow for more trade reviews" },
+  [PILOT_10.planId]: { captionBody: "Five trades opened minutes after a loss, at up to 2.5x the usual size. Sample account, not a real trader.", youtubeTitle: "Sized Up 3 Minutes After a Loss: Flagging Possible Revenge Trades", cta: "Follow for more trade reviews" },
+  [PILOT_11.planId]: { captionBody: "Sessions that ran to 6 trades against a 2.7-trade normal day. Sample account, not a real trader.", youtubeTitle: "Six Trades on a 2.7-Trade Day: Flagging Possible Overtrading", cta: "Follow for more trade reviews" },
   [PILOT_12.planId]: { captionBody: "The open wins, late morning loses. Split your trades by hour to find yours. Demo data.", youtubeTitle: "Your 11 O'Clock Trades Win 25%: Results by Time of Day", cta: "Follow for more trade reviews" },
-  [PILOT_13.planId]: { captionBody: "Tag your mistakes and see what each habit costs. Demo data from a seeded account.", youtubeTitle: "What Moving Your Stop Costs: Pricing Your Trading Habits", cta: "Follow for more trade reviews" },
+  [PILOT_13.planId]: { captionBody: "Tag your mistakes and see what each habit costs. Sample account, not a real trader.", youtubeTitle: "What Moving Your Stop Costs: Pricing Your Trading Habits", cta: "Follow for more trade reviews" },
   [PILOT_14.planId]: { captionBody: "Trades you'd take again vs trades you wouldn't: 84% win vs 18%. Demo data.", youtubeTitle: "Would You Take It Again? What Your Doubts Are Telling You", cta: "Follow for more trade reviews" },
   [PILOT_15.planId]: { captionBody: "92% on plan, and the trades outside the window lost money. Demo account and a sample plan.", youtubeTitle: "92% on Plan: What the Trades Outside It Cost", cta: "Follow for more rule reads" },
   [PILOT_16.planId]: { captionBody: "Compare recent trading to your own baseline to see what changed. Demo data.", youtubeTitle: "Win Rate Fell From 76% to 55%: Comparing Against Your Baseline", cta: "Follow for more trade reviews" },
-  [PILOT_17.planId]: { captionBody: "Every prop account's buffer, limits and health on one screen. Demo accounts with seeded trades.", youtubeTitle: "Two Funded Accounts, One Screen: Tracking Every Account's Limits", cta: "Follow for more rule reads" },
+  [PILOT_17.planId]: { captionBody: "Every prop account's buffer, limits and health on one screen. Sample accounts, not real traders.", youtubeTitle: "Two Funded Accounts, One Screen: Tracking Every Account's Limits", cta: "Follow for more rule reads" },
   [PILOT_18.planId]: { captionBody: "The setup and time window that actually work, from your own trades. Demo data.", youtubeTitle: "Your Best Setup by the Numbers: Finding Your Edge", cta: "Follow for more trade reviews" },
 };
 
@@ -1177,7 +1177,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "64% win rate. One setup still loses.", headline: "64% win rate", caption: "22 trades, $387.08 net.", takeaway: "A good overall win rate can hide one bad setup." },
       { narration: "Sorted worst first, it's Opening Range Break: 8 trades, 25% win, down $421.76.", headline: "The setup behind the losses", caption: "Opening Range Break: 8 trades, -$421.76.", takeaway: "Sort setups worst first to find the leak." },
-      { narration: "This is one example month of recorded trades. Your own setups will sort differently.", headline: "One example month", caption: "Your own setups will sort differently.", takeaway: "Check your own setups, not these numbers." },
+      { narration: "These are sample trades, not anyone's real money. Sort your own and see what shows up.", headline: "Sample trades, not real money", caption: "Sort your own and see what shows up.", takeaway: "Check your own setups, not these numbers." },
       { narration: "Sort your own setups, worst first.", headline: "Sort your setups worst first.", caption: "See your breakdown at fillbookhq.com.", takeaway: "Start the review from the weakest setup." },
     ],
     captionBody: "A 64% win rate can still hide a setup that loses. Demo data, so sort your own setups worst first.",
@@ -1191,7 +1191,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "A green month. Here's what it hides.", headline: "The total hides something", caption: "$387.08 net across 22 trades.", takeaway: "A month total blends every setup together." },
       { narration: "One setup, Opening Range Break, lost $421.76 over 8 trades at a 25% win rate.", headline: "One setup: -$421.76", caption: "Opening Range Break, 8 trades, 25% win.", takeaway: "One setup can carry most of the losses." },
-      { narration: "These are recorded demo trades from one month. Yours will tell a different story.", headline: "Recorded demo trades", caption: "Your month will tell a different story.", takeaway: "The check matters more than these numbers." },
+      { narration: "This month belongs to a sample account. Yours will tell a different story.", headline: "A sample account's month", caption: "Your month will tell a different story.", takeaway: "The check matters more than these numbers." },
       { narration: "Look past the total this month.", headline: "Look past the total.", caption: "Break your month down by setup.", takeaway: "Break the month down before you judge it." },
     ],
     captionBody: "A positive month can average away a setup that keeps losing. Demo data, so check your own month by setup.",
@@ -1205,7 +1205,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "You're up. How much room is left?", headline: "Up $387.08", caption: "14 wins, 8 losses.", takeaway: "Profit and room left are different questions." },
       { narration: "The trailing drawdown buffer is $1,725.12, with $1,000.00 left on today's loss limit. That's the real room.", headline: "Room left: $1,725.12", caption: "Today's loss limit left: $1,000.00.", takeaway: "The buffer is the number that ends accounts." },
-      { narration: "These figures come from the trades you record and the rules you configure. Your firm's rules are the official limits.", headline: "From your recorded trades", caption: "Your firm's rules are the official limits.", takeaway: "The figures depend on the trades and rules entered." },
+      { narration: "It's a sample account running sample rules. Your firm's rules set the official limits.", headline: "Sample rules, sample account", caption: "Your firm's rules set the official limits.", takeaway: "The figures depend on the trades and rules entered." },
       { narration: "Check the room, not the balance.", headline: "Check the room.", caption: "Your buffer, not your balance.", takeaway: "Know the room before you size up." },
     ],
     captionBody: "Profit tells you how you're doing. The buffer tells you how much room is left. Demo account, based on recorded trades and configured rules.",
@@ -1219,7 +1219,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "14 wins. Still far from the target.", headline: "14 wins, 8 losses", caption: "Net P&L: +$387.08.", takeaway: "A winning record isn't the same as progress." },
       { narration: "The profit target is $3,000.00, currently $387.08. Today's loss limit remaining is $1,000.00.", headline: "13% of the target", caption: "Target $3,000.00. Loss limit left $1,000.00.", takeaway: "Track the target separately from the record." },
-      { narration: "These numbers depend on the trades you record and the rules you configure. Confirm the targets with your prop firm.", headline: "Based on recorded trades", caption: "Confirm the targets with your firm.", takeaway: "The firm's own rules set the real target." },
+      { narration: "Sample account, sample targets. Confirm the real ones with your prop firm.", headline: "Sample targets", caption: "Confirm the real ones with your prop firm.", takeaway: "The firm's own rules set the real target." },
       { narration: "Track the target, not just the wins.", headline: "Track the target.", caption: "Not just the win count.", takeaway: "Measure progress against the target." },
     ],
     captionBody: "A winning record and progress toward the profit target are two different numbers. Demo account, based on recorded trades and configured rules.",
@@ -1232,7 +1232,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     topic: "A single trade sized above the written plan's contract limit",
     scenes: [
       { narration: "One trade broke the plan. Five contracts, Opening Range Break, a $257.40 loss.", headline: "One trade broke the plan.", caption: "5 contracts, -$257.40.", takeaway: "Check a losing trade's size against the plan." },
-      { narration: "This is one trade from one recorded log. Your own log will show your own sizes.", headline: "One recorded trade", caption: "Your own log will show your own sizes.", takeaway: "The check is your size against your plan." },
+      { narration: "One sample trade, not a real person's. Your log will show your own sizes.", headline: "One sample trade", caption: "Your log will show your own sizes.", takeaway: "The check is your size against your plan." },
       { narration: "The written plan caps every trade at 3 contracts. That trade was over it before it ever lost.", headline: "The plan said 3", caption: "Max contracts per trade: 3.", takeaway: "Size above the plan is a fact you can check." },
       { narration: "Check your last loss against your plan.", headline: "Check your last loss.", caption: "Compare its size to your plan.", takeaway: "Start with the size, not the story." },
     ],
@@ -1246,7 +1246,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     topic: "Comparing a real trade's size to the plan's written maximum",
     scenes: [
       { narration: "Your plan has a size limit. This trade used 5 contracts.", headline: "5 contracts", caption: "Opening Range Break, September 21st.", takeaway: "Every trade's size can be checked." },
-      { narration: "One trade, from one recorded demo log. The point is the check, not this trade.", headline: "One recorded demo trade", caption: "The point is the check, not this trade.", takeaway: "Run the same check on your own trades." },
+      { narration: "It's one trade from a sample account. The point is the check, not this trade.", headline: "One sample trade", caption: "The point is the check, not this trade.", takeaway: "Run the same check on your own trades." },
       { narration: "Max contracts per trade here is 3, written into the trading plan before the trade.", headline: "Plan limit: 3 contracts", caption: "Written before the trade, not after.", takeaway: "A written limit turns size into a yes or no." },
       { narration: "Write your size limit down first.", headline: "Write your limit down.", caption: "Then check every trade against it.", takeaway: "A limit only works if it's written." },
     ],
@@ -1261,7 +1261,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "Health score 80. Payout still at risk.", headline: "Health: 80 out of 100", caption: "Healthy, with one problem.", takeaway: "A good score can still hide a payout problem." },
       { narration: "The most important action: one day is 46% of total profit, and this firm caps it at 40%.", headline: "One day: 46% of profit", caption: "This firm's cap is 40%.", takeaway: "The flag names the day's share and the cap." },
-      { narration: "This is demo data from a sample account. Every firm writes its consistency rule differently.", headline: "Every firm differs", caption: "Read your own firm's consistency rule.", takeaway: "Confirm the rule in your own agreement." },
+      { narration: "Sample account here. Every firm writes its consistency rule differently, so read yours.", headline: "Every firm writes it differently", caption: "Read your own firm's consistency rule.", takeaway: "Confirm the rule in your own agreement." },
       { narration: "Check your best day before you request a payout.", headline: "Check your best day.", caption: "Before you request a payout.", takeaway: "Catch the cap before the request." },
     ],
     captionBody: "An account can look healthy and still be over a consistency cap. Demo data, so check your own firm's rule.",
@@ -1275,7 +1275,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "The rule that blocks profitable traders from payouts.", headline: "The payout blocker", caption: "Account health: 80 out of 100.", takeaway: "Being profitable isn't the only payout test." },
       { narration: "It's the consistency cap. Here one day made 46% of the profit, over a 40% cap, and Fillbook flags it first.", headline: "Consistency cap: 40%", caption: "Best day: 46% of total profit.", takeaway: "The biggest day can be the problem." },
-      { narration: "Sample account, demo data. Caps and how they're measured vary by firm.", headline: "Caps vary by firm", caption: "Check how your firm measures it.", takeaway: "Know your firm's exact rule." },
+      { narration: "Sample trader, sample data. How caps get measured depends on your firm.", headline: "Caps vary by firm", caption: "Check how your firm measures it.", takeaway: "Know your firm's exact rule." },
       { narration: "Know your cap before your best day happens.", headline: "Know your cap first.", caption: "Try Fillbook on your own trades.", takeaway: "Plan around the cap, not after it." },
     ],
     captionBody: "A consistency cap can hold up a payout even when the account is profitable. Demo data, so check your own firm's rule.",
@@ -1289,7 +1289,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "No breach doesn't mean you passed.", headline: "No breach. Passed?", caption: "The rule simulator checks both.", takeaway: "Survival and passing are different tests." },
       { narration: "Replaying the logged trades, nothing would have ended the account, but a requirement is still unmet. That's not a pass.", headline: "Survived isn't passed.", caption: "A requirement is still unmet.", takeaway: "Check every requirement, not just the limits." },
-      { narration: "This is a simulation on demo data. The firm's own published rules decide the real result.", headline: "A simulation, not the result", caption: "The firm's published rules decide.", takeaway: "Use the firm's rules as the final word." },
+      { narration: "Think of it as a practice run on a sample account. The firm's own rules make the real call.", headline: "A practice run", caption: "The firm's own rules make the real call.", takeaway: "Use the firm's rules as the final word." },
       { narration: "Check every requirement, not just the limits.", headline: "Check every requirement.", caption: "Not just the drawdown limits.", takeaway: "Passing needs every box checked." },
     ],
     captionBody: "Not breaching a rule and passing an evaluation are different results. Demo data, and a simulation can differ from a real evaluation.",
@@ -1303,7 +1303,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "Test a prop firm before you pay for it.", headline: "Test the firm first", caption: "Replay trades you already took.", takeaway: "Your past trades can test a firm's rules." },
       { narration: "The simulator replays your logged trades against the firm's rules, requirement by requirement.", headline: "Requirement by requirement", caption: "No breach, but not a pass yet.", takeaway: "See which requirement is the one you miss." },
-      { narration: "Simulated results on demo data can differ from a real evaluation. Always read the firm's published rules.", headline: "Simulated, not official", caption: "Read the firm's published rules.", takeaway: "The published rules are the real rules." },
+      { narration: "A practice run on a sample account can differ from the real evaluation, so always read the firm's published rules.", headline: "Practice run, not the real thing", caption: "Read the firm's published rules.", takeaway: "The published rules are the real rules." },
       { narration: "Know which firm fits your trading before you buy.", headline: "Know before you buy.", caption: "Try the rule simulator at fillbookhq.com.", takeaway: "Pick the firm your trades fit." },
     ],
     captionBody: "Replay trades you already took against a firm's rules before paying for the evaluation. Demo data, and a simulation can differ from a real evaluation.",
@@ -1317,7 +1317,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "Your P&L is only part of the picture.", headline: "P&L is one part", caption: "Edge Score: 67, Developing.", takeaway: "One number can hide several habits." },
       { narration: "Risk control scores 69 and consistency 63, while profitability trails at 59.", headline: "Profitability is the weak spot", caption: "Profitability 59. Consistency 63. Risk 69.", takeaway: "The breakdown shows what to work on." },
-      { narration: "Demo data, built from past trades. It describes what happened, not what will.", headline: "A look back", caption: "Built from past trades, not a forecast.", takeaway: "The score reviews the past." },
+      { narration: "Sample account, past trades. It tells you what happened, not what will.", headline: "A look back", caption: "What happened, not what will.", takeaway: "The score reviews the past." },
       { narration: "Find the habit that's holding you back.", headline: "Find your weak spot.", caption: "See your own score at fillbookhq.com.", takeaway: "Work on the lowest part first." },
     ],
     captionBody: "P&L is one number. The breakdown shows which habit is weakest. Demo data.",
@@ -1331,7 +1331,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "Edge Score 67. Here's what's dragging it.", headline: "Edge Score: 67", caption: "Developing.", takeaway: "Look under the score, not just at it." },
       { narration: "Over the last 3 weeks the trend is down 20, even with rule adherence at 87.", headline: "Trend: down 20", caption: "Rule adherence still 87.", takeaway: "Following rules and trending well are different." },
-      { narration: "This is a sample account's demo data. It looks back at trades, it doesn't predict them.", headline: "Demo data, looking back", caption: "It describes, it doesn't predict.", takeaway: "Treat it as a review, not a forecast." },
+      { narration: "These are sample numbers looking backward. No crystal ball here.", headline: "No crystal ball", caption: "It describes, it doesn't predict.", takeaway: "Treat it as a review, not a forecast." },
       { narration: "Watch the trend, not just the score.", headline: "Watch the trend.", caption: "Log your trades at fillbookhq.com.", takeaway: "Direction matters as much as level." },
     ],
     captionBody: "Rule adherence can stay high while the overall trend falls. Demo data.",
@@ -1345,7 +1345,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "Your best hour, before you trade.", headline: "Your best hour", caption: "From the Daily Brief.", takeaway: "Know when you trade best.", clip: { start: 1.7, end: 5.2 } },
       { narration: "The brief shows the strongest window: the open, 9:30 to 10:30, 22 trades at a 64% win rate.", headline: "Strongest window: the open", caption: "22 trades, 64% win rate.", takeaway: "Your best window is worth knowing daily.", clip: { start: 5.0, end: 17.6 } },
-      { narration: "It comes from your logged trades and the rules you set. This one is demo data.", headline: "From your logged trades", caption: "Past results don't predict future ones.", takeaway: "The brief reflects what you entered." },
+      { narration: "Sample brief, sample account. Yours reads from the trades you log and the rules you set.", headline: "A sample brief", caption: "Past results don't predict future ones.", takeaway: "The brief reflects what you entered." },
       { narration: "Trade your best window on purpose.", headline: "Trade it on purpose.", caption: "Get your own brief at fillbookhq.com.", takeaway: "Plan the session around your strongest hour." },
     ],
     captionBody: "Your strongest trading window, shown before the first trade. Demo data.",
@@ -1359,7 +1359,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "Know your limit before the open.", headline: "Your limit, first", caption: "From the Daily Brief.", takeaway: "Start with the limit, not the chart.", clip: { start: 1.7, end: 5.2 } },
       { narration: "The brief says $1,000 of today's loss limit is available, with $1,725 above the drawdown floor. Yesterday cost $17 on a single trade.", headline: "$1,000 of room today", caption: "Buffer to the floor: $1,725.", takeaway: "Two limits, both worth knowing before you trade.", clip: { start: 5.0, end: 17.7 } },
-      { narration: "Sample account, demo numbers. The brief only knows what you log and the limits you enter.", headline: "Only what you enter", caption: "Past results don't predict future ones.", takeaway: "The limits are only as good as the rules entered." },
+      { narration: "This is a sample account. The brief only knows what you log and the limits you enter.", headline: "Only what you enter", caption: "Past results don't predict future ones.", takeaway: "The limits are only as good as the rules entered." },
       { narration: "Read your limits before the first trade.", headline: "Read your limits first.", caption: "Get your own brief at fillbookhq.com.", takeaway: "Know the room before you use it." },
     ],
     captionBody: "Today's loss limit and your buffer to the floor, before the first trade. Demo data.",
@@ -1373,7 +1373,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "Mondays cost this account money.", headline: "The red day: Monday", caption: "Monday: -$57.32.", takeaway: "One weekday can be the leak.", clip: { start: 1.9, end: 5.4 } },
       { narration: "Monday: five trades, down $57.32. Every other weekday finished green, and Tuesday was best at $157.12.", headline: "Monday -$57.32", caption: "Tuesday was best at +$157.12.", takeaway: "Compare each weekday on its own.", clip: { start: 5.2, end: 17.8 } },
-      { narration: "One sample account, demo data. Your weekdays will split differently.", headline: "One sample account", caption: "Your weekdays will split differently.", takeaway: "Check your own weekdays." },
+      { narration: "One sample account, one weekly pattern. Yours will split differently.", headline: "One sample account", caption: "Your weekdays will split differently.", takeaway: "Check your own weekdays." },
       { narration: "Check your own Mondays.", headline: "Check your Mondays.", caption: "Find out at fillbookhq.com.", takeaway: "Look for your own red day." },
     ],
     captionBody: "Four weekdays green, Mondays red. Demo data from one sample account.",
@@ -1387,7 +1387,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "Is one weekday losing you money?", headline: "One red weekday?", caption: "Split by session day.", takeaway: "Split the week before judging it.", clip: { start: 1.9, end: 5.4 } },
       { narration: "Split by session day: Thursday up $104.60, Friday up $122.08, and Monday the only red day at negative $57.32.", headline: "Only one red day", caption: "Monday: 5 trades, -$57.32.", takeaway: "The red day stands out once the week is split.", clip: { start: 5.2, end: 17.8 } },
-      { narration: "This is demo data from a single sample account, not a pattern to assume.", headline: "A single sample account", caption: "Not a pattern to assume.", takeaway: "Find your own pattern, not this one." },
+      { narration: "It's a single sample account, so don't assume the pattern. Check your own.", headline: "Don't assume. Check yours.", caption: "A single sample account.", takeaway: "Find your own pattern, not this one." },
       { narration: "Split your week by day.", headline: "Split your week.", caption: "Find out at fillbookhq.com.", takeaway: "See which day costs you." },
     ],
     captionBody: "Split the week by session day and the losing day stands out. Demo data from one sample account.",
@@ -1401,7 +1401,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "$20.37 a day. How far is the payout?", headline: "$20.37 a day", caption: "129 trading days to payout-ready.", takeaway: "A daily average becomes a timeline." },
       { narration: "The target is 13% done, with $2,612.92 to go. Minimum days are met at 19, and the best day is over the consistency cap.", headline: "13% of the target", caption: "$2,612.92 still to go.", takeaway: "Each payout requirement moves separately." },
-      { narration: "A projection from demo data, not a forecast. Your firm's payout policy is the one that counts.", headline: "A projection, not a forecast", caption: "Your firm's payout policy counts.", takeaway: "Confirm the policy with your firm." },
+      { narration: "Sample account, projected pace. Your firm's payout policy has the final word.", headline: "A projection, not a forecast", caption: "Your firm's payout policy has the final word.", takeaway: "Confirm the policy with your firm." },
       { narration: "Turn your daily average into a date.", headline: "Turn it into a date.", caption: "Track yours at fillbookhq.com.", takeaway: "Know how far the payout really is." },
     ],
     captionBody: "A daily average turned into distance from a payout. A projection from demo data, not a prediction.",
@@ -1415,7 +1415,7 @@ export const PILOT_ANGLES: ScenePlan[] = [
     scenes: [
       { narration: "Payout-ready isn't one check.", headline: "Not one check", caption: "129 trading days at $20.37 a day.", takeaway: "Readiness is a list, not a number." },
       { narration: "19 trading days logged meets the 10-day minimum. But the best day is 46% of profit, over the 40% cap.", headline: "Days met. Consistency isn't.", caption: "Best day: 46% of profit, cap 40%.", takeaway: "One unmet check holds the payout." },
-      { narration: "Demo data and a projection. Check your firm's actual payout requirements.", headline: "Check your firm's list", caption: "Demo data and a projection.", takeaway: "The firm's list is the real list." },
+      { narration: "Sample numbers and a projection. Check your firm's actual payout list.", headline: "Check your firm's list", caption: "Sample numbers, projected.", takeaway: "The firm's list is the real list." },
       { narration: "Check every payout requirement, one by one.", headline: "Check them one by one.", caption: "Track yours at fillbookhq.com.", takeaway: "Clear each requirement on its own." },
     ],
     captionBody: "Payout readiness is several checks, and one unmet check holds the payout. A projection from demo data.",
@@ -1433,10 +1433,10 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "Watch the trade right after a loss.", headline: "The next trade", caption: "Opened minutes later, bigger.", takeaway: "The trade after a loss deserves a second look." },
       { narration: "Five times, the next trade came within 12 minutes of a loss, sized 1.5 to 2.5 times the average. Fillbook flags each one.", headline: "Flagged 5 times", caption: "1.5x to 2.5x the usual size.", takeaway: "A repeat pattern is easier to see when it's flagged." },
-      { narration: "Seeded demo trades. A flag asks you to look again, it doesn't read your mind.", headline: "A flag, not a diagnosis", caption: "Seeded demo trades.", takeaway: "Review the flag, then decide." },
+      { narration: "Sample trades, sample account. A flag asks you to look again, it doesn't read your mind.", headline: "A flag, not a diagnosis", caption: "Sample account, not a real trader.", takeaway: "Review the flag, then decide." },
       { narration: "Pause before the next trade.", headline: "Pause first.", caption: "See your patterns at fillbookhq.com.", takeaway: "A pause breaks the pattern." },
     ],
-    captionBody: "The trade right after a loss, opened minutes later at a bigger size, flagged five times. Demo data from a seeded account.",
+    captionBody: "The trade right after a loss, opened minutes later at a bigger size, flagged five times. Sample account, not a real trader.",
     youtubeTitle: "The Trade After the Loss: Flagging Possible Revenge Trades",
   }),
   angleOf(PILOT_10, {
@@ -1447,7 +1447,7 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "Lost $127, then sized up.", headline: "-$127, then 2.5x", caption: "Opened 3 minutes later.", takeaway: "Size after a loss tells a story." },
       { narration: "It happened again at 4 minutes, 7, 9 and 12. Each one flagged as a possible revenge trade.", headline: "Possible revenge, 5 times", caption: "Flagged, not assumed.", takeaway: "Once is a trade. Five times is a pattern." },
-      { narration: "Demo account, seeded trades. Only you know why a trade was taken.", headline: "Only you know why", caption: "Demo account, seeded trades.", takeaway: "The flag starts the review." },
+      { narration: "This is a sample account. Only you know why you took a trade.", headline: "Only you know why", caption: "Sample account, not a real trader.", takeaway: "The flag starts the review." },
       { narration: "Log the loss before the next entry.", headline: "Log it first.", caption: "Try Fillbook on your own trades.", takeaway: "Logging the loss creates a pause." },
     ],
     captionBody: "A $127 loss, then a trade at 2.5 times the size three minutes later. Flagged as a possible revenge trade. Demo data.",
@@ -1461,10 +1461,10 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "Your normal day is 2.7 trades.", headline: "Normal: 2.7 a day", caption: "Measured from your own log.", takeaway: "Your average is the baseline to watch.", clip: { start: 1.7, end: 5.2 } },
       { narration: "On 3 days it ran to 6. One still finished up $15.28. The other two lost $468.20 and $464.72.", headline: "3 days at 6 trades", caption: "Two of the three finished red.", takeaway: "Extra trades rarely come with extra profit.", clip: { start: 5.0, end: 17.7 } },
-      { narration: "Seeded demo data. Your own average sets the line.", headline: "Your average, your line", caption: "Seeded demo data.", takeaway: "Use your own normal, not this one." },
+      { narration: "Sample account here. Your own average sets the line.", headline: "Your average, your line", caption: "Sample account, not a real trader.", takeaway: "Use your own normal, not this one." },
       { narration: "Set a cap from your own average.", headline: "Set your cap.", caption: "Track your pace at fillbookhq.com.", takeaway: "A cap turns a feeling into a rule." },
     ],
-    captionBody: "A 2.7-trade normal day, and three days that ran to six. Demo data from a seeded account.",
+    captionBody: "A 2.7-trade normal day, and three days that ran to six. Sample account, not a real trader.",
     youtubeTitle: "Your Normal Day Is 2.7 Trades: Flagging Possible Overtrading Days",
   }),
   angleOf(PILOT_11, {
@@ -1475,7 +1475,7 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "More trades, worse days.", headline: "More isn't more", caption: "Flagged as possible overtrading.", takeaway: "Trade count and profit don't rise together.", clip: { start: 1.7, end: 5.2 } },
       { narration: "Fillbook flagged 3 sessions at 6 trades against a 2.7 a day pace, and two of them ended down $468.20 and $464.72.", headline: "Flagged: 3 sessions", caption: "Two ended red.", takeaway: "The flagged days are where the damage is.", clip: { start: 5.0, end: 17.7 } },
-      { narration: "Demo account with seeded trades. Your pace is personal.", headline: "Your pace is personal", caption: "Demo account, seeded trades.", takeaway: "Compare against your own pace." },
+      { narration: "Sample trader, sample trades. Your pace is personal.", headline: "Your pace is personal", caption: "Sample account, not a real trader.", takeaway: "Compare against your own pace." },
       { narration: "Count your trades before the next one.", headline: "Count before you click.", caption: "Try Fillbook on your own trades.", takeaway: "Knowing the count changes the next trade." },
     ],
     captionBody: "Three sessions flagged at six trades against a 2.7-trade pace. Demo data.",
@@ -1489,7 +1489,7 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "The open wins. Late morning doesn't.", headline: "Same trader, two hours", caption: "A weak hour, flagged at 11:00.", takeaway: "Time of day can decide the result." },
       { narration: "106 trades at the open won 71% and made $2,967.96. 25 late morning trades won 24% and lost $1,406.00.", headline: "Late morning: 24% win", caption: "The open: 71% win.", takeaway: "Your best and worst hours sit side by side." },
-      { narration: "This is seeded demo data, split by entry time.", headline: "Split by entry time", caption: "Seeded demo data.", takeaway: "Your hours will split differently." },
+      { narration: "It's a sample account, split by entry time. Try it on your own trades.", headline: "Split by entry time", caption: "Sample account, not a real trader.", takeaway: "Your hours will split differently." },
       { narration: "Trade the hours that pay you.", headline: "Trade your best hours.", caption: "Split yours at fillbookhq.com.", takeaway: "Cut the hour that loses." },
     ],
     captionBody: "The open wins 71%, late morning 24%. Same trader, same setups, different hour. Demo data.",
@@ -1503,10 +1503,10 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "20 trades at 11 o'clock. Only 25% won.", headline: "11:00: 25% win", caption: "20 timed trades.", takeaway: "One hour can be the leak." },
       { narration: "Split by time of day, late morning won 24% of 25 trades, while the open won 71%.", headline: "24% vs 71%", caption: "Late morning vs the open.", takeaway: "The weak hour shows up in every view." },
-      { narration: "One seeded demo account. Your weak hour could be a different one.", headline: "Yours may differ", caption: "One seeded demo account.", takeaway: "Look for your own weak hour." },
+      { narration: "One sample account. Your weak hour could be a totally different one.", headline: "Yours may differ", caption: "One sample account.", takeaway: "Look for your own weak hour." },
       { narration: "Which hour is costing you?", headline: "Which hour costs you?", caption: "Find out at fillbookhq.com.", takeaway: "Find it before it costs more." },
     ],
-    captionBody: "Twenty trades at 11 o'clock, and only 25% won. Demo data from a seeded account.",
+    captionBody: "Twenty trades at 11 o'clock, and only 25% won. Sample account, not a real trader.",
     youtubeTitle: "20 Trades at 11 O'Clock, 25% Won: Finding Your Weak Hour",
   }),
   angleOf(PILOT_13, {
@@ -1517,10 +1517,10 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "Chasing price has a cost too.", headline: "The cost of chasing", caption: "Tagged habits, worst first.", takeaway: "Every tagged habit has a number." },
       { narration: "Chased price: 10 trades, $629.60 lost. Good discipline: 12 trades, $828.48 made.", headline: "Discipline: +$828.48", caption: "Chased price: -$629.60.", takeaway: "Good habits get a number too." },
-      { narration: "Demo account, seeded trades. The totals only reflect what gets tagged.", headline: "Tag honestly", caption: "Demo account, seeded trades.", takeaway: "The totals are only as honest as the tags." },
+      { narration: "Sample account. The totals only reflect what gets tagged, so tag honestly.", headline: "Tag honestly", caption: "Sample account, not a real trader.", takeaway: "The totals are only as honest as the tags." },
       { narration: "Tag the habit, then count it.", headline: "Tag it, count it.", caption: "Tag your trades at fillbookhq.com.", takeaway: "What gets counted gets changed." },
     ],
-    captionBody: "Chasing price cost $629.60. Good discipline made $828.48. Demo data from a seeded account.",
+    captionBody: "Chasing price cost $629.60. Good discipline made $828.48. Sample account, not a real trader.",
     youtubeTitle: "Chasing Price Has a Cost Too: Your Habits in Dollars",
   }),
   angleOf(PILOT_13, {
@@ -1531,7 +1531,7 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "Your habits, ranked by what they cost.", headline: "Ranked by cost", caption: "Worst first.", takeaway: "Start with the habit that costs most." },
       { narration: "Worst first: moved stop, $655.84 over 4 trades. Then chased price, then possible revenge trades.", headline: "Worst: moved stop", caption: "-$655.84 across 4 trades.", takeaway: "Three habits carry most of the damage." },
-      { narration: "Seeded demo data. Your ranking depends on what you tag.", headline: "Your ranking will differ", caption: "Seeded demo data.", takeaway: "Tag every trade to get a fair ranking." },
+      { narration: "Sample trader, sample trades. Your ranking depends on what you tag.", headline: "Your ranking will differ", caption: "Sample account, not a real trader.", takeaway: "Tag every trade to get a fair ranking." },
       { narration: "Fix the most expensive habit first.", headline: "Fix the costliest first.", caption: "Try Fillbook on your own trades.", takeaway: "One habit at a time." },
     ],
     captionBody: "Moved stop, chased price, possible revenge trades: ranked by what they cost. Demo data.",
@@ -1545,7 +1545,7 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "One question after every trade.", headline: "Would you take it again?", caption: "Yes, no, or unsure.", takeaway: "A one-tap answer builds a signal." },
       { narration: "Across 131 answered trades, the ones marked yes beat the ones marked no by 60.3R.", headline: "+60.3R difference", caption: "Across 131 answered trades.", takeaway: "Your own doubt is worth listening to." },
-      { narration: "Seeded demo data. The signal comes from answering honestly.", headline: "Answer honestly", caption: "Seeded demo data.", takeaway: "Honest answers make the split meaningful." },
+      { narration: "Sample account here. The signal comes from answering honestly.", headline: "Answer honestly", caption: "Sample account, not a real trader.", takeaway: "Honest answers make the split meaningful." },
       { narration: "Answer it on your next trade.", headline: "Start on your next trade.", caption: "Log yours at fillbookhq.com.", takeaway: "It takes one tap." },
     ],
     captionBody: "Would you take it again? Across 131 answered trades, yes beat no by 60.3R. Demo data.",
@@ -1559,7 +1559,7 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "Your doubted trades won 18%.", headline: "Doubted trades: 18% win", caption: "Marked wouldn't take again.", takeaway: "Doubt shows up in the results." },
       { narration: "34 trades marked wouldn't take again lost $2,575.96. The 75 you'd repeat made $3,822.00.", headline: "-$2,575.96 vs +$3,822.00", caption: "34 doubted, 75 repeated.", takeaway: "Skipping the doubted trades is a plan." },
-      { narration: "Demo account, seeded trades. Your own answers decide the split.", headline: "Your answers decide", caption: "Demo account, seeded trades.", takeaway: "The split is only as good as the answers." },
+      { narration: "It's a sample account. Your own answers decide the split.", headline: "Your answers decide", caption: "Sample account, not a real trader.", takeaway: "The split is only as good as the answers." },
       { narration: "Skip the trades you already doubt.", headline: "Skip the doubted ones.", caption: "Try Fillbook on your own trades.", takeaway: "Trust the doubt." },
     ],
     captionBody: "Trades marked 'wouldn't take again' won 18% and lost $2,575.96. Demo data.",
@@ -1573,7 +1573,7 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "85% of trades in the window. And the rest?", headline: "Window: 85%", caption: "Slipping, per the plan check.", takeaway: "The trades outside the plan are worth a look." },
       { narration: "The 20 trades outside it averaged negative $39.16. Inside the window, $21.13 each.", headline: "Outside: -$39.16 a trade", caption: "Inside: +$21.13 a trade.", takeaway: "The window in your plan is there for a reason." },
-      { narration: "A sample plan on seeded demo trades. Your window is yours to set.", headline: "Your window, your rule", caption: "Sample plan, demo trades.", takeaway: "Set a window that fits your trading." },
+      { narration: "A sample plan on a sample account. Your window is yours to set.", headline: "Your window, your rule", caption: "Sample plan, sample account.", takeaway: "Set a window that fits your trading." },
       { narration: "Stay inside your own window.", headline: "Stay in your window.", caption: "Score yours at fillbookhq.com.", takeaway: "The plan only works if you follow it." },
     ],
     captionBody: "85% of trades inside the planned window. The 20 outside it averaged -$39.16. Demo account, sample plan.",
@@ -1587,7 +1587,7 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "Your plan, checked rule by rule.", headline: "Every rule, checked", caption: "92% overall adherence.", takeaway: "A plan can be measured." },
       { narration: "The weak spot is the trading window: 20 trades outside it, averaging negative $39.16 against $21.13 inside.", headline: "Weak spot: the window", caption: "-$39.16 outside, +$21.13 inside.", takeaway: "One rule carries most of the cost." },
-      { narration: "Seeded trades and a sample plan. Your rules set the check.", headline: "Your rules set the check", caption: "Seeded trades, sample plan.", takeaway: "Write the rules, then check them." },
+      { narration: "Sample trades and a sample plan. Your rules set the check.", headline: "Your rules set the check", caption: "Sample trades, sample plan.", takeaway: "Write the rules, then check them." },
       { narration: "Find the rule you break most.", headline: "Find your weak rule.", caption: "Try Fillbook on your own trades.", takeaway: "Fix the rule that costs most." },
     ],
     captionBody: "Every plan rule checked against the trades, and the trading window is the weak spot. Demo account, sample plan.",
@@ -1601,7 +1601,7 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "The win rate fell 21 points.", headline: "Down 21 points", caption: "76% then, 55% now.", takeaway: "A drop has a cause worth finding." },
       { narration: "Two flags climbed while it fell: possible revenge trades reached 6%, and flagged overtrading days 17%, both up from 0%.", headline: "Flags up, win rate down", caption: "Flagged overtrading days: 17%.", takeaway: "Behavior moved before the results did." },
-      { narration: "Seeded demo data, compared against its own history.", headline: "Against its own history", caption: "Seeded demo data.", takeaway: "Compare against your own past." },
+      { narration: "A sample account, compared against its own history.", headline: "Against its own history", caption: "Sample account, not a real trader.", takeaway: "Compare against your own past." },
       { narration: "Find out what changed before it costs more.", headline: "Find what changed.", caption: "Compare yours at fillbookhq.com.", takeaway: "Catch the change early." },
     ],
     captionBody: "The win rate fell 21 points while flagged revenge trades and overtrading days rose. Demo data.",
@@ -1615,7 +1615,7 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "76% then. 55% now.", headline: "76% then, 55% now", caption: "Your baseline vs recent trades.", takeaway: "Your past self is the fairest benchmark." },
       { narration: "Recent trades show flagged revenge trades at 6% and flagged overtrading days at 17%. Before, both were 0%.", headline: "Flagged: 0% to 6%", caption: "Flagged overtrading days: 0% to 17%.", takeaway: "New habits show up in the comparison." },
-      { narration: "One seeded demo account. Your own baseline is the one that matters.", headline: "Your baseline matters", caption: "One seeded demo account.", takeaway: "Measure against yourself." },
+      { narration: "One sample account. Your own baseline is the one that matters.", headline: "Your baseline matters", caption: "One sample account.", takeaway: "Measure against yourself." },
       { narration: "Measure yourself against yourself.", headline: "Measure against yourself.", caption: "Try Fillbook on your own trades.", takeaway: "Progress is personal." },
     ],
     captionBody: "76% then, 55% now, with new behavior flags in between. Demo data.",
@@ -1629,10 +1629,10 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "Which account is closer to the line?", headline: "Closer to the line?", caption: "Two accounts, one screen.", takeaway: "More accounts means more to watch." },
       { narration: "One screen shows both buffers, $1,682.36 and $1,725.12, and one best day at 46% of a 40% cap.", headline: "One account over its cap", caption: "Best day: 46% of a 40% cap.", takeaway: "The risk isn't always where you'd guess." },
-      { narration: "Demo accounts, seeded trades. Your firm sets the actual rules.", headline: "Your firm sets the rules", caption: "Demo accounts, seeded trades.", takeaway: "Confirm the rules with your firm." },
+      { narration: "Sample accounts, sample trades. Your firm sets the actual rules.", headline: "Your firm sets the rules", caption: "Sample accounts, not a real trader.", takeaway: "Confirm the rules with your firm." },
       { narration: "Check every account, not just your favorite.", headline: "Check every account.", caption: "Track yours at fillbookhq.com.", takeaway: "Watch the weakest account first." },
     ],
-    captionBody: "Two prop accounts on one screen, and one of them is over its consistency cap. Demo accounts with seeded trades.",
+    captionBody: "Two prop accounts on one screen, and one of them is over its consistency cap. Sample accounts, not real traders.",
     youtubeTitle: "Which Prop Account Is Closer to the Line?",
   }),
   angleOf(PILOT_17, {
@@ -1643,10 +1643,10 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "Two accounts. Health 87 and 80.", headline: "87 vs 80", caption: "Account health, side by side.", takeaway: "A health score points at the problem." },
       { narration: "The 80 has the problem: its best day is 46% of profit, over a 40% consistency cap. The other sits at 13%.", headline: "Best day: 46% vs 13%", caption: "Consistency cap: 40%.", takeaway: "The score drops for a specific reason." },
-      { narration: "Seeded demo accounts. Consistency caps vary by firm.", headline: "Caps vary by firm", caption: "Seeded demo accounts.", takeaway: "Check your own firm's cap." },
+      { narration: "Sample accounts, not real money. Consistency caps vary by firm.", headline: "Caps vary by firm", caption: "Sample accounts, not a real trader.", takeaway: "Check your own firm's cap." },
       { narration: "Know why an account's score is low.", headline: "Know why it's low.", caption: "Try Fillbook on your own trades.", takeaway: "A reason is something you can fix." },
     ],
-    captionBody: "Health 87 and 80: the lower one's best day is over its consistency cap. Demo accounts with seeded trades.",
+    captionBody: "Health 87 and 80: the lower one's best day is over its consistency cap. Sample accounts, not real traders.",
     youtubeTitle: "Health 87 vs Health 80: Comparing Prop Accounts",
   }),
   angleOf(PILOT_18, {
@@ -1657,7 +1657,7 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "Do more of what already works.", headline: "What already works", caption: "From Your Edge.", takeaway: "Your best setup is already in your log." },
       { narration: "The strongest setup is Order Block Retest, plus 0.58R per trade across 48 trades.", headline: "+0.58R per trade", caption: "Order Block Retest, 48 trades.", takeaway: "Know which setup earns its place." },
-      { narration: "Seeded demo data. An edge is a pattern to keep testing.", headline: "Keep testing it", caption: "Seeded demo data.", takeaway: "Past edges can fade." },
+      { narration: "Sample account. An edge is a pattern to keep testing.", headline: "Keep testing it", caption: "Sample account, not a real trader.", takeaway: "Past edges can fade." },
       { narration: "Find your best setup in your own trades.", headline: "Find your best setup.", caption: "See yours at fillbookhq.com.", takeaway: "Lean on what works." },
     ],
     captionBody: "The setup that already works: Order Block Retest, +0.58R per trade. Demo data.",
@@ -1671,7 +1671,7 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
     scenes: [
       { narration: "The best hour, found in the trades.", headline: "The best hour", caption: "From Your Edge.", takeaway: "Time is part of an edge." },
       { narration: "The open, 9:30 to 10:30, is the strongest window: 106 trades at a 71% win rate.", headline: "Best window: the open", caption: "106 trades, 71% win rate.", takeaway: "Your edge has a time of day." },
-      { narration: "One seeded demo account. Your best window could be another hour.", headline: "Yours may differ", caption: "One seeded demo account.", takeaway: "Find your own window." },
+      { narration: "One sample account. Your best window could be another hour.", headline: "Yours may differ", caption: "One sample account.", takeaway: "Find your own window." },
       { narration: "Trade your strongest window.", headline: "Trade your best window.", caption: "Try Fillbook on your own trades.", takeaway: "Put your size where you're strongest." },
     ],
     captionBody: "The open, 9:30 to 10:30, is this account's strongest window at a 71% win rate. Demo data.",
