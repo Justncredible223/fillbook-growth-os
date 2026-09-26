@@ -19,8 +19,9 @@ import java.time.ZonedDateTime
 
 /**
  * Local reminders for the daily posting plan (owner request 2026-09-25): 6:30am, 12pm and 5:30pm Arizona time, the same
- * slots the server's plan uses (backend/src/posting/postingPlan.ts). Inexact alarms (setAndAllowWhileIdle), so no
- * exact-alarm permission is needed; they fire within a few minutes of each slot. Only the next slot is ever armed: it
+ * slots the server's plan uses (backend/src/posting/postingPlan.ts). Exact alarms (USE_EXACT_ALARM, granted at install
+ * for this sideloaded app): an inexact alarm was given a 1-hour window on the owner's phone, too loose for a posting
+ * slot. If exact alarms are ever unavailable it falls back to a 10-minute window. Only the next slot is ever armed: it
  * re-arms after firing, on app start and after a reboot.
  */
 object PostingReminders {
@@ -56,7 +57,14 @@ object PostingReminders {
         val (at, slot) = nextSlot(now)
         val intent = Intent(context, PostingReminderReceiver::class.java).putExtra(PostingReminderReceiver.EXTRA_SLOT, slot)
         val pending = PendingIntent.getBroadcast(context, REQUEST_CODE, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        context.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at.toInstant().toEpochMilli(), pending)
+        val alarms = context.getSystemService(AlarmManager::class.java)
+        val atMillis = at.toInstant().toEpochMilli()
+        val canExact = Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarms.canScheduleExactAlarms()
+        if (canExact) {
+            alarms.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMillis, pending)
+        } else {
+            alarms.setWindow(AlarmManager.RTC_WAKEUP, atMillis, 10 * 60 * 1000L, pending)
+        }
     }
 
     fun show(context: Context, slotNumber: Int) {
