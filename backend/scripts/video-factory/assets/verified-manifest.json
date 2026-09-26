@@ -1248,6 +1248,559 @@
           }
         }
       ]
+    },
+    {
+      "id": "rec.b3-insights-behavior.v1",
+      "file": "motion/b3-mobile-insights-behavior.mp4",
+      "sha256": "fdb7cfed4eb8c18f7f09a2f0b4b9428d4648aa0157dc6ed5d392105465543664",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-behavior-account.2026-09-25",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server (main @ bbb52e5) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Behavior Account\", seeded by frontend/scripts/seed-pilot-behavior-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: insights top held 0-0.5s, swipe to Behavior patterns 0.5-1.7s, held 1.7-17.7s, swipe to Tagged habits 17.7-18.9s, held 18.9-34.9s.",
+      "capturedAt": "2026-09-25",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "revenge_trading",
+        "overtrading",
+        "time_of_day",
+        "mistake_tags"
+      ],
+      "durationSeconds": 34.9,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "behavior.revenge",
+          "text": "Insights, Behavior patterns: 5 possible revenge trades -- MNQ opened 3 min after losing $127, sized 2.5x your average; 9 min after losing $87, 1.5x; 12 min after losing $63, 2.0x; 4 min after losing $107, 2.4x; 7 min after losing $75, 1.9x",
+          "values": [
+            "5",
+            "3",
+            "$127",
+            "2.5x",
+            "9",
+            "$87",
+            "1.5x",
+            "12",
+            "$63",
+            "2.0x",
+            "4",
+            "$107",
+            "2.4x",
+            "7",
+            "$75",
+            "1.9x"
+          ],
+          "topics": [
+            "revenge_trading"
+          ],
+          "region": {
+            "x": 38,
+            "y": 213,
+            "w": 1004,
+            "h": 775
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 17.7
+          }
+        },
+        {
+          "key": "behavior.overtraded",
+          "text": "Insights, Behavior patterns: Overtraded 2026-09-10, 6 trades against your 2.7/day norm, net $15.28; Overtraded 2026-09-18, 6 trades, net -$468.20; Overtraded 2026-09-24, 6 trades, net -$464.72 (3 overtraded sessions)",
+          "values": [
+            "3",
+            "6",
+            "2.7",
+            "$15.28",
+            "-$468.20",
+            "-$464.72"
+          ],
+          "topics": [
+            "overtrading"
+          ],
+          "region": {
+            "x": 38,
+            "y": 995,
+            "w": 1004,
+            "h": 505
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 17.7
+          }
+        },
+        {
+          "key": "behavior.weak_hour",
+          "text": "Insights, Behavior patterns: Weak hour 11:00 -- 25% win rate across 20 timed trades, against 62% overall, net -$783.20",
+          "values": [
+            "11:00",
+            "11",
+            "25%",
+            "20",
+            "62%",
+            "-$783.20"
+          ],
+          "topics": [
+            "time_of_day"
+          ],
+          "region": {
+            "x": 38,
+            "y": 995,
+            "w": 1004,
+            "h": 505
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 17.7
+          }
+        },
+        {
+          "key": "tags.all",
+          "text": "Insights, Tagged habits (worst net impact first): Moved stop 4 trades avg -$163.96, -$655.84; Chased price 10 trades avg -$62.96, -$629.60; Revenge trade 5 trades avg -$121.02, -$605.08; Oversized 5 trades avg -$121.02, -$605.08; FOMO entry 5 trades avg -$91.76, -$458.80; Overtraded 5 trades avg -$62.96, -$314.80; Good discipline 12 trades avg $69.04, $828.48",
+          "values": [
+            "4",
+            "-$163.96",
+            "-$655.84",
+            "10",
+            "-$62.96",
+            "-$629.60",
+            "5",
+            "-$121.02",
+            "-$605.08",
+            "-$91.76",
+            "-$458.80",
+            "-$314.80",
+            "12",
+            "$69.04",
+            "$828.48"
+          ],
+          "topics": [
+            "mistake_tags"
+          ],
+          "region": {
+            "x": 38,
+            "y": 452,
+            "w": 1004,
+            "h": 731
+          },
+          "timeRangeSeconds": {
+            "start": 18.9,
+            "end": 34.9
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.b3-reports-timing-conviction.v1",
+      "file": "motion/b3-mobile-reports-timing-conviction.mp4",
+      "sha256": "f8d346316bb34f5a80a8840b61aa6865cdb6b0e10b8f6cef142cca01087972c6",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-behavior-account.2026-09-25",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server (main @ bbb52e5) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Behavior Account\", seeded by frontend/scripts/seed-pilot-behavior-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: reports top held 0-0.5s, swipe to By time of day 0.5-1.9s, held 1.9-17.9s, swipe to By conviction 17.9-19.1s, held 19.1-35.1s.",
+      "capturedAt": "2026-09-25",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "time_of_day",
+        "conviction"
+      ],
+      "durationSeconds": 35.1,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "timing.buckets",
+          "text": "Reports, By time of day: Open (9:30-10:30am ET) 106 trades, 71% win, $2,967.96; Late morning (10:30am-12pm ET) 25 trades, 24% win, -$1,406.00",
+          "values": [
+            "9:30",
+            "10:30",
+            "106",
+            "71%",
+            "$2,967.96",
+            "25",
+            "24%",
+            "-$1,406.00",
+            "12"
+          ],
+          "topics": [
+            "time_of_day"
+          ],
+          "region": {
+            "x": 38,
+            "y": 207,
+            "w": 1004,
+            "h": 362
+          },
+          "timeRangeSeconds": {
+            "start": 1.9,
+            "end": 17.9
+          }
+        },
+        {
+          "key": "conviction.all",
+          "text": "Reports, By conviction (would you take it again?): Would take again 75 trades, 84% win, +0.51R avg, $3,822.00; Wouldn't take again 34 trades, 18% win, -0.65R avg, -$2,575.96; Unsure 22 trades, 55% win, +0.12R avg, $315.92; across 131 answered trades, the ones you would take again produced +60.3R more",
+          "values": [
+            "75",
+            "84%",
+            "+0.51R",
+            "$3,822.00",
+            "34",
+            "18%",
+            "-0.65R",
+            "-$2,575.96",
+            "22",
+            "55%",
+            "+0.12R",
+            "$315.92",
+            "131",
+            "+60.3R"
+          ],
+          "topics": [
+            "conviction"
+          ],
+          "region": {
+            "x": 38,
+            "y": 1087,
+            "w": 1004,
+            "h": 552
+          },
+          "timeRangeSeconds": {
+            "start": 19.1,
+            "end": 35.1
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.b3-plan-vs-reality.v1",
+      "file": "motion/b3-mobile-plan-vs-reality.mp4",
+      "sha256": "4a29e347e51ba84a0ee584eae14f8117c6fb7d70d6df5b2c486b25e429dc999d",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-behavior-account.2026-09-25",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server (main @ bbb52e5) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Behavior Account\", seeded by frontend/scripts/seed-pilot-behavior-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: plan top held 0-0.5s, swipe to Plan vs reality 0.5-1.9s, held 1.9-17.9s, swipe to Focus for next session 17.9-19.1s, held 19.1-35.1s.",
+      "capturedAt": "2026-09-25",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "plan_adherence"
+      ],
+      "durationSeconds": 35.1,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "plan.adherence",
+          "text": "Plan vs reality: 92% overall adherence; Trading window 85% (Slipping), 111 of 131 timed trades entered inside 09:30-11:30; Max trades per day 90% (On plan), 43 of 48 trading days at or under 5 trades",
+          "values": [
+            "92%",
+            "85%",
+            "111",
+            "131",
+            "9:30",
+            "11:30",
+            "90%",
+            "43",
+            "48",
+            "5"
+          ],
+          "topics": [
+            "plan_adherence"
+          ],
+          "region": {
+            "x": 38,
+            "y": 198,
+            "w": 1004,
+            "h": 784
+          },
+          "timeRangeSeconds": {
+            "start": 1.9,
+            "end": 17.9
+          }
+        },
+        {
+          "key": "plan.focus",
+          "text": "Plan, Focus for next session: performance drops when trading outside the planned session -- 20 trades outside 09:30-11:30 average -$39.16 each, against $21.13 inside it",
+          "values": [
+            "20",
+            "9:30",
+            "11:30",
+            "-$39.16",
+            "$21.13"
+          ],
+          "topics": [
+            "plan_adherence"
+          ],
+          "region": {
+            "x": 80,
+            "y": 1208,
+            "w": 920,
+            "h": 302
+          },
+          "timeRangeSeconds": {
+            "start": 19.1,
+            "end": 35.1
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.b3-progress.v1",
+      "file": "motion/b3-mobile-progress.mp4",
+      "sha256": "3e476edffc4e5cc4c78db5dec32fea9d1bdb01686c410e6a28566496ed8a897c",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-behavior-account.2026-09-25",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server (main @ bbb52e5) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Behavior Account\", seeded by frontend/scripts/seed-pilot-behavior-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: progress top held 0-0.5s, swipe to Win rate 0.5-1.7s, held 1.7-17.7s, swipe to Revenge-trade rate 17.7-18.9s, held 18.9-34.9s.",
+      "capturedAt": "2026-09-25",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "progress"
+      ],
+      "durationSeconds": 34.9,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "progress.win_rate",
+          "text": "Progress, Win rate: baseline 76%, recent 55%, down 21%",
+          "values": [
+            "76%",
+            "55%",
+            "21%",
+            "21"
+          ],
+          "topics": [
+            "progress"
+          ],
+          "region": {
+            "x": 38,
+            "y": 207,
+            "w": 1004,
+            "h": 370
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 17.7
+          }
+        },
+        {
+          "key": "progress.behavior",
+          "text": "Progress: Revenge-trade rate baseline 0%, recent 6%; Overtrading-day rate baseline 0%, recent 17%",
+          "values": [
+            "0%",
+            "6%",
+            "17%"
+          ],
+          "topics": [
+            "progress"
+          ],
+          "region": {
+            "x": 38,
+            "y": 860,
+            "w": 1004,
+            "h": 780
+          },
+          "timeRangeSeconds": {
+            "start": 18.9,
+            "end": 34.9
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.b3-accounts-overview.v1",
+      "file": "motion/b3-mobile-accounts-overview.mp4",
+      "sha256": "77746fdb0202cd53d6e8f0d142bdc5cf0fe2b018437a4a61b64947025e38cbaf",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-behavior-account.2026-09-25",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server (main @ bbb52e5) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Behavior Account\", seeded by frontend/scripts/seed-pilot-behavior-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: rules top held 0-0.5s, swipe to All accounts at a glance 0.5-1.9s, held 1.9-19.9s.",
+      "capturedAt": "2026-09-25",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "accounts_overview"
+      ],
+      "durationSeconds": 19.9,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "accounts.overview",
+          "text": "Prop firm rules, All accounts at a glance (2 accounts): Pilot Behavior 50K Evaluation -- drawdown buffer $1,682.36, today's limit left $1,100.00, 52% to target, Health 87/100, best day 13% of 40% cap, payout not yet, 67%; Pilot Fixture 50K Evaluation -- drawdown buffer $1,725.12, today's limit left $1,000.00, 13% to target, Health 80/100, best day 46% of 40% cap, payout not yet, 86%",
+          "values": [
+            "2",
+            "$1,682.36",
+            "$1,100.00",
+            "52%",
+            "87",
+            "13%",
+            "40%",
+            "67%",
+            "$1,725.12",
+            "$1,000.00",
+            "80",
+            "46%",
+            "86%",
+            "100"
+          ],
+          "topics": [
+            "accounts_overview"
+          ],
+          "region": {
+            "x": 38,
+            "y": 208,
+            "w": 1004,
+            "h": 957
+          },
+          "timeRangeSeconds": {
+            "start": 1.9,
+            "end": 19.9
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.b3-your-edge.v1",
+      "file": "motion/b3-mobile-your-edge.mp4",
+      "sha256": "e9787c058a9da1860dffa75c70b56f9b1f7b71f353ffeb8211ad5a4a58995b09",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-behavior-account.2026-09-25",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts) of a LOCAL Fillbook dev server (main @ bbb52e5) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Behavior Account\", seeded by frontend/scripts/seed-pilot-behavior-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: intelligence Edge tab held 0-0.5s, settle 0.5-1.7s, held 1.7-19.7s.",
+      "capturedAt": "2026-09-25",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "edge"
+      ],
+      "durationSeconds": 19.7,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "edge.strongest",
+          "text": "Intelligence, Your Edge: Strongest setup Order Block Retest, +0.58R, 48 trades, 88% win rate, High confidence; Strongest window Open (9:30-10:30am ET), +$28, 106 trades, 71% win rate, High confidence",
+          "values": [
+            "+0.58R",
+            "0.58",
+            "48",
+            "88%",
+            "9:30",
+            "10:30",
+            "+$28",
+            "106",
+            "71%"
+          ],
+          "topics": [
+            "edge"
+          ],
+          "region": {
+            "x": 38,
+            "y": 820,
+            "w": 1004,
+            "h": 647
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 19.7
+          }
+        }
+      ]
     }
   ]
 }

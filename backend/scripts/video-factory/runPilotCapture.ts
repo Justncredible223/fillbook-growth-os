@@ -136,6 +136,87 @@ const SHOTS: Record<string, { id: string; steps: Step[] }> = {
   },
 };
 
+/**
+ * Batch 3 (2026-09-25): recorded against "Pilot Behavior Account" (PILOT_ACCOUNT_NAME), seeded by the fillbook repo's
+ * frontend/scripts/seed-pilot-behavior-fixtures.mjs. Each recording holds two sections so several concepts can cut
+ * different cards out of one clip.
+ */
+const BATCH_3_SHOTS: Record<string, { id: string; steps: Step[] }> = {
+  "b3-insights": {
+    id: "b3-mobile-insights-behavior",
+    steps: [
+      { kind: "goto", route: "/insights", waitFor: "text=Behavior patterns" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Behavior patterns", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "behavior_heading", selector: "text=Behavior patterns" },
+      { kind: "hold", seconds: 16 },
+      { kind: "scroll", selector: "text=Tagged habits", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "tags_heading", selector: "text=Tagged habits" },
+      { kind: "hold", seconds: 16 },
+    ],
+  },
+  "b3-reports": {
+    id: "b3-mobile-reports-timing-conviction",
+    steps: [
+      { kind: "goto", route: "/reports", waitFor: "text=By time of day" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=By time of day", seconds: 1.4, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "timing_heading", selector: "text=By time of day" },
+      { kind: "hold", seconds: 16 },
+      { kind: "scroll", selector: "text=By conviction", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "conviction_heading", selector: "text=By conviction" },
+      { kind: "hold", seconds: 16 },
+    ],
+  },
+  "b3-plan": {
+    id: "b3-mobile-plan-vs-reality",
+    steps: [
+      { kind: "goto", route: "/plan", waitFor: "text=Plan vs reality" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Plan vs reality", seconds: 1.4, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "adherence_heading", selector: "text=Plan vs reality" },
+      { kind: "hold", seconds: 16 },
+      { kind: "scroll", selector: "text=Focus for next session", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "focus_heading", selector: "text=Focus for next session" },
+      { kind: "hold", seconds: 16 },
+    ],
+  },
+  "b3-progress": {
+    id: "b3-mobile-progress",
+    steps: [
+      { kind: "goto", route: "/progress", waitFor: "text=Expectancy" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Win rate", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "winrate_heading", selector: "text=Win rate" },
+      { kind: "hold", seconds: 16 },
+      { kind: "scroll", selector: "text=Revenge-trade rate", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "revenge_heading", selector: "text=Revenge-trade rate" },
+      { kind: "hold", seconds: 16 },
+    ],
+  },
+  "b3-rules": {
+    id: "b3-mobile-accounts-overview",
+    steps: [
+      { kind: "goto", route: "/rules", waitFor: "text=All accounts at a glance" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=All accounts at a glance", seconds: 1.4, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "overview_heading", selector: "text=All accounts at a glance" },
+      { kind: "hold", seconds: 18 },
+    ],
+  },
+  "b3-edge": {
+    id: "b3-mobile-your-edge",
+    steps: [
+      { kind: "goto", route: "/intelligence?tab=edge", waitFor: "text=Strongest setup" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Your Edge", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "edge_heading", selector: "text=Your Edge" },
+      { kind: "hold", seconds: 18 },
+    ],
+  },
+};
+Object.assign(SHOTS, BATCH_3_SHOTS);
+
 async function signIn(statePath: string): Promise<void> {
   const email = process.env.PILOT_EMAIL;
   const password = process.env.PILOT_PASSWORD;
@@ -151,7 +232,8 @@ async function signIn(statePath: string): Promise<void> {
   await page.waitForTimeout(3000);
   await page.getByText("Main account").first().click();
   await page.waitForTimeout(500);
-  await page.getByText("Pilot Fixture Account", { exact: true }).click();
+  // Batch 3 (2026-09-25) records "Pilot Behavior Account" (seed-pilot-behavior-fixtures.mjs); earlier batches the original fixture account.
+  await page.getByText(process.env.PILOT_ACCOUNT_NAME ?? "Pilot Fixture Account", { exact: true }).click();
   await page.waitForTimeout(1500);
   await ctx.storageState({ path: statePath });
   await browser.close();
@@ -169,7 +251,8 @@ async function main() {
   for (const key of keys) {
     const shot = SHOTS[key];
     if (!shot) throw new Error(`Unknown pilot "${key}". Known: ${Object.keys(SHOTS).join(", ")}, all`);
-    const spec: StepCaptureSpec = { id: shot.id, baseUrl: BASE_URL, viewportCss: VIEWPORT, deviceScaleFactor: DPR, storageStatePath: statePath, steps: shot.steps };
+    // New York time, so screens that read entry times in the browser's zone (the plan's trading window) match the ET seed data.
+    const spec: StepCaptureSpec = { id: shot.id, baseUrl: BASE_URL, viewportCss: VIEWPORT, deviceScaleFactor: DPR, storageStatePath: statePath, timezoneId: "America/New_York", steps: shot.steps };
     console.log(`\n=== ${key}: ${shot.id} ===`);
     const result = await runStepCapture(spec, OUT_DIR);
     writeFileSync(join(OUT_DIR, `${shot.id}.timeline.json`), JSON.stringify(result, null, 2));
