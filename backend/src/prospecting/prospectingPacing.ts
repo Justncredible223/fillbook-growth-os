@@ -9,6 +9,13 @@
 export const REPLY_COOLDOWN_MS = 20 * 60 * 1000;
 /** At most this many replies in any rolling 24 hours. */
 export const DAILY_REPLY_CAP = 5;
+/**
+ * Recovery mode (2026-09-26): while X is limiting the account's replies (Results' reply-visibility check reads
+ * "dropped"), cold replies are held to 2 a day, only on posts under 4 hours old, and drafts never name Fillbook.
+ * It turns itself off when reply views recover. See prospectingRecovery.ts.
+ */
+export const RECOVERY_DAILY_REPLY_CAP = 2;
+export const RECOVERY_MAX_POST_AGE_MS = 4 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface ReplyPacing {
@@ -24,7 +31,7 @@ export interface ReplyPacing {
 }
 
 /** Pure: pacing from the times replies were posted (any order; unparseable values are ignored). */
-export function computeReplyPacing(repliedAts: (string | null)[], now: Date = new Date()): ReplyPacing {
+export function computeReplyPacing(repliedAts: (string | null)[], now: Date = new Date(), dailyCap: number = DAILY_REPLY_CAP): ReplyPacing {
   const nowMs = now.getTime();
   const times = repliedAts
     .map((value) => (value ? new Date(value).getTime() : NaN))
@@ -39,9 +46,9 @@ export function computeReplyPacing(repliedAts: (string | null)[], now: Date = ne
     nextMs = lastMs + REPLY_COOLDOWN_MS;
     reason = "cooldown";
   }
-  if (recent.length >= DAILY_REPLY_CAP) {
+  if (recent.length >= dailyCap) {
     // The window reopens when the oldest reply that keeps it full turns 24 hours old.
-    const capMs = recent[DAILY_REPLY_CAP - 1]! + DAY_MS;
+    const capMs = recent[dailyCap - 1]! + DAY_MS;
     if (capMs > nextMs) {
       nextMs = capMs;
       reason = "daily_cap";
@@ -50,7 +57,7 @@ export function computeReplyPacing(repliedAts: (string | null)[], now: Date = ne
 
   return {
     repliedLast24h: recent.length,
-    dailyCap: DAILY_REPLY_CAP,
+    dailyCap,
     cooldownMinutes: REPLY_COOLDOWN_MS / 60000,
     lastRepliedAt: lastMs === undefined ? null : new Date(lastMs).toISOString(),
     nextReplyAt: reason ? new Date(nextMs).toISOString() : null,
