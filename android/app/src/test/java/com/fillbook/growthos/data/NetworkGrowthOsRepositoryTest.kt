@@ -237,10 +237,19 @@ class ExtractVideoScriptRequestErrorMessageTest {
         assertEquals("A video for this topic already exists.", extractVideoScriptRequestErrorMessage(409, message))
     }
 
+    // a175bfc: a 500 from run-campaign's video path carries the same
+    // {"error": "..."} body (a real generation failure), so it is surfaced
+    // instead of hidden behind the generic "check your connection" fallback.
     @Test
-    fun `returns null for a non-400-non-409 status -- a genuine server or auth failure must still surface as NetworkException`() {
+    fun `extracts the real error message from a 500 (server-side generation error) response`() {
         val message = networkExceptionMessage(500, """{"error":"internal error"}""")
-        assertNull(extractVideoScriptRequestErrorMessage(500, message))
+        assertEquals("internal error", extractVideoScriptRequestErrorMessage(500, message))
+    }
+
+    @Test
+    fun `returns null for a status other than 400, 409, or 500 -- a genuine auth or gateway failure must still surface as NetworkException`() {
+        assertNull(extractVideoScriptRequestErrorMessage(401, networkExceptionMessage(401, """{"error":"unauthorized"}""")))
+        assertNull(extractVideoScriptRequestErrorMessage(502, networkExceptionMessage(502, """{"error":"bad gateway"}""")))
     }
 
     @Test
