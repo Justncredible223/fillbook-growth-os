@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { recoveryFromVisibility, type RecoveryState } from "../src/prospecting/prospectingRecovery";
 import {
   draftProspectingCandidateReply,
   listProspectingQueue,
@@ -155,6 +156,65 @@ describe("listProspectingQueue -- selection diagnostics", () => {
  * This closes it at the one place every non-terminal candidate passes
  * through before ever becoming visible: listProspectingQueue itself.
  */
+describe("recovery mode (X limiting the account's replies, 2026-09-26)", () => {
+  const NOW = new Date("2026-09-26T18:00:00Z");
+  const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3600000).toISOString();
+  const on = async (): Promise<RecoveryState> => recoveryFromVisibility({ status: "dropped", recentMedian: 2.5, recentCount: 30, baselineMedian: 7, baselineCount: 20 });
+  const off = async (): Promise<RecoveryState> => recoveryFromVisibility({ status: "ok", recentMedian: 8, recentCount: 5, baselineMedian: 7, baselineCount: 20 });
+
+  it("switches on only when reply views have dropped", async () => {
+    expect((await on()).active).toBe(true);
+    expect((await off()).active).toBe(false);
+    expect(recoveryFromVisibility({ status: "not_enough_data", recentMedian: null, recentCount: 0, baselineMedian: null, baselineCount: 0 }).active).toBe(false);
+  });
+
+  it("while on, the queue offers only posts under 4 hours old and the daily cap drops to 2", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "fresh", status: "new", opportunityScore: 70, postCreatedAt: hoursAgo(1), authorExternalId: "a" }));
+    repo.seed(candidate({ id: "older", status: "new", opportunityScore: 90, postCreatedAt: hoursAgo(6), authorExternalId: "b" }));
+    repo.seed(candidate({ id: "r1", status: "replied", repliedAt: hoursAgo(2), authorExternalId: "c" }));
+    repo.seed(candidate({ id: "r2", status: "replied", repliedAt: hoursAgo(5), authorExternalId: "d" }));
+
+    const result = await listProspectingQueue(fakeClient, NOW, { repo, loadRecovery: on });
+
+    expect(result.candidates.map((c) => c.id)).toEqual(["fresh"]);
+    expect(result.recovery.active).toBe(true);
+    expect(result.pacing).toMatchObject({ dailyCap: 2, repliedLast24h: 2, reason: "daily_cap" });
+  });
+
+  it("while off, the normal 12h window and cap of 5 apply", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "fresh", status: "new", opportunityScore: 70, postCreatedAt: hoursAgo(1), authorExternalId: "a" }));
+    repo.seed(candidate({ id: "older", status: "new", opportunityScore: 90, postCreatedAt: hoursAgo(6), authorExternalId: "b" }));
+
+    const result = await listProspectingQueue(fakeClient, NOW, { repo, loadRecovery: off });
+
+    expect(result.candidates.map((c) => c.id).sort()).toEqual(["fresh", "older"]);
+    expect(result.pacing.dailyCap).toBe(5);
+  });
+
+  it("while on, a draft that names Fillbook is rejected and redrafted with the recovery note", async () => {
+    const repo = new InMemoryProspectingRepository();
+    repo.seed(candidate({ id: "x-rec", platform: "x", status: "shown", draftReply: null, postText: "Moved my stop again and blew the eval. Futures trading is brutal." }));
+    const named = { isRelevant: true, reply: "Fillbook's trade log shows every moved stop next to your plan.", mentionsFillbook: true, usesLink: false, showcase: "size_vs_plan" };
+    const plain = { isRelevant: true, reply: "The stop you moved is the one that decides the eval. Write the invalidation price down before entry.", mentionsFillbook: false, usesLink: false, showcase: "none" };
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => (drafter.mock.calls.length === 1 ? named : plain));
+
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-rec", {
+      repo,
+      drafter,
+      loadGrounding: async () => ({ brandRulesSummary: "rules", verifiedKnowledgeSummary: "facts" }),
+      cheapRelevanceCheck: async () => true,
+      loadStyleExamples: async () => [],
+      loadRecovery: on,
+    });
+
+    expect(drafter.mock.calls[0]![0].recoveryNote).toMatch(/RECOVERY MODE IS ON/);
+    expect(drafter.mock.calls[1]![0].retryFeedback).toMatch(/recovery mode/);
+    expect(updated.draftReply).toBe(plain.reply);
+  });
+});
+
 describe("listProspectingQueue -- reply pacing", () => {
   const NOW = new Date("2026-09-25T12:00:00Z");
   const minutesAgo = (m: number) => new Date(NOW.getTime() - m * 60000).toISOString();
