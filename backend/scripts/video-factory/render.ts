@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { win32 as windowsPath } from "node:path";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,6 +54,13 @@ const CROP_EDGE_FEATHER =
  */
 const FONT_ASSET_PATH = join(dirname(fileURLToPath(import.meta.url)), "assets", "fonts", "Poppins-ExtraBold.ttf");
 const FONT_BASENAME = "Poppins-ExtraBold.ttf";
+/**
+ * Subfolder of the render directory holding only the caption font. libass opens every file in fontsdir as a
+ * candidate font, and the render directory also holds the music, voiceover, recordings and card images, so
+ * pointing it at "." read megabytes of video into memory on every render and caused intermittent
+ * out-of-memory ffmpeg failures (exit -12, "Error opening memory font") on the owner's machine (2026-09-25).
+ */
+const FONT_DIR = "fonts";
 
 /**
  * Bundled background music bed (Pixabay Content License -- free for
@@ -469,11 +476,10 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
   const filterComplex = [
     ...sceneFilterParts,
     ...xfadeParts,
-    // fontsdir=. (relative to ffmpeg's own cwd, the render's output
+    // fontsdir=fonts (relative to ffmpeg's own cwd, the render's output
     // directory -- see renderVideo) points libass at the bundled caption
-    // font copied there below, same basename-only path-safety reasoning as
-    // every other file in this filter graph.
-    `[${bgLabel}]subtitles=${renderBasename(plan.assPath)}:fontsdir=.[v]`,
+    // font copied there below, and nothing else (see FONT_DIR).
+    `[${bgLabel}]subtitles=${renderBasename(plan.assPath)}:fontsdir=${FONT_DIR}[v]`,
     `[${voiceoverInputIndex}:a][${silenceInputIndex}:a]concat=n=2:v=0:a=1[voicefull]`,
     // The voice feeds both the mix and the ducking sidechain.
     `[voicefull]asplit=2[voice][voicesc]`,
@@ -527,7 +533,8 @@ export async function renderVideo(plan: RenderPlan, runner: ProcessRunner): Prom
   // substitute for "Poppins ExtraBold" rather than failing the whole
   // render over caption styling.
   try {
-    const fontDest = join(cwd, FONT_BASENAME);
+    mkdirSync(join(cwd, FONT_DIR), { recursive: true });
+    const fontDest = join(cwd, FONT_DIR, FONT_BASENAME);
     if (!existsSync(fontDest)) copyFileSync(FONT_ASSET_PATH, fontDest);
   } catch {
     // Deliberately swallowed -- see comment above.
@@ -629,7 +636,8 @@ export async function renderThumbnailCard(
   // nicety, not a correctness requirement. Falls back to fontconfig's own
   // substitute if the copy fails for any reason.
   try {
-    const fontDest = join(cwd, FONT_BASENAME);
+    mkdirSync(join(cwd, FONT_DIR), { recursive: true });
+    const fontDest = join(cwd, FONT_DIR, FONT_BASENAME);
     if (!existsSync(fontDest)) copyFileSync(FONT_ASSET_PATH, fontDest);
   } catch {
     // Deliberately swallowed -- see comment above.
@@ -651,7 +659,7 @@ export async function renderThumbnailCard(
       "-i",
       `color=c=${THUMBNAIL_BACKGROUND_COLOR}:s=${WIDTH}x${HEIGHT}:d=1`,
       "-vf",
-      `subtitles=${THUMBNAIL_ASS_BASENAME}:fontsdir=.`,
+      `subtitles=${THUMBNAIL_ASS_BASENAME}:fontsdir=${FONT_DIR}`,
       "-frames:v",
       "1",
       "-q:v",

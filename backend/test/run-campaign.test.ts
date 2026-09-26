@@ -155,7 +155,7 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     expect(result.statusCode).toBe(200);
     const body = result.body as { motionConcepts: { id: string }[] };
     expect(body.motionConcepts.map((c) => c.id)).toContain(PILOT_2_ID);
-    expect(body.motionConcepts.length).toBe(36);
+    expect(body.motionConcepts.length).toBe(54);
   });
 
   it("POST with a valid motionConceptId creates a real opportunity row and enqueues via the SAME enqueue_campaign_run RPC every other request uses, with asset_type video_script", async () => {
