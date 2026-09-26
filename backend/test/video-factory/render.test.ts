@@ -54,7 +54,7 @@ describe("buildFfmpegArgs", () => {
     // Both scenes are 5s -> transition duration caps at MAX_TRANSITION_SECONDS (0.4),
     // and the fade starts exactly at the planned cut (5.0s), not 0.4s early.
     expect(filter).toContain("[sv0][sv1]xfade=transition=fade:duration=0.400:offset=5.000[xf0]");
-    expect(filter).toContain("[xf0]subtitles=captions.ass:fontsdir=.[v]");
+    expect(filter).toContain("[xf0]subtitles=captions.ass:fontsdir=fonts[v]");
   });
 
   it("concatenates voiceover + silence pad, ducks the music under the voice, mixes, then loudness-normalises", () => {
@@ -319,7 +319,7 @@ describe("host-OS independence of path handling", () => {
 
     const args = buildFfmpegArgs(posixPlan);
     expect(args.join(" ")).not.toContain("/tmp/out");
-    expect(args[args.indexOf("-filter_complex") + 1]).toContain("subtitles=captions.ass:fontsdir=.[v]");
+    expect(args[args.indexOf("-filter_complex") + 1]).toContain("subtitles=captions.ass:fontsdir=fonts[v]");
 
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
     await renderVideo(posixPlan, { run });
