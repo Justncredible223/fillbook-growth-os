@@ -205,6 +205,20 @@ class VideoStatusScreenDownloadGuardStructureTest {
                 "actually completes (or is cancelled/fails)."
         }
     }
+
+    @Test
+    fun `the guard is released before the lookup, so a download canceled from its notification can't leave the button stuck`() {
+        // DownloadManager deletes a canceled download's row before broadcasting ACTION_DOWNLOAD_COMPLETE, so the
+        // lookup's cursor is empty. The receiver used to return there before releasing the guard (2026-09-25).
+        val source = screenSource()
+        val onReceiveIndex = source.indexOf("override fun onReceive(")
+        val releaseIndex = source.indexOf("downloadingIds = downloadingIds - videoRenderId", onReceiveIndex)
+        val emptyCursorIndex = source.indexOf("cursor.moveToFirst()", onReceiveIndex)
+        val managerLookupIndex = source.indexOf("getSystemService<DownloadManager>()", onReceiveIndex)
+        check(releaseIndex in 0 until emptyCursorIndex) { "The guard must be released before the empty-cursor early return." }
+        check(releaseIndex < managerLookupIndex) { "The guard must be released before the DownloadManager lookup can return early." }
+        check(source.indexOf("Download canceled.", onReceiveIndex) > emptyCursorIndex) { "A canceled download should say so." }
+    }
 }
 
 /**

@@ -201,10 +201,18 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
             override fun onReceive(ctx: Context, intent: Intent) {
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L)
                 val videoRenderId = pendingDownloads[id] ?: return
+                // Released before anything below can return early. A download canceled from its notification has its
+                // row deleted before this broadcast arrives, so the lookup finds nothing -- and returning there used
+                // to leave the Download button disabled until the screen was reopened.
+                pendingDownloads = pendingDownloads - id
+                downloadingIds = downloadingIds - videoRenderId
                 val downloadManager = context.getSystemService<DownloadManager>() ?: return
                 val query = DownloadManager.Query().setFilterById(id)
                 downloadManager.query(query).use { cursor ->
-                    if (!cursor.moveToFirst()) return@use
+                    if (!cursor.moveToFirst()) {
+                        scope.launch { snackbarHostState.showSnackbar("Download canceled.") }
+                        return@use
+                    }
                     val statusIndex = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
                     val status = if (statusIndex >= 0) cursor.getInt(statusIndex) else DownloadManager.STATUS_FAILED
                     if (status == DownloadManager.STATUS_SUCCESSFUL) {
@@ -229,11 +237,9 @@ fun VideoStatusScreen(repo: GrowthOsRepository) {
                         // refresh mints a fresh one (see videoStatusHandlers.ts).
                         // Also where a user-cancelled download lands (DownloadManager
                         // reports cancellation as a non-successful status, same as
-                        // any other failure) -- the guard below is released either way.
+                        // any other failure) -- the guard was already released above.
                         scope.launch { snackbarHostState.showSnackbar("Download failed — the link may have expired. Pull to refresh and try again.") }
                     }
-                    pendingDownloads = pendingDownloads - id
-                    downloadingIds = downloadingIds - videoRenderId
                 }
             }
         }
