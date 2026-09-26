@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../opportunities/manualMotionConcept.js";
 import { extractYoutubeVideoId } from "../video/youtubeUrl.js";
+import { recordOwnerPublication } from "../attribution/contentPublications.js";
 import type { XOwnTweet } from "../signals/adapters/xAdapter.js";
 import { POSTING_PLATFORMS, assessReplyVisibility, buildPostingPlan, type PlanVideo, type PostingPlan, type PostingPlatform, type ReplyVisibility } from "./postingPlan.js";
 
@@ -88,7 +89,26 @@ export async function recordVideoPost(
     { onConflict: "campaign_asset_id,platform" },
   );
   if (error) throw new Error(`Recording the post failed: ${error.message}`);
+
+  // These three per-platform links replaced the Video Status screen's single "I posted this" field (2026-09-26), so
+  // they also feed what that field fed: content_publications (the growth-loop analytics and weekly summary) and, for
+  // YouTube, video_renders.published_url (growth pulse's YouTube stats and comment monitoring). Best-effort, like
+  // setPublishedUrl: the video_posts row above is what the posting plan depends on.
+  const url = input.url.trim();
+  try {
+    await recordOwnerPublication(client, { campaignAssetId: input.campaignAssetId, channel: PUBLICATION_CHANNEL[input.platform], actualUrl: url });
+  } catch (err) {
+    console.warn(`recordVideoPost: content_publications sync failed for ${input.campaignAssetId}/${input.platform}`, err);
+  }
+  if (input.platform === "youtube_shorts") {
+    const update = client.from("video_renders").update({ published_url: url, updated_at: now.toISOString() }).eq("status", "ready");
+    const { error: renderError } = await (input.videoRenderId ? update.eq("id", input.videoRenderId) : update.eq("campaign_asset_id", input.campaignAssetId));
+    if (renderError) console.warn(`recordVideoPost: video_renders.published_url sync failed for ${input.campaignAssetId}`, renderError);
+  }
 }
+
+/** content_publications.channel for each posting platform -- the same names setPublishedUrl's URL detection writes. */
+const PUBLICATION_CHANNEL: Record<PostingPlatform, string> = { tiktok: "tiktok", youtube_shorts: "youtube", instagram: "instagram" };
 
 /** Records numbers the owner typed in (TikTok and Instagram can't be read automatically). */
 export async function recordManualStats(
