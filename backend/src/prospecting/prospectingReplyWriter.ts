@@ -191,6 +191,8 @@ export interface ProspectingDraftContext {
   styleExamples?: StyleExample[];
   /** Set on a retry: why the previous draft was rejected, so the model fixes it. See xReplyGuardrails.ts's buildRetryFeedback. */
   retryFeedback?: string;
+  /** Set while recovery mode is on (prospectingRecovery.ts). In the user message, so the cached system prompt stays identical. */
+  recoveryNote?: string;
 }
 
 export interface ProspectingDraftResult {
@@ -245,6 +247,8 @@ export async function draftProspectingReply(
     verifiedKnowledgeSummary,
     formatStyleExamples(context.styleExamples) ? "" : null,
     formatStyleExamples(context.styleExamples) || null,
+    context.recoveryNote ? "" : null,
+    context.recoveryNote ?? null,
     context.retryFeedback ? "" : null,
     context.retryFeedback ?? null,
   ]

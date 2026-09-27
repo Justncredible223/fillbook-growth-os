@@ -1,4 +1,5 @@
 import { computeReplyPacing, type ReplyPacing } from "./prospectingPacing.js";
+import { RECOVERY_DRAFT_NOTE, loadRecoveryState, namesFillbook, type RecoveryState } from "./prospectingRecovery.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createLlmClient } from "../content/llmClient.js";
 import { recordCostEvent } from "../cost/costTracking.js";
@@ -34,6 +35,8 @@ export interface ProspectingHandlerDeps {
   cheapRelevanceCheck?: (context: ProspectingDraftContext) => Promise<boolean>;
   /** Recent owner-edited replies for tone examples. Overridable so tests never touch the database. */
   loadStyleExamples?: (client: SupabaseClient) => Promise<StyleExample[]>;
+  /** Recovery-mode state (prospectingRecovery.ts). Overridable so tests never touch the database. */
+  loadRecovery?: (client: SupabaseClient, now: Date) => Promise<RecoveryState>;
 }
 
 function repoFor(client: SupabaseClient, deps: ProspectingHandlerDeps): ProspectingRepository {
@@ -104,7 +107,7 @@ export async function listProspectingQueue(
   client: SupabaseClient,
   now: Date = new Date(),
   deps: ProspectingHandlerDeps = {},
-): Promise<{ candidates: ProspectingCandidate[]; diagnostics: ProspectingSelectionDiagnostics; pacing: ReplyPacing }> {
+): Promise<{ candidates: ProspectingCandidate[]; diagnostics: ProspectingSelectionDiagnostics; pacing: ReplyPacing; recovery: RecoveryState }> {
   const repo = repoFor(client, deps);
 
   const staleCutoff = new Date(now.getTime() - STALE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
@@ -116,7 +119,17 @@ export async function listProspectingQueue(
     await Promise.all(irrelevantIds.map((id) => repo.updateStatus(id, "not_relevant")));
   }
   const eligible = irrelevantIds.length > 0 ? nonTerminal.filter((row) => !irrelevantIds.includes(row.id)) : nonTerminal;
-  const { selected, deferred, belowQualityBar, tooOldForToday } = selectDailyWorkingSet(eligible, now);
+  const recovery = await (deps.loadRecovery ?? loadRecoveryState)(client, now);
+  const selection = selectDailyWorkingSet(eligible, now);
+  const { deferred, belowQualityBar } = selection;
+  let { selected, tooOldForToday } = selection;
+  if (recovery.active && recovery.maxPostAgeHours !== null) {
+    // Recovery mode: only posts fresh enough that a reply can still be seen. Older ones count as too old for today.
+    const cutoff = now.getTime() - recovery.maxPostAgeHours * 60 * 60 * 1000;
+    const fresh = (c: ProspectingCandidate) => c.postCreatedAt !== null && new Date(c.postCreatedAt).getTime() >= cutoff;
+    tooOldForToday = [...tooOldForToday, ...selected.filter((c) => !fresh(c))];
+    selected = selected.filter(fresh);
+  }
 
   const newIds = selected.filter((c) => c.status === "new").map((c) => c.id);
   await repo.markShown(newIds);
@@ -124,11 +137,12 @@ export async function listProspectingQueue(
 
   // Two days back covers the rolling 24h cap plus the cooldown after the newest reply.
   const recentReplies = await repo.listRepliedSince(new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000));
-  const pacing = computeReplyPacing(recentReplies.map((c) => c.repliedAt), now);
+  const pacing = computeReplyPacing(recentReplies.map((c) => c.repliedAt), now, recovery.dailyCap ?? undefined);
 
   return {
     candidates,
     pacing,
+    recovery,
     diagnostics: {
       totalConsidered: eligible.length,
       selected: selected.length,
@@ -215,6 +229,9 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
     });
 
   draftContext.styleExamples = await (deps.loadStyleExamples ?? loadStyleExamples)(client);
+  // Recovery mode: the draft must not name Fillbook at all while X is limiting the account's replies.
+  const recovery = await (deps.loadRecovery ?? loadRecoveryState)(client, new Date());
+  if (recovery.active) draftContext.recoveryNote = RECOVERY_DRAFT_NOTE;
   // A draft with a real problem (banned phrase, link, unverified claim, dash, over X's length limit) is
   // regenerated with the reason fed back, up to MAX_DRAFT_ATTEMPTS, and never shown. A draft with only a
   // soft style tell ("most traders", a question tacked on the end, too many sentences) gets ONE retry and
@@ -235,7 +252,9 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
       // regardless of what the model's own mentionsFillbook/usesLink flags
       // say. A hard violation is never persisted or shown to the owner.
       return {
-        hard: checkReplyGuardrails(candidate.reply, candidate.usesLink)?.reason ?? null,
+        hard:
+          checkReplyGuardrails(candidate.reply, candidate.usesLink)?.reason ??
+          (recovery.active && namesFillbook(candidate.reply) ? "names Fillbook while recovery mode is on -- leave the product out entirely" : null),
         soft: (checkReplySoftStyle(candidate.reply) ?? checkShowcaseShown(candidate.reply, candidate.showcase))?.reason ?? null,
       };
     },
