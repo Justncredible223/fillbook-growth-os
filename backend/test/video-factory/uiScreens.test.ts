@@ -41,7 +41,6 @@ describe("UI screens", () => {
 
   it("matches the new screens from their story keywords", () => {
     const cases: Array<[string, string]> = [
-      ["Fillbook UI: the revenge trade flagged as oversized", "trade-log-revenge.jpg"],
       ["Fillbook UI: your biggest leak and strongest edge", "intelligence-overview.jpg"],
       ["Fillbook UI: drawdown buffer nearly gone", "drawdown-bars.jpg"],
       ["Fillbook UI: asking the AI coach what is dragging your win rate down", "ai-coach.jpg"],
@@ -54,11 +53,23 @@ describe("UI screens", () => {
     }
   });
 
-  it("no longer offers the retired screens whose figures contradicted the new ones", () => {
+  it("a custom topic mentioning revenge/oversized/sizing/trade log no longer surfaces the retired revenge-tagged screenshot", () => {
+    // Regression coverage for the 2026-09-27 retirement (see uiScreens.ts's UI_SCREENS comment):
+    // these are exactly the words that used to route to trade-log-revenge.jpg by loose keyword
+    // match, regardless of whether the shot actually meant that specific flagged trade.
+    for (const shot of ["Fillbook UI: the revenge trade flagged as oversized", "Fillbook UI: sizing up after a loss streak", "Fillbook UI: your trade log, overtrading pattern"]) {
+      const scenes = [scene("product", shot)];
+      assignUiScreens(scenes, 0);
+      expect(scenes[0]!.imagePath).not.toContain("trade-log-revenge.jpg");
+    }
+  });
+
+  it("no longer offers the retired screens whose figures contradicted the new ones, or the retired revenge/oversized-framing screen", () => {
     const files = UI_SCREENS.map((s) => s.file);
     expect(files).not.toContain("leaks-edge.jpg");
+    expect(files).not.toContain("trade-log-revenge.jpg");
     expect(files).not.toContain("daily-brief.jpg");
-    expect(files).toHaveLength(11);
+    expect(files).toHaveLength(10);
   });
 
   it("copies a screenshot into the output directory under a ui- prefixed basename", () => {

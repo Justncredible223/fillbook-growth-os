@@ -35,14 +35,38 @@ const UI_SCREENS_DIR = join(dirname(fileURLToPath(import.meta.url)), "assets", "
  * The remaining older screens (calendar, charts, weekly-review, edge-score,
  * top-markets, connect-source) were captured earlier from the same account
  * and show earlier-month data; treat their totals as illustrative.
+ *
+ * "trade-log-revenge.jpg" (manifest id ui.trade-log-flags.v1) was retired
+ * 2026-09-27 for the same reason as leaks-edge/daily-brief below, but on
+ * framing grounds rather than a factual contradiction: it tags one trade
+ * "Revenge trade" and "Oversized," the exact motive-diagnosis framing
+ * PILOT_3's 2026-09-23 rework (src/shortform/pilots.ts) deliberately
+ * dropped in favor of a plan-relative size fact. Its old keyword entry here
+ * ("revenge", "oversiz", "tilt", "sizing", "trade log", "trades", ...) meant
+ * ANY custom/other topic whose shot description used one of those ordinary
+ * words -- not just ones actually about this screen's flagged trade --
+ * would still surface it, silently reintroducing that framing on a path
+ * this whole system otherwise has no claim/evidence gate for (see the
+ * bigger note below). Confirmed nothing else in the repo references this
+ * file or its manifest asset before removing the entry; the asset/image
+ * file itself is left in place in case it is needed again later, deliberately.
+ *
+ * BIGGER GAP, not fixed here: unlike the verified-ScenePlan path
+ * (src/shortform/claims.ts's validateSceneClaims, which requires every
+ * evidence claim to cite a specific manifest fact/region), this whole
+ * keyword-matching system has no claim-gating at all -- ANY of these
+ * screenshots can be paired with ANY custom-topic narration that happens
+ * to share a keyword, with no check that the screenshot actually supports
+ * what's being said over it. Removing the one screen whose content made
+ * that risk concrete (a behavior-flag tag) narrows the immediate exposure;
+ * it does not close the general risk that a future custom topic pairs a
+ * real screenshot with narration it doesn't actually support. A real fix
+ * would need this system to carry the same kind of per-fact evidence
+ * checking claims.ts already does for the nine verified pilots.
  */
 export const UI_SCREENS: UiScreen[] = [
   { file: "connect-source.jpg", keywords: ["import", "broker", "connect", "sync", "csv", "platform"] },
   { file: "calendar.jpg", keywords: ["calendar", "month", "day by day", "daily"] },
-  {
-    file: "trade-log-revenge.jpg",
-    keywords: ["revenge", "oversiz", "tilt", "mistake", "error", "repeat", "pattern", "trade log", "trades", "loss streak", "overtrad", "sizing"],
-  },
   {
     file: "intelligence-overview.jpg",
     keywords: ["leak", "stop", "insight", "intelligence", "testing", "experiment", "learn", "biggest", "strongest", "adherence"],

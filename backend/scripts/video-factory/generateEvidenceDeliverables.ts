@@ -12,7 +12,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PILOT_1, PILOT_2, PILOT_3, PILOT_ANGLES, pilotMetadata } from "../../src/shortform/pilots.js";
+import { PILOT_1, PILOT_2, PILOT_3, PILOT_1_OPENING_B, PILOT_2_OPENING_B, PILOT_3_OPENING_C, pilotMetadata } from "../../src/shortform/pilots.js";
 import { validatePublishedMetadata, emptyMetrics, serializeMetrics, serializeMetricsCsv, serializeMetadata } from "../../src/shortform/metadata.js";
 import type { ScenePlan } from "../../src/shortform/types.js";
 
@@ -20,24 +20,26 @@ const here = dirname(fileURLToPath(import.meta.url));
 const OUT = resolve(here, "..", "..", "out", "shortform-evidence-2026-09-26");
 mkdirSync(OUT, { recursive: true });
 
-function findAngle(basePlanId: string, key: string): ScenePlan {
-  const plan = PILOT_ANGLES.find((p) => p.planId === `${basePlanId}--${key}`);
-  if (!plan) throw new Error(`Angle ${basePlanId}--${key} not found`);
-  return plan;
-}
-
-// Concept A = Plan vs Execution (PILOT_3): variant 1 = base (direct statement hook),
-// variant 2 = "--c" angle (a concrete question/comparison hook, same evidence/voice/CTA).
-// Concept B = Green Month, Losing Setup (PILOT_1): variant 1 = base, variant 2 = "--c" angle.
-// Concept C = Profit vs Remaining Buffer (PILOT_2): variant 1 = base, variant 2 = "--c" angle.
-// (The "--b" angles exist too and are additional direct-statement alternates; "--c" was chosen
-// for variant 2 in each pair because its hook is phrased as a question/comparison, matching the
-// task's variant-2 definition, while "--b" is a second direct statement in two of the three
-// pairs. This choice is documented here rather than silently made.)
+// Concept A = Plan vs Execution (PILOT_3): v1 = base (hook "Same setup. Bigger size." -- a
+//   direct statement), v2 = PILOT_3_OPENING_C (hook "Your plan has a size limit. This trade used
+//   5 contracts." -- a concrete comparison).
+// Concept B = Green Month, Losing Setup (PILOT_1): v1 = base (hook "Green month. Losing setup."
+//   -- direct statement), v2 = PILOT_1_OPENING_B (hook "64% win rate. One setup still loses." --
+//   a concrete comparison).
+// Concept C = Profit vs Remaining Buffer (PILOT_2): v1 = base (hook "Balance isn't your buffer."
+//   -- direct statement), v2 = PILOT_2_OPENING_B (hook "You're up. How much room is left?" -- a
+//   literal question).
+// Each v2 is built by openingOnlyVariant() (src/shortform/pilots.ts), NOT the pre-existing
+// angleOf()-based PILOT_ANGLES -- angleOf rewrites every scene's wording for a full alternate
+// angle, which would confound "did the opening change retention" with "did the whole video
+// change." openingOnlyVariant swaps ONLY scene 0's narration/headline/caption/takeaway and
+// leaves scenes 2-4 byte-identical to the base plan (same narration -> same real-TTS timing),
+// so evidence sequence, voice, duration-after-opening, caption style and CTA are structurally
+// guaranteed identical between v1 and v2, not just identical by convention.
 const PAIRS: Array<{ concept: string; v1: ScenePlan; v2: ScenePlan }> = [
-  { concept: "A_plan_vs_execution", v1: PILOT_3, v2: findAngle(PILOT_3.planId, "c") },
-  { concept: "B_green_month_losing_setup", v1: PILOT_1, v2: findAngle(PILOT_1.planId, "c") },
-  { concept: "C_profit_vs_buffer", v1: PILOT_2, v2: findAngle(PILOT_2.planId, "c") },
+  { concept: "A_plan_vs_execution", v1: PILOT_3, v2: PILOT_3_OPENING_C },
+  { concept: "B_green_month_losing_setup", v1: PILOT_1, v2: PILOT_1_OPENING_B },
+  { concept: "C_profit_vs_buffer", v1: PILOT_2, v2: PILOT_2_OPENING_B },
 ];
 
 const allIssues: string[] = [];

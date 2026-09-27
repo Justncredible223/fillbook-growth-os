@@ -192,10 +192,18 @@ export async function buildRenderPlanScenes(plan: ScenePlan, manifest: VerifiedM
       // Text-only scenes get a short accent bar (an ASS vector drawing) above the headline.
       const parts = [cardLayout ? "" : `{\\p1\\c&HCFB822&}m 0 0 l 140 0 140 10 0 10{\\p0\\c&HFFFFFF&}`, s.headline ? escapeAssText(s.headline) : ""];
       if (s.captionText) parts.push(`{\\fs22} `, `{\\fs46\\c${captionColor}}${escapeAssText(s.captionText)}`);
+      // The CTA text itself (e.g. "Follow @fillbookhq") was previously only used to pick this
+      // scene's accent caption color and to feed pilotMetadata()'s cta/handlePlacement fields --
+      // it was never actually painted onto the video, so a finished render never showed the
+      // invitation it claimed to make (confirmed by grepping a real render's captions.ass for
+      // "fillbook"/"follow": no match). Render it as its own line so the on-screen closing card
+      // matches what the metadata reports.
+      if (s.cta) parts.push(`{\\fs22} `, `{\\fs38\\c&HCFB822&}${escapeAssText(s.cta)}`);
       const text = parts.filter(Boolean).join("\\N");
       if (text) captionCues.push({ text, startSeconds: start, endSeconds: end, style: "Card", marginV: cardLayout ? cardLayout.textTop : TEXT_ONLY_CARD_TOP });
     } else {
-      const captionText = [s.headline, s.captionText].filter(Boolean).map(escapeAssText).join("\\N");
+      const captionParts = [s.headline, s.captionText, s.cta].filter((v): v is string => Boolean(v)).map(escapeAssText);
+      const captionText = captionParts.join("\\N");
       // Hook style is middle-centered and reserves no space for anything
       // else -- correct for a pure opening beat, wrong for a scene that also
       // shows real evidence (kind "product" here). Caption is bottom-anchored,

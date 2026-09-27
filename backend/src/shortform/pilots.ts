@@ -1679,10 +1679,124 @@ export const PILOT_ANGLES_B3: ScenePlan[] = [
   }),
 ];
 
+interface OpeningOnlySpec {
+  key: string;
+  /** Plan-level fields a hook rewrite also affects (metadata, not on-screen). */
+  title: string;
+  hook: string;
+  topic: string;
+  /** Replaces ONLY scene 0's on-screen text -- narration/headline/caption/takeaway. */
+  opening: { narration: string; headline: string; caption: string; takeaway: string };
+  captionBody: string;
+  youtubeTitle: string;
+}
+
+/**
+ * A true "change only the opening" A/B variant, for the 2026-09-27 evidence pass (task spec
+ * section 7: "variant 1 = direct statement; variant 2 = a concrete question or comparison...
+ * Keep the rest (evidence sequence, voice, duration after the opening, caption style, CTA)
+ * identical between the pair. Do not change the ending only in variant 2.")
+ *
+ * `angleOf` above (the pre-existing mechanism) rewrites EVERY scene's narration/caption for a
+ * new full alternate angle -- correct for its own purpose (a fully distinct alternate video), but
+ * it does not isolate a single-variable opening test the way this task's six-preview deliverable
+ * needs: scenes 2-4 would carry different wording too, confounding "did the opening change
+ * retention" with "did the whole video change." This function changes scene 0 ONLY and leaves
+ * every other scene (including its exact narration, so its real-TTS duration is unaffected)
+ * byte-identical to `base`, so a real render of the pair differs in exactly one place: the hook.
+ *
+ * The replacement opening text is never newly invented here -- each call below reuses wording
+ * already authored and reviewed as a PILOT_ANGLES entry (a "--b" or "--c" hook), just applied on
+ * top of the base plan's own scenes 2-4 instead of that angle's own (different) scenes 2-4.
+ */
+function openingOnlyVariant(base: ScenePlan, spec: OpeningOnlySpec): ScenePlan {
+  const variationId = `${base.variationId}-${spec.key}`;
+  const [first, ...rest] = base.scenes;
+  if (!first) throw new Error(`${base.planId}: no scenes to build an opening variant from`);
+  const newFirst: SceneSpec = {
+    ...first,
+    sceneId: `${first.sceneId}-${spec.key}`,
+    variationId,
+    narration: spec.opening.narration,
+    takeaway: spec.opening.takeaway,
+    headline: spec.opening.headline,
+    captionText: spec.opening.caption,
+    durationSeconds: estimateSeconds(spec.opening.narration),
+    claims: first.claims.map((c) => ({ ...c, id: `${c.id}-${spec.key}`, text: spec.opening.narration })),
+  };
+  const plan: ScenePlan = {
+    ...base,
+    planId: `${base.planId}--${spec.key}`,
+    title: spec.title,
+    hook: spec.hook,
+    topic: spec.topic,
+    variationId,
+    scenes: [newFirst, ...rest.map((s) => ({ ...s, variationId }))],
+  };
+  const baseCopy = PILOT_COPY[base.planId]!;
+  ANGLE_COPY[plan.planId] = { topic: spec.topic, cta: baseCopy.cta, captionBody: spec.captionBody, youtubeTitle: spec.youtubeTitle };
+  return plan;
+}
+
+/**
+ * The three "variant 2" openings actually used for the six finished previews (see
+ * generateEvidenceDeliverables.ts and SHORTFORM_EVIDENCE_REPORT.md): a concrete comparison or
+ * question, reusing already-authored/reviewed hook copy, with scenes 2-4 identical to the base
+ * pilot. Paired against PILOT_1/PILOT_2/PILOT_3 themselves as "variant 1" (direct statement).
+ */
+export const PILOT_1_OPENING_B = openingOnlyVariant(PILOT_1, {
+  key: "opening-b",
+  // Title kept distinct from PILOT_ANGLES's "pilot-1-...--b" (which shares this same hook text
+  // but rewrites scenes 2-4 too) so the two never collide in the motion-concept catalog listing
+  // or in TikTok/YouTube metadata -- see motionCatalog.test.ts's uniqueness check.
+  title: "One losing setup, inside a 64% win rate.",
+  hook: "64% win rate. One setup still loses.",
+  topic: "A strong overall win rate can sit on top of one losing setup",
+  opening: { narration: "64% win rate. One setup still loses.", headline: "64% win rate", caption: "22 trades, $387.08 net.", takeaway: "A good overall win rate can hide one bad setup." },
+  captionBody: "A 64% win rate can still hide a setup that loses. Demo data, so sort your own setups worst first.",
+  youtubeTitle: "64% Win Rate, One Losing Setup: Sort Your Setups Worst First",
+});
+
+export const PILOT_2_OPENING_B = openingOnlyVariant(PILOT_2, {
+  key: "opening-b",
+  // Kept distinct from PILOT_ANGLES's "pilot-2-...--b" title, same reason as PILOT_1_OPENING_B above.
+  title: "How much drawdown room is left when you're up $387.",
+  hook: "You're up. How much room is left?",
+  topic: "Being up on the account says nothing about the drawdown room left",
+  opening: { narration: "You're up. How much room is left?", headline: "Up $387.08", caption: "14 wins, 8 losses.", takeaway: "Profit and room left are different questions." },
+  captionBody: "Profit tells you how you're doing. The buffer tells you how much room is left. Demo account, based on recorded trades and configured rules.",
+  youtubeTitle: "Up $387, but How Much Room Is Left? The Drawdown Buffer",
+});
+
+export const PILOT_3_OPENING_C = openingOnlyVariant(PILOT_3, {
+  key: "opening-c",
+  // Kept distinct from PILOT_ANGLES's "pilot-3-...--c" title, same reason as PILOT_1_OPENING_B above.
+  title: "5 contracts against a written 3-contract limit.",
+  hook: "Your plan has a size limit. This trade used 5 contracts.",
+  topic: "Comparing a real trade's size to the plan's written maximum",
+  opening: { narration: "Your plan has a size limit. This trade used 5 contracts.", headline: "5 contracts", caption: "Opening Range Break, September 21st.", takeaway: "Every trade's size can be checked." },
+  captionBody: "A written size limit makes every trade checkable. Demo data from one recorded log.",
+  youtubeTitle: "Your Plan Has a Size Limit: 5 Contracts vs a Max of 3",
+});
+
 /** Every concept, each scene carrying its Rook-and-Tilt beat (characterBeats.ts). */
-export const PILOTS: ScenePlan[] = [PILOT_1, PILOT_2, PILOT_3, PILOT_4, PILOT_5, PILOT_6, PILOT_7, PILOT_8, PILOT_9, ...BATCH_3_PLANS, ...PILOT_ANGLES, ...PILOT_ANGLES_B3].map(
-  withCharacterBeats,
-);
+export const PILOTS: ScenePlan[] = [
+  PILOT_1,
+  PILOT_2,
+  PILOT_3,
+  PILOT_4,
+  PILOT_5,
+  PILOT_6,
+  PILOT_7,
+  PILOT_8,
+  PILOT_9,
+  ...BATCH_3_PLANS,
+  ...PILOT_ANGLES,
+  ...PILOT_ANGLES_B3,
+  PILOT_1_OPENING_B,
+  PILOT_2_OPENING_B,
+  PILOT_3_OPENING_C,
+].map(withCharacterBeats);
 
 export function pilotMetadata(plan: ScenePlan, platform: Platform): PublishedVideoMetadata {
   const copy = PILOT_COPY[plan.planId] ?? ANGLE_COPY[plan.planId];

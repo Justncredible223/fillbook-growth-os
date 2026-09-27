@@ -34,3 +34,24 @@ describe("buildRenderPlanScenes label cues across fades", () => {
     });
   }
 });
+
+describe("buildRenderPlanScenes: a scene's cta is actually painted on screen, not just used for metadata", () => {
+  // Regression coverage: scene.cta ("Follow @fillbookhq") previously only selected the closing
+  // card's accent caption color and fed pilotMetadata()'s cta/handlePlacement fields -- it was
+  // never rendered as its own on-screen text, so a finished video never actually showed the
+  // invitation its own metadata claimed to make. Confirmed by grepping a real render's
+  // captions.ass for "fillbook"/"follow" before this fix: no match, for any of the nine base
+  // pilots. Every pilot's closing scene sets a non-null cta, so this loop covers all of them.
+  for (const plan of PILOTS) {
+    const closing = plan.scenes[plan.scenes.length - 1]!;
+    if (!closing.cta) continue;
+    it(`${plan.planId}: the closing scene's caption cue includes its cta text`, async () => {
+      const adapted = await buildRenderPlanScenes(plan, loadManifest(), mkdtempSync(join(tmpdir(), "cta-")), fakeRunner);
+      const closingCue = adapted.captionCues[adapted.captionCues.length - 1];
+      expect(closingCue, `${plan.planId} produced no caption cue for its closing scene`).toBeDefined();
+      // escapeAssText only touches ASS-special characters ({}\), never letters/digits/@/spaces,
+      // so the cta text (plain words and an @handle) survives escaping unchanged.
+      expect(closingCue!.text).toContain(closing.cta);
+    });
+  }
+});
