@@ -455,7 +455,15 @@ export const PILOT_5: ScenePlan = {
       seconds: 3,
       disclosure: "Demo data",
       topics: ["rule_simulator"],
-      clipTimeRangeSeconds: { start: 0.1, end: 4.4 },
+      // End extended 4.4->4.5 (2026-09-27): the "--c" angle's longer opening narration
+      // ("Test a prop firm before you pay for it.") needed 4.40s including transition padding,
+      // which the previous 4.30s range didn't cover -- render.ts's buildFfmpegArgs refused to
+      // render rather than loop the clip to fill the gap (a real, render-blocking bug found by
+      // the 2026-09-27 library-wide audit, not a validator false positive: confirmed by an actual
+      // failed render of pilot-5-would-you-pass--c). 4.5s is exactly the manifest fact
+      // simulator.description's own visible-window end (0-4.5s per verified-manifest.json), so
+      // this only extends the same held frame already on screen, not new content.
+      clipTimeRangeSeconds: { start: 0.1, end: 4.5 },
       claims: [{ id: "p5-c1", type: "data_point", text: "The rule simulator replays logged trades against a firm's evaluation rules.", evidence: [{ assetId: P5_REC, factKey: "simulator.description" }] }],
     }),
     scene({
@@ -601,7 +609,17 @@ export const PILOT_7: ScenePlan = {
       seconds: 2.5,
       disclosure: "Demo data",
       topics: ["daily_brief"],
-      clipTimeRangeSeconds: { start: 1.7, end: 4.3 },
+      // End extended 4.3->4.6 (2026-09-27, library-wide audit): the declared 2.60s range didn't
+      // cover this scene's 2.5s duration once render.ts's transition padding is added (needs
+      // 2.90s) -- confirmed by an actual failed render ("declared clip range is 2.60s but this
+      // scene ... needs 2.90s"), a real render-blocking bug on this BASE pilot, not an angle. The
+      // asset holds the same static Daily Brief screen from 1.7s all the way to 17.7s (all three
+      // facts on rec.p7-daily-brief.v1 share that window), so this only extends how long scene 1
+      // holds the same already-visible content -- it now overlaps 0.8s into the window scene 2
+      // separately re-trims from the same source file (3.8s+), which is harmless: each scene cuts
+      // its own independent clip from the shared source, and the overlapped content is the same
+      // static screen either way, never a jump to different evidence.
+      clipTimeRangeSeconds: { start: 1.7, end: 4.6 },
       claims: [{ id: "p7-c1", type: "data_point", text: "The Daily Brief shows the last session: -$17 on 1 trade.", evidence: [{ assetId: P7_REC, factKey: "brief.last_session" }] }],
     }),
     scene({
@@ -1015,7 +1033,13 @@ export const PILOT_14 = batch3Plan({
   topic: "Asking whether you would take a trade again separates good trades from bad ones",
   scenes: [
     { narration: "You already know which trades you shouldn't take.", headline: "Would you take it again?", caption: "One question after every trade.", takeaway: "Your own answer is a signal.", topics: ["conviction"],
-      asset: { id: B3_REPORTS_REC, crop: B3_CONVICTION_CROP, clip: { start: 19.1, end: 22.9 }, claim: "By conviction: trades split by whether you would take them again.", factKey: "conviction.all" } },
+      // End extended 22.9->23.2 (2026-09-27, library-wide audit): declared 3.80s range didn't
+      // cover this scene's duration once render.ts's transition padding is added (needs 3.90s) --
+      // confirmed by an actual failed render, a real bug, not a validator false positive. The
+      // conviction.all fact stays visible on rec.b3-reports-timing-conviction.v1 all the way to
+      // 35.1s, so this only extends how long this scene holds the same already-visible content
+      // (it now overlaps 0.5s into the window scene 2 separately re-trims from the same source).
+      asset: { id: B3_REPORTS_REC, crop: B3_CONVICTION_CROP, clip: { start: 19.1, end: 23.2 }, claim: "By conviction: trades split by whether you would take them again.", factKey: "conviction.all" } },
     { narration: "Trades you'd take again: 84% win, $3,822.00. Trades you wouldn't: 18% win, down $2,575.96.", headline: "84% vs 18%", caption: "Wouldn't take again: -$2,575.96.", takeaway: "The trades you doubted are the ones that lost.", topics: ["conviction"],
       asset: { id: B3_REPORTS_REC, crop: B3_CONVICTION_CROP, clip: { start: 22.7, end: 35.1 }, claim: "Would take again 84% win, $3,822.00; wouldn't take again 18% win, -$2,575.96.", factKey: "conviction.all" } },
     { narration: "These answers come from a sample account. Yours are what make it work.", headline: "Your answers, your data", caption: "Sample account, not a real trader.", takeaway: "Answer honestly and the split means something.", topics: ["conviction"] },

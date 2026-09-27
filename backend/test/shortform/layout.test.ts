@@ -118,12 +118,34 @@ describe("validateMotionTiming -- screen_recording clip range vs scene duration"
     const tooFast = makeScene({ durationSeconds: 5, playbackSpeed: 2, clipTimeRangeSeconds: { start: 0, end: 6 } });
     expect(codes(validateMotionTiming(tooFast, motionAsset))).toContain("insufficient_motion_footage");
     const fine = makeScene({ durationSeconds: 3, playbackSpeed: 2, clipTimeRangeSeconds: { start: 0, end: 6 } });
-    expect(validateMotionTiming(fine, motionAsset)).toEqual([]);
+    // Not a hard error (the speed-adjusted math itself is exactly sufficient), but zero margin is
+    // exactly the shape of the 2026-09-27 library-wide-audit bugs (pilot-5/7/14 angles that failed
+    // an actual render because render.ts's transition padding needs a little more than the bare
+    // scene duration) -- so this now gets the advisory "tight margin" flag, not a silent pass.
+    expect(codes(validateMotionTiming(fine, motionAsset))).not.toContain("insufficient_motion_footage");
+    expect(codes(validateMotionTiming(fine, motionAsset))).toContain("motion_footage_margin_tight");
   });
 
   it("errors when the requested range runs past what was actually captured", () => {
     const scene = makeScene({ durationSeconds: 2, clipTimeRangeSeconds: { start: 15, end: 25 } });
     expect(codes(validateMotionTiming(scene, motionAsset))).toContain("clip_time_range_past_capture");
+  });
+
+  it("flags (review, not error) a margin under 0.4s -- render.ts's transition padding can still fail an actual render even though the bare scene duration fits", () => {
+    // Regression coverage for the 2026-09-27 library-wide audit: pilot-5-would-you-pass--c,
+    // pilot-7-daily-brief and pilot-14-would-you-take-it-again all passed validateScenePlan with
+    // no error, then failed an actual render.ts render with "declared clip range is Ns but this
+    // scene ... needs Ms" -- a real bug the pre-existing check couldn't see because it only
+    // compared against scene.durationSeconds, never render.ts's added transition padding.
+    const tight = makeScene({ durationSeconds: 5, clipTimeRangeSeconds: { start: 0, end: 5.2 } });
+    const issues = codes(validateMotionTiming(tight, motionAsset));
+    expect(issues).not.toContain("insufficient_motion_footage");
+    expect(issues).toContain("motion_footage_margin_tight");
+  });
+
+  it("does not flag a comfortable (>=0.4s) margin as tight", () => {
+    const comfortable = makeScene({ durationSeconds: 5, clipTimeRangeSeconds: { start: 0, end: 5.4 } });
+    expect(codes(validateMotionTiming(comfortable, motionAsset))).not.toContain("motion_footage_margin_tight");
   });
 
   it("errors on an inverted or zero-length range", () => {
