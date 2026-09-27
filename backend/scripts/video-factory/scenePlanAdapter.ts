@@ -228,7 +228,7 @@ export async function buildRenderPlanScenes(plan: ScenePlan, manifest: VerifiedM
     beatStart += s.durationSeconds;
   }
   const characterTrack = timedBeats.length === plan.scenes.length && timedBeats.length > 0
-    ? renderCharacterTrack(timedBeats, elapsed + CHARACTER_TRACK_TAIL_SECONDS, outDir)
+    ? renderCharacterTrack(timedBeats, elapsed + CHARACTER_TRACK_TAIL_SECONDS, outDir, plan.characterPairId)
     : undefined;
 
   return { scenes, captionCues, sceneLabelCues, totalDurationSeconds: elapsed, characterTrack };

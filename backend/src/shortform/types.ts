@@ -221,16 +221,38 @@ export interface SceneSpec {
   character?: CharacterBeat;
 }
 
-export type CharacterName = "rook" | "tilt";
+/**
+ * Every individual persona across the whole roster (2026-09-27: the owner asked for visual variety
+ * across a channel about to publish many of these, not the same two characters every time). Each
+ * name is drawn with its own silhouette/props in scripts/video-factory/characters.ts -- never just
+ * a recolor of another name's body.
+ */
+export type CharacterName = "rook" | "tilt" | "ledger" | "margin" | "vector" | "blip";
+
+/**
+ * A STRUCTURAL seat, not an identity: "rook" = the calm/left seat, "tilt" = the impulsive/right
+ * seat. Every CHARACTER_BEATS entry (characterBeats.ts) is written once per seat and reused by
+ * whichever named pair is selected to play it -- e.g. "ledger" always plays the "rook" (calm/left)
+ * seat, "margin" always plays "tilt" (impulsive/right), so existing beat/quip data never needs
+ * touching when a new pair is added. Coincides by name with the original (and default) pair, Rook
+ * and Tilt themselves.
+ */
+export type CharacterRole = "rook" | "tilt";
+
+/** One selectable pair from the roster; see src/shortform/characterRoster.ts for the pair -> names registry and the deterministic selection function. */
+export type CharacterPairId = "rook-tilt" | "ledger-margin" | "vector-blip";
+
 export type CharacterPose = "idle" | "point" | "shock" | "facepalm" | "think" | "cheer" | "shrug";
 
 /**
- * One scene's worth of the character duo: a pose for each, and one short reaction line in a speech bubble.
- * The quip is entertainment, never evidence -- validateScenePlan rejects any digit, $ or % in it, so a figure can
- * only ever reach the screen through a cited claim.
+ * One scene's worth of the character duo: a pose for each SEAT, and one short reaction line in a
+ * speech bubble. `speaker`/`rook`/`tilt` are seat tokens (CharacterRole), not the literal displayed
+ * character name -- see CharacterRole's doc comment. The quip is entertainment, never evidence --
+ * validateScenePlan rejects any digit, $ or % in it, so a figure can only ever reach the screen
+ * through a cited claim.
  */
 export interface CharacterBeat {
-  speaker: CharacterName;
+  speaker: CharacterRole;
   quip: string;
   rook: CharacterPose;
   tilt: CharacterPose;
@@ -249,6 +271,14 @@ export interface ScenePlan {
   visualStyle: string;
   scenes: SceneSpec[];
   requiredAssets: RequiredAsset[];
+  /**
+   * Which named pair from the roster plays this video's character stage. Optional: leave unset to
+   * let withCharacterBeats() (characterBeats.ts) pick one deterministically from (planId,
+   * variationId) via characterRoster.ts's selectCharacterPair -- the normal case, and how every
+   * pilot gets automatic visual variety without any hand assignment. Set it explicitly only to
+   * pin a specific plan to a specific pair.
+   */
+  characterPairId?: CharacterPairId;
 }
 
 export type IssueSeverity = "error" | "review";
