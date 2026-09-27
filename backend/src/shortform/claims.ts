@@ -197,6 +197,35 @@ export function validateSceneClaims(scene: SceneSpec, asset: VerifiedAsset | und
       if (!scene.expectedTopics.some((t) => fact.topics.includes(t))) {
         add("error", "narration_fact_topic_mismatch", `Claim "${claim.id}" cites "${ev.factKey}" (${fact.topics.join(", ")}), which is not about [${scene.expectedTopics.join(", ")}].`);
       }
+      if (fact.timeRangeSeconds && scene.clipTimeRangeSeconds) {
+        const factWindow = fact.timeRangeSeconds;
+        const sceneWindow = scene.clipTimeRangeSeconds;
+        const disjoint = sceneWindow.end <= factWindow.start || sceneWindow.start >= factWindow.end;
+        if (disjoint) {
+          // The clip window this scene plays never overlaps the window the cited fact is
+          // actually on screen -- the exact defect class where a caption/narration states a
+          // value before (or after) it is visible in the recording (e.g. "5 contracts" spoken
+          // over a frame that still shows the previous value or an empty field).
+          add(
+            "error",
+            "evidence_not_visible_during_clip_window",
+            `Claim "${claim.id}" cites "${ev.factKey}", which is only on screen from ${factWindow.start}s-${factWindow.end}s in the source clip, but this scene plays ${sceneWindow.start}s-${sceneWindow.end}s -- they never overlap.`,
+          );
+        } else if (sceneWindow.start < factWindow.start - 0.05) {
+          // Partial overlap: the scene starts before the fact settles on screen, so the
+          // opening of the scene (while the caption/narration already asserts the claim)
+          // shows something else -- a swipe/scroll mid-motion, a stale value, or a blank
+          // field. Not necessarily wrong (a static field can already be legible before the
+          // manifest's conservative "fully settled" mark), but it is exactly the shape of the
+          // previously-published defect, so it is flagged for a human frame check rather than
+          // silently passed or hard-failed.
+          add(
+            "review",
+            "evidence_visible_late_in_clip_window",
+            `Claim "${claim.id}" cites "${ev.factKey}" (on screen from ${factWindow.start}s), but this scene's clip window starts at ${sceneWindow.start}s, ${(factWindow.start - sceneWindow.start).toFixed(2)}s earlier -- frame-check the opening of this scene to confirm the caption doesn't outrun the visible evidence.`,
+          );
+        }
+      }
     }
   }
 
