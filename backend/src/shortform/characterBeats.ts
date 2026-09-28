@@ -126,6 +126,12 @@ export const CHARACTER_BEATS: Record<string, CharacterBeat[]> = {
     beat("tilt", "Sample account. My turn next.", "cheer", "cheer"),
     beat("tilt", "Finding my best setup now.", "cheer", "cheer"),
   ],
+  "pilot-19-payout-request-undone": [
+    beat("tilt", "Green month. Mine, right?", "think", "cheer"),
+    beat("rook", "One trade just moved the target.", "point", "shock"),
+    beat("rook", "Confirm your firm's policy.", "point", "think"),
+    beat("tilt", "Checking the target before I ask.", "cheer", "think"),
+  ],
 };
 
 /** The base concept an angle was cut from (`pilot-1-...--b` -> `pilot-1-...`); a base plan's id is its own base. */

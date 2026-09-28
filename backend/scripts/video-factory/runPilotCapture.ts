@@ -217,6 +217,37 @@ const BATCH_3_SHOTS: Record<string, { id: string; steps: Step[] }> = {
 };
 Object.assign(SHOTS, BATCH_3_SHOTS);
 
+/**
+ * High-stakes batch (2026-09-28): five concept recordings against the five "Pilot ... Account" fixtures seeded by
+ * the fillbook repo's frontend/scripts/seed-pilot-highstakes-fixtures.mjs (accounts 1-4) and the existing
+ * seed-pilot-behavior-fixtures.mjs (account 5, "Pilot Behavior Account"). Run with PILOT_ACCOUNT_NAME set to the
+ * exact account name for each shot (see runPilotCapture.ts's SHOTS usage note at the top of this file).
+ */
+const HIGHSTAKES_SHOTS: Record<string, { id: string; steps: Step[] }> = {
+  "hs-payout": {
+    id: "hs-mobile-payout-account",
+    steps: [
+      { kind: "goto", route: "/calendar", waitFor: "text=$6,995.96" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Month total:", seconds: 1.0, block: "start", offsetCss: 80 },
+      { kind: "measure", name: "month_total_label", selector: "text=Month total:" },
+      { kind: "hold", seconds: 4.5 },
+      { kind: "scroll", selector: "text=-$1.5k", seconds: 1.2, block: "center" },
+      { kind: "measure", name: "day25_cell", selector: "text=-$1.5k" },
+      { kind: "hold", seconds: 8 },
+      { kind: "goto", route: "/payouts", waitFor: "text=Pilot Payout 150K Funded — payout readiness" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Pilot Payout 150K Funded — payout readiness", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "payout_readiness_heading", selector: "text=Pilot Payout 150K Funded — payout readiness" },
+      { kind: "hold", seconds: 16 },
+      { kind: "scroll", selector: ':nth-match(:text("Pilot Payout Account"), 2)', seconds: 1.2, block: "start", offsetCss: 80 },
+      { kind: "measure", name: "payout_requested_row", selector: ':nth-match(:text("Pilot Payout Account"), 2)' },
+      { kind: "hold", seconds: 12 },
+    ],
+  },
+};
+Object.assign(SHOTS, HIGHSTAKES_SHOTS);
+
 async function signIn(statePath: string): Promise<void> {
   const email = process.env.PILOT_EMAIL;
   const password = process.env.PILOT_PASSWORD;

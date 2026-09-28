@@ -1801,6 +1801,113 @@
           }
         }
       ]
+    },
+    {
+      "id": "rec.hs-payout-account.v1",
+      "file": "motion/hs-mobile-payout-account.mp4",
+      "sha256": "8e69286a11ea65428916c0b65b5de95c6bc484578d303ae417dfcfbc0bbde8a3",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-payout-account.2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-payout\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Payout Account\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /calendar month view held 0.5-6.0s (month total + full grid + day 25 in view, no further scroll needed), day-25 emphasis re-check 7.2-15.2s (same view); cut to /payouts, payout-readiness card for Pilot Payout 150K Funded held 16.9-32.9s; scrolled further to the Pilot Payout Account payout-request row, held 34.1-46.1s.",
+      "capturedAt": "2026-09-28",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "payout_readiness"
+      ],
+      "durationSeconds": 46.1,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "calendar.overview",
+          "text": "September calendar for Pilot Payout Account: Month total $6,995.96, 18 days, 19 trades. Day 25 alone -$1,504.04 across 2 trades, 0% win rate -- the only red day; 17 of 18 days green. Best day $610.00, worst day -$1,504.04, avg/trading day $388.66.",
+          "values": [
+            "$6,995.96",
+            "18",
+            "19",
+            "-$1,504.04",
+            "2",
+            "0%",
+            "17",
+            "$610.00",
+            "$388.66"
+          ],
+          "topics": [
+            "payout_readiness"
+          ],
+          "region": {
+            "x": 38,
+            "y": 150,
+            "w": 1004,
+            "h": 1290
+          },
+          "timeRangeSeconds": {
+            "start": 1.5,
+            "end": 15.2
+          }
+        },
+        {
+          "key": "payouts.readiness",
+          "text": "Pilot Payout 150K Funded, payout readiness: No active rule breach (account is within its drawdown and daily loss limit); Profit target reached -- Net P&L 7515.96 of 9000 target (1484.04 to go), 84% of the way there.",
+          "values": [
+            "7515.96",
+            "9000",
+            "1484.04",
+            "84%"
+          ],
+          "topics": [
+            "payout_readiness"
+          ],
+          "region": {
+            "x": 38,
+            "y": 160,
+            "w": 1004,
+            "h": 660
+          },
+          "timeRangeSeconds": {
+            "start": 16.9,
+            "end": 32.9
+          }
+        },
+        {
+          "key": "payouts.requested",
+          "text": "Pilot Payout Account payout request: Requested 2026-09-24 -- Pilot fixture, payout requested before the breach trade below. Status Requested, $4,000.00.",
+          "values": [
+            "2026-09-24",
+            "$4,000.00"
+          ],
+          "topics": [
+            "payout_readiness"
+          ],
+          "region": {
+            "x": 38,
+            "y": 860,
+            "w": 1004,
+            "h": 560
+          },
+          "timeRangeSeconds": {
+            "start": 34.1,
+            "end": 46.1
+          }
+        }
+      ]
     }
   ]
 }

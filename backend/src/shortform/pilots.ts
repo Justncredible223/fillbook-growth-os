@@ -1194,6 +1194,79 @@ const BATCH_3_COPY: Record<string, { captionBody: string; youtubeTitle: string; 
 for (const plan of BATCH_3_PLANS) PILOT_COPY[plan.planId] = { topic: plan.topic, ...BATCH_3_COPY[plan.planId]! };
 
 /* ---------------------------------------------------------------------------------------------- */
+/* High-stakes batch (2026-09-28): concepts recorded against the five "Pilot ... Account" fixtures  */
+/* seeded by frontend/scripts/seed-pilot-highstakes-fixtures.mjs (1-4) and the pre-existing          */
+/* seed-pilot-behavior-fixtures.mjs (5, reused). Crops are measured card edges from the real         */
+/* instrumented capture (scripts/video-factory/runPilotCapture.ts's "hs-*" shots), not guesses.      */
+/* ---------------------------------------------------------------------------------------------- */
+
+const HS_PAYOUT_REC = "rec.hs-payout-account.v1";
+const HS_PAYOUT_CALENDAR_CROP: Rect = { x: 38, y: 150, w: 1004, h: 1290 };
+const HS_PAYOUT_READINESS_CROP: Rect = { x: 38, y: 160, w: 1004, h: 660 };
+
+export const PILOT_19 = batch3Plan({
+  n: 19,
+  slug: "payout-request-undone",
+  title: "One trade, $1,504.04 -- the day payout math flipped.",
+  series: "Read the Rule",
+  topic: "A single oversized trading day next to a funded account's profit target and payout request",
+  scenes: [
+    {
+      narration: "Day 25 alone: -$1,504.04.",
+      headline: "-$1,504.04 in one day",
+      caption: "The only red day in 18.",
+      takeaway: "One day can stand out against a whole month.",
+      topics: ["payout_readiness"],
+      asset: {
+        id: HS_PAYOUT_REC,
+        crop: HS_PAYOUT_CALENDAR_CROP,
+        clip: { start: 1.7, end: 7.8 },
+        claim: "September: month total $6,995.96 across 18 days, 19 trades. Day 25 alone -$1,504.04 across 2 trades, 0% win rate -- the only red day; 17 of 18 days green.",
+        factKey: "calendar.overview",
+      },
+    },
+    {
+      narration: "That trade pulled net P&L to $7,515.96 -- 84% of the $9,000 profit target, $1,484.04 short.",
+      headline: "$7,515.96 of $9,000 target",
+      caption: "84% there, $1,484.04 to go.",
+      takeaway: "A single day can move a whole target's progress.",
+      topics: ["payout_readiness"],
+      asset: {
+        id: HS_PAYOUT_REC,
+        crop: HS_PAYOUT_READINESS_CROP,
+        clip: { start: 17.1, end: 31.9 },
+        claim: "Pilot Payout 150K Funded, payout readiness: no active rule breach; profit target reached -- Net P&L 7515.96 of 9000 target (1484.04 to go), 84% of the way there.",
+        factKey: "payouts.readiness",
+      },
+    },
+    {
+      narration: "This is a sample account with a sample rule set. Confirm your own firm's payout policy before requesting.",
+      headline: "Confirm your firm's policy",
+      caption: "Sample account, not a real trader.",
+      takeaway: "Your firm's actual policy is the one that counts.",
+      topics: ["payout_readiness"],
+    },
+    {
+      narration: "Know the real number before you request a payout.",
+      headline: "Know the number first.",
+      caption: "Check yours at fillbookhq.com.",
+      takeaway: "Check the target and the limit together.",
+      topics: ["payout_readiness"],
+    },
+  ],
+});
+
+const HIGHSTAKES_PLANS: ScenePlan[] = [PILOT_19];
+const HIGHSTAKES_COPY: Record<string, { captionBody: string; youtubeTitle: string; cta: string }> = {
+  [PILOT_19.planId]: {
+    captionBody: "One oversized trading day next to a funded account's profit target. Demo account, based on recorded trades and configured rules.",
+    youtubeTitle: "One Trade Cost $1,504.04: Reading a Funded Account's Payout Math",
+    cta: "Try it free on your own account for 14 days",
+  },
+};
+for (const plan of HIGHSTAKES_PLANS) PILOT_COPY[plan.planId] = { topic: plan.topic, ...HIGHSTAKES_COPY[plan.planId]! };
+
+/* ---------------------------------------------------------------------------------------------- */
 /* Angles (2026-09-25): the owner now posts 3 videos a day. Each angle re-cuts one verified concept  */
 /* with a new hook and narration over the SAME footage, crops, clip windows and fact citations, so   */
 /* every number stays checked against its recording. Numbers in narration must come from the facts  */
@@ -1887,6 +1960,7 @@ export const PILOTS: ScenePlan[] = [
   PILOT_1_OPENING_B,
   PILOT_2_OPENING_B,
   PILOT_3_OPENING_C,
+  ...HIGHSTAKES_PLANS,
 ].map(withCharacterBeats);
 
 export function pilotMetadata(plan: ScenePlan, platform: Platform): PublishedVideoMetadata {
