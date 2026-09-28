@@ -31,7 +31,7 @@ import type { ScenePlan, SceneSpec, VerifiedManifest, VerifiedAsset } from "../.
 import { synthesizeOfflineNarration } from "./localTts.js";
 import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
 import { CARD_SHADOW_SPREAD, assertCardClearsOverlays, computeCardLayout, type CardLayout } from "./render.js";
-import { renderCharacterTrack, type CharacterTrack, type TimedBeat } from "./characters.js";
+import { renderCharacterTrackIsolated, type CharacterTrack, type TimedBeat } from "./characters.js";
 
 export interface AdaptedScenes {
   scenes: RenderScene[];
@@ -250,7 +250,7 @@ export async function buildRenderPlanScenes(
     beatStart += s.durationSeconds;
   }
   const characterTrack = timedBeats.length === plan.scenes.length && timedBeats.length > 0
-    ? renderCharacterTrack(timedBeats, elapsed + CHARACTER_TRACK_TAIL_SECONDS, outDir, plan.characterPairId)
+    ? await renderCharacterTrackIsolated(timedBeats, elapsed + CHARACTER_TRACK_TAIL_SECONDS, outDir, plan.characterPairId)
     : undefined;
 
   return { scenes, captionCues, sceneLabelCues, totalDurationSeconds: elapsed, characterTrack };
