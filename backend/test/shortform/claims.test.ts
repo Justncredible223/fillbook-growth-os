@@ -66,6 +66,53 @@ describe("number extraction and support", () => {
   });
 });
 
+describe("validateSceneClaims: cited fact must actually be on screen during the scene's clip window", () => {
+  // Regression coverage for the confirmed-then-fixed defect class: a caption/narration
+  // states a value (e.g. "5 contracts") while the recording still shows an earlier or later
+  // value during part or all of the scene's own window.
+  const timedAsset = makeAsset({
+    kind: "screen_recording",
+    facts: [{ key: "qty", text: "5 x 20000.00", values: ["5"], topics: ["buffer"], region: { x: 100, y: 400, w: 800, h: 200 }, timeRangeSeconds: { start: 1.8, end: 10.3 } }],
+  });
+  const timedScene = (over: Partial<Parameters<typeof makeScene>[0]> = {}) =>
+    makeScene({ narration: "5 x 20000.00", claims: [{ id: "c1", type: "data_point", text: "5 x", evidence: [{ assetId: "asset.test.v1", factKey: "qty" }] }], ...over });
+
+  it("passes when the scene's clip window sits fully inside the fact's visible window", () => {
+    const scene = timedScene({ clipTimeRangeSeconds: { start: 1.8, end: 10.2 } });
+    expect(codes(validateSceneClaims(scene, timedAsset))).not.toContain("evidence_not_visible_during_clip_window");
+    expect(codes(validateSceneClaims(scene, timedAsset))).not.toContain("evidence_visible_late_in_clip_window");
+  });
+
+  it("errors when the scene's clip window never overlaps the fact's visible window at all", () => {
+    // e.g. the scene plays 0-1.5s of the clip, but this fact only ever appears from 1.8s on --
+    // exactly the shape of captioning "5 contracts" over a frame that still shows "1 x".
+    const scene = timedScene({ clipTimeRangeSeconds: { start: 0, end: 1.5 } });
+    expect(codes(validateSceneClaims(scene, timedAsset))).toContain("evidence_not_visible_during_clip_window");
+  });
+
+  it("errors the same way when the scene starts after the fact has already gone off screen", () => {
+    const scene = timedScene({ clipTimeRangeSeconds: { start: 11, end: 15 } });
+    expect(codes(validateSceneClaims(scene, timedAsset))).toContain("evidence_not_visible_during_clip_window");
+  });
+
+  it("flags (as a review item, not a hard error) when the scene starts noticeably before the fact settles", () => {
+    // Partial overlap: the opening of the scene may show a mid-swipe/stale frame while the
+    // claim is already being spoken -- worth a human frame-check, not an automatic block,
+    // since a static field can sometimes already be legible before the manifest's
+    // conservative "fully settled" timestamp.
+    const scene = timedScene({ clipTimeRangeSeconds: { start: 1.0, end: 10.2 } });
+    const issues = validateSceneClaims(scene, timedAsset);
+    expect(codes(issues)).toContain("evidence_visible_late_in_clip_window");
+    expect(codes(issues)).not.toContain("evidence_not_visible_during_clip_window");
+  });
+
+  it("is a no-op for still-image facts with no timeRangeSeconds, and for scenes with no clipTimeRangeSeconds", () => {
+    expect(codes(validateSceneClaims(makeScene(), makeAsset()))).not.toContain("evidence_not_visible_during_clip_window");
+    const scene = makeScene({ clipTimeRangeSeconds: undefined });
+    expect(codes(validateSceneClaims(scene, timedAsset))).not.toContain("evidence_not_visible_during_clip_window");
+  });
+});
+
 describe("validateSceneClaims: claim-to-visual linkage", () => {
   const asset = makeAsset();
 

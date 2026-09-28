@@ -305,6 +305,21 @@ export function validateMotionTiming(scene: SceneSpec, asset: VerifiedAsset): Pl
       `Scene needs ${scene.durationSeconds.toFixed(1)}s but the clip range (${start}s-${end}s at ${speed}x) only provides ${availableSeconds.toFixed(1)}s -- ` +
         `re-capture a longer range, slow durationSeconds down to match, or fall back to a still image. Never looped/frozen to fill the gap.`,
     );
+  } else if (availableSeconds < scene.durationSeconds + 0.4 - 0.05) {
+    // Below the hard error above, but tight: render.ts's buildFfmpegArgs additionally needs this
+    // scene's OUTGOING transition padding (up to MAX_TRANSITION_SECONDS = 0.4s -- see render.ts),
+    // which this check can't compute exactly without the whole scene list, so it can't be a hard
+    // error here without risking a false positive. Found by the 2026-09-27 library-wide audit
+    // after a real render (not just this validator) failed on exactly this margin for
+    // pilot-5-would-you-pass--c ("declared clip range is 4.30s but this scene ... needs 4.40s").
+    // A "review" flag here means: run an actual render before trusting this scene, don't assume
+    // validateScenePlan passing is sufficient on its own.
+    issues.push({
+      severity: "review",
+      code: "motion_footage_margin_tight",
+      sceneId: scene.sceneId,
+      message: `Clip range (${start}s-${end}s) covers this scene's ${scene.durationSeconds.toFixed(1)}s duration with less than 0.4s to spare once render.ts adds transition padding -- a real render can still fail with "declared clip range is Ns but this scene needs Ms." Render and confirm before trusting this scene.`,
+    });
   }
   return issues;
 }

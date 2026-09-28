@@ -7,11 +7,12 @@
  * Quips react; they never inform. No numbers, no promises, no advice -- validateScenePlan rejects any digit, $ or %,
  * and anything longer than CHARACTER_QUIP_MAX_CHARS, which is what fits the speech bubble in two lines.
  */
-import type { CharacterBeat, CharacterName, CharacterPose, ScenePlan } from "./types.js";
+import type { CharacterBeat, CharacterPose, CharacterRole, ScenePlan } from "./types.js";
+import { selectCharacterPair } from "./characterRoster.js";
 
 export const CHARACTER_QUIP_MAX_CHARS = 36;
 
-function beat(speaker: CharacterName, quip: string, rook: CharacterPose, tilt: CharacterPose): CharacterBeat {
+function beat(speaker: CharacterRole, quip: string, rook: CharacterPose, tilt: CharacterPose): CharacterBeat {
   return { speaker, quip, rook, tilt };
 }
 
@@ -132,10 +133,16 @@ export function basePlanId(planId: string): string {
   return planId.split("--")[0]!;
 }
 
-/** Returns `plan` with each scene's `character` beat set from CHARACTER_BEATS; throws if the counts don't line up. */
+/**
+ * Returns `plan` with each scene's `character` beat set from CHARACTER_BEATS, and `characterPairId`
+ * resolved: the plan's own explicit value if it set one, otherwise a deterministic pick from
+ * (planId, variationId) via characterRoster.ts's selectCharacterPair -- see ScenePlan.characterPairId's
+ * doc comment. Throws if the beat/scene counts don't line up.
+ */
 export function withCharacterBeats(plan: ScenePlan): ScenePlan {
   const beats = CHARACTER_BEATS[basePlanId(plan.planId)];
   if (!beats) throw new Error(`${plan.planId}: no character beats in CHARACTER_BEATS.`);
   if (beats.length !== plan.scenes.length) throw new Error(`${plan.planId}: ${beats.length} character beats for ${plan.scenes.length} scenes.`);
-  return { ...plan, scenes: plan.scenes.map((s, i) => ({ ...s, character: beats[i]! })) };
+  const characterPairId = plan.characterPairId ?? selectCharacterPair(plan.planId, plan.variationId);
+  return { ...plan, characterPairId, scenes: plan.scenes.map((s, i) => ({ ...s, character: beats[i]! })) };
 }

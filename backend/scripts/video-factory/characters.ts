@@ -1,18 +1,30 @@
 /**
- * Rook and Tilt, the character duo that plays in a stage under the evidence card on every verified motion concept
- * (2026-09-26, owner request: something that entertains below the content while staying on topic).
+ * The character duo that plays in a stage under the evidence card on every verified motion concept
+ * (2026-09-26, owner request: something that entertains below the content while staying on topic;
+ * 2026-09-27, owner request: draw from a small roster of visually distinct trading-themed pairs
+ * instead of always the same two characters -- see src/shortform/characterRoster.ts for the
+ * pair registry and the deterministic per-plan selection function).
  *
- * Both are flat vector cartoons drawn here as SVG, so there are no sprite files to keep in sync: each frame of the
- * stage is built as one SVG string and rasterised with resvg into a transparent PNG sequence, which render.ts
- * overlays in a single step. Everything that moves -- the idle bob, blinks, the squash on a pose change, mouth flaps
- * while a quip is up, and the speech bubble popping in -- is a pure function of time, so a frame is fully
- * determined by (beats, t) and unit-testable without rendering anything.
+ * Every persona is a flat vector cartoon drawn here as SVG, so there are no sprite files to keep in
+ * sync: each frame of the stage is built as one SVG string and rasterised with resvg into a
+ * transparent PNG sequence, which render.ts overlays in a single step. Everything that moves -- the
+ * idle bob, blinks, the squash on a pose change, mouth flaps while a quip is up, and the speech
+ * bubble popping in -- is a pure function of time, so a frame is fully determined by (beats, t,
+ * pair) and unit-testable without rendering anything.
+ *
+ * Two kinds of identity are in play, and they're deliberately kept separate:
+ *  - CharacterRole ("rook" = calm/left seat, "tilt" = impulsive/right seat) drives POSITION,
+ *    the CHARACTER_BEATS pose/speaker lookup, phase offsets and speech-bubble side -- it never
+ *    changes no matter which pair is selected.
+ *  - CharacterName (the actual persona: rook/tilt/ledger/margin/vector/blip) drives everything
+ *    VISUAL -- palette, silhouette (hoodie/blazer/scalper-desk), hair/headwear, props.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
-import type { CharacterBeat, CharacterName, CharacterPose } from "../../src/shortform/types.js";
+import type { CharacterBeat, CharacterName, CharacterPairId, CharacterPose, CharacterRole } from "../../src/shortform/types.js";
+import { CHARACTER_PAIRS } from "../../src/shortform/characterRoster.js";
 
 const FRAME_RATE = 30;
 const STAGE_WIDTH = 1080;
@@ -23,26 +35,39 @@ const DESK_TOP = 252;
 /** Everything stays left of x=910: TikTok's right-hand buttons start at x=930 (render.ts PLATFORM_OVERLAY_ZONES). */
 const DESK_LEFT = 30;
 const DESK_RIGHT = 910;
-const ROOK_X = 170;
-const TILT_X = 780;
+/** Seat positions -- fixed regardless of which named pair plays them (see CharacterRole's doc comment in types.ts). */
+const ROOK_SEAT_X = 170;
+const TILT_SEAT_X = 780;
 
 const FONT_PATH = join(dirname(fileURLToPath(import.meta.url)), "assets", "fonts", "Poppins-ExtraBold.ttf");
 /** Directory (relative to the render directory) the frames are written to, and the image2 pattern ffmpeg reads. */
 export const CHARACTER_FRAME_DIR = "characters";
 export const CHARACTER_FRAME_PATTERN = `${CHARACTER_FRAME_DIR}/f%05d.png`;
 
+/** Which silhouette a persona's torso/headwear is drawn with -- the main lever for reading as a distinct trading persona at a glance, not just a recolor. */
+type BodyType = "hoodie" | "blazer" | "scalper";
+
 interface Palette {
-  hoodie: string;
-  hoodieShade: string;
+  bodyType: BodyType;
+  torso: string;
+  torsoShade: string;
   skin: string;
   hair: string;
   pants: string;
+  /** Accent used for the scalper look's glow panel / floor-trader look's visor, where applicable. */
+  accent?: string;
 }
 
 const PALETTES: Record<CharacterName, Palette> = {
-  // Rook wears the brand cyan (the card captions' accent, #22B8CF).
-  rook: { hoodie: "#22B8CF", hoodieShade: "#178FA3", skin: "#F2C9A0", hair: "#1D2530", pants: "#223040" },
-  tilt: { hoodie: "#FF7A45", hoodieShade: "#D9582A", skin: "#E3AC80", hair: "#3B2A5A", pants: "#2B2238" },
+  // Rook wears the brand cyan (the card captions' accent, #22B8CF). Retail-trader hoodie look.
+  rook: { bodyType: "hoodie", torso: "#22B8CF", torsoShade: "#178FA3", skin: "#F2C9A0", hair: "#1D2530", pants: "#223040" },
+  tilt: { bodyType: "hoodie", torso: "#FF7A45", torsoShade: "#D9582A", skin: "#E3AC80", hair: "#3B2A5A", pants: "#2B2238" },
+  // Ledger & Margin: old-school floor-trader look -- blazer with lapels/tie, green eyeshade visor.
+  ledger: { bodyType: "blazer", torso: "#1B3A5C", torsoShade: "#132A44", skin: "#D9A876", hair: "#171A1E", pants: "#10141C", accent: "#8FD8A0" },
+  margin: { bodyType: "blazer", torso: "#7A1F2B", torsoShade: "#591620", skin: "#F0C39A", hair: "#4A2E1A", pants: "#241012", accent: "#E0566B" },
+  // Vector & Blip: multi-monitor scalper-desk look -- headset with a glowing mic, a chart-glow chest panel.
+  vector: { bodyType: "scalper", torso: "#123642", torsoShade: "#0B2530", skin: "#E7B98C", hair: "#0F1720", pants: "#0A1620", accent: "#3FE0D0" },
+  blip: { bodyType: "scalper", torso: "#3A1440", torsoShade: "#28092E", skin: "#C98A6B", hair: "#241030", pants: "#1A0A20", accent: "#FF4FD8" },
 };
 
 const INK = "#0B1620";
@@ -146,7 +171,7 @@ function arm(shoulder: [number, number], a: { hand: [number, number]; ctrl: [num
   const [cx, cy] = a.ctrl;
   const [hx, hy] = a.hand;
   return (
-    `<path d="M ${sx} ${sy} Q ${cx} ${cy} ${hx} ${hy}" fill="none" stroke="${p.hoodieShade}" stroke-width="21" stroke-linecap="round"/>` +
+    `<path d="M ${sx} ${sy} Q ${cx} ${cy} ${hx} ${hy}" fill="none" stroke="${p.torsoShade}" stroke-width="21" stroke-linecap="round"/>` +
     `<circle cx="${hx}" cy="${hy}" r="11.5" fill="${p.skin}" stroke="${INK}" stroke-width="2.5"/>`
   );
 }
@@ -183,32 +208,135 @@ function mouthSvg(kind: Mouth, openness: number): string {
   }
 }
 
+/**
+ * Hair AND headwear together -- the single biggest at-a-glance silhouette signal, so each persona
+ * gets its own, not a recolor of another's: Rook's side part + headset, Tilt's spikes, Ledger's
+ * neat part + green eyeshade visor, Margin's loosened-tie-era slicked hair, Vector's buzzed hair +
+ * glowing-mic headset, Blip's undercut + glowing-mic headset.
+ */
 function hairSvg(name: CharacterName, p: Palette): string {
-  if (name === "rook") {
-    // Neat side-parted cut, plus the trader's headset.
-    return (
-      `<path d="M -46 -178 Q -48 -224 -2 -222 Q 44 -222 46 -184 Q 30 -204 -6 -200 Q -30 -198 -46 -178 Z" fill="${p.hair}"/>` +
-      `<path d="M -50 -176 Q -52 -232 0 -232 Q 52 -232 50 -176" fill="none" stroke="#6B7F8E" stroke-width="7" stroke-linecap="round"/>` +
-      `<rect x="-58" y="-190" width="16" height="30" rx="7" fill="#6B7F8E"/>` +
-      `<path d="M -50 -166 Q -40 -138 -8 -140" fill="none" stroke="#6B7F8E" stroke-width="4" stroke-linecap="round"/>` +
-      `<circle cx="-7" cy="-140" r="5" fill="#22B8CF"/>`
-    );
+  switch (name) {
+    case "rook":
+      // Neat side-parted cut, plus the trader's headset.
+      return (
+        `<path d="M -46 -178 Q -48 -224 -2 -222 Q 44 -222 46 -184 Q 30 -204 -6 -200 Q -30 -198 -46 -178 Z" fill="${p.hair}"/>` +
+        `<path d="M -50 -176 Q -52 -232 0 -232 Q 52 -232 50 -176" fill="none" stroke="#6B7F8E" stroke-width="7" stroke-linecap="round"/>` +
+        `<rect x="-58" y="-190" width="16" height="30" rx="7" fill="#6B7F8E"/>` +
+        `<path d="M -50 -166 Q -40 -138 -8 -140" fill="none" stroke="#6B7F8E" stroke-width="4" stroke-linecap="round"/>` +
+        `<circle cx="-7" cy="-140" r="5" fill="#22B8CF"/>`
+      );
+    case "tilt":
+      // A spiky mess that never quite settles.
+      return `<path d="M -48 -172 L -54 -206 L -34 -198 L -32 -234 L -12 -212 L 0 -244 L 12 -214 L 30 -236 L 32 -204 L 54 -212 L 46 -180 Q 20 -200 -10 -196 Q -34 -192 -48 -172 Z" fill="${p.hair}"/>`;
+    case "ledger":
+      // Neat short hair under a classic green eyeshade visor (open-outcry floor trader).
+      return (
+        `<path d="M -44 -180 Q -46 -218 0 -216 Q 46 -218 44 -182 Q 24 -202 0 -198 Q -24 -202 -44 -180 Z" fill="${p.hair}"/>` +
+        `<path d="M -50 -194 Q 0 -220 50 -194 L 50 -200 Q 0 -226 -50 -200 Z" fill="${p.accent}" stroke="${INK}" stroke-width="2.5"/>` +
+        `<rect x="-52" y="-200" width="104" height="10" rx="5" fill="${p.accent}" stroke="${INK}" stroke-width="2"/>`
+      );
+    case "margin":
+      // Slicked hair, one lock out of place, tie already loosened -- the panicked pit runner.
+      return (
+        `<path d="M -44 -182 Q -46 -222 2 -220 Q 48 -222 46 -182 Q 30 -206 0 -202 Q -28 -204 -44 -182 Z" fill="${p.hair}"/>` +
+        `<path d="M 30 -216 Q 46 -212 42 -196" fill="none" stroke="${p.hair}" stroke-width="5" stroke-linecap="round"/>`
+      );
+    case "vector":
+      // Short buzzed hair, big over-ear headset with a glowing boom mic (scalper desk look).
+      return (
+        `<path d="M -40 -186 Q -40 -206 0 -206 Q 40 -206 40 -186 Q 20 -196 0 -196 Q -20 -196 -40 -186 Z" fill="${p.hair}"/>` +
+        `<path d="M -52 -178 Q -56 -228 0 -228 Q 56 -228 52 -178" fill="none" stroke="#3A4A56" stroke-width="9" stroke-linecap="round"/>` +
+        `<rect x="-62" y="-192" width="18" height="32" rx="8" fill="#3A4A56"/><rect x="44" y="-192" width="18" height="32" rx="8" fill="#3A4A56"/>` +
+        `<path d="M -54 -164 Q -44 -134 -6 -136" fill="none" stroke="#3A4A56" stroke-width="4" stroke-linecap="round"/>` +
+        `<circle cx="-5" cy="-136" r="5.5" fill="${p.accent}"/><circle cx="-5" cy="-136" r="9" fill="${p.accent}" opacity="0.35"/>`
+      );
+    case "blip":
+      // A messier undercut, same glowing-mic headset family as Vector but mismatched/askew (impulsive seat).
+      return (
+        `<path d="M -42 -184 L -50 -212 L -28 -202 L -20 -228 L 4 -206 L 20 -226 L 30 -200 L 50 -208 L 42 -180 Q 16 -196 -10 -192 Q -30 -190 -42 -184 Z" fill="${p.hair}"/>` +
+        `<path d="M -50 -172 Q -54 -218 -4 -222" fill="none" stroke="#3A4A56" stroke-width="9" stroke-linecap="round"/>` +
+        `<rect x="-62" y="-186" width="18" height="30" rx="8" fill="#3A4A56"/>` +
+        `<path d="M -54 -160 Q -44 -132 -8 -134" fill="none" stroke="#3A4A56" stroke-width="4" stroke-linecap="round"/>` +
+        `<circle cx="-7" cy="-134" r="5.5" fill="${p.accent}"/><circle cx="-7" cy="-134" r="9" fill="${p.accent}" opacity="0.35"/>`
+      );
   }
-  // Tilt: a spiky mess that never quite settles.
-  return `<path d="M -48 -172 L -54 -206 L -34 -198 L -32 -234 L -12 -212 L 0 -244 L 12 -214 L 30 -236 L 32 -204 L 54 -212 L 46 -180 Q 20 -200 -10 -196 Q -34 -192 -48 -172 Z" fill="${p.hair}"/>`;
 }
 
+/** A prop this persona holds in the given pose -- kept per-name so each pair reads as its own theme, not just its base body recolored. */
 function propSvg(name: CharacterName, pose: CharacterPose, shape: PoseShape): string {
   const [hx, hy] = shape.back.hand;
-  if (name === "rook" && (pose === "idle" || pose === "point" || pose === "shrug")) {
-    // The trading journal, always within reach.
-    return `<g transform="translate(${hx} ${hy}) rotate(-12)"><rect x="-15" y="-22" width="30" height="38" rx="4" fill="#FFD23F" stroke="${INK}" stroke-width="2.5"/><rect x="-15" y="-22" width="7" height="38" fill="#E0AE14"/><path d="M -3 -10 H 9 M -3 -2 H 9" stroke="${INK}" stroke-width="2"/></g>`;
+  switch (name) {
+    case "rook":
+      if (pose === "idle" || pose === "point" || pose === "shrug") {
+        // The trading journal, always within reach.
+        return `<g transform="translate(${hx} ${hy}) rotate(-12)"><rect x="-15" y="-22" width="30" height="38" rx="4" fill="#FFD23F" stroke="${INK}" stroke-width="2.5"/><rect x="-15" y="-22" width="7" height="38" fill="#E0AE14"/><path d="M -3 -10 H 9 M -3 -2 H 9" stroke="${INK}" stroke-width="2"/></g>`;
+      }
+      return "";
+    case "tilt":
+      if (pose === "idle" || pose === "cheer" || pose === "shrug" || pose === "point") {
+        // Tilt's energy drink.
+        return `<g transform="translate(${hx} ${hy}) rotate(8)"><rect x="-10" y="-30" width="20" height="36" rx="4" fill="#9BE564" stroke="${INK}" stroke-width="2.5"/><rect x="-10" y="-30" width="20" height="6" fill="#C9C9C9"/><path d="M -4 -16 L 3 -12 L -3 -8 L 4 -4" fill="none" stroke="${INK}" stroke-width="2"/></g>`;
+      }
+      return "";
+    case "ledger":
+      if (pose === "idle" || pose === "point" || pose === "shrug" || pose === "think") {
+        // A paper trading ledger, pit-trader style.
+        return `<g transform="translate(${hx} ${hy}) rotate(-10)"><rect x="-18" y="-20" width="36" height="30" rx="3" fill="#EDEAE0" stroke="${INK}" stroke-width="2.5"/><path d="M -10 -12 H 10 M -10 -5 H 10 M -10 2 H 4" stroke="#5B6670" stroke-width="2"/></g>`;
+      }
+      return "";
+    case "margin":
+      if (pose === "idle" || pose === "cheer" || pose === "shrug" || pose === "shock") {
+        // The pit phone -- open-outcry's landline to the order desk.
+        return `<g transform="translate(${hx} ${hy}) rotate(10)"><rect x="-8" y="-30" width="16" height="34" rx="6" fill="#2B2B2E" stroke="${INK}" stroke-width="2.5"/><rect x="-11" y="-34" width="22" height="8" rx="3" fill="#2B2B2E"/><rect x="-11" y="0" width="22" height="8" rx="3" fill="#2B2B2E"/></g>`;
+      }
+      return "";
+    case "vector":
+      if (pose === "idle" || pose === "point" || pose === "shrug" || pose === "think") {
+        // A glowing chart tablet -- the scalper's second screen in hand.
+        return `<g transform="translate(${hx} ${hy}) rotate(-10)"><rect x="-19" y="-26" width="38" height="28" rx="4" fill="#0E2530" stroke="${PALETTES.vector.accent}" stroke-width="2.5"/><path d="M -13 -8 L -4 -16 L 4 -10 L 13 -20" fill="none" stroke="${PALETTES.vector.accent}" stroke-width="2.5" stroke-linecap="round"/></g>`;
+      }
+      return "";
+    case "blip":
+      if (pose === "idle" || pose === "cheer" || pose === "shrug" || pose === "point") {
+        // A second energy drink, scalper-desk neon can.
+        return `<g transform="translate(${hx} ${hy}) rotate(8)"><rect x="-10" y="-30" width="20" height="36" rx="4" fill="${PALETTES.blip.accent}" stroke="${INK}" stroke-width="2.5"/><rect x="-10" y="-30" width="20" height="6" fill="#2B2B2E"/></g>`;
+      }
+      return "";
   }
-  if (name === "tilt" && (pose === "idle" || pose === "cheer" || pose === "shrug" || pose === "point")) {
-    // Tilt's energy drink.
-    return `<g transform="translate(${hx} ${hy}) rotate(8)"><rect x="-10" y="-30" width="20" height="36" rx="4" fill="#9BE564" stroke="${INK}" stroke-width="2.5"/><rect x="-10" y="-30" width="20" height="6" fill="#C9C9C9"/><path d="M -4 -16 L 3 -12 L -3 -8 L 4 -4" fill="none" stroke="${INK}" stroke-width="2"/></g>`;
+}
+
+/**
+ * The torso silhouette -- the other big at-a-glance signal alongside hair/headwear. Three distinct
+ * shapes so a pair never reads as "the hoodie body in different colors": a rounded hoodie (with
+ * pocket + drawstrings), a blazer with lapels and a tie (floor-trader look), or a squared-off
+ * scalper jacket with a glowing chart-panel chest insert.
+ */
+function torsoSvg(p: Palette): string {
+  if (p.bodyType === "blazer") {
+    return (
+      `<rect x="-46" y="-134" width="92" height="80" rx="14" fill="${p.torso}" stroke="${INK}" stroke-width="3"/>` +
+      // Lapels: two triangles meeting at a V-neck notch.
+      `<path d="M -8 -134 L -30 -100 L -8 -74 Z" fill="${p.torsoShade}"/><path d="M 8 -134 L 30 -100 L 8 -74 Z" fill="${p.torsoShade}"/>` +
+      // Tie.
+      `<path d="M -6 -134 L 6 -134 L 2 -108 L 8 -70 L 0 -60 L -8 -70 L -2 -108 Z" fill="${p.accent}" stroke="${INK}" stroke-width="2"/>`
+    );
   }
-  return "";
+  if (p.bodyType === "scalper") {
+    return (
+      `<rect x="-46" y="-134" width="92" height="80" rx="12" fill="${p.torso}" stroke="${INK}" stroke-width="3"/>` +
+      // Squared collar seam.
+      `<path d="M -22 -134 L 0 -114 L 22 -134" fill="none" stroke="${p.torsoShade}" stroke-width="4"/>` +
+      // Glowing chest panel: a small candlestick-chart motif, lit in the pair's accent color.
+      `<rect x="-20" y="-100" width="40" height="24" rx="4" fill="${p.torsoShade}" stroke="${p.accent}" stroke-width="2"/>` +
+      `<path d="M -14 -84 v -10 M -14 -94 h 0 M -4 -80 v -16 M 6 -86 v -8 M 16 -82 v -12" stroke="${p.accent}" stroke-width="2.5" stroke-linecap="round"/>`
+    );
+  }
+  // hoodie
+  return (
+    `<rect x="-46" y="-134" width="92" height="80" rx="30" fill="${p.torso}" stroke="${INK}" stroke-width="3"/>` +
+    `<rect x="-26" y="-92" width="52" height="24" rx="10" fill="${p.torsoShade}"/>` +
+    `<path d="M -8 -128 v 18 M 8 -128 v 18" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>`
+  );
 }
 
 export interface CharacterFrameState {
@@ -218,7 +346,7 @@ export interface CharacterFrameState {
   blink: boolean;
 }
 
-/** One character, feet at 0,0, facing +x (the caller mirrors Tilt to face left). */
+/** One character, feet at 0,0, facing +x (the caller mirrors the right-seat persona to face left). */
 export function drawCharacter(name: CharacterName, state: CharacterFrameState): string {
   const p = PALETTES[name];
   const shape = POSES[state.pose];
@@ -251,10 +379,7 @@ export function drawCharacter(name: CharacterName, state: CharacterFrameState): 
     `<ellipse cx="-14" cy="-4" rx="18" ry="9" fill="#F4F7FA" stroke="${INK}" stroke-width="2.5"/><ellipse cx="20" cy="-4" rx="18" ry="9" fill="#F4F7FA" stroke="${INK}" stroke-width="2.5"/>` +
     backArm +
     propSvg(name, state.pose, shape) +
-    // Hoodie torso, pocket and drawstrings.
-    `<rect x="-46" y="-134" width="92" height="80" rx="30" fill="${p.hoodie}" stroke="${INK}" stroke-width="3"/>` +
-    `<rect x="-26" y="-92" width="52" height="24" rx="10" fill="${p.hoodieShade}"/>` +
-    `<path d="M -8 -128 v 18 M 8 -128 v 18" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>` +
+    torsoSvg(p) +
     (state.pose === "facepalm" ? head + frontArm + finger : frontArm + finger + head)
   );
 }
@@ -263,8 +388,8 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-/** The speech bubble, anchored so its tail points at the speaker's head. `scale` pops it in; `opacity` fades it out. */
-export function drawBubble(speaker: CharacterName, quip: string, scale: number, opacity: number): string {
+/** The speech bubble, anchored so its tail points at the speaker's head. `scale` pops it in; `opacity` fades it out. Positioned by SEAT (role), never by which persona currently plays that seat. */
+export function drawBubble(speakerRole: CharacterRole, quip: string, scale: number, opacity: number): string {
   if (scale <= 0 || opacity <= 0) return "";
   const lines = wrapQuip(quip);
   const fontSize = 30;
@@ -273,10 +398,10 @@ export function drawBubble(speaker: CharacterName, quip: string, scale: number, 
   const width = Math.min(380, Math.round(longest * 17.5 + 48));
   const height = lines.length * lineHeight + 30;
   const top = 34;
-  const x = speaker === "rook" ? 272 : 668 - width;
+  const x = speakerRole === "rook" ? 272 : 668 - width;
   // Tail: out of the bubble's side nearest the speaker, toward their mouth (the head sits level with the bubble).
-  const edge = speaker === "rook" ? x : x + width;
-  const tailTip = speaker === "rook" ? { x: ROOK_X + 62, y: 112 } : { x: TILT_X - 62, y: 112 };
+  const edge = speakerRole === "rook" ? x : x + width;
+  const tailTip = speakerRole === "rook" ? { x: ROOK_SEAT_X + 62, y: 112 } : { x: TILT_SEAT_X - 62, y: 112 };
   const baseTop = top + height - 44;
   const baseBottom = top + height - 18;
   const pivotX = tailTip.x;
@@ -295,15 +420,15 @@ export function drawBubble(speaker: CharacterName, quip: string, scale: number, 
   );
 }
 
-/** Per-character phase offsets so the two never bob or blink in lockstep. */
-const PHASE: Record<CharacterName, number> = { rook: 0, tilt: 1.7 };
+/** Per-seat phase offsets so the two never bob or blink in lockstep -- fixed by role, not by persona. */
+const PHASE: Record<CharacterRole, number> = { rook: 0, tilt: 1.7 };
 
-function characterGroup(name: CharacterName, beat: TimedBeat, t: number): string {
-  const pose = beat.beat[name];
+function characterGroup(role: CharacterRole, name: CharacterName, beat: TimedBeat, t: number): string {
+  const pose = beat.beat[role];
   const dt = t - beat.startSeconds;
-  const phase = PHASE[name];
+  const phase = PHASE[role];
   const talkStart = TALK_DELAY;
-  const talking = beat.beat.speaker === name && dt >= talkStart && dt < talkStart + talkSeconds(beat.beat.quip);
+  const talking = beat.beat.speaker === role && dt >= talkStart && dt < talkStart + talkSeconds(beat.beat.quip);
   const mouthOpenness = talking ? 0.5 + 0.5 * Math.sin((dt - talkStart) * 2 * Math.PI * 4.2) : 0;
   const blink = (t + phase * 1.3) % 3.4 < 0.12;
 
@@ -318,14 +443,14 @@ function characterGroup(name: CharacterName, beat: TimedBeat, t: number): string
   // Both slide up from behind the desk at the start of the video.
   if (t < ENTRANCE_SECONDS) y += (1 - easeOutCubic(t / ENTRANCE_SECONDS)) * 260;
 
-  const baseX = name === "rook" ? ROOK_X : TILT_X;
-  const mirror = name === "tilt" ? -1 : 1;
+  const baseX = role === "rook" ? ROOK_SEAT_X : TILT_SEAT_X;
+  const mirror = role === "tilt" ? -1 : 1;
   const body = drawCharacter(name, { pose, talking, mouthOpenness, blink: blink && !talking });
   return `<g transform="translate(${(baseX + x).toFixed(2)} ${(DESK_TOP + 4 + y).toFixed(2)}) scale(${(mirror * sx).toFixed(4)} ${sy.toFixed(4)})">${body}</g>`;
 }
 
-/** The full stage (desk, both characters, the speaker's bubble) at time `t`, as a standalone SVG document. */
-export function buildStageSvg(beats: TimedBeat[], t: number): string {
+/** The full stage (desk, both characters, the speaker's bubble) at time `t`, as a standalone SVG document. `pair` picks which named persona plays each seat (see characterRoster.ts); defaults to the original Rook/Tilt pair if omitted. */
+export function buildStageSvg(beats: TimedBeat[], t: number, pair: Record<CharacterRole, CharacterName> = CHARACTER_PAIRS["rook-tilt"]): string {
   const current = beatAt(beats, t);
   let bubble = "";
   let characters = "";
@@ -339,8 +464,8 @@ export function buildStageSvg(beats: TimedBeat[], t: number): string {
     const opacity = !isLast && sceneLeft < BUBBLE_FADE ? clamp01(sceneLeft / BUBBLE_FADE) : 1;
     bubble = drawBubble(current.beat.speaker, current.beat.quip, scale, opacity);
     // The speaker is drawn last so a raised hand never tucks behind the other character.
-    const order: CharacterName[] = current.beat.speaker === "rook" ? ["tilt", "rook"] : ["rook", "tilt"];
-    characters = order.map((n) => characterGroup(n, current, t)).join("");
+    const order: CharacterRole[] = current.beat.speaker === "rook" ? ["tilt", "rook"] : ["rook", "tilt"];
+    characters = order.map((role) => characterGroup(role, pair[role], current, t)).join("");
   }
   const desk =
     `<rect x="${DESK_LEFT}" y="${DESK_TOP}" width="${DESK_RIGHT - DESK_LEFT}" height="${CHARACTER_STAGE_HEIGHT - DESK_TOP - 4}" rx="14" fill="#0A1A26" opacity="0.92"/>` +
@@ -360,14 +485,15 @@ export interface CharacterTrack {
   frameCount: number;
 }
 
-/** Rasterises one frame per 1/30s across `durationSeconds` into `<outDir>/characters/`. Identical frames are encoded once. */
-export function renderCharacterTrack(beats: TimedBeat[], durationSeconds: number, outDir: string): CharacterTrack {
+/** Rasterises one frame per 1/30s across `durationSeconds` into `<outDir>/characters/`. Identical frames are encoded once. `pairId` picks the roster pair to draw (defaults to Rook/Tilt). */
+export function renderCharacterTrack(beats: TimedBeat[], durationSeconds: number, outDir: string, pairId: CharacterPairId = "rook-tilt"): CharacterTrack {
+  const pair = CHARACTER_PAIRS[pairId];
   const dir = join(outDir, CHARACTER_FRAME_DIR);
   mkdirSync(dir, { recursive: true });
   const frameCount = Math.max(1, Math.ceil(durationSeconds * FRAME_RATE));
   const cache = new Map<string, Buffer>();
   for (let f = 0; f < frameCount; f++) {
-    const svg = buildStageSvg(beats, f / FRAME_RATE);
+    const svg = buildStageSvg(beats, f / FRAME_RATE, pair);
     let png = cache.get(svg);
     if (!png) {
       png = new Resvg(svg, { font: { fontFiles: [FONT_PATH], loadSystemFonts: false, defaultFontFamily: "Poppins" } }).render().asPng();
