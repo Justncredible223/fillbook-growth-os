@@ -141,7 +141,13 @@ export const PILOT_1: ScenePlan = {
       headline: "Which setup do you review first?",
       caption: "Check your own breakdown by setup.",
       seconds: 2.5, // real edge-tts speech is 1.9s; was 4.0s authored-guess
-      cta: `Follow ${OFFICIAL_HANDLE}`,
+      // 2026-09-27: was `Follow ${OFFICIAL_HANDLE}` -- the owner's own numbers shown all video are
+      // demo/sample data (disclosed, and that stays), but the CTA itself only asked for a follow,
+      // never closed the loop into an actual next action tied to the viewer's own real account.
+      // Verified against this repo's own canonical trial language (videoScriptWriter.ts's script
+      // prompt: "a 14-day free trial, no card required, and no permanent free plan afterwards") --
+      // never claims a specific plan tier or price this repo doesn't itself state.
+      cta: `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}`,
       topics: ["setup_breakdown"],
       claims: [{ id: "p1-c4", type: "invitation", text: "Invites the viewer to review their own setups.", evidence: [] }],
     }),
@@ -221,12 +227,20 @@ export const PILOT_2: ScenePlan = {
     scene({
       sceneId: "p2-s4-close",
       variationId: P2,
-      narration: "Follow for more rule reads.",
+      // Was "Follow for more rule reads." (2026-09-27: the only pilot whose SPOKEN narration
+      // itself asked for a follow rather than inviting the viewer to check their own account).
+      narration: "Sync your own account and see your real buffer, not just your balance.",
       takeaway: "Read the rule before you trust the balance.",
       headline: "Read the rule.",
       caption: "Check your buffer, not just your balance.",
       seconds: 2.5, // real edge-tts speech is 1.9s; was 3.0s authored-guess
-      cta: `Follow ${OFFICIAL_HANDLE}`,
+      // 2026-09-27: was `Follow ${OFFICIAL_HANDLE}` -- the owner's own numbers shown all video are
+      // demo/sample data (disclosed, and that stays), but the CTA itself only asked for a follow,
+      // never closed the loop into an actual next action tied to the viewer's own real account.
+      // Verified against this repo's own canonical trial language (videoScriptWriter.ts's script
+      // prompt: "a 14-day free trial, no card required, and no permanent free plan afterwards") --
+      // never claims a specific plan tier or price this repo doesn't itself state.
+      cta: `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}`,
       topics: ["buffer"],
       claims: [{ id: "p2-c5", type: "invitation", text: "Invites the viewer to follow for more rule explainers.", evidence: [] }],
     }),
@@ -339,7 +353,13 @@ export const PILOT_3: ScenePlan = {
       headline: "What's your contract limit?",
       caption: "Compare your plan to your actual sizes.",
       seconds: 2.5,
-      cta: `Follow ${OFFICIAL_HANDLE}`,
+      // 2026-09-27: was `Follow ${OFFICIAL_HANDLE}` -- the owner's own numbers shown all video are
+      // demo/sample data (disclosed, and that stays), but the CTA itself only asked for a follow,
+      // never closed the loop into an actual next action tied to the viewer's own real account.
+      // Verified against this repo's own canonical trial language (videoScriptWriter.ts's script
+      // prompt: "a 14-day free trial, no card required, and no permanent free plan afterwards") --
+      // never claims a specific plan tier or price this repo doesn't itself state.
+      cta: `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}`,
       topics: ["trade_size"],
       claims: [{ id: "p3-c4", type: "invitation", text: "Invites the viewer to check their own plan against their own trade sizes.", evidence: [] }],
     }),
@@ -419,7 +439,13 @@ export const PILOT_4: ScenePlan = {
       headline: "Catch it before you request a payout.",
       caption: "Try Fillbook on your own trades.",
       seconds: 3.5,
-      cta: `Follow ${OFFICIAL_HANDLE}`,
+      // 2026-09-27: was `Follow ${OFFICIAL_HANDLE}` -- the owner's own numbers shown all video are
+      // demo/sample data (disclosed, and that stays), but the CTA itself only asked for a follow,
+      // never closed the loop into an actual next action tied to the viewer's own real account.
+      // Verified against this repo's own canonical trial language (videoScriptWriter.ts's script
+      // prompt: "a 14-day free trial, no card required, and no permanent free plan afterwards") --
+      // never claims a specific plan tier or price this repo doesn't itself state.
+      cta: `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}`,
       topics: ["consistency"],
       claims: [{ id: "p4-c4", type: "invitation", text: "Invites the viewer to set up their own firm rules in Fillbook.", evidence: [] }],
     }),
@@ -478,7 +504,16 @@ export const PILOT_5: ScenePlan = {
       seconds: 8,
       disclosure: "Demo data",
       topics: ["rule_simulator"],
-      clipTimeRangeSeconds: { start: 4.35, end: 17.6 },
+      // Start moved 4.35->5.7 (2026-09-27 library-wide audit, hand-verified by frame-checking a
+      // real render): the manifest fact simulator.result is only actually on screen from 5.7s --
+      // at 4.35s (this scene's old start) the source clip still shows the PRIOR scene's rule-setup
+      // card ("Rule simulator... Topstep, 50K, All logged trades"), not any pass/fail result, for
+      // roughly the first 1.35s of this scene, while the caption/headline already assert "No
+      // breach. Still not a pass." This is the same claim-outruns-evidence defect class as the
+      // three bugs already fixed this pass, found by hand-verifying this pilot's own flagged
+      // evidence_visible_late_in_clip_window gap rather than assuming it harmless like the others.
+      // End (17.6) unchanged; 11.9s of available footage covers this scene's 8s easily.
+      clipTimeRangeSeconds: { start: 5.7, end: 17.6 },
       claims: [{ id: "p5-c2", type: "data_point", text: "No active breach, but the profit target is unmet, so the evaluation is incomplete and not a pass.", evidence: [{ assetId: P5_REC, factKey: "simulator.result" }] }],
     }),
     scene({
@@ -501,7 +536,13 @@ export const PILOT_5: ScenePlan = {
       headline: "Test before you pay.",
       caption: "Try the rule simulator at fillbookhq.com.",
       seconds: 3.5,
-      cta: `Follow ${OFFICIAL_HANDLE}`,
+      // 2026-09-27: was `Follow ${OFFICIAL_HANDLE}` -- the owner's own numbers shown all video are
+      // demo/sample data (disclosed, and that stays), but the CTA itself only asked for a follow,
+      // never closed the loop into an actual next action tied to the viewer's own real account.
+      // Verified against this repo's own canonical trial language (videoScriptWriter.ts's script
+      // prompt: "a 14-day free trial, no card required, and no permanent free plan afterwards") --
+      // never claims a specific plan tier or price this repo doesn't itself state.
+      cta: `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}`,
       topics: ["rule_simulator"],
       claims: [{ id: "p5-c4", type: "invitation", text: "Invites the viewer to test rules on their own trades.", evidence: [] }],
     }),
@@ -574,7 +615,13 @@ export const PILOT_6: ScenePlan = {
       headline: "What's your score?",
       caption: "Log your trades at fillbookhq.com to see yours.",
       seconds: 3,
-      cta: `Follow ${OFFICIAL_HANDLE}`,
+      // 2026-09-27: was `Follow ${OFFICIAL_HANDLE}` -- the owner's own numbers shown all video are
+      // demo/sample data (disclosed, and that stays), but the CTA itself only asked for a follow,
+      // never closed the loop into an actual next action tied to the viewer's own real account.
+      // Verified against this repo's own canonical trial language (videoScriptWriter.ts's script
+      // prompt: "a 14-day free trial, no card required, and no permanent free plan afterwards") --
+      // never claims a specific plan tier or price this repo doesn't itself state.
+      cta: `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}`,
       topics: ["edge_score"],
       claims: [{ id: "p6-c4", type: "invitation", text: "Invites the viewer to see their own score.", evidence: [] }],
     }),
@@ -661,7 +708,13 @@ export const PILOT_7: ScenePlan = {
       headline: "Know your numbers first.",
       caption: "Get your own Daily Brief at fillbookhq.com.",
       seconds: 3,
-      cta: `Follow ${OFFICIAL_HANDLE}`,
+      // 2026-09-27: was `Follow ${OFFICIAL_HANDLE}` -- the owner's own numbers shown all video are
+      // demo/sample data (disclosed, and that stays), but the CTA itself only asked for a follow,
+      // never closed the loop into an actual next action tied to the viewer's own real account.
+      // Verified against this repo's own canonical trial language (videoScriptWriter.ts's script
+      // prompt: "a 14-day free trial, no card required, and no permanent free plan afterwards") --
+      // never claims a specific plan tier or price this repo doesn't itself state.
+      cta: `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}`,
       topics: ["daily_brief"],
       claims: [{ id: "p7-c5", type: "invitation", text: "Invites the viewer to get their own brief.", evidence: [] }],
     }),
@@ -734,7 +787,13 @@ export const PILOT_8: ScenePlan = {
       headline: "Which day costs you?",
       caption: "Find out at fillbookhq.com.",
       seconds: 3,
-      cta: `Follow ${OFFICIAL_HANDLE}`,
+      // 2026-09-27: was `Follow ${OFFICIAL_HANDLE}` -- the owner's own numbers shown all video are
+      // demo/sample data (disclosed, and that stays), but the CTA itself only asked for a follow,
+      // never closed the loop into an actual next action tied to the viewer's own real account.
+      // Verified against this repo's own canonical trial language (videoScriptWriter.ts's script
+      // prompt: "a 14-day free trial, no card required, and no permanent free plan afterwards") --
+      // never claims a specific plan tier or price this repo doesn't itself state.
+      cta: `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}`,
       topics: ["day_of_week"],
       claims: [{ id: "p8-c4", type: "invitation", text: "Invites the viewer to check their own weekdays.", evidence: [] }],
     }),
@@ -807,7 +866,13 @@ export const PILOT_9: ScenePlan = {
       headline: "How far is your payout?",
       caption: "Track yours at fillbookhq.com.",
       seconds: 3,
-      cta: `Follow ${OFFICIAL_HANDLE}`,
+      // 2026-09-27: was `Follow ${OFFICIAL_HANDLE}` -- the owner's own numbers shown all video are
+      // demo/sample data (disclosed, and that stays), but the CTA itself only asked for a follow,
+      // never closed the loop into an actual next action tied to the viewer's own real account.
+      // Verified against this repo's own canonical trial language (videoScriptWriter.ts's script
+      // prompt: "a 14-day free trial, no card required, and no permanent free plan afterwards") --
+      // never claims a specific plan tier or price this repo doesn't itself state.
+      cta: `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}`,
       topics: ["payouts"],
       claims: [{ id: "p9-c4", type: "invitation", text: "Invites the viewer to track their own payout readiness.", evidence: [] }],
     }),
@@ -826,55 +891,55 @@ const YOUTUBE_TAGS = ["FuturesTrading", "PropFirmTrading", "TradingJournal", "Tr
 const PILOT_COPY: Record<string, { topic: string; cta: string; captionBody: string; youtubeTitle: string }> = {
   [PILOT_1.planId]: {
     topic: PILOT_1.topic,
-    cta: "Follow for more trade reviews",
+    cta: "Try it free on your own account for 14 days",
     captionBody: "A positive month can still hide a setup that loses. Demo data, so check your own breakdown by setup.",
     youtubeTitle: "Green Month, Losing Setup: Read Your Setup Breakdown",
   },
   [PILOT_2.planId]: {
     topic: PILOT_2.topic,
-    cta: "Follow for more rule reads",
+    cta: "Try it free on your own account for 14 days",
     captionBody: "Your balance and your buffer answer different questions. Demo account, based on recorded trades and configured rules.",
     youtubeTitle: "Balance vs Drawdown Buffer: Read the Rule",
   },
   [PILOT_3.planId]: {
     topic: PILOT_3.topic,
-    cta: "Follow for more trade reviews",
+    cta: "Try it free on your own account for 14 days",
     captionBody: "Same setup, five times the size -- and over this plan's own contract limit. Demo data.",
     youtubeTitle: "Same Setup, Bigger Size: Check It Against Your Plan",
   },
   [PILOT_4.planId]: {
     topic: PILOT_4.topic,
-    cta: "Follow for more rule reads",
+    cta: "Try it free on your own account for 14 days",
     captionBody: "One profitable day can put an account over a consistency cap. Demo data, so check your own firm's rule.",
     youtubeTitle: "Your Best Day Can Block Your Payout: The Consistency Rule",
   },
   [PILOT_5.planId]: {
     topic: PILOT_5.topic,
-    cta: "Follow for more rule reads",
+    cta: "Try it free on your own account for 14 days",
     captionBody: "Replay trades you already took against evaluation rules. Demo data, and a simulation can differ from a real evaluation.",
     youtubeTitle: "Would Your Trades Pass a Prop Firm Evaluation?",
   },
   [PILOT_6.planId]: {
     topic: PILOT_6.topic,
-    cta: "Follow for more trade reviews",
+    cta: "Try it free on your own account for 14 days",
     captionBody: "One score blending profitability, consistency, risk control and rule adherence. Demo data.",
     youtubeTitle: "Edge Score: One Number for How You Actually Trade",
   },
   [PILOT_7.planId]: {
     topic: PILOT_7.topic,
-    cta: "Follow for more trade reviews",
+    cta: "Try it free on your own account for 14 days",
     captionBody: "Last session, buffer left and your strongest window, before the first trade. Demo data.",
     youtubeTitle: "Read This Before Your First Trade: The Daily Brief",
   },
   [PILOT_8.planId]: {
     topic: PILOT_8.topic,
-    cta: "Follow for more trade reviews",
+    cta: "Try it free on your own account for 14 days",
     captionBody: "Split results by weekday to find the day that loses. Demo data from one sample account.",
     youtubeTitle: "Four Green Weekdays, One Red One: Results by Day of Week",
   },
   [PILOT_9.planId]: {
     topic: PILOT_9.topic,
-    cta: "Follow for more rule reads",
+    cta: "Try it free on your own account for 14 days",
     captionBody: "Pace turns a profit target into a timeline. A projection from demo data, not a prediction.",
     youtubeTitle: "129 Trading Days to Payout: Tracking Payout Readiness",
   },
@@ -950,7 +1015,9 @@ function batch3Plan(p: {
         caption: s.caption,
         seconds: estimateSeconds(s.narration),
         disclosure: i < 2 ? "Demo data" : i === 2 ? QUALIFY_DEMO : null,
-        cta: i === 3 ? `Follow ${OFFICIAL_HANDLE}` : null,
+        // See the P1-P9 scene() calls' matching comment: was a bare follow ask, now closes the
+        // loop into trying it on the viewer's own account, with the verified 14-day trial claim.
+        cta: i === 3 ? `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}` : null,
         topics: s.topics,
         clipTimeRangeSeconds: s.asset?.clip,
         claims: s.asset
@@ -1113,15 +1180,15 @@ export const PILOT_18 = batch3Plan({
 
 const BATCH_3_PLANS: ScenePlan[] = [PILOT_10, PILOT_11, PILOT_12, PILOT_13, PILOT_14, PILOT_15, PILOT_16, PILOT_17, PILOT_18];
 const BATCH_3_COPY: Record<string, { captionBody: string; youtubeTitle: string; cta: string }> = {
-  [PILOT_10.planId]: { captionBody: "Five trades opened minutes after a loss, at up to 2.5x the usual size. Sample account, not a real trader.", youtubeTitle: "Sized Up 3 Minutes After a Loss: Flagging Possible Revenge Trades", cta: "Follow for more trade reviews" },
-  [PILOT_11.planId]: { captionBody: "Sessions that ran to 6 trades against a 2.7-trade normal day. Sample account, not a real trader.", youtubeTitle: "Six Trades on a 2.7-Trade Day: Flagging Possible Overtrading", cta: "Follow for more trade reviews" },
-  [PILOT_12.planId]: { captionBody: "The open wins, late morning loses. Split your trades by hour to find yours. Demo data.", youtubeTitle: "Your 11 O'Clock Trades Win 25%: Results by Time of Day", cta: "Follow for more trade reviews" },
-  [PILOT_13.planId]: { captionBody: "Tag your mistakes and see what each habit costs. Sample account, not a real trader.", youtubeTitle: "What Moving Your Stop Costs: Pricing Your Trading Habits", cta: "Follow for more trade reviews" },
-  [PILOT_14.planId]: { captionBody: "Trades you'd take again vs trades you wouldn't: 84% win vs 18%. Demo data.", youtubeTitle: "Would You Take It Again? What Your Doubts Are Telling You", cta: "Follow for more trade reviews" },
-  [PILOT_15.planId]: { captionBody: "92% on plan, and the trades outside the window lost money. Demo account and a sample plan.", youtubeTitle: "92% on Plan: What the Trades Outside It Cost", cta: "Follow for more rule reads" },
-  [PILOT_16.planId]: { captionBody: "Compare recent trading to your own baseline to see what changed. Demo data.", youtubeTitle: "Win Rate Fell From 76% to 55%: Comparing Against Your Baseline", cta: "Follow for more trade reviews" },
-  [PILOT_17.planId]: { captionBody: "Every prop account's buffer, limits and health on one screen. Sample accounts, not real traders.", youtubeTitle: "Two Funded Accounts, One Screen: Tracking Every Account's Limits", cta: "Follow for more rule reads" },
-  [PILOT_18.planId]: { captionBody: "The setup and time window that actually work, from your own trades. Demo data.", youtubeTitle: "Your Best Setup by the Numbers: Finding Your Edge", cta: "Follow for more trade reviews" },
+  [PILOT_10.planId]: { captionBody: "Five trades opened minutes after a loss, at up to 2.5x the usual size. Sample account, not a real trader.", youtubeTitle: "Sized Up 3 Minutes After a Loss: Flagging Possible Revenge Trades", cta: "Try it free on your own account for 14 days" },
+  [PILOT_11.planId]: { captionBody: "Sessions that ran to 6 trades against a 2.7-trade normal day. Sample account, not a real trader.", youtubeTitle: "Six Trades on a 2.7-Trade Day: Flagging Possible Overtrading", cta: "Try it free on your own account for 14 days" },
+  [PILOT_12.planId]: { captionBody: "The open wins, late morning loses. Split your trades by hour to find yours. Demo data.", youtubeTitle: "Your 11 O'Clock Trades Win 25%: Results by Time of Day", cta: "Try it free on your own account for 14 days" },
+  [PILOT_13.planId]: { captionBody: "Tag your mistakes and see what each habit costs. Sample account, not a real trader.", youtubeTitle: "What Moving Your Stop Costs: Pricing Your Trading Habits", cta: "Try it free on your own account for 14 days" },
+  [PILOT_14.planId]: { captionBody: "Trades you'd take again vs trades you wouldn't: 84% win vs 18%. Demo data.", youtubeTitle: "Would You Take It Again? What Your Doubts Are Telling You", cta: "Try it free on your own account for 14 days" },
+  [PILOT_15.planId]: { captionBody: "92% on plan, and the trades outside the window lost money. Demo account and a sample plan.", youtubeTitle: "92% on Plan: What the Trades Outside It Cost", cta: "Try it free on your own account for 14 days" },
+  [PILOT_16.planId]: { captionBody: "Compare recent trading to your own baseline to see what changed. Demo data.", youtubeTitle: "Win Rate Fell From 76% to 55%: Comparing Against Your Baseline", cta: "Try it free on your own account for 14 days" },
+  [PILOT_17.planId]: { captionBody: "Every prop account's buffer, limits and health on one screen. Sample accounts, not real traders.", youtubeTitle: "Two Funded Accounts, One Screen: Tracking Every Account's Limits", cta: "Try it free on your own account for 14 days" },
+  [PILOT_18.planId]: { captionBody: "The setup and time window that actually work, from your own trades. Demo data.", youtubeTitle: "Your Best Setup by the Numbers: Finding Your Edge", cta: "Try it free on your own account for 14 days" },
 };
 
 for (const plan of BATCH_3_PLANS) PILOT_COPY[plan.planId] = { topic: plan.topic, ...BATCH_3_COPY[plan.planId]! };

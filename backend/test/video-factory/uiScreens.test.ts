@@ -23,7 +23,7 @@ describe("UI screens", () => {
   });
 
   it("matches a screen to keywords in the shot description", () => {
-    const scenes = [scene("product", "Fillbook UI: importing trades from your broker"), scene("product", "Fillbook UI: the calendar view")];
+    const scenes = [scene("product", "Fillbook UI: importing trades into your journal"), scene("product", "Fillbook UI: the calendar view")];
     assignUiScreens(scenes, 0);
     expect(scenes[0]!.imagePath).toContain("connect-source.jpg");
     expect(scenes[1]!.imagePath).toContain("calendar.jpg");
@@ -62,6 +62,32 @@ describe("UI screens", () => {
       assignUiScreens(scenes, 0);
       expect(scenes[0]!.imagePath).not.toContain("trade-log-revenge.jpg");
     }
+  });
+
+  it("a generic custom topic that merely mentions ordinary trading words no longer pulls in an unrelated screen by loose keyword similarity", () => {
+    // 2026-09-27 audit: every surviving screen's keyword list carried the same risk class as the
+    // retired trade-log-revenge.jpg entry -- generic single words ("risk," "account," "profit,"
+    // "rules," "review," "best," "market," "score," "limit," "coach," "chart," "week," ...) that
+    // almost any custom topic could contain regardless of whether it's actually about that
+    // screen's specific feature. None of these shots are about the feature named in parentheses,
+    // so none should match it anymore.
+    const cases: Array<[string, string]> = [
+      ["A trader talks about managing risk on a funded account.", "drawdown-bars.jpg"], // "risk"/"account"/"funded" used to match drawdown
+      ["Why most traders never turn a profit.", "charts.jpg"], // "profit" used to match charts
+      ["The rules that separate winners from losers.", "edge-score.jpg"], // "rules" used to match edge-score
+      ["A review of last week's biggest mistakes.", "weekly-review.jpg"], // "review"/"week" used to match weekly-review
+      ["Finding the best setup for your trading style.", "top-markets.jpg"], // "best"/"setup" used to match top-markets
+      ["A coach explains how to read a chart.", "ai-coach.jpg"], // "coach"/"chart" used to match ai-coach
+    ];
+    for (const [shot, unrelatedFile] of cases) {
+      const scenes = [scene("product", shot)];
+      assignUiScreens(scenes, 0);
+      expect(scenes[0]!.imagePath, shot).not.toContain(unrelatedFile);
+    }
+  });
+
+  it("every UI_SCREENS entry declares a topic tag", () => {
+    for (const s of UI_SCREENS) expect(s.topic, s.file).toBeTruthy();
   });
 
   it("no longer offers the retired screens whose figures contradicted the new ones, or the retired revenge/oversized-framing screen", () => {
