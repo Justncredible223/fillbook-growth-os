@@ -19,7 +19,8 @@
  *  - CharacterName (the actual persona: rook/tilt/ledger/margin/vector/blip) drives everything
  *    VISUAL -- palette, silhouette (hoodie/blazer/scalper-desk), hair/headwear, props.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Resvg } from "@resvg/resvg-js";
@@ -502,4 +503,70 @@ export function renderCharacterTrack(beats: TimedBeat[], durationSeconds: number
     writeFileSync(join(dir, `f${String(f + 1).padStart(5, "0")}.png`), png);
   }
   return { framePattern: CHARACTER_FRAME_PATTERN, frameCount };
+}
+
+const CHILD_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "renderCharacterTrackChild.ts");
+/** The backend package root: where `tsx` resolves from for the child process. */
+const BACKEND_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+/** A real track takes ~7-25s depending on the machine; this only guards against a child that never exits. */
+const CHILD_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * renderCharacterTrack, run in a short-lived child process. resvg-js keeps every render()'s ~1.2 MB output image
+ * allocated for the life of the process (issue #54: a real track of ~570 frames peaks near 1 GB), so drawing the track
+ * inside the render worker left that memory resident while ffmpeg ran on top of it. In a child, the OS takes it all
+ * back when the child exits -- and it exits before this function returns, i.e. before ffmpeg starts. Same function,
+ * same inputs, so the frames are byte-identical to renderCharacterTrack's.
+ *
+ * Never makes a render fail: if the child cannot start or dies, it logs and draws in-process instead (the old
+ * behaviour, just with the memory cost). Set CHARACTER_TRACK_IN_PROCESS=1 to skip the child on purpose.
+ * `options.childScript` exists so a test can point it at a script that fails.
+ */
+export async function renderCharacterTrackIsolated(
+  beats: TimedBeat[],
+  durationSeconds: number,
+  outDir: string,
+  pairId: CharacterPairId = "rook-tilt",
+  options: { childScript?: string } = {},
+): Promise<CharacterTrack> {
+  if (process.env.CHARACTER_TRACK_IN_PROCESS === "1") return renderCharacterTrack(beats, durationSeconds, outDir, pairId);
+  mkdirSync(outDir, { recursive: true });
+  const jobPath = join(outDir, "character-track-job.json");
+  writeFileSync(jobPath, JSON.stringify({ beats, durationSeconds, outDir, pairId }));
+  try {
+    const { frameCount } = await runChild(options.childScript ?? CHILD_SCRIPT, jobPath);
+    return { framePattern: CHARACTER_FRAME_PATTERN, frameCount };
+  } catch (err) {
+    console.warn(`[characters] isolated character-track render failed (${err instanceof Error ? err.message : String(err)}); drawing it in-process instead.`);
+    return renderCharacterTrack(beats, durationSeconds, outDir, pairId);
+  } finally {
+    rmSync(jobPath, { force: true });
+  }
+}
+
+function runChild(script: string, jobPath: string): Promise<{ frameCount: number; peakRssMb: number }> {
+  return new Promise((resolve, reject) => {
+    // --import tsx: the render worker itself runs under tsx, and the child is TypeScript too.
+    const child = spawn(process.execPath, ["--import", "tsx", script, jobPath], { cwd: BACKEND_DIR, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (d) => (stdout += d));
+    child.stderr.on("data", (d) => (stderr += d));
+    const timer = setTimeout(() => child.kill(), CHILD_TIMEOUT_MS);
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      if (code !== 0) return reject(new Error(`child exited ${code ?? signal}: ${stderr.trim().split("\n").slice(-3).join(" | ")}`));
+      try {
+        const parsed = JSON.parse(stdout.trim().split("\n").pop() ?? "") as { frameCount: number; peakRssMb: number };
+        if (typeof parsed.frameCount !== "number") throw new Error("no frameCount");
+        resolve(parsed);
+      } catch {
+        reject(new Error(`child printed no result: ${stdout.trim().slice(-200)}`));
+      }
+    });
+  });
 }
