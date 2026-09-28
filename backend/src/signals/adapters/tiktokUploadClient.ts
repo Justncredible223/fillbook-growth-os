@@ -129,7 +129,10 @@ export class TiktokUploadClient {
         "Content-Type": "video/mp4",
         "Content-Range": `bytes 0-${videoSize - 1}/${videoSize}`,
       },
-      body: input.fileBytes,
+      // Typings-only cast: newer @types/node types Buffer as Uint8Array<ArrayBufferLike>, which fetch's BodyInit no
+      // longer accepts, but Node's fetch takes a Buffer at runtime exactly as before. Cast rather than copy so a
+      // large video isn't duplicated in memory. (This was the one error `npm run typecheck` reported.)
+      body: input.fileBytes as unknown as BodyInit,
     });
     if (!uploadRes.ok) {
       const body = await uploadRes.text();

@@ -1,0 +1,51 @@
+name: CI
+
+# Typecheck and tests for the backend on every pull request. Before this existed nothing ran the test suite
+# anywhere: PRs only got Vercel's build check.
+#
+# Deliberately uses no secrets and only the plain `pull_request` trigger (never `pull_request_target`): this repo is
+# public, and a workflow that ran a fork's code with secrets available would hand those secrets out.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push to the same PR replaces the older run instead of queueing behind it.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      # Same tools the real render workflow installs (video-render.yml), because the render tests exercise them.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install edge-tts
+        run: pip install edge-tts
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
