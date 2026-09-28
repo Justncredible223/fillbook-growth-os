@@ -136,7 +136,7 @@ async function buildVerifiedMotionPlan(
     ? await synthesizeRealNarrationAudio(scenePlan, outDir, runner)
     : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner);
   const adjustedPlan = applyRealDurations(scenePlan, narration.durationsBySceneId);
-  const adapted = await buildRenderPlanScenes(adjustedPlan, manifest, outDir, runner);
+  const adapted = await buildRenderPlanScenes(adjustedPlan, manifest, outDir, runner, narration.wordCuesBySceneId);
 
   const assPath = join(outDir, "captions.ass");
   writeFileSync(assPath, buildAssFile(adapted.captionCues, adapted.sceneLabelCues), "utf-8");

@@ -8,12 +8,66 @@ import {
   secondsToAssTime,
   escapeAssText,
   buildAssFile,
+  alignHeadlineToSpeech,
+  buildHeadlineWordVariants,
 } from "../../scripts/video-factory/captions";
 import type { WordCue } from "../../scripts/video-factory/types";
 
 function word(text: string, startSeconds: number, endSeconds: number): WordCue {
   return { text, startSeconds, endSeconds };
 }
+
+describe("alignHeadlineToSpeech", () => {
+  const spoken = [word("Same", 0.05, 0.3), word("setup.", 0.35, 0.8), word("Bigger", 0.9, 1.2), word("size.", 1.25, 1.6), word("Five", 1.8, 2.0)];
+
+  it("pairs a headline with the first spoken words when they match, ignoring case and punctuation", () => {
+    const aligned = alignHeadlineToSpeech("Same setup. Bigger size.", spoken);
+    expect(aligned?.map((w) => w.text)).toEqual(["Same", "setup.", "Bigger", "size."]);
+    expect(aligned?.[2]).toEqual({ text: "Bigger", startSeconds: 0.9, endSeconds: 1.2 });
+    expect(alignHeadlineToSpeech("SAME setup Bigger size", spoken)).not.toBeNull();
+  });
+
+  it("returns null when the headline is not literally what is spoken first, so nothing gets highlighted on the wrong words", () => {
+    expect(alignHeadlineToSpeech("Your plan says three.", spoken)).toBeNull();
+    // a number spelled differently in the headline than in the speech
+    expect(alignHeadlineToSpeech("5 contracts.", [word("Five", 0, 0.3), word("contracts.", 0.35, 0.8)])).toBeNull();
+  });
+
+  it("returns null for an empty headline or when the speech is shorter than the headline", () => {
+    expect(alignHeadlineToSpeech("   ", spoken)).toBeNull();
+    expect(alignHeadlineToSpeech("Same setup. Bigger size. Five contracts. Really.", spoken)).toBeNull();
+  });
+});
+
+describe("buildHeadlineWordVariants", () => {
+  const words = [word("Same", 0.05, 0.3), word("setup.", 0.35, 0.8), word("Bigger", 0.9, 1.2), word("size.", 1.25, 1.6)];
+
+  it("emits one variant per word with exactly that word highlighted and popping, on the video timeline", () => {
+    const variants = buildHeadlineWordVariants(words, 10, 14);
+    expect(variants).toHaveLength(5); // 4 words + the finished-headline tail
+    expect(variants[0]!.markup).toBe("{\\c&H00EED322&\\t(0,110,\\fscx120\\fscy120)}Same{\\c&H00FFFFFF&\\fscx100\\fscy100} setup. Bigger size.");
+    expect(variants[2]!.markup).toBe("Same setup. {\\c&H00EED322&\\t(0,110,\\fscx120\\fscy120)}Bigger{\\c&H00FFFFFF&\\fscx100\\fscy100} size.");
+  });
+
+  it("is on screen from the scene's first frame, runs each variant to the next word's start, and holds the finished headline to the scene end", () => {
+    const variants = buildHeadlineWordVariants(words, 10, 14);
+    expect(variants[0]!.startSeconds).toBe(10);
+    expect(variants[0]!.endSeconds).toBeCloseTo(10.35);
+    expect(variants[1]!.startSeconds).toBeCloseTo(10.35);
+    expect(variants[3]!.endSeconds).toBeCloseTo(11.6);
+    const tail = variants[4]!;
+    expect(tail.markup).toBe("Same setup. Bigger size.");
+    expect(tail.startSeconds).toBeCloseTo(11.6);
+    expect(tail.endSeconds).toBe(14);
+    // contiguous: no gap and no overlap, so the headline never flickers or doubles
+    for (let i = 1; i < variants.length; i++) expect(variants[i]!.startSeconds).toBeCloseTo(variants[i - 1]!.endSeconds);
+  });
+
+  it("never runs outside its scene, even if a word's timing spills past the scene end", () => {
+    const variants = buildHeadlineWordVariants(words, 10, 11);
+    expect(variants.every((v) => v.startSeconds >= 10 && v.endSeconds <= 11)).toBe(true);
+  });
+});
 
 describe("mergeBrandNameWordCues", () => {
   it("merges an adjacent Fill + book pair into one Fillbook cue spanning both", () => {
@@ -120,9 +174,9 @@ describe("buildWordHighlightCues", () => {
     const phrase = [word("Your", 0, 0.3), word("funded", 0.35, 0.7), word("account.", 0.75, 1.0)];
     const cues = buildWordHighlightCues(phrase, "Caption");
     expect(cues).toHaveLength(3);
-    expect(cues[0]!.text).toBe("{\\c&H00EED322&}Your{\\c&H00FFFFFF&} funded account.");
-    expect(cues[1]!.text).toBe("Your {\\c&H00EED322&}funded{\\c&H00FFFFFF&} account.");
-    expect(cues[2]!.text).toBe("Your funded {\\c&H00EED322&}account.{\\c&H00FFFFFF&}");
+    expect(cues[0]!.text).toBe("{\\c&H00EED322&\\fscx114\\fscy114}Your{\\c&H00FFFFFF&\\fscx100\\fscy100} funded account.");
+    expect(cues[1]!.text).toBe("Your {\\c&H00EED322&\\fscx114\\fscy114}funded{\\c&H00FFFFFF&\\fscx100\\fscy100} account.");
+    expect(cues[2]!.text).toBe("Your funded {\\c&H00EED322&\\fscx114\\fscy114}account.{\\c&H00FFFFFF&\\fscx100\\fscy100}");
     expect(cues.every((c) => c.style === "Caption")).toBe(true);
   });
 
@@ -138,7 +192,7 @@ describe("buildWordHighlightCues", () => {
   it("strips literal braces from word text before wrapping the active word", () => {
     const phrase = [word("50%", 0, 0.3), word("{risk}", 0.3, 0.6)];
     const cues = buildWordHighlightCues(phrase, "Caption");
-    expect(cues[1]!.text).toBe("50% {\\c&H00EED322&}risk{\\c&H00FFFFFF&}");
+    expect(cues[1]!.text).toBe("50% {\\c&H00EED322&\\fscx114\\fscy114}risk{\\c&H00FFFFFF&\\fscx100\\fscy100}");
   });
 });
 

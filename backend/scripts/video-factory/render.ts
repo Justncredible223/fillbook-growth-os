@@ -95,6 +95,13 @@ const HOOK_ZOOM_SECONDS = 2.5;
 const HOOK_SCRIM_OPACITY = 0.35;
 
 /**
+ * Card-evidence scenes (the Proof screens) start this much smaller and grow to full size over their own scene
+ * duration. Growing the whole card, rather than zooming into its picture, is what keeps every label and figure
+ * fully visible at every frame; 5% reads as gentle motion without making a number look different between frames.
+ */
+const CARD_SETTLE_AMOUNT = 0.05;
+
+/**
  * Crossfade duration between adjacent scenes, replacing the previous hard
  * cut -- added 2026-09-17 (owner-approved render-quality improvement) to
  * soften the "instant scene change" feel of a plain concat. Capped at 30%
@@ -405,14 +412,24 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     const cardInputs = cardInputIndex.get(i);
     if (scene.card && cardInputs && scene.card.evidence) {
       const e = scene.card.evidence;
+      // Gentle motion so the proof screen isn't dead-static (owner request 2026-09-28): the whole card, shadow
+      // included, grows from (1 - CARD_SETTLE_AMOUNT) of its size to exactly its full size over the scene, always
+      // centred on the same point. It NEVER crops anything (a first attempt zoomed into the picture and clipped the
+      // last digit of "-$257.40" at the card's edge -- caught by frame inspection) and never exceeds the layout the
+      // safe-zone checks approved: it finishes at exactly e.width x e.height at e.x, e.y and is smaller before that.
+      const settleSeconds = Math.max(inputDurations[i]!, 0.1).toFixed(3);
+      const settle = `(${1 - CARD_SETTLE_AMOUNT}+${CARD_SETTLE_AMOUNT}*min(t/${settleSeconds},1))`;
+      const cardCenterX = e.x + e.width / 2;
+      const cardCenterY = e.y + e.height / 2;
       sceneFilterParts.push(
         `[${i}:v]${sourceCropTreatment(scene)}scale=${e.width}:${e.height},format=rgba[cr${i}]`,
         `[${cardInputs.mask}:v]format=gray[mk${i}]`,
-        `[cr${i}][mk${i}]alphamerge[cd${i}]`,
+        `[cr${i}][mk${i}]alphamerge,scale=w='trunc(iw*${settle}/2)*2':h='trunc(ih*${settle}/2)*2':eval=frame[cd${i}]`,
         `[${cardInputs.background}:v]format=rgba[bg${i}]`,
-        `[${cardInputs.shadow}:v]format=rgba[sh${i}]`,
-        `[bg${i}][sh${i}]overlay=${e.x - CARD_SHADOW_SPREAD}:${e.y - CARD_SHADOW_SPREAD + CARD_SHADOW_DROP}[cb${i}]`,
-        `[cb${i}][cd${i}]overlay=${e.x}:${e.y}:shortest=1,fps=${FRAME_RATE},format=yuv420p,setsar=1:1,setpts=PTS-STARTPTS[${label}]`,
+        `[${cardInputs.shadow}:v]format=rgba,scale=w='trunc(iw*${settle}/2)*2':h='trunc(ih*${settle}/2)*2':eval=frame[sh${i}]`,
+        // The shadow sits CARD_SHADOW_DROP below the card's centre, exactly as the static layout placed it.
+        `[bg${i}][sh${i}]overlay=x='${cardCenterX}-w/2':y='${cardCenterY + CARD_SHADOW_DROP}-h/2':eval=frame[cb${i}]`,
+        `[cb${i}][cd${i}]overlay=x='${cardCenterX}-w/2':y='${cardCenterY}-h/2':eval=frame:shortest=1,fps=${FRAME_RATE},format=yuv420p,setsar=1:1,setpts=PTS-STARTPTS[${label}]`,
       );
       continue;
     }
