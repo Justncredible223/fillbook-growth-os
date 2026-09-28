@@ -471,9 +471,23 @@ describe("buildFfmpegArgs card presentation", () => {
     expect(args.join(" ")).toContain("card-shadow-0.png");
     expect(filter).toContain("[0:v]crop=1004:326:38:300,");
     expect(filter).toContain("scale=996:324,format=rgba[cr0]");
-    expect(filter).toContain("[cr0][mk0]alphamerge[cd0]");
-    expect(filter).toContain("[bg0][sh0]overlay=2:382[cb0]");
-    expect(filter).toContain("[cb0][cd0]overlay=42:400:shortest=1");
+    expect(filter).toContain("[cr0][mk0]alphamerge,");
+    expect(filter).toContain("eval=frame[cd0]");
+    expect(filter).toContain("eval=frame[sh0]");
+  });
+
+  it("the card grows from 95% to exactly its full approved size, centred on the approved position, and never crops or exceeds it", () => {
+    const args = buildFfmpegArgs(cardPlan);
+    const filter = args[args.indexOf("-filter_complex") + 1]!;
+    // Card x=42..1038 (w 996), y=400..724 (h 324): centre (540, 562). The shadow sits CARD_SHADOW_DROP (22) lower.
+    expect(filter).toContain("[cb0][cd0]overlay=x='540-w/2':y='562-h/2':eval=frame:shortest=1");
+    expect(filter).toContain("[bg0][sh0]overlay=x='540-w/2':y='584-h/2':eval=frame[cb0]");
+    // Size factor is (0.95 + 0.05 * min(t/duration, 1)): 0.95 at the start, exactly 1 from the scene's end, never above 1.
+    const factors = filter.match(/\(0\.95\+0\.05\*min\(t\/[\d.]+,1\)\)/g) ?? [];
+    expect(factors.length).toBeGreaterThanOrEqual(4); // card width+height, shadow width+height
+    // Regression guard: the first attempt zoomed INTO the picture and clipped the last digit of "-$257.40" at the
+    // card's edge. Nothing may crop the evidence after the source crop.
+    expect(filter).not.toContain("crop='iw/");
   });
 
   it("a text-only card scene loops the background still instead of a solid color", () => {

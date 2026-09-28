@@ -23,8 +23,8 @@ import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ProcessRunner } from "./processRunner.js";
 import type { Scene as RenderScene } from "./types.js";
-import { VideoFactoryError } from "./types.js";
-import { escapeAssText, type SceneLabelCue } from "./captions.js";
+import { VideoFactoryError, type WordCue } from "./types.js";
+import { alignHeadlineToSpeech, buildHeadlineWordVariants, escapeAssText, mergeBrandNameWordCues, type SceneLabelCue } from "./captions.js";
 import { ASSETS_DIR, validateScenePlan } from "../../src/shortform/scenePlan.js";
 import type { CaptionCue } from "./types.js";
 import type { ScenePlan, SceneSpec, VerifiedManifest, VerifiedAsset } from "../../src/shortform/types.js";
@@ -118,7 +118,14 @@ async function buildCardMaskAndShadow(layout: CardLayout, outDir: string, runner
  * (disclosure text, reusing the exact mechanism scenes.ts already uses for
  * "FILLBOOK · EXAMPLE DATA").
  */
-export async function buildRenderPlanScenes(plan: ScenePlan, manifest: VerifiedManifest, outDir: string, runner: ProcessRunner): Promise<AdaptedScenes> {
+export async function buildRenderPlanScenes(
+  plan: ScenePlan,
+  manifest: VerifiedManifest,
+  outDir: string,
+  runner: ProcessRunner,
+  /** Real per-scene word timings from the production voice. When given, the FIRST scene's headline is highlighted word by word as it is spoken; omitted (offline voice, silent previews), every headline stays plain static text. */
+  wordCuesBySceneId?: Record<string, WordCue[]>,
+): Promise<AdaptedScenes> {
   const validation = validateScenePlan(plan, manifest, { checkFiles: true });
   if (!validation.ok) {
     const errors = validation.issues.filter((i) => i.severity === "error").map((i) => `${i.sceneId}: ${i.code} -- ${i.message}`);
@@ -189,18 +196,33 @@ export async function buildRenderPlanScenes(plan: ScenePlan, manifest: VerifiedM
       // Card layout: the headline and a smaller, softer caption as one block, directly under the evidence card, or
       // in the upper-middle of the frame on a text-only scene. The closing scene's caption uses the accent color.
       const captionColor = s.cta ? "&HCFB822&" : "&HC4B39F&";
-      // Text-only scenes get a short accent bar (an ASS vector drawing) above the headline.
-      const parts = [cardLayout ? "" : `{\\p1\\c&HCFB822&}m 0 0 l 140 0 140 10 0 10{\\p0\\c&HFFFFFF&}`, s.headline ? escapeAssText(s.headline) : ""];
-      if (s.captionText) parts.push(`{\\fs22} `, `{\\fs46\\c${captionColor}}${escapeAssText(s.captionText)}`);
-      // The CTA text itself (e.g. "Follow @fillbookhq") was previously only used to pick this
-      // scene's accent caption color and to feed pilotMetadata()'s cta/handlePlacement fields --
-      // it was never actually painted onto the video, so a finished render never showed the
-      // invitation it claimed to make (confirmed by grepping a real render's captions.ass for
-      // "fillbook"/"follow": no match). Render it as its own line so the on-screen closing card
-      // matches what the metadata reports.
-      if (s.cta) parts.push(`{\\fs22} `, `{\\fs38\\c&HCFB822&}${escapeAssText(s.cta)}`);
-      const text = parts.filter(Boolean).join("\\N");
-      if (text) captionCues.push({ text, startSeconds: start, endSeconds: end, style: "Card", marginV: cardLayout ? cardLayout.textTop : TEXT_ONLY_CARD_TOP });
+      const marginV = cardLayout ? cardLayout.textTop : TEXT_ONLY_CARD_TOP;
+      // The whole caption block for a given rendering of the headline. Text-only scenes get a short accent bar (an
+      // ASS vector drawing) above the headline.
+      const buildBlock = (headlineMarkup: string): string => {
+        const parts = [cardLayout ? "" : `{\\p1\\c&HCFB822&}m 0 0 l 140 0 140 10 0 10{\\p0\\c&HFFFFFF&}`, headlineMarkup];
+        if (s.captionText) parts.push(`{\\fs22} `, `{\\fs46\\c${captionColor}}${escapeAssText(s.captionText)}`);
+        // The CTA text itself (e.g. "Follow @fillbookhq") was previously only used to pick this
+        // scene's accent caption color and to feed pilotMetadata()'s cta/handlePlacement fields --
+        // it was never actually painted onto the video, so a finished render never showed the
+        // invitation it claimed to make (confirmed by grepping a real render's captions.ass for
+        // "fillbook"/"follow": no match). Render it as its own line so the on-screen closing card
+        // matches what the metadata reports.
+        if (s.cta) parts.push(`{\\fs22} `, `{\\fs38\\c&HCFB822&}${escapeAssText(s.cta)}`);
+        return parts.filter(Boolean).join("\\N");
+      };
+      // The hook (first scene): highlight its headline word by word as it is spoken, each word popping in. Only when
+      // real word timings exist AND the headline is literally the first words of the narration -- otherwise the
+      // highlight would land on the wrong words, so the plain static headline stays.
+      const spokenHeadline = i === 0 && s.headline ? alignHeadlineToSpeech(s.headline, mergeBrandNameWordCues(wordCuesBySceneId?.[s.sceneId] ?? [])) : null;
+      if (spokenHeadline) {
+        for (const v of buildHeadlineWordVariants(spokenHeadline, start, end)) {
+          captionCues.push({ text: buildBlock(v.markup), startSeconds: v.startSeconds, endSeconds: v.endSeconds, style: "Card", marginV });
+        }
+      } else {
+        const text = buildBlock(s.headline ? escapeAssText(s.headline) : "");
+        if (text) captionCues.push({ text, startSeconds: start, endSeconds: end, style: "Card", marginV });
+      }
     } else {
       const captionParts = [s.headline, s.captionText, s.cta].filter((v): v is string => Boolean(v)).map(escapeAssText);
       const captionText = captionParts.join("\\N");
@@ -261,6 +283,8 @@ export function applyRealDurations(plan: ScenePlan, durationsBySceneId: Record<s
 export interface RealNarrationResult {
   voiceoverPath: string;
   durationsBySceneId: Record<string, number>;
+  /** Real word timings per scene (seconds from that scene's own audio start). Only the production voice reports them; the offline voice leaves this out. */
+  wordCuesBySceneId?: Record<string, WordCue[]>;
   /** What actually produced this audio -- every caller/report must say this, never imply a finished narration when it wasn't the real production voice. */
   provenance: "edge_tts" | "offline_sapi" | "supplied";
 }
@@ -282,7 +306,7 @@ async function synthesizePerSceneAndConcat(
   outDir: string,
   runner: ProcessRunner,
   partExt: string,
-  synthesizeOne: (text: string, partPath: string) => Promise<number>,
+  synthesizeOne: (text: string, partPath: string, sceneId: string) => Promise<number>,
   voiceoverBasename: string,
 ): Promise<{ voiceoverPath: string; durationsBySceneId: Record<string, number> }> {
   mkdirSync(outDir, { recursive: true });
@@ -296,7 +320,7 @@ async function synthesizePerSceneAndConcat(
       if (result.exitCode !== 0) throw new VideoFactoryError(`Failed to build silence for scene "${s.sceneId}": ${result.stderr || result.stdout}`);
       durationsBySceneId[s.sceneId] = MIN_SILENT_SCENE_SECONDS;
     } else {
-      durationsBySceneId[s.sceneId] = await synthesizeOne(s.narration, partPath);
+      durationsBySceneId[s.sceneId] = await synthesizeOne(s.narration, partPath, s.sceneId);
     }
     partPaths.push(partPath);
   }
@@ -338,20 +362,22 @@ export async function synthesizeRealNarrationAudio(plan: ScenePlan, outDir: stri
  * offline SAPI version above is local-verification-only.
  */
 export async function synthesizeProductionNarrationAudio(plan: ScenePlan, outDir: string, runner: ProcessRunner): Promise<RealNarrationResult> {
+  const wordCuesBySceneId: Record<string, WordCue[]> = {};
   const { voiceoverPath, durationsBySceneId } = await synthesizePerSceneAndConcat(
     plan,
     outDir,
     runner,
     "mp3",
-    async (text, partPath) => {
+    async (text, partPath, sceneId) => {
       const sceneOutDir = dirname(partPath);
       const result = await generateVoiceover(text, sceneOutDir, runner, DEFAULT_VOICE);
       copyFileSync(result.mp3Path, partPath);
+      wordCuesBySceneId[sceneId] = result.wordCues;
       return result.durationSeconds;
     },
     "voiceover-production-narration.mp3",
   );
-  return { voiceoverPath, durationsBySceneId, provenance: "edge_tts" };
+  return { voiceoverPath, durationsBySceneId, wordCuesBySceneId, provenance: "edge_tts" };
 }
 
 /**

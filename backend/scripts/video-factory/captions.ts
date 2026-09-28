@@ -61,10 +61,15 @@ export function groupWordsIntoPhrases(words: WordCue[]): WordCue[][] {
   return phrases;
 }
 
-/** Brand cyan, ASS BGR (matches the old Hook style colour) -- the one highlight colour used for whichever word is currently being spoken. */
-const HIGHLIGHT_COLOR_TAG = "\\c&H00EED322&";
-/** Both styles' own PrimaryColour is white (see ASS_HEADER) -- this override switches a word back to it once it's no longer the active one. */
-const BASE_COLOR_TAG = "\\c&H00FFFFFF&";
+/**
+ * Brand cyan, ASS BGR (matches the old Hook style colour), plus a 14% scale-up -- the active-word "pop" look
+ * (2026-09-28, owner request) used for whichever word is currently being spoken. \fscx/\fscy are RESET, not
+ * relative, so every highlighted word snaps to exactly 114% regardless of any earlier override in the same line.
+ */
+const HIGHLIGHT_COLOR_ONLY = "\\c&H00EED322&";
+const HIGHLIGHT_COLOR_TAG = `${HIGHLIGHT_COLOR_ONLY}\\fscx114\\fscy114`;
+/** Both styles' own PrimaryColour is white (see ASS_HEADER) and their own scale is 100 -- this override switches a word back to both once it's no longer the active one. */
+const BASE_COLOR_TAG = "\\c&H00FFFFFF&\\fscx100\\fscy100";
 
 /**
  * Builds one Dialogue line per word within a phrase: the full phrase text
@@ -90,6 +95,58 @@ export function buildWordHighlightCues(phrase: WordCue[], style: "Hook" | "Capti
     const end = nextWord ? nextWord.startSeconds : word.endSeconds;
     return { text, startSeconds: start, endSeconds: end, style };
   });
+}
+
+/** Per-word pop for the hook headline: an ASS \t transform, so the word grows 20% over 110ms from the moment its own Dialogue line starts. */
+const HEADLINE_POP_TAG = "\\t(0,110,\\fscx120\\fscy120)";
+
+function normalizeForMatch(word: string): string {
+  return word.toLowerCase().replace(/[^a-z0-9$%]/g, "");
+}
+
+/**
+ * Pairs a scene's authored headline with the real spoken timing of its first words, or returns null when they don't
+ * line up word for word (case and punctuation aside). Verified-motion hooks usually open the narration with the
+ * headline itself ("Same setup. Bigger size." spoken, then the detail); a headline that is only a paraphrase of the
+ * speech, or spells a number differently ("5" vs "Five"), would highlight the wrong words, so it gets no highlighting
+ * at all and the caller keeps the plain static headline.
+ */
+export function alignHeadlineToSpeech(headline: string, spoken: WordCue[]): WordCue[] | null {
+  const headlineWords = headline.trim().split(/\s+/).filter(Boolean);
+  if (headlineWords.length === 0 || spoken.length < headlineWords.length) return null;
+  for (let i = 0; i < headlineWords.length; i++) {
+    const want = normalizeForMatch(headlineWords[i]!);
+    if (want === "" || want !== normalizeForMatch(spoken[i]!.text)) return null;
+  }
+  return headlineWords.map((text, i) => ({ text, startSeconds: spoken[i]!.startSeconds, endSeconds: spoken[i]!.endSeconds }));
+}
+
+export interface HeadlineWordVariant {
+  /** The headline as ASS markup with exactly one word highlighted (none, for the closing tail). */
+  markup: string;
+  startSeconds: number;
+  endSeconds: number;
+}
+
+/**
+ * One variant of the headline per spoken word: that word is brand cyan and pops in, the others stay white. Times are
+ * on the video timeline (`sceneStart` + each word's own offset). The first variant starts at the scene's own start so the
+ * headline is on screen from frame one, each variant runs to the next word's start (no flicker in the gaps), and a final
+ * un-highlighted tail holds the finished headline until the scene ends.
+ */
+export function buildHeadlineWordVariants(words: WordCue[], sceneStart: number, sceneEnd: number): HeadlineWordVariant[] {
+  const escaped = words.map((w) => escapeAssText(w.text));
+  const clamp = (t: number) => Math.min(Math.max(t, sceneStart), sceneEnd);
+  const variants: HeadlineWordVariant[] = words.map((word, i) => {
+    const markup = escaped.map((w, j) => (j === i ? `{${HIGHLIGHT_COLOR_ONLY}${HEADLINE_POP_TAG}}${w}{${BASE_COLOR_TAG}}` : w)).join(" ");
+    const start = i === 0 ? sceneStart : clamp(sceneStart + word.startSeconds);
+    const next = words[i + 1];
+    const end = next ? clamp(sceneStart + next.startSeconds) : clamp(sceneStart + word.endSeconds);
+    return { markup, startSeconds: start, endSeconds: end };
+  });
+  const last = variants[variants.length - 1]!;
+  if (sceneEnd - last.endSeconds > 0.02) variants.push({ markup: escaped.join(" "), startSeconds: last.endSeconds, endSeconds: sceneEnd });
+  return variants.filter((v) => v.endSeconds - v.startSeconds > 0.005);
 }
 
 /**
