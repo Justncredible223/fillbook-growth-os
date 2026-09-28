@@ -8,15 +8,19 @@ name: CI
 
 on:
   pull_request:
+  # Every merge to master is tested too, so master's status is visible without triggering it by hand.
+  push:
+    branches: [master]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  # A newer push to the same PR replaces the older run instead of queueing behind it.
+  # A newer push to the same PR replaces the older run instead of queueing behind it. Runs on master are never
+  # cancelled, so every merged commit gets its own result.
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   backend:
