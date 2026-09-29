@@ -1,5 +1,4 @@
 import { buildPublishedMetadata, type PublishedVideoMetadata } from "./metadata.js";
-import { withCharacterBeats } from "./characterBeats.js";
 import { OFFICIAL_HANDLE, type Claim, type Mask, type Platform, type Rect, type SceneSpec, type ScenePlan } from "./types.js";
 
 /**
@@ -1194,6 +1193,333 @@ const BATCH_3_COPY: Record<string, { captionBody: string; youtubeTitle: string; 
 for (const plan of BATCH_3_PLANS) PILOT_COPY[plan.planId] = { topic: plan.topic, ...BATCH_3_COPY[plan.planId]! };
 
 /* ---------------------------------------------------------------------------------------------- */
+/* High-stakes batch (2026-09-28): concepts recorded against the five "Pilot ... Account" fixtures  */
+/* seeded by frontend/scripts/seed-pilot-highstakes-fixtures.mjs (1-4) and the pre-existing          */
+/* seed-pilot-behavior-fixtures.mjs (5, reused). Crops are measured card edges from the real         */
+/* instrumented capture (scripts/video-factory/runPilotCapture.ts's "hs-*" shots), not guesses.      */
+/* ---------------------------------------------------------------------------------------------- */
+
+const HS_PAYOUT_REC = "rec.hs-payout-account.v1";
+const HS_PAYOUT_CALENDAR_CROP: Rect = { x: 38, y: 150, w: 1004, h: 1290 };
+const HS_PAYOUT_READINESS_CROP: Rect = { x: 38, y: 160, w: 1004, h: 660 };
+
+export const PILOT_19 = batch3Plan({
+  n: 19,
+  slug: "payout-request-undone",
+  title: "One trade, $1,504.04 -- the day payout math flipped.",
+  series: "Read the Rule",
+  topic: "A single oversized trading day next to a funded account's profit target and payout request",
+  scenes: [
+    {
+      narration: "Day 25 alone: -$1,504.04.",
+      headline: "-$1,504.04 in one day",
+      caption: "The only red day in 18.",
+      takeaway: "One day can stand out against a whole month.",
+      topics: ["payout_readiness"],
+      asset: {
+        id: HS_PAYOUT_REC,
+        crop: HS_PAYOUT_CALENDAR_CROP,
+        clip: { start: 1.7, end: 7.8 },
+        claim: "September: month total $6,995.96 across 18 days, 19 trades. Day 25 alone -$1,504.04 across 2 trades, 0% win rate -- the only red day; 17 of 18 days green.",
+        factKey: "calendar.overview",
+      },
+    },
+    {
+      narration: "That trade pulled net P&L to $7,515.96 -- 84% of the $9,000 profit target, $1,484.04 short.",
+      headline: "$7,515.96 of $9,000 target",
+      caption: "84% there, $1,484.04 to go.",
+      takeaway: "A single day can move a whole target's progress.",
+      topics: ["payout_readiness"],
+      asset: {
+        id: HS_PAYOUT_REC,
+        crop: HS_PAYOUT_READINESS_CROP,
+        clip: { start: 17.1, end: 31.9 },
+        claim: "Pilot Payout 150K Funded, payout readiness: no active rule breach; profit target reached -- Net P&L 7515.96 of 9000 target (1484.04 to go), 84% of the way there.",
+        factKey: "payouts.readiness",
+      },
+    },
+    {
+      narration: "This is a sample account with a sample rule set. Confirm your own firm's payout policy before requesting.",
+      headline: "Confirm your firm's policy",
+      caption: "Sample account, not a real trader.",
+      takeaway: "Your firm's actual policy is the one that counts.",
+      topics: ["payout_readiness"],
+    },
+    {
+      narration: "Know the real number before you request a payout.",
+      headline: "Know the number first.",
+      caption: "Check yours at fillbookhq.com.",
+      takeaway: "Check the target and the limit together.",
+      topics: ["payout_readiness"],
+    },
+  ],
+});
+
+const HS_TRAILING_REC = "rec.hs-trailing-account.v1";
+const HS_TRAILING_SUMMARY_CROP: Rect = { x: 38, y: 145, w: 1004, h: 1335 };
+const HS_TRAILING_FLOOR_CROP: Rect = { x: 38, y: 145, w: 1004, h: 1585 };
+
+export const PILOT_20 = batch3Plan({
+  n: 20,
+  slug: "the-floor-doesnt-come-back-down",
+  title: "Up $40 net. Still $60 under its own floor.",
+  series: "Read the Rule",
+  topic: "A trailing drawdown floor set by a past peak, not by today's balance",
+  scenes: [
+    {
+      narration: "Best day ever: +$3,100. Then -$3,060.",
+      headline: "+$3,100. Then -$3,060.",
+      caption: "Net still positive: +$40.00.",
+      takeaway: "A big win and a big loss can both be real, on the same account.",
+      topics: ["trailing_drawdown"],
+      asset: {
+        id: HS_TRAILING_REC,
+        crop: HS_TRAILING_SUMMARY_CROP,
+        clip: { start: 1.7, end: 8.0 },
+        claim: "Pilot Trailing Account: Sep 21 best day $3,100.00 (1 trade, 100% win), Sep 25 worst day -$3,060.00 (1 trade, 0% win); net +$40.00 across 2 trades, green days 1/2.",
+        factKey: "dashboard.trailing_summary",
+      },
+    },
+    {
+      narration: "Buffer to the floor: $-60. Equity is already below the trailing floor -- most firms close an account right there. Health: 45 of 100, caution.",
+      headline: "$-60 buffer to the floor",
+      caption: "Health 45 of 100. Caution.",
+      takeaway: "A trailing floor is set by the peak, not by today's balance.",
+      topics: ["trailing_drawdown"],
+      asset: {
+        id: HS_TRAILING_REC,
+        crop: HS_TRAILING_FLOOR_CROP,
+        clip: { start: 17.3, end: 29.3 },
+        claim: "Daily Brief: $-60 of buffer to the floor, $1,000 of today's loss limit; \"Equity is below the trailing floor. Most firms close an account at this point.\" Account Health 45/100, Caution.",
+        factKey: "dashboard.floor_breach",
+      },
+    },
+    {
+      narration: "This is a sample account with a sample rule set. Confirm your own firm's trailing-drawdown rule.",
+      headline: "Confirm your firm's rule",
+      caption: "Sample account, not a real trader.",
+      takeaway: "Trailing rules vary a lot firm to firm.",
+      topics: ["trailing_drawdown"],
+    },
+    {
+      narration: "Know where your own floor actually sits.",
+      headline: "Know your real floor.",
+      caption: "Check yours at fillbookhq.com.",
+      takeaway: "A peak can set a floor that doesn't move back down.",
+      topics: ["trailing_drawdown"],
+    },
+  ],
+});
+
+const HS_FINALDAY_REC = "rec.hs-finalday-account.v1";
+const HS_FINALDAY_SUMMARY_CROP: Rect = { x: 38, y: 140, w: 1004, h: 1320 };
+const HS_FINALDAY_TARGET_CROP: Rect = { x: 38, y: 1140, w: 1004, h: 440 };
+
+export const PILOT_21 = batch3Plan({
+  n: 21,
+  slug: "one-session-left-target-in-sight",
+  title: "98% to target. On the 10th trading day.",
+  series: "Read the Rule",
+  topic: "A profit target and a minimum-trading-days requirement converging in the same session",
+  scenes: [
+    {
+      narration: "10 green days in a row. $2,940 net.",
+      headline: "10/10 green days",
+      caption: "Net $2,940.00 across 21 trades.",
+      takeaway: "A clean streak is its own kind of evidence.",
+      topics: ["payout_readiness"],
+      asset: {
+        id: HS_FINALDAY_REC,
+        crop: HS_FINALDAY_SUMMARY_CROP,
+        clip: { start: 1.7, end: 8.0 },
+        claim: "Pilot Final Day Account: September, $2,940.00 net, 10 days, 21 trades, green days 10/10, current day streak 10.",
+        factKey: "dashboard.finalday_summary",
+      },
+    },
+    {
+      narration: "Profit target: $3,000. Currently $2,940 -- 98% of the way there.",
+      headline: "$2,940 of $3,000 -- 98%",
+      caption: "98% of the way there.",
+      takeaway: "Two requirements can land on the same session.",
+      topics: ["payout_readiness"],
+      asset: {
+        id: HS_FINALDAY_REC,
+        crop: HS_FINALDAY_TARGET_CROP,
+        clip: { start: 17.3, end: 27.3 },
+        claim: "Pilot Final Day 50K Evaluation: profit target $3,000.00, currently $2,940.00 (98%); max drawdown buffer $4,940.00, today's loss limit remaining $1,000.00.",
+        factKey: "rules.finalday_target",
+      },
+    },
+    {
+      narration: "This is a sample account. What happens next isn't predicted here.",
+      headline: "Not a prediction",
+      caption: "Sample account, not a real trader.",
+      takeaway: "A close number is still just a number, not an outcome.",
+      topics: ["payout_readiness"],
+    },
+    {
+      narration: "Know exactly how close you are, every session.",
+      headline: "Know how close you are.",
+      caption: "Track yours at fillbookhq.com.",
+      takeaway: "A target you can see is easier to trade toward.",
+      topics: ["payout_readiness"],
+    },
+  ],
+});
+
+const HS_MULTI_A_REC = "rec.hs-multi-account-a.v1";
+const HS_MULTI_B_REC = "rec.hs-multi-account-b.v1";
+const HS_MULTI_SUMMARY_CROP: Rect = { x: 38, y: 140, w: 1004, h: 1320 };
+
+export const PILOT_22 = batch3Plan({
+  n: 22,
+  slug: "one-signal-two-accounts",
+  title: "One trade. Both accounts, same -$1,201.",
+  series: "Read the Rule",
+  topic: "Duplicating a trade's size across multiple accounts duplicates the risk",
+  scenes: [
+    {
+      narration: "Day 25 alone: -$1,201 on Account A.",
+      headline: "Account A: -$1,201",
+      caption: "1 trade, 0% win.",
+      takeaway: "One trade can define a whole day.",
+      topics: ["accounts_overview"],
+      asset: {
+        id: HS_MULTI_A_REC,
+        crop: HS_MULTI_SUMMARY_CROP,
+        clip: { start: 1.7, end: 8.0 },
+        claim: "Pilot Multi Account A: September -$1,076.00 net, 4 days, 4 trades. Day 25 alone -$1,201.00 (1 trade, 0% win), green days 2/4.",
+        factKey: "dashboard.multi_a_summary",
+      },
+    },
+    {
+      narration: "Same day, same setup: -$1,201 on Account B too.",
+      headline: "Account B: -$1,201 too",
+      caption: "Same setup, both accounts.",
+      takeaway: "The same size shows up as risk twice, not once.",
+      topics: ["accounts_overview"],
+      asset: {
+        id: HS_MULTI_B_REC,
+        crop: HS_MULTI_SUMMARY_CROP,
+        clip: { start: 1.7, end: 8.0 },
+        claim: "Pilot Multi Account B: September -$1,076.00 net, 4 days, 4 trades. Day 25 alone -$1,201.00 (1 trade, 0% win), green days 2/4.",
+        factKey: "dashboard.multi_b_summary",
+      },
+    },
+    {
+      narration: "These are sample accounts. Sizing the same way across accounts is a choice worth reviewing.",
+      headline: "Worth reviewing, not a verdict",
+      caption: "Sample accounts, not real traders.",
+      takeaway: "More accounts means the same size costs more, not less.",
+      topics: ["accounts_overview"],
+    },
+    {
+      narration: "See every account's risk on one screen.",
+      headline: "See every account at once.",
+      caption: "Track yours at fillbookhq.com.",
+      takeaway: "Check the size before it repeats across accounts.",
+      topics: ["accounts_overview"],
+    },
+  ],
+});
+
+const HS_BEHAVIOR_REC = "rec.hs-behavior-account.v1";
+/**
+ * h corrected 1310 -> 1500 (2026-09-28): the original 1310 was measured short -- pixel-scanning the
+ * real source frame (motion/hs-mobile-behavior-account.mp4) shows the "Best day $203.12 / Worst day
+ * -$468.20" row's own glyphs extend to about y=1463, while y=145+1310=1455 cut into them, and the
+ * card's own rounded bottom border sits at about y=1638. That partial clip was only a few pixels at
+ * the render's old (smaller) card scale, easy to miss -- raising CARD_MAX_HEIGHT (see render.ts) made
+ * the same clip much more visible, which is what surfaced this. 1500 (bottom y=1645) clears the real
+ * border with a few px to spare and also reveals the "Avg / trading day" / "Green days" row already
+ * fully underneath (both already listed in this asset's own verified fact values).
+ */
+const HS_BEHAVIOR_MONTH_CROP: Rect = { x: 38, y: 145, w: 1004, h: 1500 };
+const HS_BEHAVIOR_WATCH_CROP: Rect = { x: 38, y: 140, w: 1004, h: 560 };
+
+export const PILOT_23 = batch3Plan({
+  n: 23,
+  slug: "the-session-that-unraveled",
+  title: "6 trades after a losing streak. Normal is 2.7.",
+  series: "What Your Journal Shows",
+  topic: "A single session's trade count compared against a trader's own baseline pace",
+  scenes: [
+    {
+      narration: "One red day: -$465, on 6 trades, 17% win. Against 13 green days out of 19.",
+      headline: "-$465 on 6 trades, 17% win",
+      caption: "13 of 19 days were green.",
+      takeaway: "One session can stand out from a mostly-green month.",
+      topics: ["overtrading"],
+      asset: {
+        id: HS_BEHAVIOR_REC,
+        crop: HS_BEHAVIOR_MONTH_CROP,
+        clip: { start: 1.7, end: 11.5 },
+        claim: "Pilot Behavior Account: September -$185.44, 19 days, 60 trades. Day 25 alone -$465 (6 trades, 17% win), green days 13/19.",
+        factKey: "calendar.month_overview",
+      },
+    },
+    {
+      narration: "That session ran to 6 trades after a losing streak -- normal pace is 2.7 a day. Frequency up 126%.",
+      headline: "6 trades vs a 2.7 normal",
+      caption: "Frequency up 126%.",
+      takeaway: "The losing day was also the busiest day.",
+      topics: ["overtrading"],
+      asset: {
+        id: HS_BEHAVIOR_REC,
+        crop: HS_BEHAVIOR_WATCH_CROP,
+        clip: { start: 19.0, end: 31.0 },
+        claim: "Worth watching -- overtrading vs. baseline: 6 trades last session (Sep 25) after a losing streak, normal pace 2.7/day, frequency up 126%.",
+        factKey: "dashboard.overtrading_watch",
+      },
+    },
+    {
+      narration: "This is a sample account, and a busy day isn't proof of anything by itself.",
+      headline: "Worth a look, not a verdict",
+      caption: "Sample account, not a real trader.",
+      takeaway: "Pace is a pattern to check, not an accusation.",
+      topics: ["overtrading"],
+    },
+    {
+      narration: "Know your own normal pace, one session at a time.",
+      headline: "Know your own pace.",
+      caption: "Track yours at fillbookhq.com.",
+      takeaway: "Compare today's count against your own baseline.",
+      topics: ["overtrading"],
+    },
+  ],
+});
+
+const HIGHSTAKES_PLANS: ScenePlan[] = [PILOT_19, PILOT_20, PILOT_21, PILOT_22, PILOT_23];
+const HIGHSTAKES_COPY: Record<string, { captionBody: string; youtubeTitle: string; cta: string }> = {
+  [PILOT_19.planId]: {
+    captionBody: "One outsized-loss trading day next to a funded account's profit target. Demo account, based on recorded trades and configured rules.",
+    youtubeTitle: "One Trade Cost $1,504.04: Reading a Funded Account's Payout Math",
+    cta: "Try it free on your own account for 14 days",
+  },
+  [PILOT_20.planId]: {
+    captionBody: "A trailing floor is set by the account's own peak, not by today's balance -- so a net-positive account can still be in breach. Demo account, based on recorded trades and configured rules.",
+    youtubeTitle: "Up $40 Net, Still Below the Floor: A Trailing Drawdown Explained",
+    cta: "Try it free on your own account for 14 days",
+  },
+  [PILOT_21.planId]: {
+    captionBody: "10 green days, and a profit target 98% of the way there on the same session a trading-days minimum is first met. Demo account, based on recorded trades and configured rules.",
+    youtubeTitle: "98% to Target on the 10th Day: Reading Two Requirements at Once",
+    cta: "Try it free on your own account for 14 days",
+  },
+  [PILOT_22.planId]: {
+    captionBody: "The same day, the same setup, the same -$1,201 -- on two separate accounts. Demo accounts, based on recorded trades and configured rules.",
+    youtubeTitle: "Same Trade, Two Accounts: When One Signal Doubles Your Risk",
+    cta: "Try it free on your own account for 14 days",
+  },
+  [PILOT_23.planId]: {
+    captionBody: "A losing streak turned into a 6-trade session against a 2.7-trade normal day. Demo account, not a real trader.",
+    youtubeTitle: "6 Trades After a Losing Streak: Reading Your Own Baseline Pace",
+    cta: "Try it free on your own account for 14 days",
+  },
+};
+for (const plan of HIGHSTAKES_PLANS) PILOT_COPY[plan.planId] = { topic: plan.topic, ...HIGHSTAKES_COPY[plan.planId]! };
+
+/* ---------------------------------------------------------------------------------------------- */
 /* Angles (2026-09-25): the owner now posts 3 videos a day. Each angle re-cuts one verified concept  */
 /* with a new hook and narration over the SAME footage, crops, clip windows and fact citations, so   */
 /* every number stays checked against its recording. Numbers in narration must come from the facts  */
@@ -1870,7 +2196,7 @@ export const PILOT_3_OPENING_C = openingOnlyVariant(PILOT_3, {
   youtubeTitle: "Your Plan Has a Size Limit: 5 Contracts vs a Max of 3",
 });
 
-/** Every concept, each scene carrying its Rook-and-Tilt beat (characterBeats.ts). */
+/** Every concept the pilot library produces. */
 export const PILOTS: ScenePlan[] = [
   PILOT_1,
   PILOT_2,
@@ -1887,7 +2213,8 @@ export const PILOTS: ScenePlan[] = [
   PILOT_1_OPENING_B,
   PILOT_2_OPENING_B,
   PILOT_3_OPENING_C,
-].map(withCharacterBeats);
+  ...HIGHSTAKES_PLANS,
+];
 
 export function pilotMetadata(plan: ScenePlan, platform: Platform): PublishedVideoMetadata {
   const copy = PILOT_COPY[plan.planId] ?? ANGLE_COPY[plan.planId];

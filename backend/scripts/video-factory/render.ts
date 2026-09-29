@@ -6,7 +6,6 @@ import type { ProcessRunner } from "./processRunner.js";
 import type { RenderPlan } from "./types.js";
 import { VideoFactoryError } from "./types.js";
 import { escapeAssText } from "./captions.js";
-import { CHARACTER_STAGE_HEIGHT } from "./characters.js";
 
 const WIDTH = 1080;
 const HEIGHT = 1920;
@@ -232,15 +231,17 @@ function sourceCropTreatment(scene: RenderPlan["scenes"][number]): string {
  * that still ends above ACTION_COLUMN_TOP when scaled to CARD_WIDE_MAX_WIDTH uses that width instead.
  */
 export const CARD_MAX_WIDTH = 760;
-/** 700 (was 860) and centered at 800 (was 980) since 2026-09-26, so the card and its text end above the character stage. */
-export const CARD_MAX_HEIGHT = 700;
-export const CARD_BAND_TOP = 280;
-export const CARD_UNIT_CENTER_Y = 800;
 /**
- * Where the Rook-and-Tilt stage (characters.ts) sits: CHARACTER_STAGE_HEIGHT tall, ending exactly at the platforms'
- * caption line (y=1600), and drawn only left of x=910 so it stays clear of the right-hand buttons.
+ * 900 and centered at 920 since 2026-09-28 (was 700 / 800): the character-stage reaction layer under the card was
+ * removed from every plan (owner call -- it read as generic and off-topic for serious financial content, and its
+ * removal left a dead empty band at the bottom of the frame), so the card and its headline/caption block no longer
+ * need to end above a character stage -- only above the platforms' own caption line (PLATFORM_OVERLAY_ZONES.captionTop,
+ * y=1600). These two constants now use the FULL band from CARD_BAND_TOP down to that line, leaving a roughly 50-70px
+ * margin above it rather than the ~300px dead band the naive "just delete the stage" version left.
  */
-export const CHARACTER_STAGE_TOP = 1600 - CHARACTER_STAGE_HEIGHT;
+export const CARD_MAX_HEIGHT = 900;
+export const CARD_BAND_TOP = 280;
+export const CARD_UNIT_CENTER_Y = 920;
 /**
  * Width a card may use when it ends above ACTION_COLUMN_TOP, where TikTok starts its right-hand buttons. Measured on a
  * 20:9 phone (owner screenshot 2026-09-25): the top button (profile/analytics) starts near y=740 of the 1080x1920
@@ -273,7 +274,16 @@ export function computeCardLayout(cropWidth: number, cropHeight: number): CardLa
   if (CARD_BAND_TOP + wideHeight <= ACTION_COLUMN_TOP) {
     const width = even(cropWidth * wideScale);
     const y = Math.min(ACTION_COLUMN_TOP - wideHeight, Math.max(CARD_BAND_TOP, centeredTop(wideHeight)));
-    return { x: (WIDTH - width) / 2, y, width, height: wideHeight, radius: Math.round(SOURCE_CARD_RADIUS * wideScale), textTop: y + wideHeight + CARD_TEXT_GAP };
+    // A wide card is pinned near the top of the frame -- it must end by ACTION_COLUMN_TOP, well above the
+    // platforms' own caption line (PLATFORM_OVERLAY_ZONES.captionTop). Gluing its headline/caption block
+    // directly underneath, the way the tall-card branch's centeredTop does, would leave everything from
+    // that text down to the caption line completely empty -- the same dead-band problem the character-
+    // stage removal was meant to fix, just for this card shape (found 2026-09-28 re-checking pilot-4).
+    // Center the text block in the WHOLE leftover band instead, from just under the card down to the
+    // caption line, so that reclaimed space is actually used rather than wasted.
+    const minTextTop = y + wideHeight + CARD_TEXT_GAP;
+    const textTop = Math.max(minTextTop, Math.round((minTextTop + PLATFORM_OVERLAY_ZONES.captionTop - CARD_TEXT_BLOCK_ESTIMATE) / 2));
+    return { x: (WIDTH - width) / 2, y, width, height: wideHeight, radius: Math.round(SOURCE_CARD_RADIUS * wideScale), textTop };
   }
   const scale = Math.min(CARD_MAX_WIDTH / cropWidth, CARD_MAX_HEIGHT / cropHeight, 1.25);
   const width = even(cropWidth * scale);
@@ -306,9 +316,6 @@ export function assertCardClearsOverlays(layout: CardLayout): void {
     throw new VideoFactoryError(
       `Card or its text (to y ${Math.max(bottom, textBottom)}) would run into the platforms' caption area (y >= ${captionTop}).`,
     );
-  }
-  if (textBottom > CHARACTER_STAGE_TOP) {
-    throw new VideoFactoryError(`Card text (to y ${textBottom}) would run into the character stage (y >= ${CHARACTER_STAGE_TOP}).`);
   }
 }
 
@@ -395,9 +402,6 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     };
     cardInputIndex.set(i, { background: still(scene.card.backgroundPath), shadow: still(evidence.shadowPath), mask: still(evidence.maskPath) });
   }
-  // The character stage: one transparent PNG per frame, read at the render's frame rate.
-  const characterInputIndex = plan.characterTrack ? nextInputIndex++ : null;
-  if (plan.characterTrack) inputArgs.push("-framerate", String(FRAME_RATE), "-i", plan.characterTrack.framePattern);
 
   // Scale each scene clip to 1080×1920 (center-crop to fill, maintain no distortion)
   const sceneFilterParts: string[] = [];
@@ -503,18 +507,9 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     bgLabel = nextLabel;
   }
 
-  // The stage goes over the scene footage but under the captions. eof_action=pass leaves the plain background if the
-  // frames ever end before the video does.
-  const characterParts: string[] = [];
-  if (characterInputIndex !== null) {
-    characterParts.push(`[${bgLabel}][${characterInputIndex}:v]overlay=0:${CHARACTER_STAGE_TOP}:eof_action=pass:format=auto,format=yuv420p[chars]`);
-    bgLabel = "chars";
-  }
-
   const filterComplex = [
     ...sceneFilterParts,
     ...xfadeParts,
-    ...characterParts,
     // fontsdir=fonts (relative to ffmpeg's own cwd, the render's output
     // directory -- see renderVideo) points libass at the bundled caption
     // font copied there below, and nothing else (see FONT_DIR).

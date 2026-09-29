@@ -217,6 +217,115 @@ const BATCH_3_SHOTS: Record<string, { id: string; steps: Step[] }> = {
 };
 Object.assign(SHOTS, BATCH_3_SHOTS);
 
+/**
+ * High-stakes batch (2026-09-28): five concept recordings against the five "Pilot ... Account" fixtures seeded by
+ * the fillbook repo's frontend/scripts/seed-pilot-highstakes-fixtures.mjs (accounts 1-4) and the existing
+ * seed-pilot-behavior-fixtures.mjs (account 5, "Pilot Behavior Account"). Run with PILOT_ACCOUNT_NAME set to the
+ * exact account name for each shot (see runPilotCapture.ts's SHOTS usage note at the top of this file).
+ */
+const HIGHSTAKES_SHOTS: Record<string, { id: string; steps: Step[] }> = {
+  "hs-payout": {
+    id: "hs-mobile-payout-account",
+    steps: [
+      { kind: "goto", route: "/calendar", waitFor: "text=$6,995.96" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Month total:", seconds: 1.0, block: "start", offsetCss: 80 },
+      { kind: "measure", name: "month_total_label", selector: "text=Month total:" },
+      { kind: "hold", seconds: 4.5 },
+      { kind: "scroll", selector: "text=-$1.5k", seconds: 1.2, block: "center" },
+      { kind: "measure", name: "day25_cell", selector: "text=-$1.5k" },
+      { kind: "hold", seconds: 8 },
+      { kind: "goto", route: "/payouts", waitFor: "text=Pilot Payout 150K Funded — payout readiness" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Pilot Payout 150K Funded — payout readiness", seconds: 1.2, block: "start", offsetCss: 100 },
+      { kind: "measure", name: "payout_readiness_heading", selector: "text=Pilot Payout 150K Funded — payout readiness" },
+      { kind: "hold", seconds: 16 },
+      { kind: "scroll", selector: ':nth-match(:text("Pilot Payout Account"), 2)', seconds: 1.2, block: "start", offsetCss: 80 },
+      { kind: "measure", name: "payout_requested_row", selector: ':nth-match(:text("Pilot Payout Account"), 2)' },
+      { kind: "hold", seconds: 12 },
+    ],
+  },
+  "hs-trailing": {
+    id: "hs-mobile-trailing-account",
+    steps: [
+      { kind: "goto", route: "/", waitFor: "text=+$40.00" },
+      { kind: "hold", seconds: 0.3 },
+      { kind: "scroll", selector: "text=Full calendar", seconds: 1.0, block: "start", offsetCss: 60 },
+      { kind: "measure", name: "calendar_heading", selector: "text=Full calendar" },
+      { kind: "hold", seconds: 4 },
+      { kind: "scroll", selector: "text=Green days", seconds: 1.0, block: "start", offsetCss: 60 },
+      { kind: "measure", name: "stats_row", selector: "text=Green days" },
+      { kind: "hold", seconds: 8 },
+      { kind: "scroll", selector: "text=$-60 of buffer to the floor", seconds: 1.0, block: "start", offsetCss: 80 },
+      { kind: "measure", name: "buffer_line", selector: "text=$-60 of buffer to the floor" },
+      { kind: "hold", seconds: 16 },
+      { kind: "scroll", selector: "text=ACCOUNT HEALTH", seconds: 1.0, block: "start", offsetCss: 80 },
+      { kind: "measure", name: "health_heading", selector: "text=ACCOUNT HEALTH" },
+      { kind: "hold", seconds: 14 },
+    ],
+  },
+  "hs-finalday": {
+    id: "hs-mobile-finalday-account",
+    steps: [
+      { kind: "goto", route: "/", waitFor: "text=+$2,940.00" },
+      { kind: "hold", seconds: 0.3 },
+      { kind: "scroll", selector: "text=Full calendar", seconds: 1.0, block: "start", offsetCss: 60 },
+      { kind: "measure", name: "calendar_heading", selector: "text=Full calendar" },
+      { kind: "hold", seconds: 4 },
+      { kind: "scroll", selector: "text=Green days", seconds: 1.0, block: "start", offsetCss: 60 },
+      { kind: "measure", name: "stats_row", selector: "text=Green days" },
+      { kind: "hold", seconds: 8 },
+      { kind: "goto", route: "/rules", waitFor: "text=Profit target: $3,000.00" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Profit target: $3,000.00", seconds: 1.0, block: "start", offsetCss: 600 },
+      { kind: "measure", name: "target_line", selector: "text=Profit target: $3,000.00" },
+      { kind: "hold", seconds: 16 },
+    ],
+  },
+  "hs-multi-a": {
+    id: "hs-mobile-multi-account-a",
+    steps: [
+      { kind: "goto", route: "/", waitFor: "text=-$1,076.00" },
+      { kind: "hold", seconds: 0.3 },
+      { kind: "scroll", selector: "text=Full calendar", seconds: 1.0, block: "start", offsetCss: 60 },
+      { kind: "measure", name: "calendar_heading", selector: "text=Full calendar" },
+      { kind: "hold", seconds: 4 },
+      { kind: "scroll", selector: "text=Green days", seconds: 1.0, block: "start", offsetCss: 60 },
+      { kind: "measure", name: "stats_row", selector: "text=Green days" },
+      { kind: "hold", seconds: 14 },
+    ],
+  },
+  "hs-multi-b": {
+    id: "hs-mobile-multi-account-b",
+    steps: [
+      { kind: "goto", route: "/", waitFor: "text=-$1,076.00" },
+      { kind: "hold", seconds: 0.3 },
+      { kind: "scroll", selector: "text=Full calendar", seconds: 1.0, block: "start", offsetCss: 60 },
+      { kind: "measure", name: "calendar_heading", selector: "text=Full calendar" },
+      { kind: "hold", seconds: 4 },
+      { kind: "scroll", selector: "text=Green days", seconds: 1.0, block: "start", offsetCss: 60 },
+      { kind: "measure", name: "stats_row", selector: "text=Green days" },
+      { kind: "hold", seconds: 14 },
+    ],
+  },
+  "hs-behavior": {
+    id: "hs-mobile-behavior-account",
+    steps: [
+      { kind: "goto", route: "/calendar", waitFor: "text=Month total:" },
+      { kind: "hold", seconds: 0.3 },
+      { kind: "scroll", selector: "text=Green days", seconds: 1.0, block: "start", offsetCss: 60 },
+      { kind: "measure", name: "month_grid", selector: "text=Month total:" },
+      { kind: "hold", seconds: 16 },
+      { kind: "goto", route: "/", waitFor: "text=Overtrading vs. your baseline" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Overtrading vs. your baseline", seconds: 1.0, block: "start", offsetCss: 200 },
+      { kind: "measure", name: "brief_overtrading", selector: "text=Overtrading vs. your baseline" },
+      { kind: "hold", seconds: 16 },
+    ],
+  },
+};
+Object.assign(SHOTS, HIGHSTAKES_SHOTS);
+
 async function signIn(statePath: string): Promise<void> {
   const email = process.env.PILOT_EMAIL;
   const password = process.env.PILOT_PASSWORD;

@@ -1801,6 +1801,502 @@
           }
         }
       ]
+    },
+    {
+      "id": "rec.hs-payout-account.v1",
+      "file": "motion/hs-mobile-payout-account.mp4",
+      "sha256": "8e69286a11ea65428916c0b65b5de95c6bc484578d303ae417dfcfbc0bbde8a3",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-payout-account.2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-payout\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Payout Account\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /calendar month view held 0.5-6.0s (month total + full grid + day 25 in view, no further scroll needed), day-25 emphasis re-check 7.2-15.2s (same view); cut to /payouts, payout-readiness card for Pilot Payout 150K Funded held 16.9-32.9s; scrolled further to the Pilot Payout Account payout-request row, held 34.1-46.1s.",
+      "capturedAt": "2026-09-28",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "payout_readiness"
+      ],
+      "durationSeconds": 46.1,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "calendar.overview",
+          "text": "September calendar for Pilot Payout Account: Month total $6,995.96, 18 days, 19 trades. Day 25 alone -$1,504.04 across 2 trades, 0% win rate -- the only red day; 17 of 18 days green. Best day $610.00, worst day -$1,504.04, avg/trading day $388.66.",
+          "values": [
+            "$6,995.96",
+            "18",
+            "19",
+            "-$1,504.04",
+            "2",
+            "0%",
+            "17",
+            "$610.00",
+            "$388.66"
+          ],
+          "topics": [
+            "payout_readiness"
+          ],
+          "region": {
+            "x": 38,
+            "y": 150,
+            "w": 1004,
+            "h": 1290
+          },
+          "timeRangeSeconds": {
+            "start": 1.5,
+            "end": 15.2
+          }
+        },
+        {
+          "key": "payouts.readiness",
+          "text": "Pilot Payout 150K Funded, payout readiness: No active rule breach (account is within its drawdown and daily loss limit); Profit target reached -- Net P&L 7515.96 of 9000 target (1484.04 to go), 84% of the way there.",
+          "values": [
+            "7515.96",
+            "9000",
+            "1484.04",
+            "84%"
+          ],
+          "topics": [
+            "payout_readiness"
+          ],
+          "region": {
+            "x": 38,
+            "y": 160,
+            "w": 1004,
+            "h": 660
+          },
+          "timeRangeSeconds": {
+            "start": 16.9,
+            "end": 32.9
+          }
+        },
+        {
+          "key": "payouts.requested",
+          "text": "Pilot Payout Account payout request: Requested 2026-09-24 -- Pilot fixture, payout requested before the breach trade below. Status Requested, $4,000.00.",
+          "values": [
+            "2026-09-24",
+            "$4,000.00"
+          ],
+          "topics": [
+            "payout_readiness"
+          ],
+          "region": {
+            "x": 38,
+            "y": 860,
+            "w": 1004,
+            "h": 560
+          },
+          "timeRangeSeconds": {
+            "start": 34.1,
+            "end": 46.1
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.hs-trailing-account.v1",
+      "file": "motion/hs-mobile-trailing-account.mp4",
+      "sha256": "92aa1988b018aba21e419f7bc34f101cd62515ed9d8324c9ce6537d0e6cf853f",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-trailing-account.2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-trailing\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Trailing Account\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-14.3s (single scroll position, no further movement); scrolled to the Daily Brief buffer line + Account Health card, held 15.3-31.3s (single scroll position showing both); scrolled further to re-anchor Account Health at the top, held 32.3-46.3s (not used by any scene).",
+      "capturedAt": "2026-09-28",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "trailing_drawdown"
+      ],
+      "durationSeconds": 46.3,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "dashboard.trailing_summary",
+          "text": "Pilot Trailing Account dashboard: September 2026, $40.00, 2 days, 2 trades. Calendar: Sep 21 $3.1k (1 trade, 100%% win), Sep 25 -$3.1k (1 trade, 0%% win). Best day $3,100.00, worst day -$3,060.00, avg/trading day $20.00, green days 1/2.",
+          "values": [
+            "$40.00",
+            "2",
+            "$3.1k",
+            "1",
+            "100%",
+            "-$3.1k",
+            "0%",
+            "$3,100.00",
+            "-$3,060.00",
+            "$20.00"
+          ],
+          "topics": [
+            "trailing_drawdown"
+          ],
+          "region": {
+            "x": 38,
+            "y": 145,
+            "w": 1004,
+            "h": 1335
+          },
+          "timeRangeSeconds": {
+            "start": 1.3,
+            "end": 14.3
+          }
+        },
+        {
+          "key": "dashboard.floor_breach",
+          "text": "Pilot Trailing Account Daily Brief and Account Health: ACCOUNT $-60 of buffer to the floor, $1,000 of today's loss limit (intraday buffer is based on closed trades). \"Equity is below the trailing floor. Most firms close an account at this point.\" ACCOUNT HEALTH 45/100, CAUTION. Most important action: \"Your drawdown floor has been breached. Stop trading this account and check the firm dashboard before placing another order.\"",
+          "values": [
+            "$-60",
+            "$1,000",
+            "45",
+            "100"
+          ],
+          "topics": [
+            "trailing_drawdown"
+          ],
+          "region": {
+            "x": 38,
+            "y": 145,
+            "w": 1004,
+            "h": 1585
+          },
+          "timeRangeSeconds": {
+            "start": 15.3,
+            "end": 31.3
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.hs-finalday-account.v1",
+      "file": "motion/hs-mobile-finalday-account.mp4",
+      "sha256": "2426efb882685b8a04af46b0b8bc7ae9a9ba46be88b695251384be2aa2888e49",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-finalday-account.2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-finalday\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Final Day Account\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-14.3s (single scroll position); cut to /rules, scrolled to the Pilot Final Day 50K Evaluation account card (drawdown buffer, loss limit, profit target line), held 15.8-31.8s. Note: /payouts was NOT used for this account -- at capture time it showed an identical, clearly wrong Net P&L (48487.82) on every account's readiness card, a real product bug flagged separately; /rules and /dashboard were cross-checked and are unaffected.",
+      "capturedAt": "2026-09-28",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "payout_readiness"
+      ],
+      "durationSeconds": 31.8,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "dashboard.finalday_summary",
+          "text": "Pilot Final Day Account dashboard: September 2026, $2,940.00, 10 days, 21 trades. Best day $340.00, worst day $180.00, avg/trading day $294.00, green days 10/10. Current day streak 10 (best 10 green days).",
+          "values": [
+            "$2,940.00",
+            "10",
+            "21",
+            "$340.00",
+            "$180.00",
+            "$294.00"
+          ],
+          "topics": [
+            "payout_readiness"
+          ],
+          "region": {
+            "x": 38,
+            "y": 140,
+            "w": 1004,
+            "h": 1320
+          },
+          "timeRangeSeconds": {
+            "start": 1.3,
+            "end": 14.3
+          }
+        },
+        {
+          "key": "rules.finalday_target",
+          "text": "Pilot Final Day 50K Evaluation, $50,000.00 account: Max drawdown buffer $4,940.00, Today's loss limit remaining $1,000.00, Profit target: $3,000.00 -- currently $2,940.00 (98%).",
+          "values": [
+            "$50,000.00",
+            "$4,940.00",
+            "$1,000.00",
+            "$3,000.00",
+            "$2,940.00",
+            "98%"
+          ],
+          "topics": [
+            "payout_readiness"
+          ],
+          "region": {
+            "x": 38,
+            "y": 1140,
+            "w": 1004,
+            "h": 440
+          },
+          "timeRangeSeconds": {
+            "start": 15.8,
+            "end": 31.8
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.hs-multi-account-a.v1",
+      "file": "motion/hs-mobile-multi-account-a.mp4",
+      "sha256": "137ad1f9aa723ccb9bfc8241249f6b10055f2216e3e9d5da4ad43ddaab91ab57",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-multi-accounts.2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-multi-a\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Multi Account A\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-20.3s (single scroll position).",
+      "capturedAt": "2026-09-28",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "accounts_overview"
+      ],
+      "durationSeconds": 20.3,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "dashboard.multi_a_summary",
+          "text": "Pilot Multi Account A dashboard: September 2026, -$1,076.00, 4 days, 4 trades. Day 25 alone -$1.2k (1 trade, 0% win) -- the day's trade was 5 contracts (Oversized), Opening Range Break, same as Multi Account B. Best day $100.00, worst day -$1,201.00, avg/trading day -$269.00, green days 2/4.",
+          "values": [
+            "-$1,076.00",
+            "4",
+            "-$1.2k",
+            "1",
+            "0%",
+            "$100.00",
+            "-$1,201.00",
+            "-$269.00",
+            "2"
+          ],
+          "topics": [
+            "accounts_overview"
+          ],
+          "region": {
+            "x": 38,
+            "y": 140,
+            "w": 1004,
+            "h": 1320
+          },
+          "timeRangeSeconds": {
+            "start": 1.3,
+            "end": 20.3
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.hs-multi-account-b.v1",
+      "file": "motion/hs-mobile-multi-account-b.mp4",
+      "sha256": "9daa443e839c73dd76e72089a4c4aefbfd417dcb3ccf9aa53f1fdaa1c1a26bdc",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-multi-accounts.2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-multi-b\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Multi Account B\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-20.3s (single scroll position).",
+      "capturedAt": "2026-09-28",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "accounts_overview"
+      ],
+      "durationSeconds": 20.3,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "dashboard.multi_b_summary",
+          "text": "Pilot Multi Account B dashboard: September 2026, -$1,076.00, 4 days, 4 trades. Day 25 alone -$1.2k (1 trade, 0% win) -- the day's trade was 5 contracts (Oversized), Opening Range Break, same as Multi Account A. Best day $100.00, worst day -$1,201.00, avg/trading day -$269.00, green days 2/4.",
+          "values": [
+            "-$1,076.00",
+            "4",
+            "-$1.2k",
+            "1",
+            "0%",
+            "$100.00",
+            "-$1,201.00",
+            "-$269.00",
+            "2"
+          ],
+          "topics": [
+            "accounts_overview"
+          ],
+          "region": {
+            "x": 38,
+            "y": 140,
+            "w": 1004,
+            "h": 1320
+          },
+          "timeRangeSeconds": {
+            "start": 1.3,
+            "end": 20.3
+          }
+        }
+      ]
+    },
+    {
+      "id": "rec.hs-behavior-account.v1",
+      "file": "motion/hs-mobile-behavior-account.mp4",
+      "sha256": "1f01c18013b38324b9ceac1b16149aad049945d2a1087a90b5089203f240c042",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-behavior-account-2.2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-behavior\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Behavior Account\", re-seeded today (2026-09-28) under the pilot-highstakes@fillbookhq.local login by re-running frontend/scripts/seed-pilot-behavior-fixtures.mjs (the ORIGINAL \"Pilot Behavior Account\" from 2026-09-25 belongs to a separate, unrelated login this session did not have credentials for -- this is a fresh, equivalent account under a login this session controls, not the original data). The account email is only in the closed nav drawer and never on screen. Timeline: /calendar month grid + best/worst/green-days stats held 1.3-17.3s (single scroll position, day 25 -$465 visible among mostly-green days, no further scroll or tap needed -- calendar day cells are not a valid read-only tap target so the per-trade expansion was never opened by this capture); cut to /dashboard, Daily Brief's \"Worth watching: Overtrading vs. your baseline\" callout held 18.8-34.8s.",
+      "capturedAt": "2026-09-28",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "overtrading",
+        "weak_hour"
+      ],
+      "durationSeconds": 34.8,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "calendar.month_overview",
+          "text": "Pilot Behavior Account, September 2026: Month total -$185.44, 19 days, 60 trades. Day 25 alone -$465 (6 trades, 17% win) -- a red day among mostly green ones. Best day $203.12, worst day -$468.20, avg/trading day -$9.76, green days 13/19.",
+          "values": [
+            "-$185.44",
+            "19",
+            "60",
+            "-$465",
+            "6",
+            "17%",
+            "$203.12",
+            "-$468.20",
+            "-$9.76",
+            "13"
+          ],
+          "topics": [
+            "overtrading"
+          ],
+          "region": {
+            "x": 38,
+            "y": 145,
+            "w": 1004,
+            "h": 1500
+          },
+          "timeRangeSeconds": {
+            "start": 1.3,
+            "end": 17.3
+          }
+        },
+        {
+          "key": "dashboard.overtrading_watch",
+          "text": "Pilot Behavior Account Daily Brief: $1,682 of buffer to the floor, $1,100 of today's loss limit. Strongest window: Open (9:30-10:30am ET), 106 trades, 71% win rate. Worth watching -- Overtrading vs. your baseline: \"6 trades last session (Sep 25) after a losing streak -- your normal pace is 2.7/day. Frequency is up 126%.\"",
+          "values": [
+            "$1,682",
+            "$1,100",
+            "106",
+            "71%",
+            "6",
+            "2.7",
+            "126%"
+          ],
+          "topics": [
+            "overtrading"
+          ],
+          "region": {
+            "x": 38,
+            "y": 140,
+            "w": 1004,
+            "h": 560
+          },
+          "timeRangeSeconds": {
+            "start": 18.8,
+            "end": 34.8
+          }
+        }
+      ]
     }
   ]
 }

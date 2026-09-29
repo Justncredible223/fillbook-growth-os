@@ -62,7 +62,6 @@ async function main() {
       assPath,
       outputPath,
       silencePadSeconds: SILENCE_PAD_SECONDS,
-      characterTrack: adapted.characterTrack,
     };
 
     console.log(`\n=== Rendering ${plan.planId} through the REAL render.ts renderVideo() ===`);
