@@ -1424,7 +1424,17 @@ export const PILOT_22 = batch3Plan({
 });
 
 const HS_BEHAVIOR_REC = "rec.hs-behavior-account.v1";
-const HS_BEHAVIOR_MONTH_CROP: Rect = { x: 38, y: 145, w: 1004, h: 1310 };
+/**
+ * h corrected 1310 -> 1500 (2026-09-28): the original 1310 was measured short -- pixel-scanning the
+ * real source frame (motion/hs-mobile-behavior-account.mp4) shows the "Best day $203.12 / Worst day
+ * -$468.20" row's own glyphs extend to about y=1463, while y=145+1310=1455 cut into them, and the
+ * card's own rounded bottom border sits at about y=1638. That partial clip was only a few pixels at
+ * the render's old (smaller) card scale, easy to miss -- raising CARD_MAX_HEIGHT (see render.ts) made
+ * the same clip much more visible, which is what surfaced this. 1500 (bottom y=1645) clears the real
+ * border with a few px to spare and also reveals the "Avg / trading day" / "Green days" row already
+ * fully underneath (both already listed in this asset's own verified fact values).
+ */
+const HS_BEHAVIOR_MONTH_CROP: Rect = { x: 38, y: 145, w: 1004, h: 1500 };
 const HS_BEHAVIOR_WATCH_CROP: Rect = { x: 38, y: 140, w: 1004, h: 560 };
 
 export const PILOT_23 = batch3Plan({

@@ -274,7 +274,16 @@ export function computeCardLayout(cropWidth: number, cropHeight: number): CardLa
   if (CARD_BAND_TOP + wideHeight <= ACTION_COLUMN_TOP) {
     const width = even(cropWidth * wideScale);
     const y = Math.min(ACTION_COLUMN_TOP - wideHeight, Math.max(CARD_BAND_TOP, centeredTop(wideHeight)));
-    return { x: (WIDTH - width) / 2, y, width, height: wideHeight, radius: Math.round(SOURCE_CARD_RADIUS * wideScale), textTop: y + wideHeight + CARD_TEXT_GAP };
+    // A wide card is pinned near the top of the frame -- it must end by ACTION_COLUMN_TOP, well above the
+    // platforms' own caption line (PLATFORM_OVERLAY_ZONES.captionTop). Gluing its headline/caption block
+    // directly underneath, the way the tall-card branch's centeredTop does, would leave everything from
+    // that text down to the caption line completely empty -- the same dead-band problem the character-
+    // stage removal was meant to fix, just for this card shape (found 2026-09-28 re-checking pilot-4).
+    // Center the text block in the WHOLE leftover band instead, from just under the card down to the
+    // caption line, so that reclaimed space is actually used rather than wasted.
+    const minTextTop = y + wideHeight + CARD_TEXT_GAP;
+    const textTop = Math.max(minTextTop, Math.round((minTextTop + PLATFORM_OVERLAY_ZONES.captionTop - CARD_TEXT_BLOCK_ESTIMATE) / 2));
+    return { x: (WIDTH - width) / 2, y, width, height: wideHeight, radius: Math.round(SOURCE_CARD_RADIUS * wideScale), textTop };
   }
   const scale = Math.min(CARD_MAX_WIDTH / cropWidth, CARD_MAX_HEIGHT / cropHeight, 1.25);
   const width = even(cropWidth * scale);
