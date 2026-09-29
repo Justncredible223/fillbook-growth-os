@@ -81,7 +81,7 @@ describe("runProspectingSearch", () => {
   const now = new Date("2026-09-01T12:00:00Z");
 
   it("inserts new candidates found via search, one call per selected topic", async () => {
-    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "how do you track your trades over time?" })]) };
+    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "how do you track your trading over time?" })]) };
     const repo = new FakeProspectingRepo();
 
     const result = await runProspectingSearch({
@@ -108,7 +108,7 @@ describe("runProspectingSearch", () => {
   });
 
   it("never re-inserts a post already known from a prior run", async () => {
-    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "how do you track your trades over time?" })]) };
+    const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "how do you track your trading over time?" })]) };
     const repo = new FakeProspectingRepo();
     const deps = { adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now };
 
@@ -124,7 +124,7 @@ describe("runProspectingSearch", () => {
 
   it("excludes spam-pattern posts from the inserted count without erroring", async () => {
     const adapter = {
-      searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "DM me for signals, guaranteed profit!!!" })]),
+      searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "DM me for trading signals, guaranteed profit trading futures!!!" })]),
     };
     const repo = new FakeProspectingRepo();
 
@@ -132,6 +132,19 @@ describe("runProspectingSearch", () => {
 
     // The same spam post comes back from every one of this run's topic searches (mockResolvedValue applies to every call).
     expect(result.excludedAsSpam).toBe(TOPICS_PER_SEARCH_RUN);
+    expect(result.newCandidates).toBe(0);
+    expect(repo.rows.size).toBe(0);
+  });
+
+  it("excludes off-topic posts (crypto, prop-firm ad spam, generic stock content) from the inserted count without erroring -- real bug, 2026-09-28: these were previously stored and only reclassified 'not_relevant' the next time the queue was fetched", async () => {
+    const adapter = {
+      searchRecentPosts: vi.fn().mockResolvedValue([searchResult({ id: "1", text: "Bitcoin just broke $90k, huge crypto rally today" })]),
+    };
+    const repo = new FakeProspectingRepo();
+
+    const result = await runProspectingSearch({ adapter: adapter as any, repo, client: fakeSupabaseClient(), getMonthSpendUsd: async () => 0, now });
+
+    expect(result.excludedAsIrrelevant).toBe(TOPICS_PER_SEARCH_RUN);
     expect(result.newCandidates).toBe(0);
     expect(repo.rows.size).toBe(0);
   });
@@ -175,7 +188,7 @@ describe("runProspectingSearch", () => {
   });
 
   it("runs normally when isPaused resolves false, and when it's omitted entirely (existing callers' contract is unchanged)", async () => {
-    const post = searchResult({ id: "1", text: "how do you track your trades over time?" });
+    const post = searchResult({ id: "1", text: "how do you track your trading over time?" });
 
     const repoNotPaused = new FakeProspectingRepo();
     const adapterNotPaused = { searchRecentPosts: vi.fn().mockResolvedValue([post]) };
@@ -249,7 +262,7 @@ describe("runProspectingSearch", () => {
   });
 
   it("scores a previously-engaged author's post higher via the prior-outreach bonus", async () => {
-    const post = searchResult({ id: "1", text: "how do you actually review trades weekly?", authorId: "known-author" });
+    const post = searchResult({ id: "1", text: "how do you actually review your trading journal weekly?", authorId: "known-author" });
     const adapter = { searchRecentPosts: vi.fn().mockResolvedValue([post]) };
     const repo = new FakeProspectingRepo();
     repo.outreach.add("known-author");

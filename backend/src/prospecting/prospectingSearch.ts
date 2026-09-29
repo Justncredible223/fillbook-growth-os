@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { XSignalAdapter } from "../signals/adapters/xAdapter.js";
 import { recordXSearchCostEvent } from "../cost/costTracking.js";
 import { PROSPECTING_TOPICS, type ProspectingTopic } from "./prospectingTopics.js";
+import { isPlausiblyTradingRelated } from "./prospectingRelevance.js";
 import { scoreProspectingCandidate } from "./prospectingScoring.js";
 import {
   QUEUE_FULL_THRESHOLD,
@@ -23,6 +24,20 @@ export interface ProspectingRunResult {
   postsRead: number;
   newCandidates: number;
   excludedAsSpam: number;
+  /**
+   * Rejected by prospectingRelevance.ts's isPlausiblyTradingRelated before
+   * ever being stored -- real, confirmed problem (2026-09-28 owner report:
+   * 70-80% of stored candidates were getting swept to 'not_relevant'):
+   * this same $0 regex gate already ran at queue-read time
+   * (prospectingHandlers.ts's listProspectingQueue), but never at
+   * discovery/insert time here, so every crypto/prop-firm-ad/stock-
+   * newsletter post a broad topic query like "drawdown" or "risk
+   * management" pulled in got written to prospecting_candidates first and
+   * only reclassified as not_relevant the next time the queue was
+   * fetched. Checking it here instead means that noise is never written
+   * at all.
+   */
+  excludedAsIrrelevant: number;
   costUsd: number;
 }
 
@@ -69,13 +84,13 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   const now = deps.now ?? new Date();
 
   if (await (deps.isPaused?.() ?? Promise.resolve(false))) {
-    return { skipped: true, skipReason: "system_paused", topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, costUsd: 0 };
+    return { skipped: true, skipReason: "system_paused", topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0 };
   }
 
   const monthSpend = await deps.getMonthSpendUsd();
   const budgetCheck = evaluateMonthlyBudget(monthSpend);
   if (!budgetCheck.eligible) {
-    return { skipped: true, skipReason: budgetCheck.reason, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, costUsd: 0 };
+    return { skipped: true, skipReason: budgetCheck.reason, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0 };
   }
 
   // Same non-terminal pool prospectingDailySelection.ts draws "today's set"
@@ -87,7 +102,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   const freshBacklogCount = backlog.filter((c) => isEligibleForDailySelection(c.postCreatedAt, now)).length;
   const queueCheck = evaluateQueueCapacity(freshBacklogCount);
   if (!queueCheck.eligible) {
-    return { skipped: true, skipReason: queueCheck.reason, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, costUsd: 0 };
+    return { skipped: true, skipReason: queueCheck.reason, topicsSearched: [], postsRead: 0, newCandidates: 0, excludedAsSpam: 0, excludedAsIrrelevant: 0, costUsd: 0 };
   }
 
   // Combines the calendar day with which of the daily run slots (see
@@ -103,6 +118,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
   let postsRead = 0;
   let newCandidates = 0;
   let excludedAsSpam = 0;
+  let excludedAsIrrelevant = 0;
   let costUsd = 0;
   const priorOutreachCache = new Map<string, boolean>();
 
@@ -122,6 +138,19 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     costUsd += await recordXSearchCostEvent(deps.client, results.length, { topic: topic.key, query: topic.query });
 
     for (const post of results) {
+      // Same $0 mechanical gate applied at queue-read time
+      // (prospectingHandlers.ts's listProspectingQueue) -- checked here too
+      // so an obviously off-topic post (crypto, prop-firm referral spam,
+      // stock-market newsletters, AI-trading-agent hype -- all confirmed
+      // real noise sources for broad topic queries like "drawdown" or
+      // "risk management") is never written to prospecting_candidates in
+      // the first place, instead of being stored and only reclassified
+      // 'not_relevant' the next time the queue happens to be fetched.
+      if (!isPlausiblyTradingRelated(post.text)) {
+        excludedAsIrrelevant++;
+        continue;
+      }
+
       let previouslyEngaged = false;
       if (post.authorId) {
         if (priorOutreachCache.has(post.authorId)) {
@@ -176,6 +205,7 @@ export async function runProspectingSearch(deps: ProspectingRunDeps): Promise<Pr
     postsRead,
     newCandidates,
     excludedAsSpam,
+    excludedAsIrrelevant,
     costUsd,
   };
 }
