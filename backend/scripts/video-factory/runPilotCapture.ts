@@ -245,6 +245,25 @@ const HIGHSTAKES_SHOTS: Record<string, { id: string; steps: Step[] }> = {
       { kind: "hold", seconds: 12 },
     ],
   },
+  "hs-trailing": {
+    id: "hs-mobile-trailing-account",
+    steps: [
+      { kind: "goto", route: "/", waitFor: "text=+$40.00" },
+      { kind: "hold", seconds: 0.3 },
+      { kind: "scroll", selector: "text=Full calendar", seconds: 1.0, block: "start", offsetCss: 60 },
+      { kind: "measure", name: "calendar_heading", selector: "text=Full calendar" },
+      { kind: "hold", seconds: 4 },
+      { kind: "scroll", selector: "text=Green days", seconds: 1.0, block: "start", offsetCss: 60 },
+      { kind: "measure", name: "stats_row", selector: "text=Green days" },
+      { kind: "hold", seconds: 8 },
+      { kind: "scroll", selector: "text=$-60 of buffer to the floor", seconds: 1.0, block: "start", offsetCss: 80 },
+      { kind: "measure", name: "buffer_line", selector: "text=$-60 of buffer to the floor" },
+      { kind: "hold", seconds: 16 },
+      { kind: "scroll", selector: "text=ACCOUNT HEALTH", seconds: 1.0, block: "start", offsetCss: 80 },
+      { kind: "measure", name: "health_heading", selector: "text=ACCOUNT HEALTH" },
+      { kind: "hold", seconds: 14 },
+    ],
+  },
 };
 Object.assign(SHOTS, HIGHSTAKES_SHOTS);
 

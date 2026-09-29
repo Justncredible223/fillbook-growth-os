@@ -1256,11 +1256,72 @@ export const PILOT_19 = batch3Plan({
   ],
 });
 
-const HIGHSTAKES_PLANS: ScenePlan[] = [PILOT_19];
+const HS_TRAILING_REC = "rec.hs-trailing-account.v1";
+const HS_TRAILING_SUMMARY_CROP: Rect = { x: 38, y: 145, w: 1004, h: 1335 };
+const HS_TRAILING_FLOOR_CROP: Rect = { x: 38, y: 145, w: 1004, h: 1585 };
+
+export const PILOT_20 = batch3Plan({
+  n: 20,
+  slug: "the-floor-doesnt-come-back-down",
+  title: "Up $40 net. Still $60 under its own floor.",
+  series: "Read the Rule",
+  topic: "A trailing drawdown floor set by a past peak, not by today's balance",
+  scenes: [
+    {
+      narration: "Best day ever: +$3,100. Then -$3,060.",
+      headline: "+$3,100. Then -$3,060.",
+      caption: "Net still positive: +$40.00.",
+      takeaway: "A big win and a big loss can both be real, on the same account.",
+      topics: ["trailing_drawdown"],
+      asset: {
+        id: HS_TRAILING_REC,
+        crop: HS_TRAILING_SUMMARY_CROP,
+        clip: { start: 1.7, end: 8.0 },
+        claim: "Pilot Trailing Account: Sep 21 best day $3,100.00 (1 trade, 100% win), Sep 25 worst day -$3,060.00 (1 trade, 0% win); net +$40.00 across 2 trades, green days 1/2.",
+        factKey: "dashboard.trailing_summary",
+      },
+    },
+    {
+      narration: "Buffer to the floor: $-60. Equity is already below the trailing floor -- most firms close an account right there. Health: 45 of 100, caution.",
+      headline: "$-60 buffer to the floor",
+      caption: "Health 45 of 100. Caution.",
+      takeaway: "A trailing floor is set by the peak, not by today's balance.",
+      topics: ["trailing_drawdown"],
+      asset: {
+        id: HS_TRAILING_REC,
+        crop: HS_TRAILING_FLOOR_CROP,
+        clip: { start: 17.3, end: 29.3 },
+        claim: "Daily Brief: $-60 of buffer to the floor, $1,000 of today's loss limit; \"Equity is below the trailing floor. Most firms close an account at this point.\" Account Health 45/100, Caution.",
+        factKey: "dashboard.floor_breach",
+      },
+    },
+    {
+      narration: "This is a sample account with a sample rule set. Confirm your own firm's trailing-drawdown rule.",
+      headline: "Confirm your firm's rule",
+      caption: "Sample account, not a real trader.",
+      takeaway: "Trailing rules vary a lot firm to firm.",
+      topics: ["trailing_drawdown"],
+    },
+    {
+      narration: "Know where your own floor actually sits.",
+      headline: "Know your real floor.",
+      caption: "Check yours at fillbookhq.com.",
+      takeaway: "A peak can set a floor that doesn't move back down.",
+      topics: ["trailing_drawdown"],
+    },
+  ],
+});
+
+const HIGHSTAKES_PLANS: ScenePlan[] = [PILOT_19, PILOT_20];
 const HIGHSTAKES_COPY: Record<string, { captionBody: string; youtubeTitle: string; cta: string }> = {
   [PILOT_19.planId]: {
     captionBody: "One oversized trading day next to a funded account's profit target. Demo account, based on recorded trades and configured rules.",
     youtubeTitle: "One Trade Cost $1,504.04: Reading a Funded Account's Payout Math",
+    cta: "Try it free on your own account for 14 days",
+  },
+  [PILOT_20.planId]: {
+    captionBody: "A trailing floor is set by the account's own peak, not by today's balance -- so a net-positive account can still be in breach. Demo account, based on recorded trades and configured rules.",
+    youtubeTitle: "Up $40 Net, Still Below the Floor: How a Trailing Drawdown Actually Works",
     cta: "Try it free on your own account for 14 days",
   },
 };

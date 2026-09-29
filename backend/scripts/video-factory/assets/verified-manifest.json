@@ -1908,6 +1908,93 @@
           }
         }
       ]
+    },
+    {
+      "id": "rec.hs-trailing-account.v1",
+      "file": "motion/hs-mobile-trailing-account.mp4",
+      "sha256": "92aa1988b018aba21e419f7bc34f101cd62515ed9d8324c9ce6537d0e6cf853f",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-trailing-account.2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-trailing\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Trailing Account\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-14.3s (single scroll position, no further movement); scrolled to the Daily Brief buffer line + Account Health card, held 15.3-31.3s (single scroll position showing both); scrolled further to re-anchor Account Health at the top, held 32.3-46.3s (not used by any scene).",
+      "capturedAt": "2026-09-28",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "trailing_drawdown"
+      ],
+      "durationSeconds": 46.3,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "dashboard.trailing_summary",
+          "text": "Pilot Trailing Account dashboard: September 2026, $40.00, 2 days, 2 trades. Calendar: Sep 21 $3.1k (1 trade, 100%% win), Sep 25 -$3.1k (1 trade, 0%% win). Best day $3,100.00, worst day -$3,060.00, avg/trading day $20.00, green days 1/2.",
+          "values": [
+            "$40.00",
+            "2",
+            "$3.1k",
+            "1",
+            "100%",
+            "-$3.1k",
+            "0%",
+            "$3,100.00",
+            "-$3,060.00",
+            "$20.00"
+          ],
+          "topics": [
+            "trailing_drawdown"
+          ],
+          "region": {
+            "x": 38,
+            "y": 145,
+            "w": 1004,
+            "h": 1335
+          },
+          "timeRangeSeconds": {
+            "start": 1.3,
+            "end": 14.3
+          }
+        },
+        {
+          "key": "dashboard.floor_breach",
+          "text": "Pilot Trailing Account Daily Brief and Account Health: ACCOUNT $-60 of buffer to the floor, $1,000 of today's loss limit (intraday buffer is based on closed trades). \"Equity is below the trailing floor. Most firms close an account at this point.\" ACCOUNT HEALTH 45/100, CAUTION. Most important action: \"Your drawdown floor has been breached. Stop trading this account and check the firm dashboard before placing another order.\"",
+          "values": [
+            "$-60",
+            "$1,000",
+            "45",
+            "100"
+          ],
+          "topics": [
+            "trailing_drawdown"
+          ],
+          "region": {
+            "x": 38,
+            "y": 145,
+            "w": 1004,
+            "h": 1585
+          },
+          "timeRangeSeconds": {
+            "start": 15.3,
+            "end": 31.3
+          }
+        }
+      ]
     }
   ]
 }
