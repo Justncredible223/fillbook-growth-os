@@ -1312,7 +1312,7 @@ export const PILOT_20 = batch3Plan({
 });
 
 const HS_FINALDAY_REC = "rec.hs-finalday-account.v1";
-const HS_FINALDAY_SUMMARY_CROP: Rect = { x: 38, y: 140, w: 1004, h: 1320 };
+const HS_FINALDAY_SUMMARY_CROP: Rect = { x: 38, y: 145, w: 1004, h: 1375 };
 const HS_FINALDAY_TARGET_CROP: Rect = { x: 38, y: 1140, w: 1004, h: 440 };
 
 export const PILOT_21 = batch3Plan({
@@ -1369,7 +1369,7 @@ export const PILOT_21 = batch3Plan({
 
 const HS_MULTI_A_REC = "rec.hs-multi-account-a.v1";
 const HS_MULTI_B_REC = "rec.hs-multi-account-b.v1";
-const HS_MULTI_SUMMARY_CROP: Rect = { x: 38, y: 140, w: 1004, h: 1320 };
+const HS_MULTI_SUMMARY_CROP: Rect = { x: 38, y: 144, w: 1004, h: 1378 };
 
 export const PILOT_22 = batch3Plan({
   n: 22,

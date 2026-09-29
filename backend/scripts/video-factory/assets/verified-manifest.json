@@ -1912,13 +1912,13 @@
     {
       "id": "rec.hs-trailing-account.v1",
       "file": "motion/hs-mobile-trailing-account.mp4",
-      "sha256": "92aa1988b018aba21e419f7bc34f101cd62515ed9d8324c9ce6537d0e6cf853f",
+      "sha256": "d747b77dd9ea895eaf05d5cbb8a94704a3f6a01adcd07ebc78eed6017a4aae8e",
       "width": 1080,
       "height": 1920,
       "kind": "screen_recording",
       "dataset": "local-fixture.pilot-trailing-account.2026-09-28",
-      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-trailing\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Trailing Account\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-14.3s (single scroll position, no further movement); scrolled to the Daily Brief buffer line + Account Health card, held 15.3-31.3s (single scroll position showing both); scrolled further to re-anchor Account Health at the top, held 32.3-46.3s (not used by any scene).",
-      "capturedAt": "2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-trailing\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Trailing Account\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-14.3s (single scroll position, no further movement); scrolled to the Daily Brief buffer line + Account Health card, held 15.3-31.3s (single scroll position showing both); scrolled further to re-anchor Account Health at the top, held 32.3-46.3s (not used by any scene). Re-recorded 2026-09-29 with two fixes: the first scroll offset was raised (60 to 87 CSS px) so the calendar card's header line sits fully below the app's sticky bar instead of being clipped by it, and the calendar is now held still until 9.3s (the follow-up scroll moved later, every later step keeps its original timestamp) so no summary scene scrolls mid-scene. Seed dates were pinned to the original 2026-09-28 run so every on-screen day and value is unchanged.",
+      "capturedAt": "2026-09-29T15:31:59Z",
       "dataLabel": "Demo data",
       "verifiedByOwner": false,
       "topics": [
@@ -1999,13 +1999,13 @@
     {
       "id": "rec.hs-finalday-account.v1",
       "file": "motion/hs-mobile-finalday-account.mp4",
-      "sha256": "2426efb882685b8a04af46b0b8bc7ae9a9ba46be88b695251384be2aa2888e49",
+      "sha256": "325b7c9e17ed76729acbe0b5cbdbe201de34e6ab52a4284f5b43ef50cc9c4388",
       "width": 1080,
       "height": 1920,
       "kind": "screen_recording",
       "dataset": "local-fixture.pilot-finalday-account.2026-09-28",
-      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-finalday\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Final Day Account\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-14.3s (single scroll position); cut to /rules, scrolled to the Pilot Final Day 50K Evaluation account card (drawdown buffer, loss limit, profit target line), held 15.8-31.8s. Note: /payouts was NOT used for this account -- at capture time it showed an identical, clearly wrong Net P&L (48487.82) on every account's readiness card, a real product bug flagged separately; /rules and /dashboard were cross-checked and are unaffected.",
-      "capturedAt": "2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-finalday\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Final Day Account\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-14.3s (single scroll position); cut to /rules, scrolled to the Pilot Final Day 50K Evaluation account card (drawdown buffer, loss limit, profit target line), held 15.8-31.8s. Note: /payouts was NOT used for this account -- at capture time it showed an identical, clearly wrong Net P&L (48487.82) on every account's readiness card, a real product bug flagged separately; /rules and /dashboard were cross-checked and are unaffected. Re-recorded 2026-09-29 with two fixes: the first scroll offset was raised (60 to 87 CSS px) so the calendar card's header line sits fully below the app's sticky bar instead of being clipped by it, and the calendar is now held still until 9.3s (the follow-up scroll moved later, every later step keeps its original timestamp) so no summary scene scrolls mid-scene. Seed dates were pinned to the original 2026-09-28 run so every on-screen day and value is unchanged.",
+      "capturedAt": "2026-09-29T15:31:59Z",
       "dataLabel": "Demo data",
       "verifiedByOwner": false,
       "topics": [
@@ -2045,9 +2045,9 @@
           ],
           "region": {
             "x": 38,
-            "y": 140,
+            "y": 145,
             "w": 1004,
-            "h": 1320
+            "h": 1375
           },
           "timeRangeSeconds": {
             "start": 1.3,
@@ -2084,13 +2084,13 @@
     {
       "id": "rec.hs-multi-account-a.v1",
       "file": "motion/hs-mobile-multi-account-a.mp4",
-      "sha256": "137ad1f9aa723ccb9bfc8241249f6b10055f2216e3e9d5da4ad43ddaab91ab57",
+      "sha256": "1ae6d28c77ff49ec6d9be571b22f89d629c16acc750494e35c6a9d240eade46d",
       "width": 1080,
       "height": 1920,
       "kind": "screen_recording",
       "dataset": "local-fixture.pilot-multi-accounts.2026-09-28",
-      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-multi-a\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Multi Account A\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-20.3s (single scroll position).",
-      "capturedAt": "2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-multi-a\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Multi Account A\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-20.3s (single scroll position). Re-recorded 2026-09-29 with two fixes: the first scroll offset was raised (60 to 87 CSS px) so the calendar card's header line sits fully below the app's sticky bar instead of being clipped by it, and the calendar is now held still until 9.3s (the follow-up scroll moved later, every later step keeps its original timestamp) so no summary scene scrolls mid-scene. Seed dates were pinned to the original 2026-09-28 run so every on-screen day and value is unchanged.",
+      "capturedAt": "2026-09-29T15:31:59Z",
       "dataLabel": "Demo data",
       "verifiedByOwner": false,
       "topics": [
@@ -2133,9 +2133,9 @@
           ],
           "region": {
             "x": 38,
-            "y": 140,
+            "y": 144,
             "w": 1004,
-            "h": 1320
+            "h": 1378
           },
           "timeRangeSeconds": {
             "start": 1.3,
@@ -2147,13 +2147,13 @@
     {
       "id": "rec.hs-multi-account-b.v1",
       "file": "motion/hs-mobile-multi-account-b.mp4",
-      "sha256": "9daa443e839c73dd76e72089a4c4aefbfd417dcb3ccf9aa53f1fdaa1c1a26bdc",
+      "sha256": "1e13d72b7419afc46844a381aaa61125d0ccb30f60544c41fa34de22953f2b42",
       "width": 1080,
       "height": 1920,
       "kind": "screen_recording",
       "dataset": "local-fixture.pilot-multi-accounts.2026-09-28",
-      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-multi-b\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Multi Account B\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-20.3s (single scroll position).",
-      "capturedAt": "2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-multi-b\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Multi Account B\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-20.3s (single scroll position). Re-recorded 2026-09-29 with two fixes: the first scroll offset was raised (60 to 87 CSS px) so the calendar card's header line sits fully below the app's sticky bar instead of being clipped by it, and the calendar is now held still until 9.3s (the follow-up scroll moved later, every later step keeps its original timestamp) so no summary scene scrolls mid-scene. Seed dates were pinned to the original 2026-09-28 run so every on-screen day and value is unchanged.",
+      "capturedAt": "2026-09-29T15:31:59Z",
       "dataLabel": "Demo data",
       "verifiedByOwner": false,
       "topics": [
@@ -2196,9 +2196,9 @@
           ],
           "region": {
             "x": 38,
-            "y": 140,
+            "y": 144,
             "w": 1004,
-            "h": 1320
+            "h": 1378
           },
           "timeRangeSeconds": {
             "start": 1.3,
