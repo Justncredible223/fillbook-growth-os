@@ -3,7 +3,6 @@ import type { LlmClient } from "./llmClient.js";
 import { capitalizationProblem, dashProblem } from "./xReplyGuardrails.js";
 import { computeScenePlanHash } from "../shortform/scenePlan.js";
 import { OFFICIAL_HANDLE, type ScenePlan } from "../shortform/types.js";
-import { CHARACTER_DISPLAY_NAME, CHARACTER_PAIRS, selectCharacterPair } from "../shortform/characterRoster.js";
 
 const VIDEO_SCRIPT_SCHEMA = {
   type: "object",
@@ -503,18 +502,7 @@ export function countSpokenWords(script: string): number {
  */
 export function buildVideoScriptFromScenePlan(plan: ScenePlan): VideoScript {
   const script = plan.scenes.map((s) => s.narration).join(" ");
-  // Resolves to whichever named pair this plan's video will actually show (see
-  // ScenePlan.characterPairId's doc comment) -- a plan run through withCharacterBeats() already
-  // carries this, but resolve the same deterministic default here too so a reviewer sees the
-  // right names even for a plan object built ad hoc without going through that helper.
-  const pair = CHARACTER_PAIRS[plan.characterPairId ?? selectCharacterPair(plan.planId, plan.variationId)];
-  // Each shot also names the duo's line, so the reviewer approving the script sees what the actual on-screen pair says.
-  const shotList = plan.scenes.map((s) => {
-    const shot = s.headline || s.captionText || s.sceneId;
-    if (!s.character) return shot;
-    const who = CHARACTER_DISPLAY_NAME[pair[s.character.speaker]];
-    return `${shot} -- ${who}: "${s.character.quip}"`;
-  });
+  const shotList = plan.scenes.map((s) => s.headline || s.captionText || s.sceneId);
   const disclosureCta = plan.scenes.find((s) => s.disclosure)?.disclosure ?? null;
   const hashtags = ["FuturesTrading", "PropFirmTrading", "TradingJournal"];
   return {

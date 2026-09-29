@@ -1,5 +1,4 @@
 import { buildPublishedMetadata, type PublishedVideoMetadata } from "./metadata.js";
-import { withCharacterBeats } from "./characterBeats.js";
 import { OFFICIAL_HANDLE, type Claim, type Mask, type Platform, type Rect, type SceneSpec, type ScenePlan } from "./types.js";
 
 /**
@@ -2187,7 +2186,7 @@ export const PILOT_3_OPENING_C = openingOnlyVariant(PILOT_3, {
   youtubeTitle: "Your Plan Has a Size Limit: 5 Contracts vs a Max of 3",
 });
 
-/** Every concept, each scene carrying its Rook-and-Tilt beat (characterBeats.ts). */
+/** Every concept the pilot library produces. */
 export const PILOTS: ScenePlan[] = [
   PILOT_1,
   PILOT_2,
@@ -2205,7 +2204,7 @@ export const PILOTS: ScenePlan[] = [
   PILOT_2_OPENING_B,
   PILOT_3_OPENING_C,
   ...HIGHSTAKES_PLANS,
-].map(withCharacterBeats);
+];
 
 export function pilotMetadata(plan: ScenePlan, platform: Platform): PublishedVideoMetadata {
   const copy = PILOT_COPY[plan.planId] ?? ANGLE_COPY[plan.planId];
