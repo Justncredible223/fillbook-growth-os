@@ -95,7 +95,7 @@ describe("listMotionConcepts", () => {
   it("lists exactly the known verified pilots, never an open-ended/inferred set", () => {
     const concepts = listMotionConcepts();
     expect(concepts.map((c) => c.id).sort()).toEqual(PILOTS.map((p) => p.planId).sort());
-    expect(concepts).toHaveLength(57); // 18 recorded concepts plus two angles each (2026-09-25), plus 3 opening-only A/B variants (2026-09-27, see pilots.ts's openingOnlyVariant)
+    expect(concepts).toHaveLength(61); // 18 recorded concepts plus two angles each (2026-09-25), plus 3 opening-only A/B variants (2026-09-27), plus the 4-concept high-stakes batch (2026-09-28, PILOT_19-22), see pilots.ts's openingOnlyVariant
     expect(new Set(concepts.map((c) => c.title)).size).toBe(concepts.length); // availability is tracked by title
     for (const c of concepts) expect(c.hook.length).toBeGreaterThan(0);
   });

@@ -1427,18 +1427,18 @@ export const PILOT_22 = batch3Plan({
 const HIGHSTAKES_PLANS: ScenePlan[] = [PILOT_19, PILOT_20, PILOT_21, PILOT_22];
 const HIGHSTAKES_COPY: Record<string, { captionBody: string; youtubeTitle: string; cta: string }> = {
   [PILOT_19.planId]: {
-    captionBody: "One oversized trading day next to a funded account's profit target. Demo account, based on recorded trades and configured rules.",
+    captionBody: "One outsized-loss trading day next to a funded account's profit target. Demo account, based on recorded trades and configured rules.",
     youtubeTitle: "One Trade Cost $1,504.04: Reading a Funded Account's Payout Math",
     cta: "Try it free on your own account for 14 days",
   },
   [PILOT_20.planId]: {
     captionBody: "A trailing floor is set by the account's own peak, not by today's balance -- so a net-positive account can still be in breach. Demo account, based on recorded trades and configured rules.",
-    youtubeTitle: "Up $40 Net, Still Below the Floor: How a Trailing Drawdown Actually Works",
+    youtubeTitle: "Up $40 Net, Still Below the Floor: A Trailing Drawdown Explained",
     cta: "Try it free on your own account for 14 days",
   },
   [PILOT_21.planId]: {
     captionBody: "10 green days, and a profit target 98% of the way there on the same session a trading-days minimum is first met. Demo account, based on recorded trades and configured rules.",
-    youtubeTitle: "98% to Target on the 10th Trading Day: Reading Two Requirements at Once",
+    youtubeTitle: "98% to Target on the 10th Day: Reading Two Requirements at Once",
     cta: "Try it free on your own account for 14 days",
   },
   [PILOT_22.planId]: {
