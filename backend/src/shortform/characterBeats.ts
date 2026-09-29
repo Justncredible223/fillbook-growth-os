@@ -138,6 +138,12 @@ export const CHARACTER_BEATS: Record<string, CharacterBeat[]> = {
     beat("rook", "Confirm your own firm's rule.", "point", "think"),
     beat("tilt", "Finding my real floor now.", "cheer", "think"),
   ],
+  "pilot-21-one-session-left-target-in-sight": [
+    beat("tilt", "Ten green days! Nearly there!", "cheer", "cheer"),
+    beat("rook", "So close. Still not there yet.", "point", "think"),
+    beat("tilt", "No peeking at what happens next.", "shrug", "think"),
+    beat("tilt", "Watching my own number now.", "cheer", "cheer"),
+  ],
 };
 
 /** The base concept an angle was cut from (`pilot-1-...--b` -> `pilot-1-...`); a base plan's id is its own base. */

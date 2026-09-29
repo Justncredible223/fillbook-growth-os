@@ -1312,7 +1312,63 @@ export const PILOT_20 = batch3Plan({
   ],
 });
 
-const HIGHSTAKES_PLANS: ScenePlan[] = [PILOT_19, PILOT_20];
+const HS_FINALDAY_REC = "rec.hs-finalday-account.v1";
+const HS_FINALDAY_SUMMARY_CROP: Rect = { x: 38, y: 140, w: 1004, h: 1320 };
+const HS_FINALDAY_TARGET_CROP: Rect = { x: 38, y: 1140, w: 1004, h: 440 };
+
+export const PILOT_21 = batch3Plan({
+  n: 21,
+  slug: "one-session-left-target-in-sight",
+  title: "98% to target. On the 10th trading day.",
+  series: "Read the Rule",
+  topic: "A profit target and a minimum-trading-days requirement converging in the same session",
+  scenes: [
+    {
+      narration: "10 green days in a row. $2,940 net.",
+      headline: "10/10 green days",
+      caption: "Net $2,940.00 across 21 trades.",
+      takeaway: "A clean streak is its own kind of evidence.",
+      topics: ["payout_readiness"],
+      asset: {
+        id: HS_FINALDAY_REC,
+        crop: HS_FINALDAY_SUMMARY_CROP,
+        clip: { start: 1.7, end: 8.0 },
+        claim: "Pilot Final Day Account: September, $2,940.00 net, 10 days, 21 trades, green days 10/10, current day streak 10.",
+        factKey: "dashboard.finalday_summary",
+      },
+    },
+    {
+      narration: "Profit target: $3,000. Currently $2,940 -- 98% of the way there.",
+      headline: "$2,940 of $3,000 -- 98%",
+      caption: "98% of the way there.",
+      takeaway: "Two requirements can land on the same session.",
+      topics: ["payout_readiness"],
+      asset: {
+        id: HS_FINALDAY_REC,
+        crop: HS_FINALDAY_TARGET_CROP,
+        clip: { start: 17.3, end: 27.3 },
+        claim: "Pilot Final Day 50K Evaluation: profit target $3,000.00, currently $2,940.00 (98%); max drawdown buffer $4,940.00, today's loss limit remaining $1,000.00.",
+        factKey: "rules.finalday_target",
+      },
+    },
+    {
+      narration: "This is a sample account. What happens next isn't predicted here.",
+      headline: "Not a prediction",
+      caption: "Sample account, not a real trader.",
+      takeaway: "A close number is still just a number, not an outcome.",
+      topics: ["payout_readiness"],
+    },
+    {
+      narration: "Know exactly how close you are, every session.",
+      headline: "Know how close you are.",
+      caption: "Track yours at fillbookhq.com.",
+      takeaway: "A target you can see is easier to trade toward.",
+      topics: ["payout_readiness"],
+    },
+  ],
+});
+
+const HIGHSTAKES_PLANS: ScenePlan[] = [PILOT_19, PILOT_20, PILOT_21];
 const HIGHSTAKES_COPY: Record<string, { captionBody: string; youtubeTitle: string; cta: string }> = {
   [PILOT_19.planId]: {
     captionBody: "One oversized trading day next to a funded account's profit target. Demo account, based on recorded trades and configured rules.",
@@ -1322,6 +1378,11 @@ const HIGHSTAKES_COPY: Record<string, { captionBody: string; youtubeTitle: strin
   [PILOT_20.planId]: {
     captionBody: "A trailing floor is set by the account's own peak, not by today's balance -- so a net-positive account can still be in breach. Demo account, based on recorded trades and configured rules.",
     youtubeTitle: "Up $40 Net, Still Below the Floor: How a Trailing Drawdown Actually Works",
+    cta: "Try it free on your own account for 14 days",
+  },
+  [PILOT_21.planId]: {
+    captionBody: "10 green days, and a profit target 98% of the way there on the same session a trading-days minimum is first met. Demo account, based on recorded trades and configured rules.",
+    youtubeTitle: "98% to Target on the 10th Trading Day: Reading Two Requirements at Once",
     cta: "Try it free on your own account for 14 days",
   },
 };

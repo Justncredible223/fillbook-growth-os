@@ -1995,6 +1995,91 @@
           }
         }
       ]
+    },
+    {
+      "id": "rec.hs-finalday-account.v1",
+      "file": "motion/hs-mobile-finalday-account.mp4",
+      "sha256": "2426efb882685b8a04af46b0b8bc7ae9a9ba46be88b695251384be2aa2888e49",
+      "width": 1080,
+      "height": 1920,
+      "kind": "screen_recording",
+      "dataset": "local-fixture.pilot-finalday-account.2026-09-28",
+      "source": "Frame-stepped capture (scripts/video-factory/stepCapture.ts via runPilotCapture.ts, shot \"hs-finalday\") of a LOCAL Fillbook dev server (branch feat/highstakes-scenarios, based on origin/master @ e5d9539) + local Supabase stack at phone layout, 432x768 CSS at 2.5x = 1080x1920, America/New_York browser time; every frame is a real screenshot of the app. Signed into a throwaway local account viewing \"Pilot Final Day Account\", seeded by fillbook/frontend/scripts/seed-pilot-highstakes-fixtures.mjs -- not a real trader. The account email is only in the closed nav drawer and never on screen. Timeline: /dashboard month calendar strip + best/worst/green-days stats held 1.3-14.3s (single scroll position); cut to /rules, scrolled to the Pilot Final Day 50K Evaluation account card (drawdown buffer, loss limit, profit target line), held 15.8-31.8s. Note: /payouts was NOT used for this account -- at capture time it showed an identical, clearly wrong Net P&L (48487.82) on every account's readiness card, a real product bug flagged separately; /rules and /dashboard were cross-checked and are unaffected.",
+      "capturedAt": "2026-09-28",
+      "dataLabel": "Demo data",
+      "verifiedByOwner": false,
+      "topics": [
+        "payout_readiness"
+      ],
+      "durationSeconds": 31.8,
+      "fps": 30,
+      "chromeRegions": [
+        {
+          "x": 0,
+          "y": 0,
+          "w": 1080,
+          "h": 140
+        },
+        {
+          "x": 900,
+          "y": 1740,
+          "w": 180,
+          "h": 180
+        }
+      ],
+      "privateRegions": [],
+      "facts": [
+        {
+          "key": "dashboard.finalday_summary",
+          "text": "Pilot Final Day Account dashboard: September 2026, $2,940.00, 10 days, 21 trades. Best day $340.00, worst day $180.00, avg/trading day $294.00, green days 10/10. Current day streak 10 (best 10 green days).",
+          "values": [
+            "$2,940.00",
+            "10",
+            "21",
+            "$340.00",
+            "$180.00",
+            "$294.00"
+          ],
+          "topics": [
+            "payout_readiness"
+          ],
+          "region": {
+            "x": 38,
+            "y": 140,
+            "w": 1004,
+            "h": 1320
+          },
+          "timeRangeSeconds": {
+            "start": 1.3,
+            "end": 14.3
+          }
+        },
+        {
+          "key": "rules.finalday_target",
+          "text": "Pilot Final Day 50K Evaluation, $50,000.00 account: Max drawdown buffer $4,940.00, Today's loss limit remaining $1,000.00, Profit target: $3,000.00 -- currently $2,940.00 (98%).",
+          "values": [
+            "$50,000.00",
+            "$4,940.00",
+            "$1,000.00",
+            "$3,000.00",
+            "$2,940.00",
+            "98%"
+          ],
+          "topics": [
+            "payout_readiness"
+          ],
+          "region": {
+            "x": 38,
+            "y": 1140,
+            "w": 1004,
+            "h": 440
+          },
+          "timeRangeSeconds": {
+            "start": 15.8,
+            "end": 31.8
+          }
+        }
+      ]
     }
   ]
 }
