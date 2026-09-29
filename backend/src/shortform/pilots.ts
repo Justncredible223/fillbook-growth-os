@@ -1368,7 +1368,63 @@ export const PILOT_21 = batch3Plan({
   ],
 });
 
-const HIGHSTAKES_PLANS: ScenePlan[] = [PILOT_19, PILOT_20, PILOT_21];
+const HS_MULTI_A_REC = "rec.hs-multi-account-a.v1";
+const HS_MULTI_B_REC = "rec.hs-multi-account-b.v1";
+const HS_MULTI_SUMMARY_CROP: Rect = { x: 38, y: 140, w: 1004, h: 1320 };
+
+export const PILOT_22 = batch3Plan({
+  n: 22,
+  slug: "one-signal-two-accounts",
+  title: "One trade. Both accounts, same -$1,201.",
+  series: "Read the Rule",
+  topic: "Duplicating a trade's size across multiple accounts duplicates the risk",
+  scenes: [
+    {
+      narration: "Day 25 alone: -$1,201 on Account A.",
+      headline: "Account A: -$1,201",
+      caption: "1 trade, 0% win.",
+      takeaway: "One trade can define a whole day.",
+      topics: ["accounts_overview"],
+      asset: {
+        id: HS_MULTI_A_REC,
+        crop: HS_MULTI_SUMMARY_CROP,
+        clip: { start: 1.7, end: 8.0 },
+        claim: "Pilot Multi Account A: September -$1,076.00 net, 4 days, 4 trades. Day 25 alone -$1,201.00 (1 trade, 0% win), green days 2/4.",
+        factKey: "dashboard.multi_a_summary",
+      },
+    },
+    {
+      narration: "Same day, same setup: -$1,201 on Account B too.",
+      headline: "Account B: -$1,201 too",
+      caption: "Same setup, both accounts.",
+      takeaway: "The same size shows up as risk twice, not once.",
+      topics: ["accounts_overview"],
+      asset: {
+        id: HS_MULTI_B_REC,
+        crop: HS_MULTI_SUMMARY_CROP,
+        clip: { start: 1.7, end: 8.0 },
+        claim: "Pilot Multi Account B: September -$1,076.00 net, 4 days, 4 trades. Day 25 alone -$1,201.00 (1 trade, 0% win), green days 2/4.",
+        factKey: "dashboard.multi_b_summary",
+      },
+    },
+    {
+      narration: "These are sample accounts. Sizing the same way across accounts is a choice worth reviewing.",
+      headline: "Worth reviewing, not a verdict",
+      caption: "Sample accounts, not real traders.",
+      takeaway: "More accounts means the same size costs more, not less.",
+      topics: ["accounts_overview"],
+    },
+    {
+      narration: "See every account's risk on one screen.",
+      headline: "See every account at once.",
+      caption: "Track yours at fillbookhq.com.",
+      takeaway: "Check the size before it repeats across accounts.",
+      topics: ["accounts_overview"],
+    },
+  ],
+});
+
+const HIGHSTAKES_PLANS: ScenePlan[] = [PILOT_19, PILOT_20, PILOT_21, PILOT_22];
 const HIGHSTAKES_COPY: Record<string, { captionBody: string; youtubeTitle: string; cta: string }> = {
   [PILOT_19.planId]: {
     captionBody: "One oversized trading day next to a funded account's profit target. Demo account, based on recorded trades and configured rules.",
@@ -1383,6 +1439,11 @@ const HIGHSTAKES_COPY: Record<string, { captionBody: string; youtubeTitle: strin
   [PILOT_21.planId]: {
     captionBody: "10 green days, and a profit target 98% of the way there on the same session a trading-days minimum is first met. Demo account, based on recorded trades and configured rules.",
     youtubeTitle: "98% to Target on the 10th Trading Day: Reading Two Requirements at Once",
+    cta: "Try it free on your own account for 14 days",
+  },
+  [PILOT_22.planId]: {
+    captionBody: "The same day, the same setup, the same -$1,201 -- on two separate accounts. Demo accounts, based on recorded trades and configured rules.",
+    youtubeTitle: "Same Trade, Two Accounts: When One Signal Doubles Your Risk",
     cta: "Try it free on your own account for 14 days",
   },
 };
