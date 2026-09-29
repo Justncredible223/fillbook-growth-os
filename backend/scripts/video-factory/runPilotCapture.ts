@@ -308,6 +308,21 @@ const HIGHSTAKES_SHOTS: Record<string, { id: string; steps: Step[] }> = {
       { kind: "hold", seconds: 14 },
     ],
   },
+  "hs-behavior": {
+    id: "hs-mobile-behavior-account",
+    steps: [
+      { kind: "goto", route: "/calendar", waitFor: "text=Month total:" },
+      { kind: "hold", seconds: 0.3 },
+      { kind: "scroll", selector: "text=Green days", seconds: 1.0, block: "start", offsetCss: 60 },
+      { kind: "measure", name: "month_grid", selector: "text=Month total:" },
+      { kind: "hold", seconds: 16 },
+      { kind: "goto", route: "/", waitFor: "text=Overtrading vs. your baseline" },
+      { kind: "hold", seconds: 0.5 },
+      { kind: "scroll", selector: "text=Overtrading vs. your baseline", seconds: 1.0, block: "start", offsetCss: 200 },
+      { kind: "measure", name: "brief_overtrading", selector: "text=Overtrading vs. your baseline" },
+      { kind: "hold", seconds: 16 },
+    ],
+  },
 };
 Object.assign(SHOTS, HIGHSTAKES_SHOTS);
 

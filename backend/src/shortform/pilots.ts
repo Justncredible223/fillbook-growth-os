@@ -1424,7 +1424,63 @@ export const PILOT_22 = batch3Plan({
   ],
 });
 
-const HIGHSTAKES_PLANS: ScenePlan[] = [PILOT_19, PILOT_20, PILOT_21, PILOT_22];
+const HS_BEHAVIOR_REC = "rec.hs-behavior-account.v1";
+const HS_BEHAVIOR_MONTH_CROP: Rect = { x: 38, y: 145, w: 1004, h: 1310 };
+const HS_BEHAVIOR_WATCH_CROP: Rect = { x: 38, y: 140, w: 1004, h: 560 };
+
+export const PILOT_23 = batch3Plan({
+  n: 23,
+  slug: "the-session-that-unraveled",
+  title: "6 trades after a losing streak. Normal is 2.7.",
+  series: "What Your Journal Shows",
+  topic: "A single session's trade count compared against a trader's own baseline pace",
+  scenes: [
+    {
+      narration: "One red day: -$465, on 6 trades, 17% win. Against 13 green days out of 19.",
+      headline: "-$465 on 6 trades, 17% win",
+      caption: "13 of 19 days were green.",
+      takeaway: "One session can stand out from a mostly-green month.",
+      topics: ["overtrading"],
+      asset: {
+        id: HS_BEHAVIOR_REC,
+        crop: HS_BEHAVIOR_MONTH_CROP,
+        clip: { start: 1.7, end: 11.5 },
+        claim: "Pilot Behavior Account: September -$185.44, 19 days, 60 trades. Day 25 alone -$465 (6 trades, 17% win), green days 13/19.",
+        factKey: "calendar.month_overview",
+      },
+    },
+    {
+      narration: "That session ran to 6 trades after a losing streak -- normal pace is 2.7 a day. Frequency up 126%.",
+      headline: "6 trades vs a 2.7 normal",
+      caption: "Frequency up 126%.",
+      takeaway: "The losing day was also the busiest day.",
+      topics: ["overtrading"],
+      asset: {
+        id: HS_BEHAVIOR_REC,
+        crop: HS_BEHAVIOR_WATCH_CROP,
+        clip: { start: 19.0, end: 31.0 },
+        claim: "Worth watching -- overtrading vs. baseline: 6 trades last session (Sep 25) after a losing streak, normal pace 2.7/day, frequency up 126%.",
+        factKey: "dashboard.overtrading_watch",
+      },
+    },
+    {
+      narration: "This is a sample account, and a busy day isn't proof of anything by itself.",
+      headline: "Worth a look, not a verdict",
+      caption: "Sample account, not a real trader.",
+      takeaway: "Pace is a pattern to check, not an accusation.",
+      topics: ["overtrading"],
+    },
+    {
+      narration: "Know your own normal pace, one session at a time.",
+      headline: "Know your own pace.",
+      caption: "Track yours at fillbookhq.com.",
+      takeaway: "Compare today's count against your own baseline.",
+      topics: ["overtrading"],
+    },
+  ],
+});
+
+const HIGHSTAKES_PLANS: ScenePlan[] = [PILOT_19, PILOT_20, PILOT_21, PILOT_22, PILOT_23];
 const HIGHSTAKES_COPY: Record<string, { captionBody: string; youtubeTitle: string; cta: string }> = {
   [PILOT_19.planId]: {
     captionBody: "One outsized-loss trading day next to a funded account's profit target. Demo account, based on recorded trades and configured rules.",
@@ -1444,6 +1500,11 @@ const HIGHSTAKES_COPY: Record<string, { captionBody: string; youtubeTitle: strin
   [PILOT_22.planId]: {
     captionBody: "The same day, the same setup, the same -$1,201 -- on two separate accounts. Demo accounts, based on recorded trades and configured rules.",
     youtubeTitle: "Same Trade, Two Accounts: When One Signal Doubles Your Risk",
+    cta: "Try it free on your own account for 14 days",
+  },
+  [PILOT_23.planId]: {
+    captionBody: "A losing streak turned into a 6-trade session against a 2.7-trade normal day. Demo account, not a real trader.",
+    youtubeTitle: "6 Trades After a Losing Streak: Reading Your Own Baseline Pace",
     cta: "Try it free on your own account for 14 days",
   },
 };
