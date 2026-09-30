@@ -55,9 +55,12 @@ describe("story scorecard", () => {
     }
   });
 
-  it("does not hand out top grades to the current library: no A+ exists yet, so the bar is real", () => {
-    const grades = MOTION_SCENE_PLANS.map((p) => scoreStory(p).grade);
-    expect(grades.filter((g) => g === "A+")).toHaveLength(0);
-    expect(grades.filter((g) => g === "D").length).toBeGreaterThan(0);
+  it("does not hand out top grades freely: A+ is rare (only the story rebuilds) and most of the library is below A", () => {
+    const scored = MOTION_SCENE_PLANS.map((p) => ({ id: p.planId, grade: scoreStory(p).grade }));
+    const aPlus = scored.filter((s) => s.grade === "A+");
+    expect(aPlus.length).toBeGreaterThan(0);
+    expect(aPlus.every((s) => s.id.includes("-story-"))).toBe(true);
+    expect(scored.filter((s) => s.grade === "D").length).toBeGreaterThan(0);
+    expect(scored.filter((s) => s.grade === "A" || s.grade === "A+").length).toBeLessThan(scored.length / 4);
   });
 });

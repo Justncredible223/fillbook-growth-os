@@ -259,7 +259,7 @@ export function validatePayoffText(scene: SceneSpec): PlanIssue[] {
   if (!scene.payoff) add("error", "payoff_missing_spec", 'A scene with layout "payoff" needs a payoff spec (theme and motion).');
   const text = splitPayoffHeadline(scene.headline);
   // A text-only payoff scene (a qualification or closing line) has no card to caption, so it may lead with words.
-  if (!text && scene.assetId !== null) add("error", "payoff_headline_no_figure", "A payoff headline starts with the big figure, e.g. \"$1,725 left before your floor\".");
+  if (!text && scene.assetId !== null && !scene.payoff?.leadWithWords) add("error", "payoff_headline_no_figure", "A payoff headline starts with the big figure, e.g. \"$1,725 left before your floor\".");
   const words = payoffWordCount(scene.headline);
   if (words > PAYOFF_MAX_WORDS) add("error", "payoff_too_many_words", `Payoff headline has ${words} words; the limit is ${PAYOFF_MAX_WORDS} per screen.`);
   if (scene.headline.trim().length > PAYOFF_MAX_HEADLINE_CHARS) add("error", "payoff_headline_too_long", `Payoff headline is ${scene.headline.trim().length} characters; the limit is ${PAYOFF_MAX_HEADLINE_CHARS}.`);
