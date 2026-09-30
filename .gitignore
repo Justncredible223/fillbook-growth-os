@@ -23,3 +23,7 @@ android/keystore.properties
 # Video Factory render output -- generated MP4s/voiceovers/captions, never
 # committed. See docs/VIDEO_FACTORY.md.
 output/
+
+# Stray directory the render tests create on Linux (a Windows-style output path
+# is a literal folder name there); the tests clean it up, this is the backstop.
+backend/C:*
