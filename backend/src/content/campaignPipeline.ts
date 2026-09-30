@@ -9,6 +9,7 @@ import { draftResearch, formatResearchAsText, type ResearchReport } from "./rese
 import { extractMotionConceptRefFromRationale } from "../../scripts/video-factory/motionCatalog.js";
 import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../opportunities/manualMotionConcept.js";
 import { MOTION_SCENE_PLANS } from "../shortform/motionPlans.js";
+import { assertMeetsRenderBar } from "../shortform/storyScore.js";
 import { loadManifest, validateScenePlan } from "../shortform/scenePlan.js";
 
 /**
@@ -192,6 +193,7 @@ export async function runCampaignPipeline(
     // fail later at render time -- the owner finds out immediately, before
     // spending any review-agent budget on a request that could never
     // actually render with motion.
+    assertMeetsRenderBar(plan);
     const planValidation = validateScenePlan(plan, loadManifest(), { checkFiles: true });
     if (!planValidation.ok) {
       const errors = planValidation.issues.filter((i) => i.severity === "error").map((i) => `${i.sceneId}: ${i.code} -- ${i.message}`);

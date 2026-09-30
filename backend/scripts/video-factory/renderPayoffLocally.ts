@@ -13,7 +13,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PAYOFF_PILOTS } from "../../src/shortform/payoffPilots.js";
+import { MOTION_SCENE_PLANS, isPayoffPlan } from "../../src/shortform/motionPlans.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
 import { applyRealDurations, buildRenderPlanScenes, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio } from "./scenePlanAdapter.js";
 import { buildAssFile } from "./captions.js";
@@ -31,7 +31,7 @@ async function main() {
   const voice = process.argv.find((a) => a.startsWith("--voice="))?.slice("--voice=".length) ?? "edge";
   if (voice !== "edge" && voice !== "offline") throw new Error(`--voice must be "edge" or "offline", got "${voice}".`);
   const filter = process.argv.slice(2).find((a) => !a.startsWith("--"));
-  const plans = PAYOFF_PILOTS.filter((p) => !filter || p.planId.endsWith(`-${filter}`) || p.planId.includes(filter));
+  const plans = MOTION_SCENE_PLANS.filter(isPayoffPlan).filter((p) => !filter || p.planId.includes(filter));
   if (plans.length === 0) throw new Error(`No payoff plan matches "${filter}".`);
 
   const manifest = loadManifest();

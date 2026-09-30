@@ -180,6 +180,8 @@ export interface PayoffSpec {
   motion: PayoffMotion;
   /** Draw an animated pointer that glides to the element being described and pulses once on arrival. Evidence scenes only. */
   cursor?: boolean;
+  /** This evidence scene leads with words, not a figure (every scene after the hook may; the hook itself may not). */
+  leadWithWords?: boolean;
 }
 export type AspectRatio = "9:16" | "4:5" | "1:1" | "source";
 export type TransitionType = "cut" | "fade";

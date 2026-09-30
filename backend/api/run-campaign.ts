@@ -9,6 +9,8 @@ import { validateVideoTopicShape, manualVideoTopicTitle, manualVideoTopicOpportu
 import { validateResearchTopicShape, manualResearchTopicTitle, manualResearchTopicOpportunityInput } from "../src/opportunities/manualResearchTopic.js";
 import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX, manualMotionConceptTitle, manualMotionConceptOpportunityInput } from "../src/opportunities/manualMotionConcept.js";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
+import { MOTION_SCENE_PLANS } from "../src/shortform/motionPlans.js";
+import { renderBar, renderBarRefusal } from "../src/shortform/storyScore.js";
 
 /**
  * Motion concepts that must not be offered again, keyed by their opportunity title (owner rule 2026-09-25: a concept
@@ -133,6 +135,11 @@ export function isAllowedAssetTypeOverride(value: unknown): value is AllowedAsse
  * runCampaignForOpportunity call every other request already goes
  * through -- no separate pipeline, no separate budget/idempotency logic.
  */
+const planFor = (id: string) => MOTION_SCENE_PLANS.find((p) => p.planId === id);
+const meetsBar = (id: string): boolean => { const p = planFor(id); return p ? renderBar(p).ok : false; };
+const barSummary = (id: string) => { const p = planFor(id); const r = p ? renderBar(p) : null; return { score: r?.score ?? 0, grade: r?.grade ?? "D", fixes: r?.fixes ?? [] }; };
+const barRefusal = (id: string): string => { const p = planFor(id); return p ? renderBarRefusal(p) : `"${id}" is not a known concept.`; };
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireAppAuth(req, res)) return;
   // GET: the fixed, small catalog of concepts that have verified product
@@ -144,7 +151,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const states = await motionConceptStates(getServiceClient());
       res.status(200).json({
-        motionConcepts: listMotionConcepts().filter((c) => !states.has(manualMotionConceptTitle(c))),
+        // Only A and A+ concepts are offered (owner rule, 2026-09-30); the rest are listed with their grade and what to fix.
+        motionConcepts: listMotionConcepts().filter((c) => !states.has(manualMotionConceptTitle(c)) && meetsBar(c.id)),
+        belowBarMotionConcepts: listMotionConcepts()
+          .filter((c) => !meetsBar(c.id))
+          .map((c) => ({ id: c.id, title: c.title, ...barSummary(c.id) })),
         unavailableMotionConcepts: listMotionConcepts()
           .filter((c) => states.has(manualMotionConceptTitle(c)))
           .map((c) => ({ id: c.id, title: c.title, state: states.get(manualMotionConceptTitle(c)) })),
@@ -183,6 +194,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
       const concept = listMotionConcepts().find((c) => c.id === rawMotionConceptId);
+      if (concept && !meetsBar(concept.id)) {
+        res.status(409).json({ error: `Story bar not met: ${barRefusal(concept.id)}` });
+        return;
+      }
       if (!concept) {
         res.status(400).json({
           error: `Unknown motionConceptId "${rawMotionConceptId}". Known concepts: ${listMotionConcepts().map((c) => c.id).join(", ")}.`,

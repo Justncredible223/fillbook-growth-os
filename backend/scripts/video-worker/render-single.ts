@@ -67,6 +67,7 @@ import { resolveMotionScenePlan, summarizeUsedAssets, type CatalogAssetSummary }
 import { buildRenderPlanScenes, applyRealDurations, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio } from "../video-factory/scenePlanAdapter.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
 import { isPayoffPlan } from "../../src/shortform/motionPlans.js";
+import { assertMeetsRenderBar } from "../../src/shortform/storyScore.js";
 import { PAYOFF_SPEECH_RATE, PAYOFF_TRANSITION_SECONDS } from "../video-factory/payoffCues.js";
 import type { ScenePlan } from "../../src/shortform/types.js";
 
@@ -290,6 +291,8 @@ export async function runRender(videoRenderId: string, campaignAssetId: string, 
   let plan: RenderPlan;
   let motionSelection: MotionSelectionReport;
   if (motionMatch.plan) {
+    // Owner rule: only concepts that grade A or A+ are rendered, including ones approved before the rule existed.
+    assertMeetsRenderBar(motionMatch.plan);
     const built = await buildVerifiedMotionPlan(motionMatch.plan, outDir, runner, outputPath);
     plan = built.plan;
     motionSelection = { usedVerifiedScenePlan: true, reason: motionMatch.reason, assetsUsed: built.assetsUsed, narrationProvenance: built.narrationProvenance };
