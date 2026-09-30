@@ -1988,6 +1988,67 @@
             "start": 34.1,
             "end": 46.1
           }
+        },
+        {
+          "key": "calendar.green_days",
+          "text": "Pilot Payout Account, September calendar: Green days 17 / 18",
+          "values": [
+            "17",
+            "18"
+          ],
+          "region": {
+            "x": 551,
+            "y": 1510,
+            "w": 129,
+            "h": 71
+          },
+          "timeRangeSeconds": {
+            "start": 1.5,
+            "end": 15.2
+          },
+          "topics": [
+            "payout_readiness"
+          ]
+        },
+        {
+          "key": "calendar.worst_day",
+          "text": "Pilot Payout Account, September calendar: Worst day -$1,504.04",
+          "values": [
+            "-$1,504.04"
+          ],
+          "region": {
+            "x": 550,
+            "y": 1400,
+            "w": 186,
+            "h": 72
+          },
+          "timeRangeSeconds": {
+            "start": 1.5,
+            "end": 15.2
+          },
+          "topics": [
+            "payout_readiness"
+          ]
+        },
+        {
+          "key": "payouts.to_go",
+          "text": "Pilot Payout 150K Funded, payout readiness: target (1484.04 to go)",
+          "values": [
+            "1484.04"
+          ],
+          "region": {
+            "x": 450,
+            "y": 533,
+            "w": 281,
+            "h": 36
+          },
+          "timeRangeSeconds": {
+            "start": 16.9,
+            "end": 32.9
+          },
+          "topics": [
+            "payout_readiness"
+          ]
         }
       ]
     },
@@ -2256,6 +2317,48 @@
             "start": 15.8,
             "end": 31.8
           }
+        },
+        {
+          "key": "dashboard.green_days",
+          "text": "Pilot Final Day Account dashboard: Green days 10 / 10",
+          "values": [
+            "10"
+          ],
+          "region": {
+            "x": 551,
+            "y": 1346,
+            "w": 129,
+            "h": 72
+          },
+          "timeRangeSeconds": {
+            "start": 1.3,
+            "end": 14.3
+          },
+          "topics": [
+            "payout_readiness"
+          ]
+        },
+        {
+          "key": "rules.target_progress",
+          "text": "Pilot Final Day 50K Evaluation: Profit target $3,000.00, currently $2,940.00 (98%)",
+          "values": [
+            "$3,000.00",
+            "$2,940.00",
+            "98%"
+          ],
+          "region": {
+            "x": 402,
+            "y": 1503,
+            "w": 334,
+            "h": 36
+          },
+          "timeRangeSeconds": {
+            "start": 15.8,
+            "end": 31.8
+          },
+          "topics": [
+            "payout_readiness"
+          ]
         }
       ]
     },
@@ -2319,6 +2422,26 @@
             "start": 1.3,
             "end": 20.3
           }
+        },
+        {
+          "key": "dashboard.multi_a_worst_day",
+          "text": "Pilot Multi Account A dashboard, September 2026: Worst day -$1,201.00",
+          "values": [
+            "-$1,201.00"
+          ],
+          "region": {
+            "x": 550,
+            "y": 1237,
+            "w": 187,
+            "h": 72
+          },
+          "timeRangeSeconds": {
+            "start": 1.3,
+            "end": 20.3
+          },
+          "topics": [
+            "accounts_overview"
+          ]
         }
       ]
     },
@@ -2382,6 +2505,26 @@
             "start": 1.3,
             "end": 20.3
           }
+        },
+        {
+          "key": "dashboard.multi_b_worst_day",
+          "text": "Pilot Multi Account B dashboard, September 2026: Worst day -$1,201.00",
+          "values": [
+            "-$1,201.00"
+          ],
+          "region": {
+            "x": 550,
+            "y": 1237,
+            "w": 187,
+            "h": 72
+          },
+          "timeRangeSeconds": {
+            "start": 1.3,
+            "end": 20.3
+          },
+          "topics": [
+            "accounts_overview"
+          ]
         }
       ]
     },
