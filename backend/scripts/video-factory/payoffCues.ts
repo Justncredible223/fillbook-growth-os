@@ -117,15 +117,15 @@ export interface PayoffCursorInput {
 }
 
 /**
- * Where the pointer's tip rests on a payoff card, in frame pixels: inside the lower-right of the focal element (so it
- * never covers the figure), mapped from source pixels through the card's own scale, and clamped into the safe area.
+ * Where the pointer's tip rests on a payoff card, in frame pixels: at the lower edge of the focal element (so the arrow hangs below the text
+ * and never covers the figure), mapped from source pixels through the card's own scale, and clamped into the safe area.
  */
 export function payoffCursorTarget(input: Pick<PayoffCursorInput, "card" | "crop" | "focal">): { x: number; y: number } {
   const { card, crop, focal } = input;
   const sx = card.width / crop.w;
   const sy = card.height / crop.h;
-  const x = card.x + (focal.x + focal.w * 0.88 - crop.x) * sx;
-  const y = card.y + (focal.y + focal.h * 0.8 - crop.y) * sy;
+  const x = card.x + (focal.x + focal.w * 0.9 - crop.x) * sx;
+  const y = card.y + (focal.y + focal.h * 0.97 - crop.y) * sy;
   return {
     x: Math.round(Math.min(CURSOR_MAX_X, Math.max(card.x + 30, x))),
     y: Math.round(Math.min(CURSOR_MAX_Y, Math.max(card.y + 10, y))),
