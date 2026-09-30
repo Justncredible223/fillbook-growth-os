@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, afterAll } from "vitest";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -328,6 +328,14 @@ describe("host-OS independence of path handling", () => {
 });
 
 describe("renderVideo", () => {
+  // These tests render a Windows-style plan ("C:\\out\\draft-1"). On Linux that is
+  // just a relative directory name, and renderVideo stages the music and font
+  // into it, so each run left a "C:\\out\\draft-1" folder in backend/ that then
+  // got committed by mistake (PR #70). Remove it once this block is done.
+  afterAll(() => {
+    rmSync("C:\\out\\draft-1", { recursive: true, force: true });
+  });
+
   it("runs ffmpeg with cwd set to the output directory", async () => {
     const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
     const runner: ProcessRunner = { run };
