@@ -20,6 +20,45 @@ const DEFAULT_TIMEOUT_MS = Number(process.env.LLM_CALL_TIMEOUT_MS) || 20_000;
 
 export class LlmClientError extends Error {}
 
+/**
+ * Retry policy for transient Claude API failures. On 2026-09-29 every
+ * Campaign Run for six minutes died on a single "HTTP 503 -- credential
+ * validation failed" from one review-agent call, a blip the API recovered
+ * from on its own; one retry a second later would have carried the run.
+ *
+ * Only statuses that mean "try again" are retried (429 rate limit, 5xx,
+ * 529 overloaded) plus network errors. Timeouts are NOT retried: callers run
+ * inside a 60s Vercel invocation (see DEFAULT_TIMEOUT_MS), and a second 20s
+ * wait on a hung request would blow that budget. Delays stay short for the
+ * same reason; a server Retry-After is honoured but capped.
+ */
+export interface RetryOptions {
+  /** Extra attempts after the first; 0 disables retrying. */
+  retries: number;
+  /** Delay before retry n (1-based), in ms. */
+  delaysMs: number[];
+  /** Upper bound on any single wait, including a server Retry-After. */
+  maxDelayMs: number;
+  sleep: (ms: number) => Promise<void>;
+}
+
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504, 529]);
+
+export const NO_RETRY: RetryOptions = { retries: 0, delaysMs: [], maxDelayMs: 0, sleep: async () => {} };
+
+export const DEFAULT_RETRY: RetryOptions = {
+  retries: 2,
+  delaysMs: [1_000, 3_000],
+  maxDelayMs: 5_000,
+  sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+};
+
+function retryDelayMs(retry: RetryOptions, attempt: number, retryAfter: string | null): number {
+  const fromHeader = retryAfter !== null && /^\d+(\.\d+)?$/.test(retryAfter.trim()) ? Number(retryAfter) * 1000 : null;
+  const planned = retry.delaysMs[Math.min(attempt, retry.delaysMs.length) - 1] ?? 0;
+  return Math.min(fromHeader ?? planned, retry.maxDelayMs);
+}
+
 export interface ToolCallResult<T> {
   toolName: string;
   input: T;
@@ -50,6 +89,9 @@ export class LlmClient {
     private fetchImpl: typeof fetch = fetch,
     private workspaceId?: string,
     private onUsage?: (usage: LlmUsage) => void,
+    // Off unless asked for, so a test's failing fetch mock fails once and
+    // fast; createLlmClient (every production caller) turns it on.
+    private retry: RetryOptions = NO_RETRY,
   ) {}
 
   /**
@@ -70,45 +112,39 @@ export class LlmClient {
     model = MODEL,
     cacheSystemPrompt = false,
   ): Promise<T> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    let res: Response;
-
     const systemValue = cacheSystemPrompt
       ? [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }]
       : systemPrompt;
 
-    try {
-      res = await this.fetchImpl(ANTHROPIC_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": this.apiKey,
-          "anthropic-version": ANTHROPIC_VERSION,
-          "anthropic-beta": "prompt-caching-2024-07-31",
-          ...(this.workspaceId ? { "anthropic-workspace-id": this.workspaceId } : {}),
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: maxTokens,
-          system: systemValue,
-          messages: [{ role: "user", content: userMessage }],
-          tools: [{ name: toolName, description: `Submit your ${toolName} result`, input_schema: toolSchema }],
-          tool_choice: { type: "tool", name: toolName },
-        }),
-        signal: controller.signal,
-      });
-    } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        throw new LlmClientError(`Claude API request timed out after ${timeoutMs}ms`);
-      }
-      throw err;
-    } finally {
-      clearTimeout(timer);
-    }
+    const requestBody = JSON.stringify({
+      model,
+      max_tokens: maxTokens,
+      system: systemValue,
+      messages: [{ role: "user", content: userMessage }],
+      tools: [{ name: toolName, description: `Submit your ${toolName} result`, input_schema: toolSchema }],
+      tool_choice: { type: "tool", name: toolName },
+    });
 
-    if (!res.ok) {
+    let res: Response;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        res = await this.post(requestBody, timeoutMs);
+      } catch (err) {
+        // fetch rejects with a TypeError on a network failure (DNS, reset);
+        // a timeout arrives here as an LlmClientError and is not retried.
+        if (err instanceof TypeError && attempt < this.retry.retries) {
+          await this.retry.sleep(retryDelayMs(this.retry, attempt + 1, null));
+          continue;
+        }
+        throw err;
+      }
+      if (res.ok) break;
+
       const body = await res.text();
+      if (RETRYABLE_STATUSES.has(res.status) && attempt < this.retry.retries) {
+        await this.retry.sleep(retryDelayMs(this.retry, attempt + 1, res.headers?.get("retry-after") ?? null));
+        continue;
+      }
       throw new LlmClientError(`Claude API request failed: HTTP ${res.status} -- ${body}`);
     }
 
@@ -139,6 +175,33 @@ export class LlmClient {
     }
     return toolUse.input as T;
   }
+
+  /** One request with its own timeout; a timeout becomes an LlmClientError. */
+  private async post(body: string, timeoutMs: number): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await this.fetchImpl(ANTHROPIC_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": this.apiKey,
+          "anthropic-version": ANTHROPIC_VERSION,
+          "anthropic-beta": "prompt-caching-2024-07-31",
+          ...(this.workspaceId ? { "anthropic-workspace-id": this.workspaceId } : {}),
+        },
+        body,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new LlmClientError(`Claude API request timed out after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 }
 
 export function createLlmClient(env: NodeJS.ProcessEnv = process.env, onUsage?: (usage: LlmUsage) => void): LlmClient {
@@ -151,5 +214,5 @@ export function createLlmClient(env: NodeJS.ProcessEnv = process.env, onUsage?: 
   }
   // Identity-linked keys (the default type Console now issues) require the
   // workspace they act in to be named explicitly on every request.
-  return new LlmClient(apiKey, fetch, env.ANTHROPIC_WORKSPACE_ID, onUsage);
+  return new LlmClient(apiKey, fetch, env.ANTHROPIC_WORKSPACE_ID, onUsage, DEFAULT_RETRY);
 }
