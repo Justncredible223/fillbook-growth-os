@@ -1,10 +1,10 @@
 import type { CaptionCue, WordCue } from "./types.js";
 
 /**
- * voiceover.ts's respellFillbookForTts sends "Fillbook" to TTS as the two
- * real dictionary words "Fill book" so it's pronounced correctly -- which
- * means the raw WordBoundary stream reports "Fill" and "book" as two
- * separate word cues. This merges any such adjacent pair back into one
+ * voiceover.ts now sends "Fillbook" to TTS as one word, so the WordBoundary
+ * stream normally reports one cue and this is a no-op. It stays for word-cue
+ * files produced when the name was spoken as the two words "Fill book": it
+ * merges any such adjacent pair back into one
  * "Fillbook" cue (spanning both words' combined time range) before caption
  * phrases are built, so it still displays and highlights as a single word
  * on screen, matching what it actually is. Matches on bare letters only

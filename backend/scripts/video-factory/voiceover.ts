@@ -51,35 +51,18 @@ export const TTS_RETRY_DELAYS_MS: readonly number[] = [2000, 5000];
 const WORD_TIMING_SCRIPT = join(dirname(fileURLToPath(import.meta.url)), "edge_tts_words.py");
 
 /**
- * edge-tts mispronounces "Fillbook" as a single compound word (confirmed
- * by ear on a real render -- it read as "fill-boo-k" instead of
- * "fill-book"). Splitting it into the two real dictionary words it's
- * actually made of before sending text to TTS fixes the compound-word
- * blending. (A separate issue -- the Multilingual voice tier
- * mispronouncing the word "book" itself -- turned out to be a voice
- * defect, not a spelling problem; fixed by switching DEFAULT_VOICE back
- * to the standard "en-US-AndrewNeural", not by respelling "book" into
- * something else. The word sent to TTS is the real word "book," spoken
- * as itself.) This only affects what's SPOKEN; captions.ts's
- * mergeBrandNameWordCues stitches the resulting two WordBoundary entries
- * back into one "Fillbook" caption word afterward, so it still displays
- * and highlights as a single word on screen, matching what it actually is.
+ * "Fillbook" is sent to TTS as the single word, exactly as written: the owner
+ * compared the voice's reading of "Fillbook", "Fill book", "Fill-book" and
+ * "Filbook" by ear (2026-09-30) and picked the plain one-word spelling. The
+ * earlier two-word respelling made the brand name sound stressed and halting.
  *
- * Also matches "FillbookHQ" (e.g. every script's closing "head to
- * fillbookhq.com" line) -- \bFillbook\b alone never matched it, since
- * there's no word boundary between the "k" and the "H" ("FillbookHQ" is
- * one unbroken run of letters), so that form was sent to TTS completely
- * unrespelled. The optional HQ group below is split out as its own word
- * the same way.
+ * "FillbookHQ" is still split into "Fillbook HQ": run together, the voice
+ * reads "HQ" as part of the word. Captions and on-screen text are unaffected
+ * (mergeBrandNameWordCues only acts on a spoken "Fill" + "book" pair, which
+ * no longer occurs, so it is a harmless no-op kept for older word-cue files).
  */
 export function respellFillbookForTts(text: string): string {
-  return text.replace(/\bFillbook(HQ)?\b/gi, (match, hq: string | undefined) => {
-    const isAllCaps = match === match.toUpperCase();
-    const isCapitalized = match.charAt(0) === match.charAt(0).toUpperCase();
-    const fill = isAllCaps ? "FILL" : isCapitalized ? "Fill" : "fill";
-    const book = isAllCaps ? "BOOK" : "book";
-    return hq ? `${fill} ${book} ${hq}` : `${fill} ${book}`;
-  });
+  return text.replace(/\b(Fillbook)HQ\b/gi, "$1 HQ");
 }
 
 /**
