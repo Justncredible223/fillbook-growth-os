@@ -69,9 +69,11 @@ export interface CaptionCue {
   text: string;
   startSeconds: number;
   endSeconds: number;
-  style: "Hook" | "Caption" | "Outro" | "Card";
+  style: "Hook" | "Caption" | "Outro" | "Card" | "Pay";
   /** Per-cue vertical margin (the "Card" style is top-anchored, so this is the text block's top y). */
   marginV?: number;
+  /** ASS layer (default 0). Higher layers draw on top, e.g. the payoff pointer above the text. */
+  layer?: number;
 }
 
 export type SceneKind = "hook" | "product" | "metric" | "cta" | "explanation";
@@ -131,6 +133,8 @@ export interface RenderPlan {
   assPath: string;
   outputPath: string;
   silencePadSeconds: number;
+  /** Caps the crossfade between scenes (default 0.4s). Payoff plans use a snappier 0.15s so a ~2s scene reads as a cut. */
+  maxTransitionSeconds?: number;
   /** Background music track (absolute path) and where in it to start; omitted = the renderer's default bed from the start. */
   musicFile?: string;
   musicStartSeconds?: number;

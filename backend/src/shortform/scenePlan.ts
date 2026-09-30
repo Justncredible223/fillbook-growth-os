@@ -46,6 +46,8 @@ export function computeScenePlanHash(plan: ScenePlan): string {
       crop: s.crop,
       clipTimeRangeSeconds: s.clipTimeRangeSeconds ?? null,
       claims: s.claims.map((c) => ({ id: c.id, type: c.type, text: c.text, evidence: c.evidence })),
+      // Only present on payoff-layout scenes, so every existing plan's hash is unchanged.
+      ...(s.payoff ? { payoff: s.payoff, layout: s.layout } : {}),
     })),
   };
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
