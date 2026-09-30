@@ -904,6 +904,18 @@ private fun VideoRenderCard(
             }
         }
         if (render.status == "ready") {
+            render.pinnedComment?.let { pinned ->
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "After posting: paste this as a comment, then pin it (Studio and TikTok can't do it for you).",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextTertiary,
+                )
+                Spacer(Modifier.height(6.dp))
+                VideoMetadataSection(label = "PINNED COMMENT — TIKTOK", copyLabel = "TikTok pinned comment", body = pinned.tiktok)
+                Spacer(Modifier.height(8.dp))
+                VideoMetadataSection(label = "PINNED COMMENT — YOUTUBE", copyLabel = "YouTube pinned comment", body = pinned.youtube)
+            }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PrimaryButton(text = "Download", onClick = onDownload, enabled = !downloading, busy = downloading, modifier = Modifier.weight(1f))

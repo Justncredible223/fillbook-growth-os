@@ -574,6 +574,14 @@ data class VideoRenderStatus(
     val videoMetadata: VideoRenderMetadata? = null,
     /** The real external URL the owner pasted back in after manually posting this video -- null until they do. See setVideoPublishedUrl. */
     val publishedUrl: String? = null,
+    /** Ready-to-copy pinned comment (tracked no-signup demo link) per platform, built by the backend. Null when the backend couldn't build it. The owner posts and pins it by hand -- neither platform's API can do that for them. */
+    val pinnedComment: PinnedComment? = null,
+)
+
+/** See [VideoRenderStatus.pinnedComment]. */
+data class PinnedComment(
+    val tiktok: String,
+    val youtube: String,
 )
 
 /** See [VideoRenderStatus.videoMetadata]'s own doc comment. */
