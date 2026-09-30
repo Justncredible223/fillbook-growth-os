@@ -48,6 +48,9 @@ export function pilot7PayoffPlan(variant: PayoffVariant): ScenePlan {
   const spec: PayoffSpec =
     variant === "a" ? { theme: "bright", motion: "pop", cursor: true } : variant === "b" ? { theme: "dark", motion: "pop", cursor: true } : { theme: "bright", motion: "count", cursor: true };
   const variationId = `p7-pay-${variant}`;
+  // Distinct per variant: the app recognises an already-made concept by its title, and pilot 7 already owns the plain one.
+  // The marker is internal; drop it from the title when posting.
+  const title = `Read this before your first trade. (${variant.toUpperCase()})`;
 
   const base = (i: { sceneId: string; first?: boolean; narration: string; takeaway: string; headline: string; caption: string; seconds: number; disclosure: string; cta?: string }) => ({
     sceneId: i.sceneId,
@@ -80,7 +83,7 @@ export function pilot7PayoffPlan(variant: PayoffVariant): ScenePlan {
 
   return {
     planId: `pilot-7-payoff-${variant}`,
-    title: "Read this before your first trade.",
+    title,
     series: "What Your Journal Shows",
     topic: "A short brief of last session, remaining buffer and the strongest window before trading",
     hook: "$1,725 left before your floor.",

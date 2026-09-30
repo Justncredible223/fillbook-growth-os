@@ -8,7 +8,7 @@ import type { RecentVideo } from "./videoHookVariety.js";
 import { draftResearch, formatResearchAsText, type ResearchReport } from "./researchWriter.js";
 import { extractMotionConceptRefFromRationale } from "../../scripts/video-factory/motionCatalog.js";
 import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../opportunities/manualMotionConcept.js";
-import { PILOTS } from "../shortform/pilots.js";
+import { MOTION_SCENE_PLANS } from "../shortform/motionPlans.js";
 import { loadManifest, validateScenePlan } from "../shortform/scenePlan.js";
 
 /**
@@ -183,9 +183,9 @@ export async function runCampaignPipeline(
     researchReport = await draftResearch(llmClient, opportunity, context.brandRulesSummary, context.verifiedKnowledgeSummary);
     draftText = formatResearchAsText(researchReport);
   } else if (motionConceptId) {
-    const plan = PILOTS.find((p) => p.planId === motionConceptId);
+    const plan = MOTION_SCENE_PLANS.find((p) => p.planId === motionConceptId);
     if (!plan) {
-      throw new Error(`Motion concept "${motionConceptId}" is not a known verified ScenePlan (known: ${PILOTS.map((p) => p.planId).join(", ")}).`);
+      throw new Error(`Motion concept "${motionConceptId}" is not a known verified ScenePlan (known: ${MOTION_SCENE_PLANS.map((p) => p.planId).join(", ")}).`);
     }
     // Refuses to draft against a broken/incomplete verified plan rather
     // than generating a script whose motionScenePlan reference would only

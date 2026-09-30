@@ -17,6 +17,7 @@ import { PAYOFF_PILOTS } from "../../src/shortform/payoffPilots.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
 import { applyRealDurations, buildRenderPlanScenes, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio } from "./scenePlanAdapter.js";
 import { buildAssFile } from "./captions.js";
+import { PAYOFF_SPEECH_RATE, PAYOFF_TRANSITION_SECONDS } from "./payoffCues.js";
 import { renderVideo } from "./render.js";
 import { pickMusic } from "./music.js";
 import { createProcessRunner } from "./processRunner.js";
@@ -25,10 +26,6 @@ import type { RenderPlan } from "./types.js";
 const here = dirname(fileURLToPath(import.meta.url));
 const OUT_ROOT = resolve(here, "..", "..", "out", "payoff");
 const SILENCE_PAD_SECONDS = 0.3;
-/** Payoff scenes are ~2-3s: a 0.15s crossfade reads as a cut, where the default 0.4s would blur a fifth of every scene. */
-const PAYOFF_TRANSITION_SECONDS = 0.15;
-/** Brisker than the pipeline's +8% default: a payoff scene is a beat, not a paragraph. */
-const PAYOFF_SPEECH_RATE = "+18%";
 
 async function main() {
   const voice = process.argv.find((a) => a.startsWith("--voice="))?.slice("--voice=".length) ?? "edge";

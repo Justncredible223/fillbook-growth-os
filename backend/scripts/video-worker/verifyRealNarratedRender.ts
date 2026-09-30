@@ -15,7 +15,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { runRender } from "./render-single.js";
 import { createProcessRunner } from "../video-factory/processRunner.js";
 import { isAvailable as offlineTtsAvailable } from "../video-factory/localTts.js";
-import { PILOTS } from "../../src/shortform/pilots.js";
+import { MOTION_SCENE_PLANS } from "../../src/shortform/motionPlans.js";
 import { buildVideoScriptFromScenePlan } from "../../src/content/videoScriptWriter.js";
 
 const voiceArg = process.argv.find((a) => a.startsWith("--voice="))?.slice("--voice=".length) ?? "offline";
@@ -24,7 +24,7 @@ if (voiceArg === "offline") process.env.VIDEO_WORKER_OFFLINE_NARRATION = "true";
 else delete process.env.VIDEO_WORKER_OFFLINE_NARRATION;
 
 const planFilter = process.argv.slice(2).find((a) => !a.startsWith("--"));
-const plan = PILOTS.find((p) => !planFilter || p.planId.includes(planFilter));
+const plan = MOTION_SCENE_PLANS.find((p) => !planFilter || p.planId.includes(planFilter));
 if (!plan) throw new Error(`No pilot matches "${planFilter}".`);
 
 if (voiceArg === "offline" && !offlineTtsAvailable()) {
@@ -33,7 +33,7 @@ if (voiceArg === "offline" && !offlineTtsAvailable()) {
 }
 
 /** Exactly what the campaign pipeline stores for a motion-concept request: the canonical script built from the plan. */
-function fakeApprovedRowFor(p: (typeof PILOTS)[number]) {
+function fakeApprovedRowFor(p: (typeof MOTION_SCENE_PLANS)[number]) {
   const videoScript = buildVideoScriptFromScenePlan(p);
   return {
     campaignAssetsRow: {
