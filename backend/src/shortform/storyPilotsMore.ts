@@ -133,7 +133,7 @@ export function pilot19StoryPlan(): ScenePlan {
       },
       {
         sceneId: "p19s-s4-so", narration: "And the account is still $1,484 short of it.", takeaway: "How far from the target.", headline: "$1,484 still to go.", caption: "Short of the target.", seconds: 3.2,
-        zoom: zoom(PAYOUT, { x: 372, y: 526, w: 378, h: 50 }, { x: 450, y: 533, w: 281, h: 36 }, "p19s-c4", "The account is $1,484.04 short of its profit target.", "payouts.to_go", P19_PAY),
+        zoom: zoom(PAYOUT, { x: 126, y: 526, w: 620, h: 50 }, { x: 136, y: 531, w: 599, h: 38 }, "p19s-c4", "Net P&L 7515.96 of the 9000 target: $1,484.04 to go.", "payouts.to_go", P19_PAY),
       },
       {
         sceneId: "p19s-s5-gap", narration: "That gap is almost exactly the size of one red day.", takeaway: "The gap and the red day are about the same size.", headline: "The gap is about one red day.", caption: "Almost exactly.", seconds: 3.4,
@@ -168,7 +168,7 @@ export function pilot21StoryPlan(): ScenePlan {
       },
       {
         sceneId: "p21s-s2-turn", narration: "But only 98% of the target: $2,940 of $3,000.", takeaway: "Ninety-eight percent of the target.", headline: "98% of the target.", caption: "$2,940 of $3,000.", seconds: 3.8,
-        zoom: zoom(FINALDAY, { x: 396, y: 1496, w: 346, h: 52 }, { x: 402, y: 1503, w: 334, h: 36 }, "p21s-c2", "Profit target $3,000.00, currently $2,940.00 (98%).", "rules.target_progress", P21_RULES),
+        zoom: zoom(FINALDAY, { x: 71, y: 1496, w: 681, h: 52 }, { x: 81, y: 1503, w: 661, h: 38 }, "p21s-c2", "Profit target $3,000.00, currently $2,940.00 (98%).", "rules.target_progress", P21_RULES),
       },
       {
         sceneId: "p21s-s3-plain", narration: "The profit target is the amount you have to reach to pass.", takeaway: "What the profit target is.", headline: "The target is the number to pass.", caption: "It is what you must reach.", seconds: 3.2,

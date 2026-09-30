@@ -2032,15 +2032,17 @@
         },
         {
           "key": "payouts.to_go",
-          "text": "Pilot Payout 150K Funded, payout readiness: target (1484.04 to go)",
+          "text": "Pilot Payout 150K Funded, payout readiness: Net P&L 7515.96 of 9000 target (1484.04 to go)",
           "values": [
+            "7515.96",
+            "9000",
             "1484.04"
           ],
           "region": {
-            "x": 450,
-            "y": 533,
-            "w": 281,
-            "h": 36
+            "x": 136,
+            "y": 531,
+            "w": 599,
+            "h": 38
           },
           "timeRangeSeconds": {
             "start": 16.9,
@@ -2347,10 +2349,10 @@
             "98%"
           ],
           "region": {
-            "x": 402,
+            "x": 81,
             "y": 1503,
-            "w": 334,
-            "h": 36
+            "w": 661,
+            "h": 38
           },
           "timeRangeSeconds": {
             "start": 15.8,
