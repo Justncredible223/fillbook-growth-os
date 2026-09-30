@@ -2442,6 +2442,29 @@
           "topics": [
             "accounts_overview"
           ]
+        },
+        {
+          "key": "dashboard.multi_a_red_day",
+          "text": "Pilot Multi Account A calendar, September 2026: day 25 is the red day, -$1.2k (1 trade, 0% win)",
+          "values": [
+            "25",
+            "-$1.2k",
+            "1",
+            "0%"
+          ],
+          "topics": [
+            "accounts_overview"
+          ],
+          "region": {
+            "x": 746,
+            "y": 852,
+            "w": 108,
+            "h": 134
+          },
+          "timeRangeSeconds": {
+            "start": 1.3,
+            "end": 9.0
+          }
         }
       ]
     },

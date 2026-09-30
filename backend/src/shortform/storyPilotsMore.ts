@@ -216,7 +216,11 @@ export function pilot22StoryPlan(): ScenePlan {
         claimText: "When the same trade is taken on two accounts at the same size, the loss appears on both accounts.",
       },
       {
-        sceneId: "p22s-s4-close", narration: "Minus $1,201, twice. Check your size before it repeats.", takeaway: "Check the size before it repeats.", headline: "-$1,201. Twice.", caption: "Check your size before it repeats.", seconds: 4.6, cta: CTA,
+        sceneId: "p22s-s4-journal", narration: "Log both accounts in Fillbook, and the repeat shows up right in your calendar.", takeaway: "The journal shows the repeat.", headline: "It shows in the calendar.", caption: "Log every account in one journal.", seconds: 3.6, leadWithWords: true,
+        zoom: zoom(MULTI_A, { x: 610, y: 844, w: 376, h: 148 }, { x: 746, y: 852, w: 108, h: 134 }, "p22s-c4", "Account A's calendar shows September 25 as its red day: -$1.2k, one trade.", "dashboard.multi_a_red_day", P22_CLIP),
+      },
+      {
+        sceneId: "p22s-s5-close", narration: "Minus $1,201, twice. Log every account. Check your size.", takeaway: "Log every account and check the size.", headline: "-$1,201. Twice.", caption: "Log every account. Check your size.", seconds: 4.8, cta: CTA,
         claimText: "Invites the viewer to try it on their own account.", claimType: "invitation",
       },
     ],
