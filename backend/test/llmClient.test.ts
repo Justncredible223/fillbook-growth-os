@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { LlmClient, LlmClientError } from "../src/content/llmClient";
+import { LlmClient, LlmClientError, DEFAULT_RETRY, createLlmClient, type RetryOptions } from "../src/content/llmClient";
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -66,6 +66,81 @@ describe("LlmClient", () => {
       model: "claude-sonnet-4-5-20250929",
       inputTokens: 42,
       outputTokens: 7,
+    });
+  });
+
+  describe("retrying transient failures", () => {
+    const ok = () => jsonResponse({ content: [{ type: "tool_use", name: "t", input: { pass: true } }] });
+    const fail = (status: number, headers: Record<string, string> = {}) =>
+      ({ ...jsonResponse({ error: "blip" }, false, status), headers: new Headers(headers) }) as Response;
+    const retrying = (sleep = vi.fn(async () => {})): RetryOptions => ({ ...DEFAULT_RETRY, sleep });
+
+    it("retries a 503 and returns the next successful answer", async () => {
+      const fetchMock = vi.fn().mockResolvedValueOnce(fail(503)).mockResolvedValueOnce(ok());
+      const sleep = vi.fn(async () => {});
+      const client = new LlmClient("k", fetchMock, undefined, undefined, retrying(sleep));
+
+      await expect(client.callTool("s", "u", "t", {})).resolves.toEqual({ pass: true });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(sleep).toHaveBeenCalledWith(1_000);
+    });
+
+    it.each([429, 500, 502, 504, 529])("retries HTTP %i", async (status) => {
+      const fetchMock = vi.fn().mockResolvedValueOnce(fail(status)).mockResolvedValueOnce(ok());
+      const client = new LlmClient("k", fetchMock, undefined, undefined, retrying());
+      await expect(client.callTool("s", "u", "t", {})).resolves.toEqual({ pass: true });
+    });
+
+    it("gives up after two retries with the last error, backing off 1s then 3s", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(fail(503));
+      const sleep = vi.fn(async () => {});
+      const client = new LlmClient("k", fetchMock, undefined, undefined, retrying(sleep));
+
+      await expect(client.callTool("s", "u", "t", {})).rejects.toThrow(/HTTP 503/);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(sleep.mock.calls).toEqual([[1_000], [3_000]]);
+    });
+
+    it("does not retry a client error such as 400 or 401", async () => {
+      for (const status of [400, 401]) {
+        const fetchMock = vi.fn().mockResolvedValue(fail(status));
+        const client = new LlmClient("k", fetchMock, undefined, undefined, retrying());
+        await expect(client.callTool("s", "u", "t", {})).rejects.toThrow(new RegExp(`HTTP ${status}`));
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      }
+    });
+
+    it("honours Retry-After but never waits longer than the cap", async () => {
+      const sleep = vi.fn(async () => {});
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(fail(429, { "retry-after": "2" }))
+        .mockResolvedValueOnce(fail(429, { "retry-after": "60" }))
+        .mockResolvedValueOnce(ok());
+      const client = new LlmClient("k", fetchMock, undefined, undefined, retrying(sleep));
+
+      await client.callTool("s", "u", "t", {});
+      expect(sleep.mock.calls).toEqual([[2_000], [5_000]]);
+    });
+
+    it("retries a network error but not a timeout", async () => {
+      const network = vi.fn().mockRejectedValueOnce(new TypeError("fetch failed")).mockResolvedValueOnce(ok());
+      await expect(new LlmClient("k", network, undefined, undefined, retrying()).callTool("s", "u", "t", {}))
+        .resolves.toEqual({ pass: true });
+
+      const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
+      const hung = vi.fn().mockRejectedValue(abort);
+      await expect(new LlmClient("k", hung, undefined, undefined, retrying()).callTool("s", "u", "t", {}))
+        .rejects.toThrow(/timed out/);
+      expect(hung).toHaveBeenCalledTimes(1);
+    });
+
+    it("is off for a directly constructed client and on for createLlmClient", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(fail(503));
+      await expect(new LlmClient("k", fetchMock).callTool("s", "u", "t", {})).rejects.toThrow(/HTTP 503/);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      const client = createLlmClient({ ANTHROPIC_API_KEY: "k" } as NodeJS.ProcessEnv);
+      expect((client as unknown as { retry: RetryOptions }).retry).toBe(DEFAULT_RETRY);
     });
   });
 });
