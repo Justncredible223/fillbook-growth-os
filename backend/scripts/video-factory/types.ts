@@ -72,6 +72,8 @@ export interface CaptionCue {
   style: "Hook" | "Caption" | "Outro" | "Card" | "Pay";
   /** Per-cue vertical margin (the "Card" style is top-anchored, so this is the text block's top y). */
   marginV?: number;
+  /** ASS layer (default 0). Higher layers draw on top, e.g. the payoff pointer above the text. */
+  layer?: number;
 }
 
 export type SceneKind = "hook" | "product" | "metric" | "cta" | "explanation";

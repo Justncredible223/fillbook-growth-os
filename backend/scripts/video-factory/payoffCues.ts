@@ -1,7 +1,8 @@
 import type { CaptionCue } from "./types.js";
 import { escapeAssText } from "./captions.js";
 import { PAYOFF, countUpFrames, splitPayoffHeadline } from "../../src/shortform/payoffLayout.js";
-import type { PayoffSpec, PayoffTheme } from "../../src/shortform/types.js";
+import type { PayoffSpec, PayoffTheme, Rect } from "../../src/shortform/types.js";
+import type { PayoffCard } from "../../src/shortform/payoffLayout.js";
 
 /** ASS colours are &HBBGGRR&. */
 const COLORS: Record<PayoffTheme, { ink: string; muted: string; good: string; bad: string }> = {
@@ -91,4 +92,69 @@ export function buildPayoffCues(input: PayoffCueInput): CaptionCue[] {
   }
   const pop = `\\fscx${POP_FROM_PERCENT}\\fscy${POP_FROM_PERCENT}\\t(0,${POP_MILLISECONDS},\\fscx100\\fscy100)`;
   return [{ text: block(text.big, pop), startSeconds: start, endSeconds: end, style: "Pay", marginV }];
+}
+
+const CURSOR_LAYER = 5;
+const RIPPLE_LAYER = 4;
+const CURSOR_DELAY_SECONDS = 0.2;
+const CURSOR_MOVE_MILLISECONDS = 450;
+/** Classic arrow, tip at (0,0), about 40x62px. */
+const CURSOR_SHAPE = "m 0 0 l 0 52 l 13 40 l 22 62 l 32 57 l 23 36 l 40 36";
+/** A ring of radius 30 (four bezier quarter-arcs) centered on (0,0). */
+const RIPPLE_SHAPE = "m 30 0 b 30 17 17 30 0 30 b -17 30 -30 17 -30 0 b -30 -17 -17 -30 0 -30 b 17 -30 30 -17 30 0";
+
+/** Frame-space limits that keep the pointer clear of the platforms' button column and caption area. */
+const CURSOR_MAX_X = 880;
+const CURSOR_MAX_Y = 1560 - 62;
+
+export interface PayoffCursorInput {
+  card: Pick<PayoffCard, "x" | "y" | "width" | "height">;
+  crop: Rect;
+  /** The element the narration is about; the pointer lands just inside its lower-right corner. */
+  focal: Rect;
+  start: number;
+  end: number;
+}
+
+/**
+ * Where the pointer's tip rests on a payoff card, in frame pixels: inside the lower-right of the focal element (so it
+ * never covers the figure), mapped from source pixels through the card's own scale, and clamped into the safe area.
+ */
+export function payoffCursorTarget(input: Pick<PayoffCursorInput, "card" | "crop" | "focal">): { x: number; y: number } {
+  const { card, crop, focal } = input;
+  const sx = card.width / crop.w;
+  const sy = card.height / crop.h;
+  const x = card.x + (focal.x + focal.w * 0.88 - crop.x) * sx;
+  const y = card.y + (focal.y + focal.h * 0.8 - crop.y) * sy;
+  return {
+    x: Math.round(Math.min(CURSOR_MAX_X, Math.max(card.x + 30, x))),
+    y: Math.round(Math.min(CURSOR_MAX_Y, Math.max(card.y + 10, y))),
+  };
+}
+
+/**
+ * The pointer for one evidence scene: it fades in a beat after the scene opens, glides to the element being described
+ * over ~0.45s, and a ring pulses once where it lands. It is drawn on top of the real recording, at render time, so the
+ * verified footage, its hash and its facts are untouched.
+ */
+export function buildPayoffCursorCues(input: PayoffCursorInput): CaptionCue[] {
+  const to = payoffCursorTarget(input);
+  const from = { x: Math.min(CURSOR_MAX_X, to.x + 120), y: Math.min(CURSOR_MAX_Y, to.y + 170) };
+  const appear = input.start + CURSOR_DELAY_SECONDS;
+  const landed = appear + CURSOR_MOVE_MILLISECONDS / 1000;
+  const pointer: CaptionCue = {
+    text: `{\\an7\\move(${from.x},${from.y},${to.x},${to.y},0,${CURSOR_MOVE_MILLISECONDS})\\fad(120,0)\\bord4\\shad0\\1c&HFFFFFF&\\3c&H1E1E1E&\\p1}${CURSOR_SHAPE}{\\p0}`,
+    startSeconds: appear,
+    endSeconds: input.end,
+    style: "Pay",
+    layer: CURSOR_LAYER,
+  };
+  const ripple: CaptionCue = {
+    text: `{\\an5\\pos(${to.x},${to.y})\\fscx40\\fscy40\\1a&HFF&\\3c&H907C0E&\\bord6\\shad0\\t(0,420,\\fscx170\\fscy170\\3a&HFF&)\\p1}${RIPPLE_SHAPE}{\\p0}`,
+    startSeconds: landed,
+    endSeconds: landed + 0.42,
+    style: "Pay",
+    layer: RIPPLE_LAYER,
+  };
+  return [pointer, ripple];
 }

@@ -32,7 +32,7 @@ import { synthesizeOfflineNarration } from "./localTts.js";
 import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
 import { CARD_SHADOW_SPREAD, PLATFORM_OVERLAY_ZONES, assertCardClearsOverlays, computeCardLayout, type CardLayout } from "./render.js";
 import { computePayoffCard, type PayoffCard } from "../../src/shortform/payoffLayout.js";
-import { PAYOFF_BACKGROUNDS, buildPayoffCues } from "./payoffCues.js";
+import { PAYOFF_BACKGROUNDS, buildPayoffCues, buildPayoffCursorCues } from "./payoffCues.js";
 
 export interface AdaptedScenes {
   scenes: RenderScene[];
@@ -222,6 +222,9 @@ export async function buildRenderPlanScenes(
     if (renderScene.card && payoff) {
       // Payoff layout: the big figure + line + caption block (animated), drawn above the zoomed card, in the top band.
       captionCues.push(...buildPayoffCues({ headline: s.headline, captionText: s.captionText, cta: s.cta, start, end, spec: payoff, hasCard: Boolean(payoffCard) }));
+      if (payoff.cursor && payoffCard && s.crop && s.focalRegion) {
+        captionCues.push(...buildPayoffCursorCues({ card: payoffCard, crop: s.crop, focal: s.focalRegion, start, end: end + (plan.scenes[i + 1]?.transition.durationSeconds ?? 0) }));
+      }
     } else if (renderScene.card) {
       // Card layout: the headline and a smaller, softer caption as one block, directly under the evidence card, or
       // in the upper-middle of the frame on a text-only scene. The closing scene's caption uses the accent color.

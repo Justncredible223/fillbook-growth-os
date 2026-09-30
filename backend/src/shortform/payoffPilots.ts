@@ -46,7 +46,7 @@ const CTA = `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}`;
 
 export function pilot7PayoffPlan(variant: PayoffVariant): ScenePlan {
   const spec: PayoffSpec =
-    variant === "a" ? { theme: "bright", motion: "pop" } : variant === "b" ? { theme: "dark", motion: "pop" } : { theme: "bright", motion: "count" };
+    variant === "a" ? { theme: "bright", motion: "pop", cursor: true } : variant === "b" ? { theme: "dark", motion: "pop", cursor: true } : { theme: "bright", motion: "count", cursor: true };
   const variationId = `p7-pay-${variant}`;
 
   const base = (i: { sceneId: string; first?: boolean; narration: string; takeaway: string; headline: string; caption: string; seconds: number; disclosure: string; cta?: string }) => ({

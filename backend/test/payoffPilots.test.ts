@@ -13,9 +13,9 @@ describe("the payoff redesign of pilot 7", () => {
     expect(PAYOFF_PILOTS.map((p) => p.planId)).toEqual(["pilot-7-payoff-a", "pilot-7-payoff-b", "pilot-7-payoff-c"]);
     const specs = PAYOFF_PILOTS.map((p) => p.scenes[0]!.payoff);
     expect(specs).toEqual([
-      { theme: "bright", motion: "pop" },
-      { theme: "dark", motion: "pop" },
-      { theme: "bright", motion: "count" },
+      { theme: "bright", motion: "pop", cursor: true },
+      { theme: "dark", motion: "pop", cursor: true },
+      { theme: "bright", motion: "count", cursor: true },
     ]);
     const words = (i: number) => PAYOFF_PILOTS[i]!.scenes.map((s) => [s.narration, s.headline, s.captionText, s.claims.map((c) => c.text)]);
     expect(words(1)).toEqual(words(0));

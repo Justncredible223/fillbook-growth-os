@@ -309,7 +309,7 @@ export interface SceneLabelCue {
  */
 export function buildAssFile(captionCues: CaptionCue[], sceneLabelCues: SceneLabelCue[]): string {
   const captionLines = captionCues.map(
-    (cue) => `Dialogue: 0,${secondsToAssTime(cue.startSeconds)},${secondsToAssTime(cue.endSeconds)},${cue.style},,0,0,${cue.marginV ?? 0},,${cue.text}`,
+    (cue) => `Dialogue: ${cue.layer ?? 0},${secondsToAssTime(cue.startSeconds)},${secondsToAssTime(cue.endSeconds)},${cue.style},,0,0,${cue.marginV ?? 0},,${cue.text}`,
   );
   const sceneLines = sceneLabelCues.map(
     (cue) =>
