@@ -21,7 +21,7 @@ export const PAYOFF_BACKGROUNDS: Record<PayoffTheme, { top: string; bottom: stri
  * these sizes look large: the figure is 340 (about 250px of cap height), the line 110, the caption 70. A long
  * figure shrinks so it still fits the 760px text width (the Pay style keeps text between x=150 and x=930, clear of the platforms' button column).
  */
-export const PAYOFF_FONT = { big: 340, bigMin: 140, line: 110, caption: 70, cta: 60, wordsOnly: 150 } as const;
+export const PAYOFF_FONT = { big: 340, bigMin: 140, line: 110, caption: 70, cta: 60, wordsOnly: 130 } as const;
 
 export function bigFontSize(big: string): number {
   return Math.max(PAYOFF_FONT.bigMin, Math.min(PAYOFF_FONT.big, Math.floor(760 / (big.length * 0.27))));
