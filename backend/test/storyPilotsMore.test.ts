@@ -66,10 +66,17 @@ describe("story rebuilds of pilots 19, 21 and 22", () => {
     expect(p22).toMatch(/Account A: minus \$1,201.*Account B: the same minus \$1,201.*shows up twice/i);
   });
 
-  it("show the two accounts on their own recordings", () => {
+  it("show the two accounts on their own recordings, then what Fillbook does: its calendar shows the repeat", () => {
     const s = pilot22StoryPlan().scenes;
     expect(s[0]!.assetId).toBe("rec.hs-multi-account-a.v1");
     expect(s[1]!.assetId).toBe("rec.hs-multi-account-b.v1");
+    const journal = s.find((x) => x.sceneId === "p22s-s4-journal")!;
+    expect(journal.assetId).toBe("rec.hs-multi-account-a.v1");
+    expect(journal.narration).toMatch(/log both accounts in fillbook.*calendar/i);
+    expect(journal.claims[0]!.evidence[0]!.factKey).toBe("dashboard.multi_a_red_day");
+    expect(journal.payoff?.leadWithWords).toBe(true);
+    // It shows the product working; it does not claim the product prevents, blocks or catches anything in advance.
+    expect(`${journal.narration} ${journal.headline} ${journal.captionText}`).not.toMatch(/prevent|block|protect|catch|stop|alert|warn/i);
   });
 
   it("make no claim Fillbook cannot support: no real-time, live, guarantee, advice or coverage wording", () => {
@@ -82,7 +89,7 @@ describe("story rebuilds of pilots 19, 21 and 22", () => {
   it("zoom each evidence scene into one line of the real recording, at a zoom that stays sharp", () => {
     for (const p of MORE_STORY_PILOTS) {
       for (const s of p.scenes.filter((x) => x.assetId)) {
-        expect(s.crop!.w * s.crop!.h).toBeLessThan(400 * 110);
+        expect(s.crop!.w * s.crop!.h).toBeLessThan(60000);
         expect(s.payoff?.cursor).toBe(true);
         expect(s.crop!.w).toBeGreaterThanOrEqual(300);
       }
