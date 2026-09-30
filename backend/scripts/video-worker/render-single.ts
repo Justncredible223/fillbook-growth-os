@@ -66,6 +66,8 @@ import { PUBLISH_TIKTOK_JOB_TYPE } from "../../src/video/tiktokPublishJob.js";
 import { resolveMotionScenePlan, summarizeUsedAssets, type CatalogAssetSummary } from "../video-factory/motionCatalog.js";
 import { buildRenderPlanScenes, applyRealDurations, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio } from "../video-factory/scenePlanAdapter.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
+import { isPayoffPlan } from "../../src/shortform/motionPlans.js";
+import { PAYOFF_SPEECH_RATE, PAYOFF_TRANSITION_SECONDS } from "../video-factory/payoffCues.js";
 import type { ScenePlan } from "../../src/shortform/types.js";
 
 const STORAGE_BUCKET = "rendered-videos";
@@ -126,6 +128,8 @@ async function buildVerifiedMotionPlan(
   outputPath: string,
 ): Promise<{ plan: RenderPlan; assetsUsed: CatalogAssetSummary[]; narrationProvenance: "edge_tts" | "offline_sapi" }> {
   const manifest = loadManifest();
+  // Payoff-layout plans (the retention redesign) are timed for a brisker voice and snappier cuts; every other plan is unchanged.
+  const payoff = isPayoffPlan(scenePlan);
   // VIDEO_WORKER_OFFLINE_NARRATION is a local-verification-only escape
   // hatch (never set in the real GitHub Actions workflow) -- lets this
   // exact production code path be exercised end to end with zero network
@@ -134,7 +138,7 @@ async function buildVerifiedMotionPlan(
   // implying the real edge-tts voice was used.
   const narration = process.env.VIDEO_WORKER_OFFLINE_NARRATION === "true"
     ? await synthesizeRealNarrationAudio(scenePlan, outDir, runner)
-    : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner);
+    : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner, payoff ? { rate: PAYOFF_SPEECH_RATE } : {});
   const adjustedPlan = applyRealDurations(scenePlan, narration.durationsBySceneId);
   const adapted = await buildRenderPlanScenes(adjustedPlan, manifest, outDir, runner, narration.wordCuesBySceneId);
 
@@ -151,6 +155,7 @@ async function buildVerifiedMotionPlan(
     assPath,
     outputPath,
     silencePadSeconds: SILENCE_PAD_SECONDS,
+    ...(payoff ? { maxTransitionSeconds: PAYOFF_TRANSITION_SECONDS } : {}),
     musicFile: music?.file,
     musicStartSeconds: music?.startSeconds,
   };

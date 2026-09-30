@@ -41,12 +41,12 @@
  * change to render-single.ts or this resolution logic is needed.
  */
 import { computeScenePlanHash } from "../../src/shortform/scenePlan.js";
-import { PILOTS } from "../../src/shortform/pilots.js";
+import { MOTION_SCENE_PLANS } from "../../src/shortform/motionPlans.js";
 import type { ScenePlan, VerifiedManifest } from "../../src/shortform/types.js";
 import type { VideoScript } from "./types.js";
 import { buildVideoScriptFromScenePlan } from "../../src/content/videoScriptWriter.js";
 
-const CATALOG_SCENE_PLANS: ScenePlan[] = PILOTS;
+const CATALOG_SCENE_PLANS: ScenePlan[] = MOTION_SCENE_PLANS;
 
 /** Every manually-created motion-concept opportunity's rationale carries this marker as its own trailing token, followed by the plan's id -- see api/run-campaign.ts and campaignPipeline.ts's own parsing of it. Never user-typed text: only ever written by server code after validating the id against CATALOG_SCENE_PLANS. */
 export const MOTION_CONCEPT_REF_PREFIX = "MOTION_CONCEPT_REF:";

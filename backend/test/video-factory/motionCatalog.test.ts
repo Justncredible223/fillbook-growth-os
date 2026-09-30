@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { resolveMotionScenePlan, extractMotionConceptRefFromRationale, listMotionConcepts, MOTION_CONCEPT_REF_PREFIX } from "../../scripts/video-factory/motionCatalog";
 import { computeScenePlanHash } from "../../src/shortform/scenePlan";
 import { PILOTS, PILOT_1, PILOT_2, PILOT_3 } from "../../src/shortform/pilots";
+import { MOTION_SCENE_PLANS } from "../../src/shortform/motionPlans";
+import { PAYOFF_PILOTS } from "../../src/shortform/payoffPilots";
 import { buildVideoScriptFromScenePlan } from "../../src/content/videoScriptWriter";
 
 describe("resolveMotionScenePlan", () => {
@@ -92,10 +94,14 @@ describe("extractMotionConceptRefFromRationale", () => {
 });
 
 describe("listMotionConcepts", () => {
-  it("lists exactly the known verified pilots, never an open-ended/inferred set", () => {
+  it("lists exactly the known verified plans (the pilots plus the payoff variants), never an open-ended/inferred set", () => {
     const concepts = listMotionConcepts();
-    expect(concepts.map((c) => c.id).sort()).toEqual(PILOTS.map((p) => p.planId).sort());
-    expect(concepts).toHaveLength(62); // 18 recorded concepts plus two angles each (2026-09-25), plus 3 opening-only A/B variants (2026-09-27), plus the 5-concept high-stakes batch (2026-09-28, PILOT_19-23), see pilots.ts's openingOnlyVariant
+    expect(concepts.map((c) => c.id).sort()).toEqual(MOTION_SCENE_PLANS.map((p) => p.planId).sort());
+    expect(concepts.map((c) => c.id).sort()).toEqual([...PILOTS, ...PAYOFF_PILOTS].map((p) => p.planId).sort());
+    // 2026-09-30: 62 -> 65, the +3 being the payoff-layout variants of pilot 7 (payoffPilots.ts).
+    expect(concepts).toHaveLength(65);
+    // Below: the pilots alone.
+    expect(concepts.filter((c) => PILOTS.some((p) => p.planId === c.id))).toHaveLength(62); // 18 recorded concepts plus two angles each (2026-09-25), plus 3 opening-only A/B variants (2026-09-27), plus the 5-concept high-stakes batch (2026-09-28, PILOT_19-23), see pilots.ts's openingOnlyVariant
     expect(new Set(concepts.map((c) => c.title)).size).toBe(concepts.length); // availability is tracked by title
     for (const c of concepts) expect(c.hook.length).toBeGreaterThan(0);
   });

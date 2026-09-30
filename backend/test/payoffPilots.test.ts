@@ -71,7 +71,7 @@ describe("the payoff redesign of pilot 7", () => {
     const plan = pilot7PayoffPlan("a");
     const last = plan.scenes[plan.scenes.length - 1]!;
     expect(last.narration.startsWith("Read this before your first trade.")).toBe(true);
-    expect(plan.title).toBe("Read this before your first trade.");
+    expect(plan.title.startsWith("Read this before your first trade.")).toBe(true);
   });
 });
 

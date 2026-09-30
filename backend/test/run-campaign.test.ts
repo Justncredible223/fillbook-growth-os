@@ -158,7 +158,8 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     // 2026-09-27: 54 -> 57, the +3 being the opening-only A/B variant plans (openingOnlyVariant())
     // added for the three-concept, six-preview retention test -- see SHORTFORM_EVIDENCE_REPORT.md.
     // 2026-09-28: 57 -> 62, the +5 being the high-stakes batch (PILOT_19-23).
-    expect(body.motionConcepts.length).toBe(62);
+    // 2026-09-30: 62 -> 65, the +3 being the payoff-layout variants of pilot 7 (payoffPilots.ts).
+    expect(body.motionConcepts.length).toBe(65);
   });
 
   it("POST with a valid motionConceptId creates a real opportunity row and enqueues via the SAME enqueue_campaign_run RPC every other request uses, with asset_type video_script", async () => {

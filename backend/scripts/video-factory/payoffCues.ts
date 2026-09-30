@@ -23,6 +23,11 @@ export const PAYOFF_BACKGROUNDS: Record<PayoffTheme, { top: string; bottom: stri
  */
 export const PAYOFF_FONT = { big: 340, bigMin: 140, line: 110, caption: 70, cta: 60, wordsOnly: 130 } as const;
 
+/** Brisker than the pipeline's +8% default: a payoff scene is a beat, not a paragraph. */
+export const PAYOFF_SPEECH_RATE = "+18%";
+/** Payoff scenes are ~2-4s: a 0.15s crossfade reads as a cut, where the default 0.4s would blur a fifth of every scene. */
+export const PAYOFF_TRANSITION_SECONDS = 0.15;
+
 export function bigFontSize(big: string): number {
   return Math.max(PAYOFF_FONT.bigMin, Math.min(PAYOFF_FONT.big, Math.floor(760 / (big.length * 0.27))));
 }
