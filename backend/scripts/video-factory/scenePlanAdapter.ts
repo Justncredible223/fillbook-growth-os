@@ -30,7 +30,9 @@ import type { CaptionCue } from "./types.js";
 import type { ScenePlan, SceneSpec, VerifiedManifest, VerifiedAsset } from "../../src/shortform/types.js";
 import { synthesizeOfflineNarration } from "./localTts.js";
 import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
-import { CARD_SHADOW_SPREAD, assertCardClearsOverlays, computeCardLayout, type CardLayout } from "./render.js";
+import { CARD_SHADOW_SPREAD, PLATFORM_OVERLAY_ZONES, assertCardClearsOverlays, computeCardLayout, type CardLayout } from "./render.js";
+import { computePayoffCard, type PayoffCard } from "../../src/shortform/payoffLayout.js";
+import { PAYOFF_BACKGROUNDS, buildPayoffCues } from "./payoffCues.js";
 
 export interface AdaptedScenes {
   scenes: RenderScene[];
@@ -72,10 +74,11 @@ async function buildCroppedStill(asset: VerifiedAsset, crop: { x: number; y: num
 const TEXT_ONLY_CARD_TOP = 880;
 
 /** The designed full-canvas background shared by every card scene: a deep blue-to-near-black vertical gradient. */
-async function buildCardBackground(outDir: string, runner: ProcessRunner): Promise<string> {
-  const outPath = join(outDir, "card-background.png");
+async function buildCardBackground(outDir: string, runner: ProcessRunner, theme: "bright" | "dark" = "dark"): Promise<string> {
+  const outPath = join(outDir, theme === "dark" ? "card-background.png" : `card-background-${theme}.png`);
+  const { top, bottom } = PAYOFF_BACKGROUNDS[theme];
   const result = await runner.run("ffmpeg", [
-    "-y", "-f", "lavfi", "-i", "gradients=s=1080x1920:c0=0x10263a:c1=0x05080c:x0=540:y0=0:x1=540:y1=1500:nb_colors=2",
+    "-y", "-f", "lavfi", "-i", `gradients=s=1080x1920:c0=${top}:c1=${bottom}:x0=540:y0=0:x1=540:y1=1500:nb_colors=2`,
     "-frames:v", "1", outPath,
   ], {});
   if (result.exitCode !== 0) throw new VideoFactoryError(`Adapter: failed to build the card background: ${result.stderr || result.stdout}`);
@@ -83,7 +86,7 @@ async function buildCardBackground(outDir: string, runner: ProcessRunner): Promi
 }
 
 /** A rounded-rectangle alpha mask for the card, and a soft pre-blurred shadow CARD_SHADOW_SPREAD larger on every side. */
-async function buildCardMaskAndShadow(layout: CardLayout, outDir: string, runner: ProcessRunner, index: number): Promise<{ maskPath: string; shadowPath: string }> {
+async function buildCardMaskAndShadow(layout: Pick<CardLayout, "width" | "height" | "radius">, outDir: string, runner: ProcessRunner, index: number, glow?: { r: number; g: number; b: number; alpha: number }): Promise<{ maskPath: string; shadowPath: string }> {
   const r = layout.radius;
   const inside = (pad: number) =>
     `if(gt(abs(X-W/2),W/2-${pad})+gt(abs(Y-H/2),H/2-${pad}),0,` +
@@ -98,7 +101,7 @@ async function buildCardMaskAndShadow(layout: CardLayout, outDir: string, runner
   const spread = CARD_SHADOW_SPREAD;
   const shadow = await runner.run("ffmpeg", [
     "-y", "-f", "lavfi", "-i", `color=c=black@0:s=${layout.width + 2 * spread}x${layout.height + 2 * spread},format=rgba`,
-    "-vf", `geq=r=0:g=0:b=0:a='150*${inside(spread)}',boxblur=24:2`, "-frames:v", "1", shadowPath,
+    "-vf", `geq=r=${glow?.r ?? 0}:g=${glow?.g ?? 0}:b=${glow?.b ?? 0}:a='${glow?.alpha ?? 150}*${inside(spread)}',boxblur=24:2`, "-frames:v", "1", shadowPath,
   ], {});
   if (shadow.exitCode !== 0) throw new VideoFactoryError(`Adapter: failed to build card shadow ${index}: ${shadow.stderr || shadow.stdout}`);
   return { maskPath, shadowPath };
@@ -130,6 +133,16 @@ export async function buildRenderPlanScenes(
   }
   mkdirSync(outDir, { recursive: true });
   const backgroundPath = await buildCardBackground(outDir, runner);
+  // Payoff scenes pick a theme per scene; each still is built once, on first use.
+  const themedBackgrounds = new Map<"bright" | "dark", string>([["dark", backgroundPath]]);
+  const backgroundFor = async (theme: "bright" | "dark"): Promise<string> => {
+    let path = themedBackgrounds.get(theme);
+    if (!path) {
+      path = await buildCardBackground(outDir, runner, theme);
+      themedBackgrounds.set(theme, path);
+    }
+    return path;
+  };
 
   const scenes: RenderScene[] = [];
   const captionCues: CaptionCue[] = [];
@@ -149,7 +162,10 @@ export async function buildRenderPlanScenes(
 
     const renderScene: RenderScene = { kind, label, durationSeconds: s.durationSeconds, backgroundColor, narration: s.narration };
     let cardLayout: CardLayout | null = null;
-    if (!s.assetId) renderScene.card = { backgroundPath };
+    let payoffCard: PayoffCard | null = null;
+    const payoff = s.layout === "payoff" ? s.payoff : undefined;
+    const sceneBackground = payoff ? await backgroundFor(payoff.theme) : backgroundPath;
+    if (!s.assetId) renderScene.card = { backgroundPath: sceneBackground };
 
     if (s.assetId) {
       const asset = findAsset(manifest, s.assetId);
@@ -166,7 +182,21 @@ export async function buildRenderPlanScenes(
         renderScene.clipTimeRangeSeconds = s.clipTimeRangeSeconds;
         if (s.crop) renderScene.sourceCrop = s.crop;
         if (asset.privateRegions?.length) renderScene.privacyMasks = asset.privateRegions.map((pr) => pr.region);
-        if (s.crop) {
+        if (s.crop && payoff) {
+          payoffCard = computePayoffCard(s.crop);
+          const right = payoffCard.x + payoffCard.width;
+          const bottom = payoffCard.y + payoffCard.height;
+          if (right > PLATFORM_OVERLAY_ZONES.rightColumn.x || bottom > PLATFORM_OVERLAY_ZONES.captionTop) {
+            throw new VideoFactoryError(`Adapter: payoff card for "${s.sceneId}" (x to ${right}, y to ${bottom}) would run under a platform overlay.`);
+          }
+          // A dark card on a dark theme needs an edge: a soft cool glow instead of the usual black shadow.
+          const glow = payoff.theme === "dark" ? { r: 70, g: 150, b: 200, alpha: 210 } : undefined;
+          const { maskPath, shadowPath } = await buildCardMaskAndShadow(payoffCard, outDir, runner, i, glow);
+          renderScene.card = {
+            backgroundPath: sceneBackground,
+            evidence: { x: payoffCard.x, y: payoffCard.y, width: payoffCard.width, height: payoffCard.height, maskPath, shadowPath },
+          };
+        } else if (s.crop) {
           cardLayout = computeCardLayout(s.crop.w, s.crop.h);
           assertCardClearsOverlays(cardLayout);
           const { maskPath, shadowPath } = await buildCardMaskAndShadow(cardLayout, outDir, runner, i);
@@ -189,7 +219,10 @@ export async function buildRenderPlanScenes(
 
     const start = elapsed;
     const end = elapsed + s.durationSeconds;
-    if (renderScene.card) {
+    if (renderScene.card && payoff) {
+      // Payoff layout: the big figure + line + caption block (animated), drawn above the zoomed card, in the top band.
+      captionCues.push(...buildPayoffCues({ headline: s.headline, captionText: s.captionText, cta: s.cta, start, end, spec: payoff, hasCard: Boolean(payoffCard) }));
+    } else if (renderScene.card) {
       // Card layout: the headline and a smaller, softer caption as one block, directly under the evidence card, or
       // in the upper-middle of the frame on a text-only scene. The closing scene's caption uses the accent color.
       const captionColor = s.cta ? "&HCFB822&" : "&HC4B39F&";
@@ -343,7 +376,7 @@ export async function synthesizeRealNarrationAudio(plan: ScenePlan, outDir: stri
  * is what render-single.ts's real ScenePlan-matched path calls -- the
  * offline SAPI version above is local-verification-only.
  */
-export async function synthesizeProductionNarrationAudio(plan: ScenePlan, outDir: string, runner: ProcessRunner): Promise<RealNarrationResult> {
+export async function synthesizeProductionNarrationAudio(plan: ScenePlan, outDir: string, runner: ProcessRunner, options: { rate?: string } = {}): Promise<RealNarrationResult> {
   const wordCuesBySceneId: Record<string, WordCue[]> = {};
   const { voiceoverPath, durationsBySceneId } = await synthesizePerSceneAndConcat(
     plan,
@@ -352,7 +385,7 @@ export async function synthesizeProductionNarrationAudio(plan: ScenePlan, outDir
     "mp3",
     async (text, partPath, sceneId) => {
       const sceneOutDir = dirname(partPath);
-      const result = await generateVoiceover(text, sceneOutDir, runner, DEFAULT_VOICE);
+      const result = await generateVoiceover(text, sceneOutDir, runner, DEFAULT_VOICE, options.rate);
       copyFileSync(result.mp3Path, partPath);
       wordCuesBySceneId[sceneId] = result.wordCues;
       return result.durationSeconds;

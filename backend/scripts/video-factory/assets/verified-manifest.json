@@ -1086,6 +1086,88 @@
             "start": 1.7,
             "end": 17.7
           }
+        },
+        {
+          "key": "brief.buffer",
+          "text": "Daily Brief, Account: $1,725 of buffer to the floor",
+          "values": [
+            "$1,725"
+          ],
+          "topics": [
+            "daily_brief"
+          ],
+          "region": {
+            "x": 70,
+            "y": 505,
+            "w": 405,
+            "h": 100
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 17.7
+          }
+        },
+        {
+          "key": "brief.last_session_value",
+          "text": "Daily Brief, Last session: -$17 on 1 trade",
+          "values": [
+            "-$17",
+            "1"
+          ],
+          "topics": [
+            "daily_brief"
+          ],
+          "region": {
+            "x": 70,
+            "y": 330,
+            "w": 290,
+            "h": 108
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 17.7
+          }
+        },
+        {
+          "key": "brief.loss_limit",
+          "text": "Daily Brief, Account: $1,000 of today's loss limit",
+          "values": [
+            "$1,000"
+          ],
+          "topics": [
+            "daily_brief"
+          ],
+          "region": {
+            "x": 494,
+            "y": 552,
+            "w": 370,
+            "h": 52
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 17.7
+          }
+        },
+        {
+          "key": "brief.window_stats",
+          "text": "Daily Brief, Your strongest window: 22 trades, 64% win rate",
+          "values": [
+            "22",
+            "64%"
+          ],
+          "topics": [
+            "daily_brief"
+          ],
+          "region": {
+            "x": 458,
+            "y": 680,
+            "w": 335,
+            "h": 48
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 17.7
+          }
         }
       ]
     },

@@ -284,6 +284,7 @@ Style: SceneLabel,Poppins ExtraBold,48,&H00F4F6FA,&H00F4F6FA,&H00000000,&H000000
 Style: Outro,Poppins ExtraBold,92,&H00EED322,&H00EED322,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,7,3,5,170,170,0,1
 Style: Card,Poppins ExtraBold,76,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,8,170,170,0,1
 Style: CardLabel,Poppins ExtraBold,30,&H00DED4C9,&H00DED4C9,&H00362A1D,&H00362A1D,1,0,0,0,100,100,2,0,3,14,0,8,80,80,168,1
+Style: Pay,Poppins ExtraBold,72,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,8,150,150,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`;

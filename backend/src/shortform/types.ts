@@ -165,7 +165,20 @@ export interface Mask {
   label?: string;
 }
 
-export type SceneLayout = "full_card" | "fill";
+export type SceneLayout = "full_card" | "fill" | "payoff";
+
+/**
+ * "payoff" scenes (the 2026-09 retention redesign): frame one is one big number or claim -- the headline's first
+ * token -- with a short line under it and ONE zoomed element of the real product below, on a bright or dark
+ * background. Opt-in per scene, so no existing plan or approved script hash changes.
+ */
+export type PayoffTheme = "bright" | "dark";
+/** "pop": the big number scales up into place. "count": it counts up to its value over the first ~0.5s. */
+export type PayoffMotion = "pop" | "count";
+export interface PayoffSpec {
+  theme: PayoffTheme;
+  motion: PayoffMotion;
+}
 export type AspectRatio = "9:16" | "4:5" | "1:1" | "source";
 export type TransitionType = "cut" | "fade";
 
@@ -196,6 +209,8 @@ export interface SceneSpec {
   claims: Claim[];
   masks: Mask[];
   fontSizes?: { headline: number; caption: number };
+  /** Required when `layout` is "payoff"; ignored otherwise. */
+  payoff?: PayoffSpec;
   /** Opt-ins for the rare deliberate exceptions. */
   allowChrome?: boolean;
   keepSidebar?: boolean;

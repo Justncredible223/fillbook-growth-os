@@ -176,13 +176,13 @@ export function computeSceneTransitions(durations: number[]): { transitions: Sce
  * The final video length then equals the sum of `durations` exactly.
  * Transition lengths use the same caps as computeSceneTransitions.
  */
-export function computeSyncedSceneTimeline(durations: number[]): { inputDurations: number[]; transitions: SceneTransition[] } {
+export function computeSyncedSceneTimeline(durations: number[], maxTransitionSeconds: number = MAX_TRANSITION_SECONDS): { inputDurations: number[]; transitions: SceneTransition[] } {
   const transitions: SceneTransition[] = [];
   const inputDurations = [...durations];
   let boundary = 0;
   for (let i = 1; i < durations.length; i++) {
     boundary += durations[i - 1]!;
-    const duration = Math.min(MAX_TRANSITION_SECONDS, TRANSITION_FRACTION_OF_SHORTER_SCENE * Math.min(durations[i - 1]!, durations[i]!));
+    const duration = Math.min(maxTransitionSeconds, TRANSITION_FRACTION_OF_SHORTER_SCENE * Math.min(durations[i - 1]!, durations[i]!));
     transitions.push({ durationSeconds: duration, offsetSeconds: boundary });
     inputDurations[i - 1] = durations[i - 1]! + duration;
   }
@@ -322,7 +322,7 @@ export function assertCardClearsOverlays(layout: CardLayout): void {
 export function buildFfmpegArgs(plan: RenderPlan): string[] {
   if (plan.scenes.length === 0) throw new VideoFactoryError("Render plan has no scenes.");
 
-  const { inputDurations, transitions } = computeSyncedSceneTimeline(plan.scenes.map((s) => s.durationSeconds));
+  const { inputDurations, transitions } = computeSyncedSceneTimeline(plan.scenes.map((s) => s.durationSeconds), plan.maxTransitionSeconds);
 
   const inputArgs: string[] = [];
   for (let i = 0; i < plan.scenes.length; i++) {

@@ -1,4 +1,5 @@
 import type { AspectRatio, Platform, PlanIssue, Rect, SceneSpec, VerifiedAsset } from "./types.js";
+import { PAYOFF, computePayoffCard, payoffWordCount, splitPayoffHeadline } from "./payoffLayout.js";
 
 /** Vertical short-form canvas for both TikTok and YouTube Shorts. */
 export const CANVAS = { width: 1080, height: 1920 } as const;
@@ -165,7 +166,7 @@ export function validateOutputDimensions(width: number, height: number): PlanIss
   ];
 }
 
-export function validateCropBounds(crop: Rect | null, asset: VerifiedAsset, sceneId: string): PlanIssue[] {
+export function validateCropBounds(crop: Rect | null, asset: VerifiedAsset, sceneId: string, layout?: SceneSpec["layout"]): PlanIssue[] {
   const issue = (code: string, message: string): PlanIssue => ({ severity: "error", code, sceneId, message });
   if (!crop) return [issue("missing_crop", "A scene with a screenshot needs an explicit crop rectangle.")];
   const { x, y, w, h } = crop;
@@ -173,7 +174,9 @@ export function validateCropBounds(crop: Rect | null, asset: VerifiedAsset, scen
   if (![x, y, w, h].every(Number.isInteger)) return [issue("invalid_crop_bounds", "Crop values must be whole pixels.")];
   const problems: PlanIssue[] = [];
   if (x < 0 || y < 0) problems.push(issue("invalid_crop_bounds", `Crop starts outside the image (x=${x}, y=${y}).`));
-  if (w < 120 || h < 120) problems.push(issue("invalid_crop_bounds", `Crop is too small to read (${w}x${h}); each side must be at least 120px.`));
+  // A payoff scene is a deliberate tight zoom on one line of the product, so its floor is lower.
+  const minSide = layout === "payoff" ? 50 : 120;
+  if (w < minSide || h < minSide) problems.push(issue("invalid_crop_bounds", `Crop is too small to read (${w}x${h}); each side must be at least ${minSide}px.`));
   if (x + w > asset.width || y + h > asset.height) {
     problems.push(issue("invalid_crop_bounds", `Crop ${w}x${h} at (${x},${y}) runs past the ${asset.width}x${asset.height} image.`));
   }
@@ -184,7 +187,7 @@ export function validateCropBounds(crop: Rect | null, asset: VerifiedAsset, scen
 export function validateSceneFraming(scene: SceneSpec, asset: VerifiedAsset): PlanIssue[] {
   const issues: PlanIssue[] = [];
   const add = (severity: PlanIssue["severity"], code: string, message: string) => issues.push({ severity, code, sceneId: scene.sceneId, message });
-  const bounds = validateCropBounds(scene.crop, asset, scene.sceneId);
+  const bounds = validateCropBounds(scene.crop, asset, scene.sceneId, scene.layout);
   issues.push(...bounds);
   if (bounds.length > 0 || !scene.crop) return issues;
   const crop = scene.crop;
@@ -209,6 +212,15 @@ export function validateSceneFraming(scene: SceneSpec, asset: VerifiedAsset): Pl
     if (!scene.intentionalFullPage && crop.w >= asset.width * 0.9 && crop.h >= asset.height * 0.9) {
       add("error", "full_desktop_page", "Do not scale a full desktop page into a portrait frame. Crop to the card that carries the point.");
     }
+  }
+
+  if (scene.layout === "payoff") {
+    // A payoff card is a deliberate tight zoom on ONE element, framed by computePayoffCard, so the generic
+    // media-box aspect and scale checks below do not apply. It instead shows a tiny card as a review item.
+    const card = computePayoffCard(crop);
+    if (card.width < 420) add("review", "payoff_card_small", `The zoomed card is only ${card.width}px wide; widen the crop so it reads as one clear element.`);
+    if (card.scale >= PAYOFF.upscaleWarn) add("review", "crop_soft", `The payoff card enlarges this crop ${card.scale.toFixed(1)}x and may look soft.`);
+    return issues;
   }
 
   const cropAspect = crop.w / crop.h;
@@ -236,6 +248,24 @@ export function validateSceneFraming(scene: SceneSpec, asset: VerifiedAsset): Pl
 
 const EMAIL_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 
+/** Max words on one payoff screen, counting the big figure (redesign brief: 5-7 words per screen). */
+export const PAYOFF_MAX_WORDS = 7;
+export const PAYOFF_MAX_HEADLINE_CHARS = 34;
+
+/** Payoff-specific text rules: a spec, a big figure as the headline's first token, and a short line under it. */
+export function validatePayoffText(scene: SceneSpec): PlanIssue[] {
+  const issues: PlanIssue[] = [];
+  const add = (severity: PlanIssue["severity"], code: string, message: string) => issues.push({ severity, code, sceneId: scene.sceneId, message });
+  if (!scene.payoff) add("error", "payoff_missing_spec", 'A scene with layout "payoff" needs a payoff spec (theme and motion).');
+  const text = splitPayoffHeadline(scene.headline);
+  // A text-only payoff scene (a qualification or closing line) has no card to caption, so it may lead with words.
+  if (!text && scene.assetId !== null) add("error", "payoff_headline_no_figure", "A payoff headline starts with the big figure, e.g. \"$1,725 left before your floor\".");
+  const words = payoffWordCount(scene.headline);
+  if (words > PAYOFF_MAX_WORDS) add("error", "payoff_too_many_words", `Payoff headline has ${words} words; the limit is ${PAYOFF_MAX_WORDS} per screen.`);
+  if (scene.headline.trim().length > PAYOFF_MAX_HEADLINE_CHARS) add("error", "payoff_headline_too_long", `Payoff headline is ${scene.headline.trim().length} characters; the limit is ${PAYOFF_MAX_HEADLINE_CHARS}.`);
+  return issues;
+}
+
 /** Text length, font size and overflow checks against the fixed layout boxes of every platform the scene targets. */
 export function validateSceneText(scene: SceneSpec): PlanIssue[] {
   const issues: PlanIssue[] = [];
@@ -249,9 +279,11 @@ export function validateSceneText(scene: SceneSpec): PlanIssue[] {
   if (scene.captionText.trim().length > TEXT_LIMITS.captionChars) add("error", "caption_too_long", `On-screen caption is ${scene.captionText.trim().length} characters; the limit is ${TEXT_LIMITS.captionChars}.`);
   if (scene.disclosure && scene.disclosure.length > TEXT_LIMITS.disclosureChars) add("error", "disclosure_too_long", `Disclosure is ${scene.disclosure.length} characters; the limit is ${TEXT_LIMITS.disclosureChars}.`);
 
+  if (scene.layout === "payoff") issues.push(...validatePayoffText(scene));
+
   for (const platform of platformsOf(scene.platform)) {
     const boxes = layoutBoxes(platform);
-    if (textOverflows(scene.headline, headlineFont, boxes.headline)) add("error", "headline_overflow", `Headline does not fit its box on ${platform} at ${headlineFont}px.`);
+    if (scene.layout !== "payoff" && textOverflows(scene.headline, headlineFont, boxes.headline)) add("error", "headline_overflow", `Headline does not fit its box on ${platform} at ${headlineFont}px.`);
     if (textOverflows(scene.captionText, captionFont, boxes.caption)) add("error", "caption_overflow", `Caption does not fit its box on ${platform} at ${captionFont}px.`);
     if (scene.disclosure && textOverflows(scene.disclosure, DEFAULT_FONT.disclosure, boxes.disclosure)) add("error", "disclosure_overflow", `Disclosure does not fit its box on ${platform}.`);
   }
