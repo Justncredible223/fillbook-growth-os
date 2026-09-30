@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
+// These tests exercise request states, pipeline mechanics and render paths with real pilots as their fixtures. The story
+// bar (only A and A+ concepts render) has its own tests in storyBar.test.ts, so it is switched off here: otherwise every
+// test that happens to pick a lower-graded pilot would fail for a reason it is not about.
+vi.mock("../src/shortform/storyScore", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/shortform/storyScore")>();
+  return { ...actual, assertMeetsRenderBar: () => {}, renderBar: () => ({ ok: true, score: 100, grade: "A+" as const, fixes: [] }) };
+});
+
 /**
  * Exercises the ACTUAL api/run-campaign.ts handler (not just
  * campaignPipeline.ts directly) with a fake Supabase client -- proves the

@@ -39,15 +39,18 @@ const OPEN_LOOP = /\?|\b(here'?s what|here'?s why|which one|how much|how far|wha
 /** Words that turn a fact into a consequence in the middle of the video. */
 const TURN = /\b(but|then|until|only|still|yet|instead|so|because|which means|that'?s why|once)\b/i;
 
-/** Trading terms a new viewer will not know, each with words that would explain it in plain language. */
+/**
+ * Trading terms a new viewer will not know, each with the phrasing that actually explains it. A neighbouring word is not an
+ * explanation: "loss limit" says nothing about what a "floor" is, so the patterns ask for the explaining phrase itself.
+ */
 const JARGON: ReadonlyArray<{ term: RegExp; name: string; gloss: RegExp }> = [
-  { term: /\bfloor\b/i, name: "floor", gloss: /\b(lowest|can'?t (?:go|fall|drop) below|closed|closes|breach|room|limit|drawdown)\b/i },
-  { term: /\bdrawdown\b/i, name: "drawdown", gloss: /\b(fall|drop|below|lowest|room|allowed to lose|limit|peak)\b/i },
-  { term: /\bbuffer\b/i, name: "buffer", gloss: /\b(room|left before|allowed|cushion|before (?:the|your) (?:floor|limit|breach))\b/i },
-  { term: /\btrailing\b/i, name: "trailing", gloss: /\b(follows|moves up|peak|highest|never comes? back|set by)\b/i },
-  { term: /\bconsistency (?:rule|cap)\b/i, name: "consistency rule", gloss: /\b(single day|one day|percent of|% of|share of|total profit)\b/i },
-  { term: /\br-?multiple\b/i, name: "R-multiple", gloss: /\b(risk|times|multiple of)\b/i },
-  { term: /\bedge score\b/i, name: "Edge Score", gloss: /\b(score|out of|how you)\b/i },
+  { term: /\bfloor\b/i, name: "floor", gloss: /\b(lowest (?:your|the) (?:balance|account)|can'?t (?:go|fall|drop|dip) below|(?:falls?|drops?|dips?) below|account (?:is )?(?:closed|gone|over)|closes? the account|the (?:minimum|lowest) (?:it|your account) can)\b/i },
+  { term: /\bdrawdown\b/i, name: "drawdown", gloss: /\b(?:falls?|drops?|dips?) (?:from|below) (?:your |the |its )?(?:peak|high)|below (?:your |the |its )?peak|allowed to (?:lose|fall|drop)|how far (?:you|it) can (?:fall|drop|lose)\b/i },
+  { term: /\bbuffer\b/i, name: "buffer", gloss: /\b(?:room to (?:lose|fall|drop)|how much (?:you can )?(?:lose|fall|drop)|allowed to (?:lose|fall|drop))\b/i },
+  { term: /\btrailing\b/i, name: "trailing", gloss: /\b(?:follows (?:your |the |its )?peak|set by (?:your |the |its |the account'?s )?(?:own )?peak|moves? up with|rises? with|never comes? back down)\b/i },
+  { term: /\bconsistency (?:rule|cap)\b/i, name: "consistency rule", gloss: /\b(?:single day|one day|percent of (?:your |the )?(?:total )?profit|% of (?:your |the )?(?:total )?profit|share of (?:your |the )?(?:total )?profit)\b/i },
+  { term: /\br-?multiple\b/i, name: "R-multiple", gloss: /\b(?:times (?:your |the )?risk|multiple of (?:your |the )?risk|measured in risk)\b/i },
+  { term: /\bedge score\b/i, name: "Edge Score", gloss: /\b(?:score out of|out of 100|one score for)\b/i },
 ];
 
 const wordsOf = (t: string): string[] => t.trim().split(/\s+/).filter(Boolean);
@@ -112,4 +115,38 @@ export function scoreStory(plan: ScenePlan): StoryScore {
     .slice(0, 3)
     .map((c) => `${c.label}: ${c.note}`);
   return { planId: plan.planId, score, grade: grade(score), criteria, fixes };
+}
+
+/**
+ * The render bar (owner decision, 2026-09-30): only concepts that grade A or A+ are ever rendered. A concept below it is
+ * not offered in the app, is not drafted by the campaign step, and is refused by the render worker even if it was
+ * approved earlier, so no route reaches a render without clearing it.
+ */
+export const MIN_RENDER_GRADE: StoryGrade = "A";
+export const MIN_RENDER_SCORE = 85;
+
+export interface RenderBarResult {
+  ok: boolean;
+  score: number;
+  grade: StoryGrade;
+  fixes: string[];
+}
+
+export function renderBar(plan: ScenePlan): RenderBarResult {
+  const s = scoreStory(plan);
+  return { ok: s.score >= MIN_RENDER_SCORE, score: s.score, grade: s.grade, fixes: s.fixes };
+}
+
+/** The refusal shown to the owner or written to the render log: what the score is, what the bar is, and what to change. */
+export function renderBarRefusal(plan: ScenePlan, result: RenderBarResult = renderBar(plan)): string {
+  return (
+    `"${plan.planId}" grades ${result.grade} (${result.score}/100); only ${MIN_RENDER_GRADE} and A+ (${MIN_RENDER_SCORE}+) are rendered. ` +
+    `Fix first: ${result.fixes.join(" | ") || "no single fix stands out; rework the concept"}`
+  );
+}
+
+/** Throws the refusal above when a plan is below the bar. Used by the campaign step and the render worker. */
+export function assertMeetsRenderBar(plan: ScenePlan): void {
+  const result = renderBar(plan);
+  if (!result.ok) throw new Error(`Story bar not met: ${renderBarRefusal(plan, result)}`);
 }
