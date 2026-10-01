@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { FakeSupabaseClient, asSupabase } from "./helpers/fakeSupabase";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery";
 import type { XSignalAdapter, XSearchResult } from "../src/signals/adapters/xAdapter";
@@ -26,6 +26,15 @@ function xResult(overrides: Partial<XSearchResult> = {}): XSearchResult {
 }
 
 const NOW = new Date("2026-09-05T00:00:00Z");
+
+// The budget reservation reads the real clock for "this month", so pin Date to NOW or the September fixtures stop counting once the calendar month rolls over.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 describe("runPartnershipDiscoveryStep", () => {
   it("finds a new candidate via X search, dedupes against nothing, and creates it as an already-qualified, evidence-backed prospect (no send, no contact)", async () => {

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { recoveryFromVisibility, type RecoveryState } from "../src/prospecting/prospectingRecovery";
+import { computeMentionBudget } from "../src/prospecting/prospectingMentionBudget";
 import {
   draftProspectingCandidateReply,
   listProspectingQueue,
@@ -699,5 +700,62 @@ describe("draftProspectingCandidateReply -- cheap relevance precheck", () => {
 
     expect(cheapRelevanceCheck).not.toHaveBeenCalled();
     expect(drafter).not.toHaveBeenCalled();
+  });
+});
+
+describe("mention budget (cold replies naming Fillbook too often, 2026-09-30)", () => {
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3600000).toISOString();
+  const grounding = async () => ({ brandRulesSummary: "rules", verifiedKnowledgeSummary: "facts" });
+  const recoveryOff = async (): Promise<RecoveryState> => recoveryFromVisibility({ status: "ok", recentMedian: 8, recentCount: 5, baselineMedian: 7, baselineCount: 20 });
+  const named = { isRelevant: true, reply: "Fillbook's trade log shows every moved stop next to your plan.", mentionsFillbook: true, usesLink: false, showcase: "size_vs_plan" };
+  const plain = { isRelevant: true, reply: "The stop you moved is the one that decides the eval. Write the invalidation price down before entry.", mentionsFillbook: false, usesLink: false, showcase: "none" };
+
+  function seedReplied(repo: InMemoryProspectingRepository, mentions: number, total: number) {
+    for (let i = 0; i < total; i++) {
+      repo.seed(candidate({ id: `r-${i}`, status: "replied", draftReply: i < mentions ? "Fillbook shows that view." : "Plain advice.", repliedAt: hoursAgo(i + 1) }));
+    }
+    repo.seed(candidate({ id: "x-mb", platform: "x", status: "shown", draftReply: null, postText: "Moved my stop again and blew the eval. Futures trading is brutal." }));
+  }
+
+  const deps = (repo: InMemoryProspectingRepository, drafter: (ctx: ProspectingDraftContext) => Promise<typeof named | typeof plain>) => ({
+    repo,
+    drafter,
+    loadGrounding: grounding,
+    cheapRelevanceCheck: async () => true,
+    loadStyleExamples: async () => [],
+    loadRecovery: recoveryOff,
+  });
+
+  it("computes the share from posted replies and ignores a sample that is too small", () => {
+    const rows = (n: number, named_: number) =>
+      Array.from({ length: n }, (_, i) => candidate({ id: `c-${i}`, status: "replied", draftReply: i < named_ ? "Fillbook shows it." : "Plain.", repliedAt: hoursAgo(i + 1) }));
+    expect(computeMentionBudget(rows(4, 4)).exhausted).toBe(false);
+    expect(computeMentionBudget(rows(10, 2)).exhausted).toBe(false);
+    expect(computeMentionBudget(rows(10, 6))).toMatchObject({ exhausted: true, sampled: 10 });
+  });
+
+  it("uses the edited final reply over the draft, and only the most recent window", () => {
+    const old = Array.from({ length: 20 }, (_, i) => candidate({ id: `o-${i}`, status: "replied", draftReply: "Fillbook shows it.", repliedAt: hoursAgo(1000 + i) }));
+    const fresh = Array.from({ length: 12 }, (_, i) => candidate({ id: `f-${i}`, status: "replied", draftReply: "Fillbook shows it.", finalReply: "Edited, no product.", repliedAt: hoursAgo(i + 1) }));
+    expect(computeMentionBudget([...old, ...fresh]).exhausted).toBe(false);
+  });
+
+  it("leaves the draft free to name Fillbook while the recent share is within budget", async () => {
+    const repo = new InMemoryProspectingRepository();
+    seedReplied(repo, 2, 10);
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => named);
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-mb", deps(repo, drafter));
+    expect(drafter.mock.calls[0]![0].recoveryNote).toBeUndefined();
+    expect(updated.draftReply).toBe(named.reply);
+  });
+
+  it("when the budget is exhausted, tells the drafter to leave Fillbook out and redrafts one that names it", async () => {
+    const repo = new InMemoryProspectingRepository();
+    seedReplied(repo, 8, 10);
+    const drafter = vi.fn(async (_ctx: ProspectingDraftContext) => (drafter.mock.calls.length === 1 ? named : plain));
+    const updated = await draftProspectingCandidateReply(fakeClient, "x-mb", deps(repo, drafter));
+    expect(drafter.mock.calls[0]![0].recoveryNote).toMatch(/MENTION BUDGET REACHED/);
+    expect(drafter.mock.calls[1]![0].retryFeedback).toMatch(/pitch it too often/);
+    expect(updated.draftReply).toBe(plain.reply);
   });
 });

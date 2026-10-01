@@ -1,5 +1,6 @@
 import { computeReplyPacing, type ReplyPacing } from "./prospectingPacing.js";
 import { RECOVERY_DRAFT_NOTE, loadRecoveryState, namesFillbook, type RecoveryState } from "./prospectingRecovery.js";
+import { MENTION_BUDGET_DRAFT_NOTE, computeMentionBudget } from "./prospectingMentionBudget.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createLlmClient } from "../content/llmClient.js";
 import { recordCostEvent } from "../cost/costTracking.js";
@@ -232,6 +233,10 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
   // Recovery mode: the draft must not name Fillbook at all while X is limiting the account's replies.
   const recovery = await (deps.loadRecovery ?? loadRecoveryState)(client, new Date());
   if (recovery.active) draftContext.recoveryNote = RECOVERY_DRAFT_NOTE;
+  // Mention budget: once recent posted replies name Fillbook too often, this one must leave it out (same effect as recovery mode).
+  const mentionBudget = computeMentionBudget(await repo.listRepliedSince(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)));
+  if (!recovery.active && mentionBudget.exhausted) draftContext.recoveryNote = MENTION_BUDGET_DRAFT_NOTE;
+  const mustOmitFillbook = recovery.active || mentionBudget.exhausted;
   // A draft with a real problem (banned phrase, link, unverified claim, dash, over X's length limit) is
   // regenerated with the reason fed back, up to MAX_DRAFT_ATTEMPTS, and never shown. A draft with only a
   // soft style tell ("most traders", a question tacked on the end, too many sentences) gets ONE retry and
@@ -254,7 +259,11 @@ export async function draftProspectingCandidateReply(client: SupabaseClient, id:
       return {
         hard:
           checkReplyGuardrails(candidate.reply, candidate.usesLink)?.reason ??
-          (recovery.active && namesFillbook(candidate.reply) ? "names Fillbook while recovery mode is on -- leave the product out entirely" : null),
+          (mustOmitFillbook && namesFillbook(candidate.reply)
+            ? recovery.active
+              ? "names Fillbook while recovery mode is on -- leave the product out entirely"
+              : "names Fillbook but recent replies already pitch it too often -- leave the product out entirely"
+            : null),
         soft: (checkReplySoftStyle(candidate.reply) ?? checkShowcaseShown(candidate.reply, candidate.showcase))?.reason ?? null,
       };
     },
