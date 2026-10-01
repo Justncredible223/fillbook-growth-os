@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { MOTION_SCENE_PLANS } from "../src/shortform/motionPlans";
+import { MOTION_SCENE_PLANS, isChartPlan } from "../src/shortform/motionPlans";
 import { MIN_RENDER_SCORE, assertMeetsRenderBar, renderBar, renderBarRefusal } from "../src/shortform/storyScore";
 
 /**
@@ -81,33 +81,78 @@ describe("the app's request handler", () => {
     vi.resetModules();
   });
 
-  it("offers only concepts that clear the bar, and lists the rest with their grade and fixes", async () => {
+  it("offers only chart-card concepts that clear the bar; every older concept is retired from the list", async () => {
     const { res, result } = fakeRes();
     await handler(fakeReq(undefined, "GET"), res);
     expect(result.statusCode).toBe(200);
-    const body = result.body as { motionConcepts: { id: string }[]; belowBarMotionConcepts: { id: string; score: number; grade: string; fixes: string[] }[] };
-    expect(body.motionConcepts.map((c) => c.id).sort()).toEqual(passing.map((p) => p.planId).sort());
-    expect(body.belowBarMotionConcepts.map((c) => c.id).sort()).toEqual(failing.map((p) => p.planId).sort());
-    expect(body.motionConcepts.length + body.belowBarMotionConcepts.length).toBe(MOTION_SCENE_PLANS.length);
-    const weak = body.belowBarMotionConcepts.find((c) => c.id === WEAK_ID)!;
-    expect(weak.score).toBeLessThan(MIN_RENDER_SCORE);
-    expect(weak.fixes.length).toBeGreaterThan(0);
+    const body = result.body as { motionConcepts: { id: string }[]; belowBarMotionConcepts: { id: string }[] };
+    const charts = MOTION_SCENE_PLANS.filter(isChartPlan);
+    expect(charts.length).toBeGreaterThan(0);
+    expect(body.motionConcepts.map((c) => c.id).sort()).toEqual(charts.filter((p) => renderBar(p).ok).map((p) => p.planId).sort());
+    expect(body.belowBarMotionConcepts.map((c) => c.id).sort()).toEqual(charts.filter((p) => !renderBar(p).ok).map((p) => p.planId).sort());
+    const listed = new Set([...body.motionConcepts, ...body.belowBarMotionConcepts].map((c) => c.id));
+    expect(listed.has(WEAK_ID)).toBe(false);
+    expect([...listed].every((id) => charts.some((p) => p.planId === id))).toBe(true);
   });
 
-  it("refuses a request for a concept below the bar with a 409, before anything is created or queued", async () => {
-    const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: WEAK_ID }), res);
-    expect(result.statusCode).toBe(409);
-    expect((result.body as { error: string }).error).toMatch(/Story bar not met/);
+  it("refuses a request for a retired (older-style) concept with a 409, before anything is created or queued", async () => {
+    for (const id of [WEAK_ID, passing.find((p) => !isChartPlan(p))!.planId]) {
+      const { res, result } = fakeRes();
+      await handler(fakeReq({ motionConceptId: id }), res);
+      expect(result.statusCode, id).toBe(409);
+      expect((result.body as { error: string }).error).toMatch(/retired/);
+    }
     expect(state.inserted).toEqual([]);
     expect(state.rpcCalls).toEqual([]);
   });
 
-  it("accepts a request for a concept that clears the bar", async () => {
+  it("accepts a request for a chart-card concept that clears the bar", async () => {
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: passing[0]!.planId }), res);
+    await handler(fakeReq({ motionConceptId: MOTION_SCENE_PLANS.find((p) => isChartPlan(p) && renderBar(p).ok)!.planId }), res);
     expect(result.statusCode).toBe(200);
     expect(state.rpcCalls).toContain("enqueue_campaign_run");
+  });
+});
+
+describe("the bar still applies to an offered chart concept", () => {
+  const WEAKENED = "chart-a-17-green-days";
+  let handler: typeof import("../api/run-campaign").default;
+  let state: ReturnType<typeof createFakeClient>;
+
+  beforeEach(async () => {
+    process.env.APP_API_TOKEN = "test-app-token";
+    state = createFakeClient();
+    vi.resetModules();
+    vi.doMock("../src/lib/supabaseClient.js", () => ({ getServiceClient: () => state.client }));
+    vi.doMock("../src/shortform/storyScore", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("../src/shortform/storyScore")>();
+      return {
+        ...actual,
+        renderBar: (p: { planId: string }) => (p.planId === WEAKENED ? { ok: false, score: 50, grade: "D" as const, fixes: ["stubbed weakness"] } : actual.renderBar(p as never)),
+        renderBarRefusal: (p: { planId: string }) => `Story bar not met: ${p.planId} (stubbed)`,
+      };
+    });
+    handler = (await import("../api/run-campaign")).default;
+  });
+  afterEach(() => {
+    vi.doUnmock("../src/lib/supabaseClient.js");
+    vi.doUnmock("../src/shortform/storyScore");
+    vi.resetModules();
+  });
+
+  it("lists it below the bar with its grade and fixes, and refuses a request for it with a 409", async () => {
+    const get = fakeRes();
+    await handler(fakeReq(undefined, "GET"), get.res);
+    const body = get.result.body as { motionConcepts: { id: string }[]; belowBarMotionConcepts: { id: string; score: number; grade: string; fixes: string[] }[] };
+    expect(body.motionConcepts.map((c) => c.id)).not.toContain(WEAKENED);
+    expect(body.belowBarMotionConcepts).toEqual([expect.objectContaining({ id: WEAKENED, score: 50, grade: "D", fixes: ["stubbed weakness"] })]);
+
+    const post = fakeRes();
+    await handler(fakeReq({ motionConceptId: WEAKENED }), post.res);
+    expect(post.result.statusCode).toBe(409);
+    expect((post.result.body as { error: string }).error).toMatch(/Story bar not met/);
+    expect(state.inserted).toEqual([]);
+    expect(state.rpcCalls).toEqual([]);
   });
 });
 

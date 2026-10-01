@@ -22,7 +22,9 @@ vi.mock("../src/shortform/storyScore", async (importOriginal) => {
  * actually receives.
  */
 
-const PILOT_2_ID = "pilot-2-balance-isnt-your-buffer";
+// A chart-card concept: the only kind the app offers for a new video (older concepts are retired from the list).
+const CONCEPT_ID = "chart-a-17-green-days";
+const CONCEPT_TITLE = "17 green days and $1,484 still to go";
 
 function fakeReq(body: unknown, method = "POST"): VercelRequest {
   return { method, headers: { authorization: "Bearer test-app-token" }, body } as unknown as VercelRequest;
@@ -86,11 +88,11 @@ function createFakeClient(
             data: [
               {
                 id: e.id,
-                title: "Motion concept request: Balance isn't your buffer.",
+                title: `Motion concept request: ${CONCEPT_TITLE}`,
                 score: 100,
                 urgency: "normal",
                 confidence: 1,
-                rationale: `MOTION_CONCEPT_REF:${PILOT_2_ID}`,
+                rationale: `MOTION_CONCEPT_REF:${CONCEPT_ID}`,
                 recommended_channels: [],
                 recommended_campaign_type: null,
                 approval_class: "EXTERNAL_DRAFT",
@@ -162,19 +164,25 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     await handler(fakeReq(undefined, "GET"), res);
     expect(result.statusCode).toBe(200);
     const body = result.body as { motionConcepts: { id: string }[] };
-    expect(body.motionConcepts.map((c) => c.id)).toContain(PILOT_2_ID);
-    // 2026-09-27: 54 -> 57, the +3 being the opening-only A/B variant plans (openingOnlyVariant())
-    // added for the three-concept, six-preview retention test -- see SHORTFORM_EVIDENCE_REPORT.md.
-    // 2026-09-28: 57 -> 62, the +5 being the high-stakes batch (PILOT_19-23).
-    // 2026-09-30: 62 -> 65, the +3 being the payoff-layout variants of pilot 7 (payoffPilots.ts); 65 -> 66, the +1 being the
-    // story rebuild of pilot 20 (storyPilots.ts).
-    // 66 -> 69: the story rebuilds of pilots 19, 21 and 22 (storyPilotsMore.ts). 69 -> 72: those of pilot 7 (storyPilots7.ts).
-    expect(body.motionConcepts.length).toBe(75); // 72 -> 75: the chart-card concepts (chartPilots.ts)
+    expect(body.motionConcepts.map((c) => c.id)).toContain(CONCEPT_ID);
+    // 2026-10-01: only the chart-card concepts are offered (3, chartPilots.ts); every older concept (72) is retired from the list
+    // but stays in the catalog so a script already drafted or approved still renders.
+    expect(body.motionConcepts.map((c) => c.id).sort()).toEqual(["chart-a-17-green-days", "chart-b-10-green-days", "chart-c-one-signal-two-accounts"]);
+  });
+
+  it("POST for a retired (older-style) concept is refused with 409, and a custom-topic or Radar video request is refused too", async () => {
+    for (const body of [{ motionConceptId: "pilot-2-balance-isnt-your-buffer" }, { topic: "stop loss discipline", assetType: "video_script" }, { opportunityId: "opp-1", assetType: "video_script" }]) {
+      const { res, result } = fakeRes();
+      await handler(fakeReq(body), res);
+      expect(result.statusCode, JSON.stringify(body)).toBe(409);
+    }
+    expect(fakeClientState.insertedOpportunities).toHaveLength(0);
+    expect(fakeClientState.calls).toHaveLength(0);
   });
 
   it("POST with a valid motionConceptId creates a real opportunity row and enqueues via the SAME enqueue_campaign_run RPC every other request uses, with asset_type video_script", async () => {
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: PILOT_2_ID }), res);
+    await handler(fakeReq({ motionConceptId: CONCEPT_ID }), res);
 
     expect(result.statusCode).toBe(200);
     const body = result.body as { status: string; campaignRunRequestId: string; opportunityId: string };
@@ -187,7 +195,7 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     expect(fakeClientState.insertedOpportunities).toHaveLength(1);
     const inserted = fakeClientState.insertedOpportunities[0]!;
     expect(inserted.title).toContain("Motion concept request:");
-    expect(inserted.rationale).toContain(`MOTION_CONCEPT_REF:${PILOT_2_ID}`);
+    expect(inserted.rationale).toContain(`MOTION_CONCEPT_REF:${CONCEPT_ID}`);
 
     const enqueueCall = fakeClientState.calls.find((c) => c.kind === "enqueue_campaign_run");
     expect(enqueueCall?.args).toMatchObject({ p_opportunity_id: "opp-new-1", p_asset_type_override: "video_script" });
@@ -205,14 +213,14 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
 
   it("POST with motionConceptId AND topic together is rejected with 400 -- exactly one selector is ever valid", async () => {
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: PILOT_2_ID, topic: "some custom topic" }), res);
+    await handler(fakeReq({ motionConceptId: CONCEPT_ID, topic: "some custom topic" }), res);
     expect(result.statusCode).toBe(400);
     expect(fakeClientState.insertedOpportunities).toHaveLength(0);
   });
 
   it("POST with motionConceptId AND opportunityId together is rejected with 400", async () => {
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: PILOT_2_ID, opportunityId: "some-id" }), res);
+    await handler(fakeReq({ motionConceptId: CONCEPT_ID, opportunityId: "some-id" }), res);
     expect(result.statusCode).toBe(400);
     expect(fakeClientState.insertedOpportunities).toHaveLength(0);
   });
@@ -224,7 +232,7 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     handler = (await import("../api/run-campaign")).default;
 
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: PILOT_2_ID }), res);
+    await handler(fakeReq({ motionConceptId: CONCEPT_ID }), res);
 
     expect(result.statusCode).toBe(200);
     expect(fakeClientState.insertedOpportunities).toHaveLength(0); // no NEW opportunity created
@@ -241,33 +249,26 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     }) as any;
 
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: PILOT_2_ID }), res);
+    await handler(fakeReq({ motionConceptId: CONCEPT_ID }), res);
     expect(result.statusCode).toBe(409);
     expect(fakeClientState.calls).toHaveLength(0);
   });
 });
 
 describe("api/run-campaign.ts handler -- a concept is used up once requested (owner rule 2026-09-25)", () => {
-  const made = { thesis: "Motion concept request: Balance isn't your buffer.", status: "approved" };
-  const waiting = { thesis: "Motion concept request: Same setup. Bigger size.", status: "in_review" };
+  const A = "Motion concept request: 17 green days and $1,484 still to go";
+  const B = "Motion concept request: 10 green days and still not done";
+  const C = "Motion concept request: One signal, two accounts, both lost $1,201";
   let handler: typeof import("../api/run-campaign").default;
   let state: ReturnType<typeof createFakeClient>;
 
-  beforeEach(async () => {
+  async function load(opts: Parameters<typeof createFakeClient>[0]) {
     process.env.APP_API_TOKEN = "test-app-token";
-    state = createFakeClient({
-      campaignRows: [
-        made,
-        waiting,
-        { thesis: "Motion concept request: Green month. Losing setup.", status: "retired" },
-        { thesis: "Motion concept request: Would your trades pass?", status: "draft" },
-      ],
-      pendingRuns: [{ opportunity_id: "opp-queued", title: "Motion concept request: Your best day can block your payout." }],
-    });
+    state = createFakeClient(opts);
     vi.resetModules();
     vi.doMock("../src/lib/supabaseClient.js", () => ({ getServiceClient: () => state.client }));
     handler = (await import("../api/run-campaign")).default;
-  });
+  }
 
   afterEach(() => {
     vi.doUnmock("../src/lib/supabaseClient.js");
@@ -275,28 +276,45 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
   });
 
   it("GET leaves out a concept that's queued, waiting in Approvals, made or rejected, and keeps one whose draft was blocked", async () => {
+    await load({
+      campaignRows: [
+        { thesis: A, status: "approved" },
+        { thesis: B, status: "in_review" },
+        { thesis: C, status: "draft" },
+      ],
+    });
     const { res, result } = fakeRes();
     await handler(fakeReq(undefined, "GET"), res);
     const body = result.body as { motionConcepts: { id: string }[]; unavailableMotionConcepts: { id: string; state: string }[] };
     const ids = body.motionConcepts.map((c) => c.id);
-    expect(ids).not.toContain("pilot-2-balance-isnt-your-buffer");
-    expect(ids).not.toContain("pilot-3-same-setup-bigger-size");
-    expect(ids).not.toContain("pilot-1-green-month-losing-setup");
-    expect(ids).not.toContain("pilot-4-best-day-blocks-payout");
-    expect(ids).toContain("pilot-5-would-you-pass");
+    expect(ids).not.toContain("chart-a-17-green-days");
+    expect(ids).not.toContain("chart-b-10-green-days");
+    expect(ids).toContain("chart-c-one-signal-two-accounts");
     expect(body.unavailableMotionConcepts).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "pilot-2-balance-isnt-your-buffer", state: "made" }),
-        expect.objectContaining({ id: "pilot-3-same-setup-bigger-size", state: "waiting" }),
-        expect.objectContaining({ id: "pilot-1-green-month-losing-setup", state: "rejected" }),
-        expect.objectContaining({ id: "pilot-4-best-day-blocks-payout", state: "waiting" }),
+        expect.objectContaining({ id: "chart-a-17-green-days", state: "made" }),
+        expect.objectContaining({ id: "chart-b-10-green-days", state: "waiting" }),
+      ]),
+    );
+  });
+
+  it("GET lists a concept whose request is still queued or rejected as unavailable, never as retired-and-hidden", async () => {
+    await load({ campaignRows: [{ thesis: A, status: "retired" }], pendingRuns: [{ opportunity_id: "opp-queued", title: C }] });
+    const { res, result } = fakeRes();
+    await handler(fakeReq(undefined, "GET"), res);
+    const body = result.body as { unavailableMotionConcepts: { id: string; state: string }[] };
+    expect(body.unavailableMotionConcepts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "chart-a-17-green-days", state: "rejected" }),
+        expect.objectContaining({ id: "chart-c-one-signal-two-accounts", state: "waiting" }),
       ]),
     );
   });
 
   it("POST for a concept that already has a video is refused with 409 before anything is created or enqueued", async () => {
+    await load({ campaignRows: [{ thesis: A, status: "approved" }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "pilot-2-balance-isnt-your-buffer" }), res);
+    await handler(fakeReq({ motionConceptId: "chart-a-17-green-days" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("already been made");
     expect(state.insertedOpportunities).toHaveLength(0);
@@ -304,23 +322,26 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
   });
 
   it("POST for a concept waiting in Approvals is refused with 409", async () => {
+    await load({ campaignRows: [{ thesis: B, status: "in_review" }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "pilot-3-same-setup-bigger-size" }), res);
+    await handler(fakeReq({ motionConceptId: "chart-b-10-green-days" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("waiting in Approvals");
   });
 
   it("POST for a concept whose request is still queued is refused with 409, so it can't be run twice", async () => {
+    await load({ pendingRuns: [{ opportunity_id: "opp-queued", title: C }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "pilot-4-best-day-blocks-payout" }), res);
+    await handler(fakeReq({ motionConceptId: "chart-c-one-signal-two-accounts" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("already in progress");
     expect(state.calls).toHaveLength(0);
   });
 
   it("POST for a concept whose script was rejected is refused with 409", async () => {
+    await load({ campaignRows: [{ thesis: A, status: "retired" }] });
     const { res, result } = fakeRes();
-    await handler(fakeReq({ motionConceptId: "pilot-1-green-month-losing-setup" }), res);
+    await handler(fakeReq({ motionConceptId: "chart-a-17-green-days" }), res);
     expect(result.statusCode).toBe(409);
     expect((result.body as { error: string }).error).toContain("already rejected");
   });
