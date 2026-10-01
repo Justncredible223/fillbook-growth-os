@@ -15,7 +15,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MOTION_SCENE_PLANS, isPayoffPlan } from "../../src/shortform/motionPlans.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
-import { applyRealDurations, buildRenderPlanScenes, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio } from "./scenePlanAdapter.js";
+import { applyRealDurations, buildRenderPlanScenes, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio, synthesizeSilentNarration } from "./scenePlanAdapter.js";
 import { buildAssFile } from "./captions.js";
 import { PAYOFF_SPEECH_RATE, PAYOFF_TRANSITION_SECONDS } from "./payoffCues.js";
 import { renderVideo } from "./render.js";
@@ -42,7 +42,12 @@ async function main() {
     const outDir = join(OUT_ROOT, plan.planId);
     mkdirSync(outDir, { recursive: true });
     console.log(`\n=== ${plan.planId} (${voice} voice) ===`);
-    const narration = voice === "offline" ? await synthesizeRealNarrationAudio(plan, outDir, runner) : await synthesizeProductionNarrationAudio(plan, outDir, runner, { rate: PAYOFF_SPEECH_RATE });
+    const narration =
+      plan.voiceover === "none"
+        ? await synthesizeSilentNarration(plan, outDir, runner)
+        : voice === "offline"
+          ? await synthesizeRealNarrationAudio(plan, outDir, runner)
+          : await synthesizeProductionNarrationAudio(plan, outDir, runner, { rate: PAYOFF_SPEECH_RATE });
     const adjusted = applyRealDurations(plan, narration.durationsBySceneId);
     const adapted = await buildRenderPlanScenes(adjusted, manifest, outDir, runner, narration.wordCuesBySceneId);
     const assPath = join(outDir, "captions.ass");

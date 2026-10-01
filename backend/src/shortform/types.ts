@@ -165,7 +165,56 @@ export interface Mask {
   label?: string;
 }
 
-export type SceneLayout = "full_card" | "fill" | "payoff";
+export type SceneLayout = "full_card" | "fill" | "payoff" | "chart";
+
+/**
+ * "chart" scenes (the 2026-10 chart-card format): no screenshot at all. One short paradox line on a dark background and
+ * ONE self-explaining chart drawn from numbers that come off a verified recording's facts, so the picture is the proof
+ * ("17 green days. Still $1,484 short." over 18 squares and a payout bar). Opt-in per scene, like "payoff".
+ *
+ * The scene still names the recording it draws its numbers from (`assetId`) and cites its facts in `claims`, so the
+ * usual evidence rules apply; it just has no crop, because nothing of the recording is shown. Every number the chart
+ * draws is checked against those facts (see chart.ts), and the gap a progress bar shows is checked to be target - value.
+ */
+export type ChartTone = "good" | "bad";
+export interface ChartGrid {
+  /** Cells drawn: one per day (or trade). Must be supported by a cited fact, like every figure. */
+  total: number;
+  /** How many are good; the rest (total - good) are bad and sit at `badAt`. */
+  good: number;
+  /** Zero-based cell positions of the bad cells. */
+  badAt: number[];
+  cols: number;
+}
+export interface ChartProgress {
+  /** Drawn above the bar, e.g. "Payout target: $9,000". */
+  label: string;
+  /** Amount reached and the target, in dollars. The missing part is drawn and labelled as target - value. */
+  value: number;
+  target: number;
+  /** Drawn under the bar, e.g. "$1,484 to go". Must equal the dollar gap, rounded down to whole dollars. */
+  gapLabel: string;
+}
+export interface ChartPair {
+  aLabel: string;
+  bLabel: string;
+  /** The one figure both bars carry, e.g. "-$1,201". */
+  value: string;
+}
+export interface ChartSpec {
+  kind: "grid_progress" | "pair";
+  /** The beat this scene reveals, 1-based. Earlier beats are drawn already complete; later beats are not drawn yet. */
+  stage: number;
+  /** The headline split into display lines. Joined with spaces they must equal the scene headline. */
+  lines: string[];
+  /** Colour of the last headline line. */
+  accent: ChartTone;
+  grid?: ChartGrid;
+  progress?: ChartProgress;
+  pair?: ChartPair;
+  /** Draw the chart dimmed, under the closing invitation. */
+  dim?: boolean;
+}
 
 /**
  * "payoff" scenes (the 2026-09 retention redesign): frame one is one big number or claim -- the headline's first
@@ -215,6 +264,8 @@ export interface SceneSpec {
   fontSizes?: { headline: number; caption: number };
   /** Required when `layout` is "payoff"; ignored otherwise. */
   payoff?: PayoffSpec;
+  /** Required when `layout` is "chart"; ignored otherwise. */
+  chart?: ChartSpec;
   /** Opt-ins for the rare deliberate exceptions. */
   allowChrome?: boolean;
   keepSidebar?: boolean;
@@ -251,6 +302,11 @@ export interface ScenePlan {
   visualStyle: string;
   scenes: SceneSpec[];
   requiredAssets: RequiredAsset[];
+  /**
+   * "none": the video has no spoken narration, only on-screen text, a chart and the music bed. The scenes' `narration`
+   * still holds the sentence each scene says in text (it is what the claim checks read). Omitted means narrated.
+   */
+  voiceover?: "narrated" | "none";
 }
 
 export type IssueSeverity = "error" | "review";

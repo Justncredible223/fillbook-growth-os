@@ -125,7 +125,7 @@ export function scanText(text: string, field: string, sceneId?: string): PlanIss
   return issues;
 }
 
-function claimEvidenceNumbers(scene: SceneSpec, asset: VerifiedAsset): string[] {
+export function claimEvidenceNumbers(scene: SceneSpec, asset: VerifiedAsset): string[] {
   const numbers: string[] = [];
   for (const claim of scene.claims) {
     for (const ev of claim.evidence) {

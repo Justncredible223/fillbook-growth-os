@@ -64,7 +64,7 @@ import { SupabaseJobQueueRepository } from "../../src/jobs/supabaseJobQueueRepos
 import { PUBLISH_YOUTUBE_JOB_TYPE } from "../../src/video/youtubePublishJob.js";
 import { PUBLISH_TIKTOK_JOB_TYPE } from "../../src/video/tiktokPublishJob.js";
 import { resolveMotionScenePlan, summarizeUsedAssets, type CatalogAssetSummary } from "../video-factory/motionCatalog.js";
-import { buildRenderPlanScenes, applyRealDurations, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio } from "../video-factory/scenePlanAdapter.js";
+import { buildRenderPlanScenes, applyRealDurations, synthesizeProductionNarrationAudio, synthesizeRealNarrationAudio, synthesizeSilentNarration } from "../video-factory/scenePlanAdapter.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
 import { isPayoffPlan } from "../../src/shortform/motionPlans.js";
 import { assertMeetsRenderBar } from "../../src/shortform/storyScore.js";
@@ -94,7 +94,7 @@ export interface MotionSelectionReport {
   /** Always populated, both when motion was used and when it wasn't -- see motionCatalog.ts's resolveMotionScenePlan. */
   reason: string;
   assetsUsed: CatalogAssetSummary[];
-  narrationProvenance: "edge_tts" | "offline_sapi" | "supplied" | null;
+  narrationProvenance: "edge_tts" | "offline_sapi" | "supplied" | "none" | null;
 }
 
 export interface RenderRunResult {
@@ -127,7 +127,7 @@ async function buildVerifiedMotionPlan(
   outDir: string,
   runner: ProcessRunner,
   outputPath: string,
-): Promise<{ plan: RenderPlan; assetsUsed: CatalogAssetSummary[]; narrationProvenance: "edge_tts" | "offline_sapi" }> {
+): Promise<{ plan: RenderPlan; assetsUsed: CatalogAssetSummary[]; narrationProvenance: "edge_tts" | "offline_sapi" | "none" }> {
   const manifest = loadManifest();
   // Payoff-layout plans (the retention redesign) are timed for a brisker voice and snappier cuts; every other plan is unchanged.
   const payoff = isPayoffPlan(scenePlan);
@@ -137,9 +137,12 @@ async function buildVerifiedMotionPlan(
   // calls, for a local proof render. Every caller must still report
   // `narrationProvenance` honestly (see RenderRunResult) rather than
   // implying the real edge-tts voice was used.
-  const narration = process.env.VIDEO_WORKER_OFFLINE_NARRATION === "true"
-    ? await synthesizeRealNarrationAudio(scenePlan, outDir, runner)
-    : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner, payoff ? { rate: PAYOFF_SPEECH_RATE } : {});
+  // A plan with voiceover "none" (the chart cards) has no speech: a silent track under the music bed, scenes as authored.
+  const narration = scenePlan.voiceover === "none"
+    ? await synthesizeSilentNarration(scenePlan, outDir, runner)
+    : process.env.VIDEO_WORKER_OFFLINE_NARRATION === "true"
+      ? await synthesizeRealNarrationAudio(scenePlan, outDir, runner)
+      : await synthesizeProductionNarrationAudio(scenePlan, outDir, runner, payoff ? { rate: PAYOFF_SPEECH_RATE } : {});
   const adjustedPlan = applyRealDurations(scenePlan, narration.durationsBySceneId);
   const adapted = await buildRenderPlanScenes(adjustedPlan, manifest, outDir, runner, narration.wordCuesBySceneId);
 
@@ -160,7 +163,7 @@ async function buildVerifiedMotionPlan(
     musicFile: music?.file,
     musicStartSeconds: music?.startSeconds,
   };
-  return { plan, assetsUsed: summarizeUsedAssets(adjustedPlan, manifest), narrationProvenance: narration.provenance === "offline_sapi" ? "offline_sapi" : "edge_tts" };
+  return { plan, assetsUsed: summarizeUsedAssets(adjustedPlan, manifest), narrationProvenance: narration.provenance === "offline_sapi" ? "offline_sapi" : narration.provenance === "none" ? "none" : "edge_tts" };
 }
 
 /** The existing, unchanged stock-footage/UI-screenshot path -- exactly the same logic this file always ran, just factored out so buildRenderPlan can choose between it and the verified-motion path above. */

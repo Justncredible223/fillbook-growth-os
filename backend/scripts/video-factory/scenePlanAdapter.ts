@@ -33,6 +33,7 @@ import { generateVoiceover, DEFAULT_VOICE } from "./voiceover.js";
 import { CARD_SHADOW_SPREAD, PLATFORM_OVERLAY_ZONES, assertCardClearsOverlays, computeCardLayout, type CardLayout } from "./render.js";
 import { computePayoffCard, type PayoffCard } from "../../src/shortform/payoffLayout.js";
 import { PAYOFF_BACKGROUNDS, buildPayoffCues, buildPayoffCursorCues } from "./payoffCues.js";
+import { buildChartCues } from "./chartCues.js";
 
 export interface AdaptedScenes {
   scenes: RenderScene[];
@@ -156,7 +157,9 @@ export async function buildRenderPlanScenes(
     // evidence must never get that treatment just for being first --
     // "product" (real screenshots' own existing kind) renders it at full
     // clarity instead, regardless of scene index.
-    const kind = s.cta ? "cta" : s.assetId ? "product" : i === 0 ? "hook" : "explanation";
+    // A chart scene names the recording its numbers come from but shows none of it, so it is never a "product" scene.
+    const chart = s.layout === "chart" ? s.chart : undefined;
+    const kind = s.cta ? "cta" : s.assetId && !chart ? "product" : i === 0 ? "hook" : "explanation";
     const label = s.disclosure ? s.disclosure.toUpperCase() : "";
     const backgroundColor = "0x05070a"; // brand-dark fallback for a text-only scene, matches scenes.ts's own hook/explanation color
 
@@ -164,10 +167,10 @@ export async function buildRenderPlanScenes(
     let cardLayout: CardLayout | null = null;
     let payoffCard: PayoffCard | null = null;
     const payoff = s.layout === "payoff" ? s.payoff : undefined;
-    const sceneBackground = payoff ? await backgroundFor(payoff.theme) : backgroundPath;
-    if (!s.assetId) renderScene.card = { backgroundPath: sceneBackground };
+    const sceneBackground = chart ? await backgroundFor("dark") : payoff ? await backgroundFor(payoff.theme) : backgroundPath;
+    if (!s.assetId || chart) renderScene.card = { backgroundPath: sceneBackground };
 
-    if (s.assetId) {
+    if (s.assetId && !chart) {
       const asset = findAsset(manifest, s.assetId);
       if (asset.kind === "screen_recording") {
         if (!s.clipTimeRangeSeconds) throw new VideoFactoryError(`Adapter: scene "${s.sceneId}" uses a screen_recording asset with no clipTimeRangeSeconds (should have been caught by validateScenePlan).`);
@@ -219,7 +222,10 @@ export async function buildRenderPlanScenes(
 
     const start = elapsed;
     const end = elapsed + s.durationSeconds;
-    if (renderScene.card && payoff) {
+    if (chart) {
+      // Chart layout: the headline, the chart up to this scene's beat, and the beat's caption, all drawn as vector cues.
+      captionCues.push(...buildChartCues({ chart, headline: s.headline, captionText: s.captionText, cta: s.cta, start, end }));
+    } else if (renderScene.card && payoff) {
       // Payoff layout: the big figure + line + caption block (animated), drawn above the zoomed card, in the top band.
       captionCues.push(...buildPayoffCues({ headline: s.headline, captionText: s.captionText, cta: s.cta, start, end, spec: payoff, hasCard: Boolean(payoffCard) }));
       if (payoff.cursor && payoffCard && s.crop && s.focalRegion) {
@@ -268,8 +274,8 @@ export async function buildRenderPlanScenes(
     // The fade into scene i+1 runs from this scene's nominal end for that transition's duration, with this
     // scene's footage still visible -- so an evidence scene keeps its label through that fade, and the next
     // scene's label waits for it to finish, never leaving fading evidence unlabeled or under another label.
-    const outgoingFade = s.assetId ? (plan.scenes[i + 1]?.transition.durationSeconds ?? 0) : 0;
-    const incomingDelay = i > 0 && plan.scenes[i - 1]!.assetId ? s.transition.durationSeconds : 0;
+    const outgoingFade = s.assetId && !chart ? (plan.scenes[i + 1]?.transition.durationSeconds ?? 0) : 0;
+    const incomingDelay = i > 0 && plan.scenes[i - 1]!.assetId && plan.scenes[i - 1]!.layout !== "chart" ? s.transition.durationSeconds : 0;
     if (label) sceneLabelCues.push({ label, startSeconds: start + incomingDelay, endSeconds: end + outgoingFade, ...(renderScene.card ? { style: "CardLabel" as const } : {}) });
     elapsed = end;
   }
@@ -304,7 +310,7 @@ export interface RealNarrationResult {
   /** Real word timings per scene (seconds from that scene's own audio start). Only the production voice reports them; the offline voice leaves this out. */
   wordCuesBySceneId?: Record<string, WordCue[]>;
   /** What actually produced this audio -- every caller/report must say this, never imply a finished narration when it wasn't the real production voice. */
-  provenance: "edge_tts" | "offline_sapi" | "supplied";
+  provenance: "edge_tts" | "offline_sapi" | "supplied" | "none";
 }
 
 const MIN_SILENT_SCENE_SECONDS = 1.5;
@@ -412,6 +418,23 @@ export async function buildSilentPlaceholderAudio(durationSeconds: number, outPa
     {},
   );
   if (result.exitCode !== 0) throw new VideoFactoryError(`Adapter: failed to build placeholder silent audio: ${result.stderr || result.stdout}`);
+}
+
+/**
+ * The audio for a plan with `voiceover: "none"`: a silent track the length of the plan, so the music bed is the only
+ * sound. Each scene keeps the duration the plan authored; there is no speech to measure.
+ */
+export async function synthesizeSilentNarration(plan: ScenePlan, outDir: string, runner: ProcessRunner): Promise<RealNarrationResult> {
+  mkdirSync(outDir, { recursive: true });
+  const durationsBySceneId: Record<string, number> = {};
+  let total = 0;
+  for (const s of plan.scenes) {
+    durationsBySceneId[s.sceneId] = s.durationSeconds;
+    total += s.durationSeconds;
+  }
+  const voiceoverPath = join(outDir, "voiceover-silent.mp3");
+  await buildSilentPlaceholderAudio(total, voiceoverPath, runner);
+  return { voiceoverPath, durationsBySceneId, provenance: "none" };
 }
 
 export function ensureDir(path: string): void {

@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ProcessRunner } from "../../scripts/video-factory/processRunner";
 import { runRender } from "../../scripts/video-worker/render-single";
 import { PILOT_1, PILOT_2 } from "../../src/shortform/pilots";
+import { chartAPlan } from "../../src/shortform/chartPilots";
 import { computeScenePlanHash } from "../../src/shortform/scenePlan";
 import { buildVideoScriptFromScenePlan } from "../../src/content/videoScriptWriter";
 
@@ -65,7 +66,7 @@ function resolveAgainstCwd(maybeRelativePath: string, cwd?: string): string {
  * checks -- a fixed, unrelated guess for the final probe would make
  * validateOutput's own duration-matches-narration check spuriously fail.
  */
-function createFakeRunner(): ProcessRunner {
+function createFakeRunner(finalDurationSeconds?: number): ProcessRunner {
   let narrationTotalSeconds = 0;
   const run = vi.fn(async (command: string, args: string[] = [], options?: { cwd?: string }) => {
     if (args.includes("-version") || args.includes("--version")) return { stdout: "", stderr: "", exitCode: 0 };
@@ -73,7 +74,8 @@ function createFakeRunner(): ProcessRunner {
       const path = String(args[args.length - 1]);
       const wantsStreams = args.includes("-show_streams");
       const isNarrationProbe = /voiceover\.mp3$/.test(path);
-      const duration = isNarrationProbe ? FAKE_NARRATION_SECONDS : narrationTotalSeconds || FAKE_NARRATION_SECONDS;
+      // A silent plan (voiceover none) has no narration to total up, so its final video's probed duration is given directly.
+      const duration = isNarrationProbe ? FAKE_NARRATION_SECONDS : finalDurationSeconds ?? (narrationTotalSeconds || FAKE_NARRATION_SECONDS);
       if (isNarrationProbe) narrationTotalSeconds += FAKE_NARRATION_SECONDS;
       const streams = wantsStreams
         ? [
@@ -322,6 +324,38 @@ describe("runRender", () => {
     const runMock = runner.run as unknown as ReturnType<typeof vi.fn>;
     const edgeTtsCalls = runMock.mock.calls.filter((c: unknown[]) => c[0] === "python3" && !(c[1] as string[]).includes("--version"));
     expect(edgeTtsCalls.length).toBe(PILOT_2.scenes.length);
+  }, 30_000);
+
+  it("a chart-card plan (voiceover none) renders via the verified-motion path with NO speech synthesis, reporting provenance none and the recording its numbers come from", async () => {
+    const plan = chartAPlan();
+    const runner = createFakeRunner(plan.scenes.reduce((n, s) => n + s.durationSeconds, 0) + 0.3);
+    const workDir = tempWorkDir();
+    const calls: { table: string; op: string }[] = [];
+    const { campaignAssetsRow, contentVersionsRow } = makeRow({
+      hook: plan.hook,
+      script: buildVideoScriptFromScenePlan(plan).script,
+      shotList: ["irrelevant -- the ScenePlan path never reads shotList"],
+      youtubeTitle: plan.title,
+      youtubeDescription: "desc",
+      tiktokCaption: "caption",
+      hashtags: ["#trading"],
+      disclosureCta: null,
+      motionScenePlan: { scenePlanId: plan.planId, scenePlanHash: computeScenePlanHash(plan) },
+    });
+    const client = createFakeSupabaseClient({ campaignAssetsRow, contentVersionsRow }, calls);
+    const sendPush = vi.fn().mockResolvedValue({ ok: true, isRevokedToken: false });
+
+    const result = await runRender("render-chart", "asset-1", { client, runner, workDir, sendPush });
+
+    expect(result.motionSelection.usedVerifiedScenePlan).toBe(true);
+    expect(result.motionSelection.reason).toContain(plan.planId);
+    expect(result.motionSelection.narrationProvenance).toBe("none");
+    expect(result.motionSelection.assetsUsed.map((a) => a.assetId)).toContain("rec.hs-payout-account.v1");
+    expect(existsSync(join(workDir, "render-chart", "final.mp4"))).toBe(true);
+    // No edge-tts call at all: the audio is a silent track under the music bed.
+    const runMock = runner.run as unknown as ReturnType<typeof vi.fn>;
+    const edgeTtsCalls = runMock.mock.calls.filter((c: unknown[]) => c[0] === "python3" && !(c[1] as string[]).includes("--version"));
+    expect(edgeTtsCalls.length).toBe(0);
   }, 30_000);
 
   it("a valid scenePlanId+hash+hook, but approved script BODY/figures/claims text altered after generation, is rejected before any narration/rendering happens", async () => {
