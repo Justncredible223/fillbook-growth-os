@@ -1168,6 +1168,27 @@
             "start": 1.7,
             "end": 17.7
           }
+        },
+        {
+          "key": "brief.window_name",
+          "text": "Daily Brief, Your strongest window: Open (9:30-10:30am ET)",
+          "values": [
+            "9:30",
+            "10:30"
+          ],
+          "topics": [
+            "daily_brief"
+          ],
+          "region": {
+            "x": 80,
+            "y": 688,
+            "w": 362,
+            "h": 44
+          },
+          "timeRangeSeconds": {
+            "start": 1.7,
+            "end": 17.7
+          }
         }
       ]
     },

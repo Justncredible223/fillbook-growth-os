@@ -16,7 +16,7 @@ const CTA = `Try it free on your own account for 14 days. ${OFFICIAL_HANDLE}`;
 const SPEC: PayoffSpec = { theme: "bright", motion: "pop", cursor: true };
 const WORDS_SPEC: PayoffSpec = { ...SPEC, leadWithWords: true };
 
-interface Zoom {
+export interface Zoom {
   assetId: string;
   crop: Rect;
   focal: Rect;
@@ -24,7 +24,7 @@ interface Zoom {
   clip: { start: number; end: number };
 }
 
-interface SceneInput {
+export interface SceneInput {
   sceneId: string;
   narration: string;
   takeaway: string;
@@ -41,7 +41,7 @@ interface SceneInput {
   leadWithWords?: boolean;
 }
 
-interface StoryConfig {
+export interface StoryConfig {
   planId: string;
   title: string;
   series: string;
@@ -52,7 +52,7 @@ interface StoryConfig {
   scenes: SceneInput[];
 }
 
-function buildStoryPlan(cfg: StoryConfig): ScenePlan {
+export function buildStoryPlan(cfg: StoryConfig): ScenePlan {
   const scenes: SceneSpec[] = cfg.scenes.map((s, i) => {
     const spec = s.zoom ? (s.leadWithWords ? WORDS_SPEC : SPEC) : WORDS_SPEC;
     const common = {
@@ -96,7 +96,7 @@ function buildStoryPlan(cfg: StoryConfig): ScenePlan {
   };
 }
 
-const zoom = (assetId: string, crop: Rect, focal: Rect, id: string, text: string, factKey: string, clip: { start: number; end: number }): Zoom => ({
+export const zoom = (assetId: string, crop: Rect, focal: Rect, id: string, text: string, factKey: string, clip: { start: number; end: number }): Zoom => ({
   assetId,
   crop,
   focal,
