@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateChartScene } from "./chart.js";
+import { validateChartScene, validateIllustrativeChart } from "./chart.js";
 import { validateSceneClaims } from "./claims.js";
 import { TEXT_LIMITS, validateMotionTiming, validatePrivacyMasks, validateSceneFraming, validateSceneText } from "./layout.js";
 import { OFFICIAL_HANDLE, type PlanIssue, type PlanValidation, type RequiredAsset, type SceneSpec, type ScenePlan, type VerifiedAsset, type VerifiedManifest } from "./types.js";
@@ -116,6 +116,8 @@ export function validateScenePlan(plan: ScenePlan, manifest: VerifiedManifest, o
     issues.push(...validateSceneText(scene));
 
     if (scene.assetId === null) {
+      // A chart scene with no recording behind it is illustrative arithmetic: the arithmetic is its evidence (chart.ts).
+      if (scene.layout === "chart") issues.push(...validateIllustrativeChart(scene));
       issues.push(...validateSceneClaims(scene, undefined));
       continue;
     }

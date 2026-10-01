@@ -1,6 +1,8 @@
 import type { CaptionCue } from "./types.js";
 import { escapeAssText } from "./captions.js";
-import { CHART, chartGeometry } from "../../src/shortform/chart.js";
+import { CAPTION_WRAP_CHARS, CHART, CTA_WRAP_CHARS, chartGeometry, wrapCaption } from "../../src/shortform/chart.js";
+
+export { wrapCaption };
 import type { ChartSpec, ChartTone } from "../../src/shortform/types.js";
 
 /**
@@ -63,22 +65,6 @@ export function fitFont(text: string, size: number, maxWidth: number, min = 30):
   return fs;
 }
 
-/** Greedy word wrap by character budget, for short captions that must stay inside the safe width. */
-export function wrapCaption(text: string, maxChars: number): string[] {
-  const lines: string[] = [];
-  let line = "";
-  for (const word of text.split(/\s+/).filter(Boolean)) {
-    if (line && (line + " " + word).length > maxChars) {
-      lines.push(line);
-      line = word;
-    } else {
-      line = line ? `${line} ${word}` : word;
-    }
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
 const toneColor = (t: ChartTone): string => (t === "bad" ? COLOR.bad : COLOR.good);
 
 export interface ChartCueInput {
@@ -124,7 +110,7 @@ export function buildChartCues(input: ChartCueInput): CaptionCue[] {
   });
 
   // ---- grid + progress bar ----
-  if (chart.kind === "grid_progress" && chart.grid) {
+  if ((chart.kind === "grid_progress" || chart.kind === "outcomes") && chart.grid) {
     const step = Math.min(CELL_STEP, Math.max(0.04, (dur - 1.0) / Math.max(1, geo.cells.length)));
     for (const cell of geo.cells) {
       const cx = cell.x + cell.size / 2;
@@ -170,7 +156,7 @@ export function buildChartCues(input: ChartCueInput): CaptionCue[] {
     }
 
     // stage 3: the bad cells pulse, so the eye lands on the red day
-    if (stage === 3) {
+    if (chart.kind === "grid_progress" && stage === 3) {
       for (const cell of geo.cells.filter((c) => c.tone === "bad")) {
         const cx = cell.x + cell.size / 2;
         const cy = cell.y + cell.size / 2;
@@ -180,6 +166,33 @@ export function buildChartCues(input: ChartCueInput): CaptionCue[] {
           b.push(`{\\an5\\pos(${fmt(cx)},${fmt(cy)})\\1a&HFF&\\3c${COLOR.bad}\\bord6\\shad0\\fscx100\\fscy100\\t(0,600,\\fscx118\\fscy118\\3a&HFF&)\\p1}${ring}{\\p0}`, t0, t0 + 0.6, LAYER_SHAPE + 1);
         }
       }
+    }
+  }
+
+  // ---- outcomes: the total won and the total lost as two bars, then the net ----
+  if (chart.kind === "outcomes" && chart.bars && chart.net) {
+    geo.outcomeBars.forEach((ob, i) => {
+      if (stage < 2) return;
+      const spec = chart.bars![i]!;
+      const anim = stage === 2;
+      const at = anim ? start + 0.3 + i * 0.6 : start;
+      const tone = toneColor(spec.tone);
+      const fade = anim ? `\\fad(250,0)` : "";
+      const dimText = chart.dim ? `\\1a${DIM_ALPHA}` : "";
+      b.push(`{\\an4\\pos(${ob.x0},${ob.y - 30})\\fs52\\c${COLOR.muted}${fade}${dimText}}${escapeAssText(spec.label)}`, at, end, LAYER_TEXT);
+      const clip = anim
+        ? `\\clip(${ob.x0},${ob.y - 2},${ob.x0},${ob.y + ob.h + 2})\\t(0,1000,\\clip(${ob.x0},${ob.y - 2},${ob.x1 + 2},${ob.y + ob.h + 2}))`
+        : "";
+      b.push(shape(roundedRectPath(ob.x1 - ob.x0, ob.h, 14), (ob.x0 + ob.x1) / 2, ob.y + ob.h / 2, tone, `${clip}${dim}`), at, end, LAYER_SHAPE);
+      const inside = ob.x1 - ob.x0 >= 300;
+      const valueAt = anim ? at + 0.9 : at;
+      const valueTag = inside ? `\\an6\\pos(${ob.x1 - 22},${fmt(ob.y + ob.h / 2)})` : `\\an4\\pos(${ob.x1 + 24},${fmt(ob.y + ob.h / 2)})`;
+      b.push(`{${valueTag}\\fs60\\c${COLOR.ink}${anim ? `\\fad(200,0)` : ""}${dimText}}${escapeAssText(spec.display)}`, valueAt, end, LAYER_TEXT);
+    });
+    if (stage >= 3) {
+      const anim = stage === 3;
+      const pop = anim ? `\\fscx80\\fscy80\\t(0,300,\\fscx100\\fscy100)` : "";
+      b.push(`{\\an5\\pos(${CHART.centerX},${fmt(geo.netY)})\\fs190\\c${toneColor(chart.net.tone)}${pop}${chart.dim ? `\\1a${DIM_ALPHA}` : ""}}${escapeAssText(chart.net.display)}`, start, end, LAYER_TEXT);
     }
   }
 
@@ -208,20 +221,20 @@ export function buildChartCues(input: ChartCueInput): CaptionCue[] {
 
   // ---- the beat caption, under the chart ----
   if (captionText) {
-    const lines = wrapCaption(captionText, 32);
+    const lines = wrapCaption(captionText, CAPTION_WRAP_CHARS);
     const fs = 78;
     const fade = stage <= 3 ? `\\fad(250,0)` : "";
     lines.forEach((line, i) => {
-      b.push(`{\\an5\\pos(${CHART.centerX},${fmt(geo.captionTop + i * 90 + 45)})\\fs${fs}\\c${COLOR.ink}${fade}}${escapeAssText(line)}`, start + (stage === 1 ? 0.5 : 0.3), end, LAYER_TEXT);
+      b.push(`{\\an5\\pos(${CHART.centerX},${fmt(geo.captionTop + i * CHART.captionPitch + CHART.captionPitch / 2)})\\fs${fs}\\c${COLOR.ink}${fade}}${escapeAssText(line)}`, start + (stage === 1 ? 0.5 : 0.3), end, LAYER_TEXT);
     });
   }
 
   // ---- the closing invitation ----
   if (cta) {
-    const lines = wrapCaption(cta, 36);
-    const ctaTop = geo.captionTop + (captionText ? wrapCaption(captionText, 32).length * 90 : 0) + 40;
+    const lines = wrapCaption(cta, CTA_WRAP_CHARS);
+    const ctaTop = geo.captionTop + (captionText ? wrapCaption(captionText, CAPTION_WRAP_CHARS).length * CHART.captionPitch : 0) + CHART.ctaGap;
     lines.forEach((line, i) => {
-      b.push(`{\\an5\\pos(${CHART.centerX},${ctaTop + i * 70 + 35})\\fs52\\c${COLOR.accent}\\fad(300,0)}${escapeAssText(line)}`, start + 0.3, end, LAYER_TEXT);
+      b.push(`{\\an5\\pos(${CHART.centerX},${ctaTop + i * CHART.ctaPitch + CHART.ctaPitch / 2})\\fs52\\c${COLOR.accent}\\fad(300,0)}${escapeAssText(line)}`, start + 0.3, end, LAYER_TEXT);
     });
   }
   return b.cues;
