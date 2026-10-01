@@ -10,7 +10,8 @@ import { requireAppAuth } from "../src/lib/requireAppAuth.js";
  * free -- safe to poll every couple of seconds.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!requireAppAuth(req, res)) return;
+  // Reading a run's status is read-only, so the automation token may do it.
+  if (!requireAppAuth(req, res, { allowAutomation: true })) return;
   if (req.method !== "GET") {
     res.status(405).json({ error: "Method not allowed" });
     return;

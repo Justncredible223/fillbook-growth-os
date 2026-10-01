@@ -613,7 +613,8 @@ async function handleResearch(req: VercelRequest, res: VercelResponse): Promise<
  * docs/EXTERNAL_WRITE_FIREWALL.md).
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!requireAppAuth(req, res)) return;
+  // Only the read-only video-status list is open to the automation token; every approve/reject/edit stays app-token only.
+  if (!requireAppAuth(req, res, { allowAutomation: req.method === "GET" && req.query.resource === "video-status" })) return;
   if (req.query.resource === "inbound") {
     await handleInbound(req, res);
     return;
