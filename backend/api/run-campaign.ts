@@ -141,7 +141,8 @@ const barSummary = (id: string) => { const p = planFor(id); const r = p ? render
 const barRefusal = (id: string): string => { const p = planFor(id); return p ? renderBarRefusal(p) : `"${id}" is not a known concept.`; };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!requireAppAuth(req, res)) return;
+  // Requesting a video is something the automation token may do (approving it is not -- see requireAppAuth).
+  if (!requireAppAuth(req, res, { allowAutomation: true })) return;
   // GET: the fixed, small catalog of concepts that have verified product
   // motion (see motionCatalog.ts's listMotionConcepts) -- read-only, no
   // paused/budget gate needed since it costs nothing and changes nothing.

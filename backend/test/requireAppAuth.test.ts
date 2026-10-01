@@ -176,3 +176,112 @@ describe("constantTimeEquals", () => {
     expect(constantTimeEquals("Bearer abc123", "")).toBe(false);
   });
 });
+
+/**
+ * APP_API_TOKEN_AUTOMATION: a second, separately rotated credential for scripts and assistants. It must only ever open
+ * the endpoints that opt in (requesting a video, reading status), never the ones that approve, reject or edit.
+ */
+describe("requireAppAuth -- APP_API_TOKEN_AUTOMATION", () => {
+  const AUTOMATION = "automation-token-0123456789-abcdefghijklmnop";
+  const saved = { t: process.env.APP_API_TOKEN, p: process.env.APP_API_TOKEN_PREVIOUS, a: process.env.APP_API_TOKEN_AUTOMATION };
+
+  beforeEach(() => {
+    process.env.APP_API_TOKEN = "current-token-abc";
+    delete process.env.APP_API_TOKEN_PREVIOUS;
+    process.env.APP_API_TOKEN_AUTOMATION = AUTOMATION;
+  });
+
+  afterEach(() => {
+    for (const [key, value] of [["APP_API_TOKEN", saved.t], ["APP_API_TOKEN_PREVIOUS", saved.p], ["APP_API_TOKEN_AUTOMATION", saved.a]] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  const call = (token: string, options?: { allowAutomation?: boolean }) => {
+    const res = mockRes();
+    const ok = requireAppAuth({ headers: { authorization: `Bearer ${token}` } } as any, res, options);
+    return { ok, res };
+  };
+
+  it("accepts the automation token on an endpoint that opted in", () => {
+    expect(call(AUTOMATION, { allowAutomation: true }).ok).toBe(true);
+  });
+
+  it("refuses the automation token on an endpoint that did not opt in, so it can never approve or reject", () => {
+    const { ok, res } = call(AUTOMATION);
+    expect(ok).toBe(false);
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(call(AUTOMATION, { allowAutomation: false }).ok).toBe(false);
+  });
+
+  it("treats a too-short automation token as not configured", () => {
+    process.env.APP_API_TOKEN_AUTOMATION = "short";
+    expect(call("short", { allowAutomation: true }).ok).toBe(false);
+  });
+
+  it("is a normal state when no automation token is set: nothing changes for the app's own token", () => {
+    delete process.env.APP_API_TOKEN_AUTOMATION;
+    expect(call("current-token-abc", { allowAutomation: true }).ok).toBe(true);
+    expect(call("", { allowAutomation: true }).ok).toBe(false);
+    expect(call("anything", { allowAutomation: true }).ok).toBe(false);
+  });
+
+  it("still accepts the app's own token on every endpoint, opted in or not", () => {
+    expect(call("current-token-abc").ok).toBe(true);
+    expect(call("current-token-abc", { allowAutomation: true }).ok).toBe(true);
+  });
+
+  it("rejects a wrong token even when an automation token is configured", () => {
+    expect(call("some-other-token-that-is-long-enough-12345", { allowAutomation: true }).ok).toBe(false);
+  });
+});
+
+describe("approvals endpoint -- the automation token opens only the read-only video-status list", () => {
+  const AUTOMATION = "automation-token-0123456789-abcdefghijklmnop";
+  const saved = { t: process.env.APP_API_TOKEN, a: process.env.APP_API_TOKEN_AUTOMATION };
+
+  beforeEach(() => {
+    process.env.APP_API_TOKEN = "current-token-abc";
+    process.env.APP_API_TOKEN_AUTOMATION = AUTOMATION;
+  });
+
+  afterEach(() => {
+    if (saved.t === undefined) delete process.env.APP_API_TOKEN;
+    else process.env.APP_API_TOKEN = saved.t;
+    if (saved.a === undefined) delete process.env.APP_API_TOKEN_AUTOMATION;
+    else process.env.APP_API_TOKEN_AUTOMATION = saved.a;
+  });
+
+  async function hit(method: string, query: Record<string, string>) {
+    const { default: handler } = await import("../api/approvals");
+    const res = mockRes();
+    res.setHeader = vi.fn();
+    res.end = vi.fn();
+    try {
+      await handler({ method, query, headers: { authorization: `Bearer ${AUTOMATION}` }, body: {} } as any, res);
+    } catch {
+      // Past the auth gate the handler needs a database; this test only cares whether the gate let it through.
+    }
+    return res;
+  }
+
+  it("lets the automation token read video-status (GET)", async () => {
+    const res = await hit("GET", { resource: "video-status" });
+    expect(res.status).not.toHaveBeenCalledWith(401);
+  });
+
+  it("refuses it on video-status with any other method", async () => {
+    const res = await hit("POST", { resource: "video-status" });
+    expect(res.status).toHaveBeenCalledWith(401);
+  });
+
+  it("refuses it on the approvals queue itself, and on every other resource", async () => {
+    for (const query of [{} as Record<string, string>, { resource: "inbound" }, { resource: "prospecting" }, { resource: "partnerships" }, { resource: "posting" }]) {
+      for (const method of ["GET", "POST", "PATCH"]) {
+        const res = await hit(method, query);
+        expect(res.status, `${method} ${JSON.stringify(query)}`).toHaveBeenCalledWith(401);
+      }
+    }
+  });
+});

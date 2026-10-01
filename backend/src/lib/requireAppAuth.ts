@@ -27,7 +27,19 @@ import { timingSafeEqual } from "node:crypto";
  * matches either currently-accepted value; writes a 401 and returns false
  * otherwise, or a 500 if the server itself isn't configured at all.
  */
-export function requireAppAuth(req: VercelRequest, res: VercelResponse): boolean {
+export interface AppAuthOptions {
+  /**
+   * Accept APP_API_TOKEN_AUTOMATION on this endpoint. Off by default: the automation token exists so scripts and
+   * assistants can REQUEST a video and READ render status without holding the app's own token, so only those endpoints
+   * opt in. Anything that approves, rejects, publishes or edits stays reachable only with the app's own token.
+   */
+  allowAutomation?: boolean;
+}
+
+/** An automation token shorter than this is treated as not configured, so a weak value can never open the API. */
+export const MIN_AUTOMATION_TOKEN_LENGTH = 32;
+
+export function requireAppAuth(req: VercelRequest, res: VercelResponse, options: AppAuthOptions = {}): boolean {
   const expected = process.env.APP_API_TOKEN;
   if (!expected) {
     res.status(500).json({ error: "APP_API_TOKEN is not configured on the server" });
@@ -47,8 +59,13 @@ export function requireAppAuth(req: VercelRequest, res: VercelResponse): boolean
   const previous = process.env.APP_API_TOKEN_PREVIOUS;
   const matchesCurrent = constantTimeEquals(header, `Bearer ${expected}`);
   const matchesPrevious = previous ? constantTimeEquals(header, `Bearer ${previous}`) : false;
+  // The automation token is a separate credential (APP_API_TOKEN_AUTOMATION), rotated on its own and never baked into
+  // an APK. It is only honoured on endpoints that opted in, and only when it is long enough to be a real secret.
+  const automation = process.env.APP_API_TOKEN_AUTOMATION;
+  const automationUsable = options.allowAutomation === true && Boolean(automation) && (automation ?? "").length >= MIN_AUTOMATION_TOKEN_LENGTH;
+  const matchesAutomation = constantTimeEquals(header, `Bearer ${automation ?? ""}`) && automationUsable;
 
-  if (!matchesCurrent && !matchesPrevious) {
+  if (!matchesCurrent && !matchesPrevious && !matchesAutomation) {
     res.status(401).json({ error: "Missing or invalid Authorization header" });
     return false;
   }
