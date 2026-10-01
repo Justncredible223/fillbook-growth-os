@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { validateChartScene } from "./chart.js";
 import { validateSceneClaims } from "./claims.js";
 import { TEXT_LIMITS, validateMotionTiming, validatePrivacyMasks, validateSceneFraming, validateSceneText } from "./layout.js";
 import { OFFICIAL_HANDLE, type PlanIssue, type PlanValidation, type RequiredAsset, type SceneSpec, type ScenePlan, type VerifiedAsset, type VerifiedManifest } from "./types.js";
@@ -48,6 +49,8 @@ export function computeScenePlanHash(plan: ScenePlan): string {
       claims: s.claims.map((c) => ({ id: c.id, type: c.type, text: c.text, evidence: c.evidence })),
       // Only present on payoff-layout scenes, so every existing plan's hash is unchanged.
       ...(s.payoff ? { payoff: s.payoff, layout: s.layout } : {}),
+      // Only present on chart-layout scenes, so every existing plan's hash is unchanged.
+      ...(s.chart ? { chart: s.chart, layout: s.layout } : {}),
     })),
   };
   return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
@@ -130,6 +133,16 @@ export function validateScenePlan(plan: ScenePlan, manifest: VerifiedManifest, o
     }
 
     usedAssets.set(asset.id, asset);
+    if (scene.layout === "chart") {
+      // A chart scene draws numbers taken from the recording's facts and shows none of the recording itself: no crop, no
+      // clip window, nothing to mask. Its numbers are checked against the facts it cites instead (chart.ts).
+      issues.push(...validateChartScene(scene, asset));
+      issues.push(...validateSceneClaims(scene, asset));
+      if (asset.dataLabel && !(scene.disclosure ?? "").toLowerCase().includes(asset.dataLabel.toLowerCase())) {
+        add("error", "missing_demo_label", `${asset.id} is demo data; the scene must show "${asset.dataLabel}" on screen.`, scene.sceneId);
+      }
+      continue;
+    }
     // validateSceneFraming's checks (crop bounds, focal region, chrome,
     // aspect/upscale) are generic across every asset kind, including
     // screen_recording -- only the CLIP-TIME dimension is unique to motion

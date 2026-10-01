@@ -7,6 +7,7 @@ import { PAYOFF_PILOTS } from "../../src/shortform/payoffPilots";
 import { STORY_PILOTS } from "../../src/shortform/storyPilots";
 import { MORE_STORY_PILOTS } from "../../src/shortform/storyPilotsMore";
 import { PILOT7_STORY_PILOTS } from "../../src/shortform/storyPilots7";
+import { CHART_PILOTS } from "../../src/shortform/chartPilots";
 import { buildVideoScriptFromScenePlan } from "../../src/content/videoScriptWriter";
 
 describe("resolveMotionScenePlan", () => {
@@ -100,11 +101,11 @@ describe("listMotionConcepts", () => {
   it("lists exactly the known verified plans (the pilots plus the payoff variants), never an open-ended/inferred set", () => {
     const concepts = listMotionConcepts();
     expect(concepts.map((c) => c.id).sort()).toEqual(MOTION_SCENE_PLANS.map((p) => p.planId).sort());
-    expect(concepts.map((c) => c.id).sort()).toEqual([...PILOTS, ...PAYOFF_PILOTS, ...STORY_PILOTS, ...MORE_STORY_PILOTS, ...PILOT7_STORY_PILOTS].map((p) => p.planId).sort());
+    expect(concepts.map((c) => c.id).sort()).toEqual([...PILOTS, ...PAYOFF_PILOTS, ...STORY_PILOTS, ...MORE_STORY_PILOTS, ...PILOT7_STORY_PILOTS, ...CHART_PILOTS].map((p) => p.planId).sort());
     // 2026-09-30: 62 -> 65, the +3 being the payoff-layout variants of pilot 7 (payoffPilots.ts); 65 -> 66, the +1 being the
     // story rebuild of pilot 20 (storyPilots.ts).
     // 66 -> 69: the story rebuilds of pilots 19, 21 and 22 (storyPilotsMore.ts). 69 -> 72: those of pilot 7 (storyPilots7.ts).
-    expect(concepts).toHaveLength(72);
+    expect(concepts).toHaveLength(75); // 72 -> 75: the chart-card concepts (chartPilots.ts)
     // Below: the pilots alone.
     expect(concepts.filter((c) => PILOTS.some((p) => p.planId === c.id))).toHaveLength(62); // 18 recorded concepts plus two angles each (2026-09-25), plus 3 opening-only A/B variants (2026-09-27), plus the 5-concept high-stakes batch (2026-09-28, PILOT_19-23), see pilots.ts's openingOnlyVariant
     expect(new Set(concepts.map((c) => c.title)).size).toBe(concepts.length); // availability is tracked by title

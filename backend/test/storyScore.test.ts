@@ -59,7 +59,7 @@ describe("story scorecard", () => {
     const scored = MOTION_SCENE_PLANS.map((p) => ({ id: p.planId, grade: scoreStory(p).grade }));
     const aPlus = scored.filter((s) => s.grade === "A+");
     expect(aPlus.length).toBeGreaterThan(0);
-    expect(aPlus.every((s) => s.id.includes("-story-"))).toBe(true);
+    expect(aPlus.every((s) => s.id.includes("-story-") || s.id.startsWith("chart-"))).toBe(true);
     expect(scored.filter((s) => s.grade === "D").length).toBeGreaterThan(0);
     expect(scored.filter((s) => s.grade === "A" || s.grade === "A+").length).toBeLessThan(scored.length / 4);
   });

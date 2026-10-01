@@ -283,7 +283,7 @@ export function validateSceneText(scene: SceneSpec): PlanIssue[] {
 
   for (const platform of platformsOf(scene.platform)) {
     const boxes = layoutBoxes(platform);
-    if (scene.layout !== "payoff" && textOverflows(scene.headline, headlineFont, boxes.headline)) add("error", "headline_overflow", `Headline does not fit its box on ${platform} at ${headlineFont}px.`);
+    if (scene.layout !== "payoff" && scene.layout !== "chart" && textOverflows(scene.headline, headlineFont, boxes.headline)) add("error", "headline_overflow", `Headline does not fit its box on ${platform} at ${headlineFont}px.`);
     if (textOverflows(scene.captionText, captionFont, boxes.caption)) add("error", "caption_overflow", `Caption does not fit its box on ${platform} at ${captionFont}px.`);
     if (scene.disclosure && textOverflows(scene.disclosure, DEFAULT_FONT.disclosure, boxes.disclosure)) add("error", "disclosure_overflow", `Disclosure does not fit its box on ${platform}.`);
   }

@@ -169,7 +169,7 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     // 2026-09-30: 62 -> 65, the +3 being the payoff-layout variants of pilot 7 (payoffPilots.ts); 65 -> 66, the +1 being the
     // story rebuild of pilot 20 (storyPilots.ts).
     // 66 -> 69: the story rebuilds of pilots 19, 21 and 22 (storyPilotsMore.ts). 69 -> 72: those of pilot 7 (storyPilots7.ts).
-    expect(body.motionConcepts.length).toBe(72);
+    expect(body.motionConcepts.length).toBe(75); // 72 -> 75: the chart-card concepts (chartPilots.ts)
   });
 
   it("POST with a valid motionConceptId creates a real opportunity row and enqueues via the SAME enqueue_campaign_run RPC every other request uses, with asset_type video_script", async () => {
