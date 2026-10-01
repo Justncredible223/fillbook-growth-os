@@ -7,7 +7,8 @@ import { requireAppAuth } from "../src/lib/requireAppAuth.js";
 import { isPlausiblyTradingRelated } from "../src/prospecting/prospectingRelevance.js";
 import { validateVideoTopicShape, manualVideoTopicTitle, manualVideoTopicOpportunityInput } from "../src/opportunities/manualVideoTopic.js";
 import { validateResearchTopicShape, manualResearchTopicTitle, manualResearchTopicOpportunityInput } from "../src/opportunities/manualResearchTopic.js";
-import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX, manualMotionConceptTitle, manualMotionConceptOpportunityInput } from "../src/opportunities/manualMotionConcept.js";
+import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX, manualMotionConceptTitle } from "../src/opportunities/manualMotionConcept.js";
+import { enqueueMotionConceptRequest } from "../src/opportunities/requestMotionConcept.js";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
 import { MOTION_SCENE_PLANS, isChartPlan } from "../src/shortform/motionPlans.js";
 import { renderBar, renderBarRefusal } from "../src/shortform/storyScore.js";
@@ -212,7 +213,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       }
 
-      const opportunityRepo: OpportunityRepository = new SupabaseOpportunityRepository(client);
       const canonicalTitle = manualMotionConceptTitle(concept);
       const state = (await motionConceptStates(client)).get(canonicalTitle);
       if (state) {
@@ -225,32 +225,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
         return;
       }
-      const { data: existingDup, error: dupError } = await client
-        .from("opportunities")
-        .select("id, status")
-        .ilike("title", canonicalTitle)
-        .eq("status", "open")
-        .limit(1);
-      if (dupError) throw new Error(`Duplicate-concept check failed: ${dupError.message}`);
-
-      let motionOpportunity: Awaited<ReturnType<typeof opportunityRepo.listOpen>>[number] | undefined;
-      if (existingDup && existingDup.length > 0) {
-        // Still open = stuck draft (failed a prior quality gate, e.g. the plan's own
-        // evidence validation, or the review gate). Re-run the exact same request.
-        const openList = await opportunityRepo.listOpen();
-        motionOpportunity = openList.find((o) => o.id === existingDup[0]!.id);
-      }
-      if (!motionOpportunity) {
-        motionOpportunity = await opportunityRepo.insert(manualMotionConceptOpportunityInput(concept));
-      }
-
-      const { data: enqueueRows, error: enqueueError } = await client.rpc("enqueue_campaign_run", {
-        p_opportunity_id: motionOpportunity.id,
-        p_asset_type_override: "video_script",
-      });
-      if (enqueueError) throw new Error(`enqueue_campaign_run failed: ${enqueueError.message}`);
-      const enqueued = (enqueueRows as Array<{ campaign_run_request_id: string; job_id: string | null; already_existed: boolean }>)[0]!;
-      res.status(200).json({ status: "queued", campaignRunRequestId: enqueued.campaign_run_request_id, opportunityId: motionOpportunity.id });
+      const queued = await enqueueMotionConceptRequest(client, concept);
+      res.status(200).json({ status: "queued", campaignRunRequestId: queued.campaignRunRequestId, opportunityId: queued.opportunityId });
       return;
     }
 
