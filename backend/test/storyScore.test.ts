@@ -61,6 +61,7 @@ describe("story scorecard", () => {
     expect(aPlus.length).toBeGreaterThan(0);
     expect(aPlus.every((s) => s.id.includes("-story-") || s.id.startsWith("chart-"))).toBe(true);
     expect(scored.filter((s) => s.grade === "D").length).toBeGreaterThan(0);
-    expect(scored.filter((s) => s.grade === "A" || s.grade === "A+").length).toBeLessThan(scored.length / 4);
+    // Most of the library is older concepts that do not clear the bar; the A+ ones are the story rebuilds and the chart cards.
+    expect(scored.filter((s) => s.grade === "A" || s.grade === "A+").length).toBeLessThan(scored.length / 2);
   });
 });

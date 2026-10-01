@@ -1,5 +1,5 @@
 import { extractNumbers, numberIsSupported, claimEvidenceNumbers } from "./claims.js";
-import type { ChartSpec, PlanIssue, SceneSpec, VerifiedAsset } from "./types.js";
+import type { ChartGrid, ChartSpec, PlanIssue, SceneSpec, VerifiedAsset } from "./types.js";
 
 /**
  * Chart-card geometry (frame pixels, 1080x1920) and validation. The geometry is pure data so the same numbers drive the
@@ -25,9 +25,48 @@ export const CHART = {
   pairBarLength: 640,
   pairBarHeight: 80,
   pairMarkerX: 150,
+  /** "outcomes": gap under the grid to the first bar, the pitch between the two bars, and each bar's height. */
+  outcomeGap: 90,
+  outcomeRowGap: 120,
+  outcomeBarHeight: 70,
+  /** Pitch between caption lines and between invitation lines, and the gap between the caption block and the invitation. */
+  captionPitch: 90,
+  ctaPitch: 70,
+  ctaGap: 40,
   safeRight: 880,
   safeBottom: 1560,
 } as const;
+
+/** Greedy word wrap by character budget, for short captions and the invitation that must stay inside the safe width. */
+export function wrapCaption(text: string, maxChars: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (line && (line + " " + word).length > maxChars) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = line ? `${line} ${word}` : word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/** Character budgets the renderer wraps the beat caption and the invitation at. */
+export const CAPTION_WRAP_CHARS = 32;
+export const CTA_WRAP_CHARS = 36;
+
+/** The lowest y a scene's caption block, plus its invitation if it has one, reaches when the caption starts at `captionTop`. */
+export function textBlockBottom(scene: { captionText: string; cta: string | null }, captionTop: number): number {
+  const captionLines = scene.captionText ? wrapCaption(scene.captionText, CAPTION_WRAP_CHARS).length : 0;
+  const captionBottom = captionTop + captionLines * CHART.captionPitch;
+  if (!scene.cta) return captionBottom;
+  return captionBottom + CHART.ctaGap + wrapCaption(scene.cta, CTA_WRAP_CHARS).length * CHART.ctaPitch;
+}
+
+/** The label every illustrative (not account-data) scene must show on screen. */
+export const ILLUSTRATIVE_LABEL = "Illustrative example";
 
 export interface GridCell {
   index: number;
@@ -51,6 +90,10 @@ export interface ChartGeometry {
   bar: BarGeometry | null;
   /** Pair chart: marker line and the two bars, top to bottom. */
   pairBars: Array<{ x0: number; x1: number; y: number; h: number; label: string }>;
+  /** Outcomes chart: the won and lost bars, top to bottom, each sized against the larger. */
+  outcomeBars: Array<{ x0: number; x1: number; y: number; h: number }>;
+  /** Outcomes chart: vertical centre of the large net figure. */
+  netY: number;
   /** Top of the beat caption block, below whichever chart is drawn. */
   captionTop: number;
   /** Lowest and rightmost pixel any chart element reaches. */
@@ -62,37 +105,59 @@ export function headlineBottom(lines: number): number {
   return CHART.hookTop + lines * CHART.hookLineHeight;
 }
 
-export function chartGeometry(chart: ChartSpec): ChartGeometry {
+function layoutGrid(grid: ChartGrid): { cells: GridCell[]; bottom: number; right: number } {
+  const { total, cols, badAt } = grid;
+  const width = CHART.right - CHART.left;
+  const size = Math.min(CHART.gridMaxCell, Math.floor((width - (cols - 1) * CHART.gridGap) / cols));
+  const rows = Math.ceil(total / cols);
+  const gridW = cols * size + (cols - 1) * CHART.gridGap;
+  const x0 = CHART.left + Math.floor((width - gridW) / 2);
   const cells: GridCell[] = [];
+  for (let i = 0; i < total; i++) {
+    const r = Math.floor(i / cols);
+    const c = i % cols;
+    cells.push({ index: i, x: x0 + c * (size + CHART.gridGap), y: CHART.gridTop + r * (size + CHART.gridGap), size, tone: badAt.includes(i) ? "bad" : "good" });
+  }
+  return { cells, bottom: CHART.gridTop + rows * size + (rows - 1) * CHART.gridGap, right: x0 + gridW };
+}
+
+export function chartGeometry(chart: ChartSpec): ChartGeometry {
+  let cells: GridCell[] = [];
   let bar: BarGeometry | null = null;
   const pairBars: ChartGeometry["pairBars"] = [];
+  const outcomeBars: ChartGeometry["outcomeBars"] = [];
+  let netY = 0;
   let maxX: number = CHART.left;
   let maxY: number = headlineBottom(chart.lines.length);
   let captionTop: number = CHART.gridTop;
 
-  if (chart.kind === "grid_progress" && chart.grid) {
-    const { total, cols, badAt } = chart.grid;
-    const width = CHART.right - CHART.left;
-    const size = Math.min(CHART.gridMaxCell, Math.floor((width - (cols - 1) * CHART.gridGap) / cols));
-    const rows = Math.ceil(total / cols);
-    const gridW = cols * size + (cols - 1) * CHART.gridGap;
-    const x0 = CHART.left + Math.floor((width - gridW) / 2);
-    for (let i = 0; i < total; i++) {
-      const r = Math.floor(i / cols);
-      const c = i % cols;
-      cells.push({ index: i, x: x0 + c * (size + CHART.gridGap), y: CHART.gridTop + r * (size + CHART.gridGap), size, tone: badAt.includes(i) ? "bad" : "good" });
-    }
-    const gridBottom = CHART.gridTop + rows * size + (rows - 1) * CHART.gridGap;
-    maxX = Math.max(maxX, x0 + gridW);
-    maxY = Math.max(maxY, gridBottom);
-    captionTop = gridBottom + CHART.barGap;
-    if (chart.progress) {
-      const y = gridBottom + CHART.barGap;
+  if ((chart.kind === "grid_progress" || chart.kind === "outcomes") && chart.grid) {
+    const laid = layoutGrid(chart.grid);
+    cells = laid.cells;
+    maxX = Math.max(maxX, laid.right);
+    maxY = Math.max(maxY, laid.bottom);
+    captionTop = laid.bottom + CHART.barGap;
+    if (chart.kind === "grid_progress" && chart.progress) {
+      const y = laid.bottom + CHART.barGap;
       const fillEnd = CHART.left + Math.round((CHART.right - CHART.left) * (chart.progress.value / chart.progress.target));
       bar = { x0: CHART.left, x1: CHART.right, y, h: CHART.barHeight, fillEnd };
       maxX = Math.max(maxX, CHART.right);
       maxY = Math.max(maxY, y + CHART.barHeight + 90);
       captionTop = y + CHART.barHeight + 110;
+    }
+    if (chart.kind === "outcomes" && chart.bars) {
+      const largest = Math.max(...chart.bars.map((b) => b.amount), 1);
+      const y0 = laid.bottom + CHART.outcomeGap;
+      chart.bars.forEach((b, i) => {
+        const len = Math.max(24, Math.round((CHART.right - CHART.left) * (b.amount / largest)));
+        const y = y0 + i * CHART.outcomeRowGap;
+        outcomeBars.push({ x0: CHART.left, x1: CHART.left + len, y, h: CHART.outcomeBarHeight });
+        maxX = Math.max(maxX, CHART.left + len);
+        maxY = Math.max(maxY, y + CHART.outcomeBarHeight);
+      });
+      netY = y0 + 2 * CHART.outcomeRowGap + 50;
+      maxY = Math.max(maxY, netY + 70);
+      captionTop = netY + 110;
     }
   }
   if (chart.kind === "pair" && chart.pair) {
@@ -104,7 +169,7 @@ export function chartGeometry(chart: ChartSpec): ChartGeometry {
     });
     captionTop = CHART.pairTop + 2 * CHART.pairRowGap + 40;
   }
-  return { cells, bar, pairBars, captionTop, maxX, maxY };
+  return { cells, bar, pairBars, outcomeBars, netY, captionTop, maxX, maxY };
 }
 
 /** The dollar gap a progress bar draws and labels: target - value, rounded down to whole dollars. */
@@ -132,6 +197,7 @@ export function validateChartScene(scene: SceneSpec, asset: VerifiedAsset): Plan
   if (chart.lines.length === 0 || chart.lines.join(" ").trim() !== scene.headline.trim()) {
     add("chart_lines_mismatch", `The chart's headline lines ("${chart.lines.join(" ")}") must join back to the scene headline ("${scene.headline}").`);
   }
+  if (chart.kind === "outcomes") add("chart_outcomes_needs_illustration", "An outcomes chart is illustrative arithmetic, not account data: it must not cite a recording.");
 
   const supported = claimEvidenceNumbers(scene, asset);
   const needsFact = (what: string, token: string) => {
@@ -163,7 +229,7 @@ export function validateChartScene(scene: SceneSpec, asset: VerifiedAsset): Plan
         if (shown.length !== 1 || shown[0] !== gap) add("chart_gap_mismatch", `The bar's gap label says "${p.gapLabel}", but target - value is $${gap}.`);
       }
     }
-  } else {
+  } else if (chart.kind === "pair") {
     const pr = chart.pair;
     if (!pr) add("chart_missing_pair", "A pair chart needs its pair.");
     else needsFact("the bars' figure", pr.value);
@@ -173,5 +239,95 @@ export function validateChartScene(scene: SceneSpec, asset: VerifiedAsset): Plan
   if (geo.maxX > CHART.safeRight || geo.maxY > CHART.safeBottom) {
     add("chart_under_overlay", `The chart reaches x=${geo.maxX}, y=${geo.maxY}; it must stay within x<=${CHART.safeRight} and y<=${CHART.safeBottom}.`);
   }
+  const textBottom = textBlockBottom(scene, geo.captionTop);
+  if (textBottom > CHART.safeBottom) add("chart_text_under_overlay", `The caption and invitation block reaches y=${textBottom}; it must stay above y=${CHART.safeBottom}.`);
+  return issues;
+}
+
+/** Every figure an illustrative outcomes chart may show, computed from its four inputs alone. */
+export function illustrationFigures(i: { trades: number; wins: number; avgWin: number; avgLoss: number }) {
+  const losses = i.trades - i.wins;
+  const totalWins = i.wins * i.avgWin;
+  const totalLosses = losses * i.avgLoss;
+  const net = totalWins - totalLosses;
+  // Integer arithmetic first: (wins / trades) * 100 gives 55.00000000000001 for 11 of 20.
+  const winRate = (i.wins * 100) / i.trades;
+  return { losses, totalWins, totalLosses, net, winRate, netAbs: Math.abs(net) };
+}
+
+/**
+ * Validation for an illustrative scene (a chart scene with no recording behind it): the arithmetic is the evidence. It
+ * must carry the "Illustrative example" label, its win rate must be a whole percent, the bars and the net must be the
+ * products and difference of the four inputs, and every number in any text the viewer sees must be one of the figures
+ * those inputs produce. A card therefore cannot show a number the arithmetic doesn't.
+ */
+export function validateIllustrativeChart(scene: SceneSpec): PlanIssue[] {
+  const issues: PlanIssue[] = [];
+  const add = (code: string, message: string) => issues.push({ severity: "error", code, sceneId: scene.sceneId, message });
+  const chart = scene.chart;
+  if (!chart) {
+    add("chart_missing", "A scene with the chart layout must carry a chart spec.");
+    return issues;
+  }
+  if (scene.crop || scene.clipTimeRangeSeconds) add("chart_has_crop", "A chart scene shows no part of a recording, so it has no crop or clip range.");
+  if (!(scene.disclosure ?? "").toLowerCase().includes(ILLUSTRATIVE_LABEL.toLowerCase())) {
+    add("missing_illustrative_label", `A scene with no recording behind it is arithmetic, not account data: it must show "${ILLUSTRATIVE_LABEL}" on screen.`);
+  }
+  if (!(chart.stage >= 1)) add("chart_bad_stage", "A chart's stage starts at 1.");
+  if (chart.lines.length === 0 || chart.lines.join(" ").trim() !== scene.headline.trim()) {
+    add("chart_lines_mismatch", `The chart's headline lines ("${chart.lines.join(" ")}") must join back to the scene headline ("${scene.headline}").`);
+  }
+  if (chart.kind !== "outcomes" || !chart.illustration || !chart.grid || !chart.bars || !chart.net) {
+    add("chart_illustration_incomplete", "An illustrative scene must be an outcomes chart with its illustration, grid, two bars and net.");
+    return issues;
+  }
+
+  const i = chart.illustration;
+  if (!(i.trades >= 2) || i.wins < 1 || i.wins >= i.trades || !(i.avgWin > 0) || !(i.avgLoss > 0)) {
+    add("chart_bad_illustration", "The illustration needs at least one win and one loss, and positive average sizes.");
+    return issues;
+  }
+  const f = illustrationFigures(i);
+  if (!Number.isInteger(f.winRate)) add("chart_win_rate_not_whole", `${i.wins} of ${i.trades} is ${f.winRate}%, which is not a whole percent; pick counts that give one.`);
+  if (f.net === 0) add("chart_no_paradox", "The net result is zero, so there is nothing to show.");
+
+  const g = chart.grid;
+  if (g.total !== i.trades || g.good !== i.wins || new Set(g.badAt).size !== g.badAt.length || g.badAt.length !== f.losses || g.badAt.some((x) => x < 0 || x >= g.total)) {
+    add("chart_bad_grid", `The grid must have ${i.trades} cells, ${i.wins} good, and ${f.losses} bad cells at distinct positions.`);
+  }
+  const [won, lost] = chart.bars;
+  if (won.amount !== f.totalWins || won.tone !== "good") add("chart_bar_mismatch", `The won bar must be ${f.totalWins} (${i.wins} x ${i.avgWin}) and good.`);
+  if (lost.amount !== f.totalLosses || lost.tone !== "bad") add("chart_bar_mismatch", `The lost bar must be ${f.totalLosses} (${f.losses} x ${i.avgLoss}) and bad.`);
+  for (const b of chart.bars) {
+    const shown = extractNumbers(b.display).map((t) => Number(t.replace(/[$,+-]/g, "")));
+    if (shown.length !== 1 || shown[0] !== b.amount) add("chart_bar_display_mismatch", `A bar shows "${b.display}", but its amount is ${b.amount}.`);
+  }
+  const netShown = extractNumbers(chart.net.display).map((t) => Number(t.replace(/[$,+-]/g, "")));
+  if (netShown.length !== 1 || netShown[0] !== f.netAbs) add("chart_net_mismatch", `The net shows "${chart.net.display}", but the net is ${f.net}.`);
+  if (chart.net.tone !== (f.net < 0 ? "bad" : "good")) add("chart_net_tone", "The net's colour must be bad for a loss and good for a profit.");
+  if (chart.net.display.startsWith("-") !== f.net < 0) add("chart_net_sign", "The net's sign must match the arithmetic.");
+
+  // Every number the viewer reads or hears must be one of the figures the four inputs produce.
+  const allowed = [i.trades, i.wins, f.losses, f.winRate, i.avgWin, i.avgLoss, f.totalWins, f.totalLosses, f.netAbs].map(String);
+  const texts: Array<[string, string]> = [
+    ["headline", scene.headline],
+    ["caption", scene.captionText],
+    ["narration", scene.narration],
+    ["takeaway", scene.takeaway],
+    ["bar label", chart.bars.map((b) => `${b.label} ${b.display}`).join(" ")],
+    ["net", chart.net.display],
+  ];
+  for (const [field, text] of texts) {
+    for (const token of extractNumbers(text)) {
+      if (!numberIsSupported(token, allowed)) add("chart_unsupported_number", `The ${field} shows "${token}", which the illustration's arithmetic does not produce.`);
+    }
+  }
+
+  const geo = chartGeometry(chart);
+  if (geo.maxX > CHART.safeRight || geo.maxY > CHART.safeBottom) {
+    add("chart_under_overlay", `The chart reaches x=${geo.maxX}, y=${geo.maxY}; it must stay within x<=${CHART.safeRight} and y<=${CHART.safeBottom}.`);
+  }
+  const textBottom = textBlockBottom(scene, geo.captionTop);
+  if (textBottom > CHART.safeBottom) add("chart_text_under_overlay", `The caption and invitation block reaches y=${textBottom}; it must stay above y=${CHART.safeBottom}.`);
   return issues;
 }

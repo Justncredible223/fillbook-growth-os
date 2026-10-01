@@ -201,8 +201,29 @@ export interface ChartPair {
   /** The one figure both bars carry, e.g. "-$1,201". */
   value: string;
 }
+/**
+ * One bar of an "outcomes" chart: a label, the figure drawn on it, and the amount (dollars, always positive) whose size
+ * the bar's length shows. `tone` is the bar's colour: good (green) for wins, bad (red) for losses.
+ */
+export interface ChartBar {
+  label: string;
+  display: string;
+  amount: number;
+  tone: ChartTone;
+}
+/**
+ * The arithmetic behind an illustrative "outcomes" chart: `trades` trades, `wins` of them winners averaging `avgWin`
+ * dollars, the rest losers averaging `avgLoss`. Nothing here claims to be a real account: the scene is labelled
+ * "Illustrative example", and chart.ts recomputes every figure the chart and its text show from these four numbers.
+ */
+export interface ChartIllustration {
+  trades: number;
+  wins: number;
+  avgWin: number;
+  avgLoss: number;
+}
 export interface ChartSpec {
-  kind: "grid_progress" | "pair";
+  kind: "grid_progress" | "pair" | "outcomes";
   /** The beat this scene reveals, 1-based. Earlier beats are drawn already complete; later beats are not drawn yet. */
   stage: number;
   /** The headline split into display lines. Joined with spaces they must equal the scene headline. */
@@ -212,6 +233,12 @@ export interface ChartSpec {
   grid?: ChartGrid;
   progress?: ChartProgress;
   pair?: ChartPair;
+  /** "outcomes" only: the total won and the total lost, drawn as two bars sized against each other. */
+  bars?: [ChartBar, ChartBar];
+  /** "outcomes" only: the net result, drawn large once its beat is reached, e.g. "-$2,000". */
+  net?: { display: string; tone: ChartTone };
+  /** "outcomes" only: the arithmetic every figure is checked against. */
+  illustration?: ChartIllustration;
   /** Draw the chart dimmed, under the closing invitation. */
   dim?: boolean;
 }
