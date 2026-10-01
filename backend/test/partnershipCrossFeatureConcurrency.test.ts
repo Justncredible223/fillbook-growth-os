@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { FakeSupabaseClient, asSupabase } from "./helpers/fakeSupabase";
 import { createPartnership, qualifyPartnership, generateDraftForPartnership } from "../src/partnerships/partnershipsHandlers";
 import { runPartnershipDiscoveryStep } from "../src/partnerships/discovery";
@@ -90,6 +90,15 @@ function buildClient(overrides: Record<string, any[]> = {}) {
 }
 
 const NOW = new Date("2026-09-05T00:00:00Z");
+
+// The budget reservation reads the real clock for "this month", so pin Date to NOW or the September fixtures stop counting once the calendar month rolls over.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 describe("discovery and generation running CONCURRENTLY share one atomic budget check", () => {
   it("both proceed without interfering when each independently fits its own bucket AND the combined shared cap has room", async () => {
