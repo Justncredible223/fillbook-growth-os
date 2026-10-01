@@ -384,7 +384,11 @@ export const FEED_POST_TOPICS: FeedPostTopic[] = [
       "Write a short, concrete HOW-TO: the specific steps a trader takes to enter their prop firm's trailing drawdown and " +
       "daily loss limit into Fillbook so it tracks both automatically -- this is a walkthrough of using the product, not a " +
       "hook about a mistake. Ground every step ONLY in the verified knowledge you're given; if it doesn't support a specific " +
-      "enough step-by-step claim, narrow the how-to to what it does support rather than inventing UI details.",
+      "enough step-by-step claim, narrow the how-to to what it does support rather than inventing UI details. The only " +
+      "setup steps that exist are on the \"Prop firm rules\" page: click \"Add account\", pick the firm and account size " +
+      "(or \"Custom\" and type the account size, daily loss limit, drawdown and profit target from the firm's rules), and " +
+      "choose trailing or static drawdown for that account. Never name any other page, button, toggle or step (a post " +
+      "once invented \"Accounts page, click your account, scroll to Rules, toggle on Trailing Drawdown\" and it was wrong).",
     editorialTags: ["rule-literacy", "prop-firm-mechanics"],
     audienceRelevance: 4,
     specificity: 4,
