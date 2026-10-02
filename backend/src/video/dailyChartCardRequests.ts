@@ -3,6 +3,7 @@ import type { MotionConceptSummary } from "../../scripts/video-factory/motionCat
 import { manualMotionConceptTitle } from "../opportunities/manualMotionConcept.js";
 import { MOTION_SCENE_PLANS, isChartPlan } from "../shortform/motionPlans.js";
 import { renderBar } from "../shortform/storyScore.js";
+import type { ScenePlan } from "../shortform/types.js";
 
 /**
  * The daily chart-card refill: keeps a few chart cards waiting in Approvals so there is always something fresh to
@@ -24,13 +25,33 @@ export interface DailyChartCardDeps {
   request(conceptId: string): Promise<{ campaignRunRequestId: string; opportunityId: string }>;
 }
 
-/** The chart-card concepts the app offers, in the order they are requested: the hand-made ones, then the illustrative ones. */
+/** The theme a chart concept is about: its first scene's topic. Concepts about the same thing share one. */
+function themeOf(plan: ScenePlan): string {
+  return plan.scenes[0]?.expectedTopics[0] ?? plan.planId;
+}
+
+/**
+ * The chart-card concepts the app offers, in the order they are requested. Round-robin across themes (the hand-made and
+ * bar-chart concepts each cover a different part of the product; the illustrative win-rate ones are one theme of many
+ * variations), so consecutive requests are about different things instead of the same template again and again.
+ */
 export function offeredChartConcepts(): MotionConceptSummary[] {
   const byId = new Map(MOTION_SCENE_PLANS.map((p) => [p.planId, p] as const));
-  return listMotionConcepts().filter((c) => {
+  const offered = listMotionConcepts().filter((c) => {
     const plan = byId.get(c.id);
     return plan !== undefined && isChartPlan(plan) && renderBar(plan).ok;
   });
+  const groups = new Map<string, MotionConceptSummary[]>();
+  for (const c of offered) {
+    const theme = themeOf(byId.get(c.id)!);
+    groups.set(theme, [...(groups.get(theme) ?? []), c]);
+  }
+  const rounds = Math.max(0, ...[...groups.values()].map((g) => g.length));
+  const ordered: MotionConceptSummary[] = [];
+  for (let round = 0; round < rounds; round++) {
+    for (const group of groups.values()) if (group[round]) ordered.push(group[round]!);
+  }
+  return ordered;
 }
 
 export async function runDailyChartCardRequests(deps: DailyChartCardDeps): Promise<string> {
