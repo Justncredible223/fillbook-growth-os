@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { buildPinnedComments, type PinnedComments } from "./pinnedComment.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordOwnerPublication } from "../attribution/contentPublications.js";
 import { extractYoutubeVideoId } from "./youtubeUrl.js";
@@ -36,6 +37,8 @@ export interface VideoRenderStatusJson {
   createdAt: string;
   updatedAt: string;
   videoMetadata: VideoRenderMetadataJson | null;
+  /** Ready-to-copy pinned comment (tracked no-signup demo link) per platform. Null only if the campaign's thesis can't be looked up. The owner posts and pins it by hand: neither platform's API can do that for them. */
+  pinnedComment: PinnedComments | null;
   /** The real external URL the owner pasted back in after manually posting this video (see setPublishedUrl) -- null until they do. Never inferred/guessed. */
   publishedUrl: string | null;
 }
@@ -122,6 +125,16 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
     }
   }
 
+  // Best-effort, same tolerance as the metadata lookup: a failure just leaves pinnedComment null.
+  const thesisByAssetId = new Map<string, string>();
+  if (assetIds.length > 0) {
+    const { data: assetRows } = await client.from("campaign_assets").select("id, campaigns(thesis)").in("id", assetIds);
+    for (const a of (assetRows ?? []) as Array<{ id: string; campaigns: { thesis: string } | Array<{ thesis: string }> | null }>) {
+      const c = Array.isArray(a.campaigns) ? a.campaigns[0] : a.campaigns;
+      if (c?.thesis) thesisByAssetId.set(a.id, c.thesis);
+    }
+  }
+
   return Promise.all(
     rows.map(async (row) => {
       let downloadUrl: string | null = null;
@@ -154,6 +167,9 @@ export async function listVideoRenderStatuses(client: SupabaseClient, limit = 50
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         videoMetadata: metadataByAssetId.get(row.campaign_asset_id) ?? null,
+        pinnedComment: thesisByAssetId.has(row.campaign_asset_id)
+          ? buildPinnedComments(row.campaign_asset_id, thesisByAssetId.get(row.campaign_asset_id)!)
+          : null,
         publishedUrl: row.published_url,
       };
     }),

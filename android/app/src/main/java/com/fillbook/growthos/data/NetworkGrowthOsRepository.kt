@@ -981,6 +981,11 @@ class NetworkGrowthOsRepository(
         updatedAt = getString("updatedAt"),
         videoMetadata = toVideoRenderMetadata(),
         publishedUrl = optStringOrNull("publishedUrl"),
+        pinnedComment = optJSONObject("pinnedComment")?.let { pc ->
+            val tiktok = pc.optStringOrNull("tiktok")
+            val youtube = pc.optStringOrNull("youtube")
+            if (tiktok != null && youtube != null) PinnedComment(tiktok = tiktok, youtube = youtube) else null
+        },
     )
 
     // Folded into /api/approvals (?resource=video-status) -- same

@@ -58,7 +58,7 @@ export function utmQueryString(params: UtmParams): string {
  * the per-reply/per-contact case that genuinely needs a click count,
  * e.g. partnership outreach).
  */
-const ALLOWED_DESTINATION_PATHS = new Set(["/", "/pricing"]);
+const ALLOWED_DESTINATION_PATHS = new Set(["/", "/pricing", "/sample"]);
 const DESTINATION_HOST = "https://www.fillbookhq.com";
 
 export function buildDestinationUrl(campaignAssetId: string, platform: string, campaignThesis: string, path: string = "/"): string {
