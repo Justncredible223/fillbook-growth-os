@@ -44,6 +44,16 @@ describe("bar-chart concepts", () => {
     }
   });
 
+  it("say where in Fillbook the feature lives, and never end a line on an engagement-bait question", () => {
+    // The AI review (growth_strategist) failed a concept that showed numbers with no mechanism: it must name the product and the screen.
+    for (const p of BARS_PILOTS) {
+      const opening = p.scenes[0]!;
+      expect(`${opening.narration} ${opening.captionText}`, `${p.planId} opening`).toMatch(/fillbook|reports|insights|progress|plan|account health/i);
+      expect(spoken(p), `${p.planId}`).toMatch(/\bFillbook\b/);
+      for (const s of p.scenes) expect(s.narration.trim().endsWith("?"), `${s.sceneId} ends on a question`).toBe(p.planId === "chart-bars-conviction" && s === opening);
+    }
+  });
+
   it("keep every chart inside the platforms' safe area, including the closing beat", () => {
     for (const p of BARS_PILOTS) {
       for (const s of p.scenes) {
