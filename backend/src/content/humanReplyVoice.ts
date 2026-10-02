@@ -115,9 +115,15 @@ export const HUMAN_POST_VOICE_RULES = `FILLBOOK TEAM VOICE FOR PUBLIC POSTS (doe
   rewrite it shorter and blunter.
 - Every post should help a trader understand their own behavior: pick a real behavior or rule problem
   (revenge trading, moving a stop, oversizing, a drawdown or consistency-cap surprise, skipping the
-  review) and make the reader see themselves in it. Where it fits, one short "we track that in Fillbook"
-  clause is welcome, tied to one concrete thing the verified knowledge says it does. Otherwise the
-  problem you describe should make the need obvious on its own.
+  review) and make the reader see themselves in it.
+- Every post ties back to Fillbook (owner rule 2026-09-21: posts are mainly about Fillbook, and the growth
+  review fails a post that is pure trader education or psychology with no product connection). After the
+  point is made, add ONE short, plain clause that says where Fillbook shows it, such as "Fillbook's Insights
+  flags sizing that jumps after a loss." Name the screen or feature, tie it to ONE concrete thing the
+  verified knowledge says it does, and describe what it shows from the trader's imported or synced trades,
+  never live or real-time monitoring and never a promise of any outcome. It is a clause, not a pitch: no
+  feature list, no "check it out". If the verified knowledge supports no capability that fits the point,
+  pick the nearest one it does support rather than inventing one.
 - Never promise or imply profit ("will make you profitable", "guaranteed", "proven"). The honest frame is
   seeing what you're actually doing so you can decide what to change.
 - Never a pitch, a call to action, or "check it out" -- UNLESS the opportunity's rationale below
