@@ -11,6 +11,7 @@ import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX, manualMotionConceptTitle } from "..
 import { enqueueMotionConceptRequest } from "../src/opportunities/requestMotionConcept.js";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
 import { MOTION_SCENE_PLANS, isChartPlan } from "../src/shortform/motionPlans.js";
+import { distinctConcepts } from "../src/shortform/conceptVariety.js";
 import { renderBar, renderBarRefusal } from "../src/shortform/storyScore.js";
 
 /**
@@ -154,9 +155,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "GET") {
     try {
       const states = await motionConceptStates(getServiceClient());
+      const unused = listMotionConcepts().filter((c) => isOffered(c.id) && !states.has(manualMotionConceptTitle(c)) && meetsBar(c.id));
+      // Owner rule, 2026-10-02: never offer near-copies to choose between. A concept that says nearly what one already made or
+      // waiting says, or what an earlier one in this list says, is left out (it stays in the catalog; see conceptVariety.ts).
+      const used = listMotionConcepts().filter((c) => isOffered(c.id) && ["made", "waiting"].includes(states.get(manualMotionConceptTitle(c)) ?? "")).map((c) => c.id);
+      const motionConcepts = distinctConcepts(unused, used, planFor);
+      const offeredIds = new Set(motionConcepts.map((c) => c.id));
       res.status(200).json({
         // Only A and A+ concepts are offered (owner rule, 2026-09-30); the rest are listed with their grade and what to fix.
-        motionConcepts: listMotionConcepts().filter((c) => isOffered(c.id) && !states.has(manualMotionConceptTitle(c)) && meetsBar(c.id)),
+        motionConcepts,
+        // Unused concepts left out because they are near-copies of one that is made, waiting or offered above.
+        hiddenNearCopyConceptIds: unused.filter((c) => !offeredIds.has(c.id)).map((c) => c.id),
         belowBarMotionConcepts: listMotionConcepts()
           .filter((c) => isOffered(c.id) && !meetsBar(c.id))
           .map((c) => ({ id: c.id, title: c.title, ...barSummary(c.id) })),

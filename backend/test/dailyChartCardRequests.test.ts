@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { distinctConcepts } from "../src/shortform/conceptVariety";
+import { MOTION_SCENE_PLANS } from "../src/shortform/motionPlans";
 import { LOW_SUPPLY_AT, MAX_CHART_CARDS_WAITING, offeredChartConcepts, runDailyChartCardRequests, type ConceptState, type DailyChartCardDeps } from "../src/video/dailyChartCardRequests";
 import { manualMotionConceptTitle } from "../src/opportunities/manualMotionConcept";
 
@@ -76,7 +78,9 @@ describe("runDailyChartCardRequests", () => {
   });
 
   it("warns when the unused supply runs low", async () => {
-    const used = concepts.slice(0, concepts.length - (LOW_SUPPLY_AT + 1)).map((_, i) => [i, "made"] as [number, ConceptState]);
+    // Supply is counted in DIFFERENT concepts: the near-copies of a made one are hidden, so they are not supply.
+    const distinct = distinctConcepts(concepts, [], (id) => MOTION_SCENE_PLANS.find((p) => p.planId === id));
+    const used = distinct.slice(0, distinct.length - (LOW_SUPPLY_AT + 1)).map((c) => [concepts.indexOf(c), "made"] as [number, ConceptState]);
     const { d } = deps({ states: used });
     expect(await runDailyChartCardRequests(d)).toMatch(/LOW SUPPLY/);
   });

@@ -3,6 +3,7 @@ import type { MotionConceptSummary } from "../../scripts/video-factory/motionCat
 import { manualMotionConceptTitle } from "../opportunities/manualMotionConcept.js";
 import { MOTION_SCENE_PLANS, isChartPlan } from "../shortform/motionPlans.js";
 import { renderBar } from "../shortform/storyScore.js";
+import { distinctConcepts } from "../shortform/conceptVariety.js";
 import type { ScenePlan } from "../shortform/types.js";
 
 /**
@@ -60,7 +61,11 @@ export async function runDailyChartCardRequests(deps: DailyChartCardDeps): Promi
   const concepts = offeredChartConcepts();
   const stateOf = (c: MotionConceptSummary) => states.get(manualMotionConceptTitle(c));
   const waiting = concepts.filter((c) => stateOf(c) === "waiting").length;
-  const unused = concepts.filter((c) => stateOf(c) === undefined);
+  // Never request a concept that is a near-copy of one already made or waiting, or of another one in this batch: the
+  // owner would be approving the same video twice. (A rejected concept does not count as made.)
+  const planOf = (id: string) => MOTION_SCENE_PLANS.find((p) => p.planId === id);
+  const used = concepts.filter((c) => stateOf(c) === "made" || stateOf(c) === "waiting").map((c) => c.id);
+  const unused = distinctConcepts(concepts.filter((c) => stateOf(c) === undefined), used, planOf);
 
   if (unused.length === 0) return "no unused chart concepts left -- add more";
   const room = MAX_CHART_CARDS_WAITING - waiting;
