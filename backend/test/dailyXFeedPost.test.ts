@@ -312,6 +312,40 @@ describe("runDailyXFeedPostStep -- failure, retry, and duplicate/near-duplicate 
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("a forced Regenerate with no attempts left never claims the run: it stays failed, never wedged on 'running'", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(draftResponse(VOCAB_VIOLATION_DRAFT));
+    const { deps } = buildHarness(fetchMock);
+    await runDailyXFeedPostStep(deps, OPERATING_DATE, false);
+    await runDailyXFeedPostStep(deps, OPERATING_DATE, true); // attempts now 4/4
+
+    fetchMock.mockClear();
+    for (let tap = 0; tap < 3; tap++) {
+      const overCap = await runDailyXFeedPostStep(deps, OPERATING_DATE, true);
+      expect(overCap.skipReason).toMatch(/max_attempts_reached/);
+      expect((await deps.runRepo.getRun(OPERATING_DATE))!.status).toBe("failed");
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("closes a run an earlier Regenerate already wedged on 'running' at the cap, with the real reason", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(draftResponse(VOCAB_VIOLATION_DRAFT));
+    const { deps } = buildHarness(fetchMock);
+    await runDailyXFeedPostStep(deps, OPERATING_DATE, false);
+    await runDailyXFeedPostStep(deps, OPERATING_DATE, true); // 4/4, failed
+    // Reproduce the old bug: the row was claimed (failed -> running) and the call then returned without finishing it.
+    const failed = (await deps.runRepo.getRun(OPERATING_DATE))!;
+    expect(await deps.runRepo.tryClaimForAttempt(OPERATING_DATE, { status: "failed", updatedAt: failed.updatedAt })).toBe(true);
+
+    fetchMock.mockClear();
+    const later = new Date(Date.now() + STALE_RUNNING_MS + 60_000);
+    const result = await runDailyXFeedPostStep(deps, OPERATING_DATE, true, later);
+    expect(result.skipReason).toMatch(/max_attempts_reached/);
+    const row = (await deps.runRepo.getRun(OPERATING_DATE))!;
+    expect(row.status).toBe("failed");
+    expect(row.error).toMatch(/no attempts left today/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("an unforced call after a prior failure does not spend again, but reports the prior failure reason", async () => {
     const fetchMock = vi.fn().mockResolvedValue(draftResponse(VOCAB_VIOLATION_DRAFT));
     const { deps } = buildHarness(fetchMock);
@@ -430,6 +464,20 @@ describe("deriveTodayXPostView -- Home's exact state mapping (ready / handed_off
     expect(view.state).toBe("failed");
     expect(view.canRegenerate).toBe(true);
     expect(view.reason).toMatch(/didn't finish/);
+  });
+
+  it("a stale run with no attempts left says so, and offers no Regenerate that could not work", () => {
+    const running = { ...readyRun, status: "running" as const, campaignAssetId: null, attempts: MAX_ATTEMPTS_PER_DAY, updatedAt: "2026-09-05T12:00:00.000Z" };
+    const view = deriveTodayXPostView(running, null, false, null, new Date(new Date(running.updatedAt).getTime() + STALE_RUNNING_MS + 1000));
+    expect(view.state).toBe("failed");
+    expect(view.canRegenerate).toBe(false);
+    expect(view.reason).toMatch(/no attempts left today/);
+  });
+
+  it("a failed run with no attempts left offers no Regenerate; one with attempts left still does", () => {
+    const failed = { ...readyRun, status: "failed" as const, campaignAssetId: null, error: "review gate: growth_strategist: x" };
+    expect(deriveTodayXPostView({ ...failed, attempts: MAX_ATTEMPTS_PER_DAY }, null, false, null).canRegenerate).toBe(false);
+    expect(deriveTodayXPostView({ ...failed, attempts: 2 }, null, false, null).canRegenerate).toBe(true);
   });
 
   it("a run that is still within the staleness bar stays 'running' (a live attempt is never shown as failed)", () => {
