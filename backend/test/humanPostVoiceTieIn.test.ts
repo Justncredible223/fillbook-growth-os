@@ -17,4 +17,15 @@ describe("HUMAN_POST_VOICE_RULES product tie-in", () => {
     expect(HUMAN_POST_VOICE_RULES).toMatch(/never a promise of any outcome/);
     expect(HUMAN_POST_VOICE_RULES).toMatch(/Never promise or imply profit/);
   });
+
+  // The first version of the tie-in produced "computes the buffer from your synced trades so you know where you stand",
+  // which the skeptic and fact_checker rejected as implying real-time knowledge (2026-10-02). The clause is limited to
+  // what the screen shows, never when Fillbook knows it.
+  it("limits the tie-in to what a screen shows and bans the timing phrases that failed review", () => {
+    expect(HUMAN_POST_VOICE_RULES).toMatch(/WHAT the screen shows, never WHEN Fillbook knows it/);
+    expect(HUMAN_POST_VOICE_RULES).toMatch(/imported or synced CLOSED trades/);
+    for (const phrase of ["know where you stand", "as it happens", "while you trade", "mid-session", "before you breach", "in real time", "instantly", "alerts you before"]) {
+      expect(HUMAN_POST_VOICE_RULES, phrase).toContain(`"${phrase}"`);
+    }
+  });
 });
