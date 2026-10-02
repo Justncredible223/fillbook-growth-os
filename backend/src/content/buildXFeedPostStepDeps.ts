@@ -24,6 +24,15 @@ const FRESHNESS_SIGNAL_LOOKBACK_DAYS = 7;
 const RECENT_FEED_POST_LOOKBACK = 14;
 
 /**
+ * The asset stages that mean a draft actually reached the owner (ready for review, opened in X, or reviewed and
+ * dismissed). Only these count as "recent content" for the originality check. Every attempt makes a draft asset,
+ * including the ones the review gate rejected, so before this the lookback was mostly the day's own failed drafts: after a
+ * few rejected attempts on similar angles, the next draft measured 60%+ against text nobody had seen ("too similar to
+ * recent content (63% overlap)") and the day ended with no post.
+ */
+export const OWNER_REVIEWED_STAGES = ["ready_for_owner", "handed_off", "retired"];
+
+/**
  * Builds the real Supabase-backed deps for runDailyXFeedPostStep, mirroring
  * buildSupabaseRunCampaignDeps's shape and reasoning (see that function's
  * kdoc) but scoped to this feature's own run-tracking table, budget line,
@@ -43,6 +52,7 @@ export async function buildXFeedPostStepDeps(client: SupabaseClient): Promise<{ 
     .from("campaign_assets")
     .select("id")
     .eq("asset_type", X_FEED_POST_ASSET_TYPE)
+    .in("stage", OWNER_REVIEWED_STAGES)
     .order("created_at", { ascending: false })
     .limit(RECENT_FEED_POST_LOOKBACK);
   const recentAssetIds = ((recentAssetRows ?? []) as Array<{ id: string }>).map((r) => r.id);
