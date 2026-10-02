@@ -771,6 +771,11 @@ function isStaleRunning(run: XFeedPostRun, now: Date): boolean {
   return run.status === "running" && now.getTime() - new Date(run.updatedAt).getTime() > STALE_RUNNING_MS;
 }
 
+/** The message a run shows when the day's attempts are used up (Home reads it back from the run's error). */
+export function maxAttemptsMessage(attempts: number): string {
+  return `max_attempts_reached (${attempts}/${MAX_ATTEMPTS_PER_DAY}): no attempts left today, the next post is generated tomorrow`;
+}
+
 /**
  * Conservative worst-case wall time for ONE attempt: the draft call is
  * sequential, then the 9 review agents run concurrently via Promise.all
@@ -828,6 +833,15 @@ export async function runDailyXFeedPostStep(
   let run = await deps.runRepo.getRun(operatingDate);
   let runId: string;
 
+  const maxAttemptsSkipped = (r: XFeedPostRun): XFeedPostStepResult => ({
+    status: "skipped",
+    skipReason: `max_attempts_reached (${r.attempts}/${MAX_ATTEMPTS_PER_DAY})`,
+    attempts: r.attempts,
+    aiCalls: r.aiCalls,
+    costUsd: r.costUsd,
+    error: r.error ?? undefined,
+  });
+
   if (run === null) {
     const claimedId = await deps.runRepo.claimRun(operatingDate);
     if (claimedId === null) {
@@ -878,6 +892,9 @@ export async function runDailyXFeedPostStep(
         // to replace it -- either way, nothing new to do.
         return stillReadyResult(run);
       }
+      // No attempts left: never claim. A claim flips the row to 'running', and with nothing left to attempt nothing would
+      // ever finish it, so the card sat on "Generating..." and every tap re-locked it.
+      if (run.attempts >= MAX_ATTEMPTS_PER_DAY) return maxAttemptsSkipped(run);
       // Dismissed + force: claim atomically before touching anything else.
       // A lost claim means someone else is already replacing (or already
       // replaced) this exact post -- re-read and report whatever is
@@ -902,6 +919,7 @@ export async function runDailyXFeedPostStep(
           error: run.error ?? undefined,
         };
       }
+      if (run.attempts >= MAX_ATTEMPTS_PER_DAY) return maxAttemptsSkipped(run);
       const claimed = await deps.runRepo.tryClaimForAttempt(operatingDate, { status: "failed", updatedAt: run.updatedAt });
       if (!claimed) {
         const fresh = await deps.runRepo.getRun(operatingDate);
@@ -914,6 +932,20 @@ export async function runDailyXFeedPostStep(
       if (!isStaleRunning(run, now)) {
         // Genuinely in flight (or written moments ago) -- never race it.
         return { status: "skipped", skipReason: "already_in_progress", attempts: run.attempts, aiCalls: run.aiCalls, costUsd: run.costUsd };
+      }
+      if (run.attempts >= MAX_ATTEMPTS_PER_DAY) {
+        // Wedged by an earlier Regenerate that claimed the row and then found no attempts left. There is nothing to reclaim
+        // it FOR: close it as failed with the real reason so Home stops saying it ran out of time.
+        await deps.runRepo.finalizeAttempt(run.id, run.updatedAt, {
+          status: "failed",
+          topicKey: run.topicKey,
+          triedTopicKeys: run.triedTopicKeys,
+          attempts: run.attempts,
+          aiCalls: run.aiCalls,
+          costUsd: run.costUsd,
+          error: maxAttemptsMessage(run.attempts),
+        });
+        return maxAttemptsSkipped(run);
       }
       // Abandoned by a crashed/timed-out invocation -- reclaim rather
       // than leaving the operating date permanently locked. Same
@@ -1161,6 +1193,10 @@ export function deriveTodayXPostView(
     // until something reclaims it. Showing "Generating..." with no button for it left the owner stuck for hours, so once it
     // is past the staleness bar (the same one a reclaim uses) it reads as failed and Regenerate, which does reclaim it, is offered.
     if (now && isStaleRunning(run, now)) {
+      // With no attempts left a Regenerate cannot start another (and used to wedge the row like this), so say that instead.
+      if (run.attempts >= MAX_ATTEMPTS_PER_DAY) {
+        return { state: "failed", reason: maxAttemptsMessage(run.attempts), selectionReason: run.selectionReason ?? undefined, canRegenerate: false };
+      }
       return {
         state: "failed",
         reason: "The last attempt didn't finish (it ran out of time). Tap Regenerate to try again.",
@@ -1172,7 +1208,8 @@ export function deriveTodayXPostView(
   }
 
   if (run.status === "failed") {
-    return { state: "failed", reason: run.error ?? undefined, selectionReason: run.selectionReason ?? undefined, canRegenerate: true };
+    // Used-up attempts: Regenerate would do nothing, so don't offer it.
+    return { state: "failed", reason: run.error ?? undefined, selectionReason: run.selectionReason ?? undefined, canRegenerate: run.attempts < MAX_ATTEMPTS_PER_DAY };
   }
 
   // run.status === "ready" from here on.
