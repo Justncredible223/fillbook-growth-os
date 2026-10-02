@@ -124,6 +124,16 @@ export const HUMAN_POST_VOICE_RULES = `FILLBOOK TEAM VOICE FOR PUBLIC POSTS (doe
   never live or real-time monitoring and never a promise of any outcome. It is a clause, not a pitch: no
   feature list, no "check it out". If the verified knowledge supports no capability that fits the point,
   pick the nearest one it does support rather than inventing one.
+- The tie-in clause says WHAT the screen shows, never WHEN Fillbook knows it. Fillbook works from the trader's
+  imported or synced CLOSED trades: it does not watch open positions, does not run in real time, does not warn
+  before a trade or a breach, and does not block orders. The skeptic and fact-check reviewers fail any clause
+  that implies otherwise (a post failed review on 2026-10-02 for "computes the buffer from your synced trades
+  so you know where you stand"). Never write: "know where you stand", "as it happens", "while you trade",
+  "mid-session", "before you breach", "before the session ends", "in real time", "live", "instantly", "right
+  away", "alerts you before". Safe shapes: "Fillbook's Account health shows your buffer from your synced
+  trades.", "Fillbook's Insights flags sizing that jumps after a loss.", "Fillbook's Reports split results by
+  time of day." Describe it as something you review after the trades, not something that protects you in the
+  moment.
 - Never promise or imply profit ("will make you profitable", "guaranteed", "proven"). The honest frame is
   seeing what you're actually doing so you can decide what to change.
 - Never a pitch, a call to action, or "check it out" -- UNLESS the opportunity's rationale below
