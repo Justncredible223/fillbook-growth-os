@@ -29,6 +29,11 @@ export const CHART = {
   outcomeGap: 90,
   outcomeRowGap: 120,
   outcomeBarHeight: 70,
+  /** "bars": where the first row's label sits, the largest bar length, and the bar height. The pitch depends on the row count. */
+  barsTop: 640,
+  barsBarLength: 640,
+  barsBarHeight: 54,
+  barsLabelGap: 34,
   /** Pitch between caption lines and between invitation lines, and the gap between the caption block and the invitation. */
   captionPitch: 90,
   ctaPitch: 70,
@@ -94,11 +99,18 @@ export interface ChartGeometry {
   outcomeBars: Array<{ x0: number; x1: number; y: number; h: number }>;
   /** Outcomes chart: vertical centre of the large net figure. */
   netY: number;
+  /** Bars chart: each row's bar, top to bottom, sized against the largest. */
+  rowBars: Array<{ x0: number; x1: number; y: number; h: number }>;
   /** Top of the beat caption block, below whichever chart is drawn. */
   captionTop: number;
   /** Lowest and rightmost pixel any chart element reaches. */
   maxX: number;
   maxY: number;
+}
+
+/** Vertical pitch between rows of a bars chart: tighter as rows are added, so five rows still leave room for the caption and invitation. */
+export function barsPitch(rows: number): number {
+  return rows <= 3 ? 150 : rows === 4 ? 135 : 118;
 }
 
 export function headlineBottom(lines: number): number {
@@ -126,6 +138,7 @@ export function chartGeometry(chart: ChartSpec): ChartGeometry {
   let bar: BarGeometry | null = null;
   const pairBars: ChartGeometry["pairBars"] = [];
   const outcomeBars: ChartGeometry["outcomeBars"] = [];
+  const rowBars: ChartGeometry["rowBars"] = [];
   let netY = 0;
   let maxX: number = CHART.left;
   let maxY: number = headlineBottom(chart.lines.length);
@@ -169,7 +182,20 @@ export function chartGeometry(chart: ChartSpec): ChartGeometry {
     });
     captionTop = CHART.pairTop + 2 * CHART.pairRowGap + 40;
   }
-  return { cells, bar, pairBars, outcomeBars, netY, captionTop, maxX, maxY };
+  if (chart.kind === "bars" && chart.rows) {
+    const largest = Math.max(...chart.rows.map((r) => r.amount), 1);
+    const pitch = barsPitch(chart.rows.length);
+    chart.rows.forEach((r, i) => {
+      const y = CHART.barsTop + i * pitch + CHART.barsLabelGap + 20;
+      const len = Math.max(24, Math.round(CHART.barsBarLength * (r.amount / largest)));
+      rowBars.push({ x0: CHART.left, x1: CHART.left + len, y, h: CHART.barsBarHeight });
+      // The figure sits to the right of the bar (or inside it when the bar is long), so allow for its width.
+      maxX = Math.max(maxX, CHART.left + len);
+      maxY = Math.max(maxY, y + CHART.barsBarHeight);
+    });
+    captionTop = CHART.barsTop + chart.rows.length * pitch + 50;
+  }
+  return { cells, bar, pairBars, outcomeBars, rowBars, netY, captionTop, maxX, maxY };
 }
 
 /** The dollar gap a progress bar draws and labels: target - value, rounded down to whole dollars. */
@@ -233,6 +259,22 @@ export function validateChartScene(scene: SceneSpec, asset: VerifiedAsset): Plan
     const pr = chart.pair;
     if (!pr) add("chart_missing_pair", "A pair chart needs its pair.");
     else needsFact("the bars' figure", pr.value);
+  } else if (chart.kind === "bars") {
+    const rows = chart.rows;
+    if (!rows || rows.length < 2 || rows.length > 5) {
+      add("chart_bad_rows", "A bars chart needs 2 to 5 rows.");
+    } else {
+      rows.forEach((r, i) => {
+        const shown = extractNumbers(r.display).map((t) => Number(t.replace(/[$,%x+-]/g, "")));
+        if (shown.length !== 1 || shown[0] !== r.amount) add("chart_row_display_mismatch", `Row ${i + 1} shows "${r.display}", but its amount is ${r.amount}.`);
+        if (!(r.amount > 0)) add("chart_row_bad_amount", `Row ${i + 1}'s amount must be positive; a loss is a bad-toned row, not a negative one.`);
+        if (r.display.trim().startsWith("-") && r.tone !== "bad") add("chart_row_tone", `Row ${i + 1} shows a negative figure, so its bar must be bad-toned.`);
+        for (const token of extractNumbers(`${r.label} ${r.display}`)) needsFact(`row ${i + 1}'s figure`, token);
+      });
+      if (chart.highlight !== undefined && (!Number.isInteger(chart.highlight) || chart.highlight < 0 || chart.highlight >= rows.length)) {
+        add("chart_bad_highlight", "The highlighted row must be one of the rows.");
+      }
+    }
   }
 
   const geo = chartGeometry(chart);

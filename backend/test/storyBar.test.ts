@@ -85,10 +85,12 @@ describe("the app's request handler", () => {
     const { res, result } = fakeRes();
     await handler(fakeReq(undefined, "GET"), res);
     expect(result.statusCode).toBe(200);
-    const body = result.body as { motionConcepts: { id: string }[]; belowBarMotionConcepts: { id: string }[] };
+    const body = result.body as { motionConcepts: { id: string }[]; belowBarMotionConcepts: { id: string }[]; hiddenNearCopyConceptIds: string[] };
     const charts = MOTION_SCENE_PLANS.filter(isChartPlan);
     expect(charts.length).toBeGreaterThan(0);
-    expect(body.motionConcepts.map((c) => c.id).sort()).toEqual(charts.filter((p) => renderBar(p).ok).map((p) => p.planId).sort());
+    // Every chart concept that clears the bar is either offered or hidden as a near-copy of one that is (never lost, never both).
+    expect([...body.motionConcepts.map((c) => c.id), ...body.hiddenNearCopyConceptIds].sort()).toEqual(charts.filter((p) => renderBar(p).ok).map((p) => p.planId).sort());
+    expect(body.motionConcepts.some((c) => body.hiddenNearCopyConceptIds.includes(c.id))).toBe(false);
     expect(body.belowBarMotionConcepts.map((c) => c.id).sort()).toEqual(charts.filter((p) => !renderBar(p).ok).map((p) => p.planId).sort());
     const listed = new Set([...body.motionConcepts, ...body.belowBarMotionConcepts].map((c) => c.id));
     expect(listed.has(WEAK_ID)).toBe(false);

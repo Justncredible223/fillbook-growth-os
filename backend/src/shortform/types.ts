@@ -212,6 +212,17 @@ export interface ChartBar {
   tone: ChartTone;
 }
 /**
+ * One row of a "bars" chart: the label (what the row is), the figure written on the bar, and the magnitude whose size
+ * the bar's length shows (always positive; a negative figure is a "bad" bar). Every number in `label` and `display`
+ * must appear in a fact the scene cites.
+ */
+export interface ChartRow {
+  label: string;
+  display: string;
+  amount: number;
+  tone: ChartTone;
+}
+/**
  * The arithmetic behind an illustrative "outcomes" chart: `trades` trades, `wins` of them winners averaging `avgWin`
  * dollars, the rest losers averaging `avgLoss`. Nothing here claims to be a real account: the scene is labelled
  * "Illustrative example", and chart.ts recomputes every figure the chart and its text show from these four numbers.
@@ -223,7 +234,7 @@ export interface ChartIllustration {
   avgLoss: number;
 }
 export interface ChartSpec {
-  kind: "grid_progress" | "pair" | "outcomes";
+  kind: "grid_progress" | "pair" | "outcomes" | "bars";
   /** The beat this scene reveals, 1-based. Earlier beats are drawn already complete; later beats are not drawn yet. */
   stage: number;
   /** The headline split into display lines. Joined with spaces they must equal the scene headline. */
@@ -235,6 +246,10 @@ export interface ChartSpec {
   pair?: ChartPair;
   /** "outcomes" only: the total won and the total lost, drawn as two bars sized against each other. */
   bars?: [ChartBar, ChartBar];
+  /** "bars" only: 2 to 5 labelled bars drawn from one recording's facts, sized against the largest. */
+  rows?: ChartRow[];
+  /** "bars" only: index of the row the third beat rings, so the eye lands on the one that matters. */
+  highlight?: number;
   /** "outcomes" only: the net result, drawn large once its beat is reached, e.g. "-$2,000". */
   net?: { display: string; tone: ChartTone };
   /** "outcomes" only: the arithmetic every figure is checked against. */

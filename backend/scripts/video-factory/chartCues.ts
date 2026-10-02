@@ -196,6 +196,38 @@ export function buildChartCues(input: ChartCueInput): CaptionCue[] {
     }
   }
 
+  // ---- bars: labelled rows drawn from one recording's facts ----
+  if (chart.kind === "bars" && chart.rows) {
+    const dimText = chart.dim ? `\\1a${DIM_ALPHA}` : "";
+    geo.rowBars.forEach((rb, i) => {
+      const spec = chart.rows![i]!;
+      const anim = stage === 1;
+      const at = anim ? start + 0.25 + i * 0.32 : start;
+      const fade = anim ? `\\fad(220,0)` : "";
+      const tone = toneColor(spec.tone);
+      b.push(`{\\an4\\pos(${rb.x0},${rb.y - CHART.barsLabelGap})\\fs${fitFont(spec.label, 46, CHART.right - CHART.left)}\\c${COLOR.muted}${fade}${dimText}}${escapeAssText(spec.label)}`, at, end, LAYER_TEXT);
+      const clip = anim
+        ? `\\clip(${rb.x0},${rb.y - 2},${rb.x0},${rb.y + rb.h + 2})\\t(0,800,\\clip(${rb.x0},${rb.y - 2},${rb.x1 + 2},${rb.y + rb.h + 2}))`
+        : "";
+      b.push(shape(roundedRectPath(rb.x1 - rb.x0, rb.h, 12), (rb.x0 + rb.x1) / 2, rb.y + rb.h / 2, tone, `${clip}${dim}`), at, end, LAYER_SHAPE);
+      const inside = rb.x1 - rb.x0 >= 300;
+      const valueAt = anim ? at + 0.7 : at;
+      const valueTag = inside ? `\\an6\\pos(${rb.x1 - 18},${fmt(rb.y + rb.h / 2)})` : `\\an4\\pos(${rb.x1 + 22},${fmt(rb.y + rb.h / 2)})`;
+      b.push(`{${valueTag}\\fs54\\c${COLOR.ink}${anim ? `\\fad(160,0)` : ""}${dimText}}${escapeAssText(spec.display)}`, valueAt, end, LAYER_TEXT);
+    });
+    // stage 3: the highlighted row pulses, so the eye lands on the one that matters
+    if (stage === 3 && chart.highlight !== undefined) {
+      const rb = geo.rowBars[chart.highlight]!;
+      const spec = chart.rows[chart.highlight]!;
+      const ringW = rb.x1 - rb.x0 + 20;
+      const ring = roundedRectPath(ringW, rb.h + 16, 16);
+      for (let k = 0; k < 3; k++) {
+        const t0 = start + 0.15 + k * 0.7;
+        b.push(`{\\an5\\pos(${fmt(rb.x0 - 10 + ringW / 2)},${fmt(rb.y + rb.h / 2)})\\1a&HFF&\\3c${toneColor(spec.tone)}\\bord6\\shad0\\fscx100\\fscy100\\t(0,600,\\fscx106\\fscy112\\3a&HFF&)\\p1}${ring}{\\p0}`, t0, t0 + 0.6, LAYER_SHAPE + 1);
+      }
+    }
+  }
+
   // ---- pair of bars from one marker ----
   if (chart.kind === "pair" && chart.pair) {
     const markerTop = CHART.pairTop - 20;

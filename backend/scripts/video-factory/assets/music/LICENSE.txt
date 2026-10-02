@@ -8,3 +8,14 @@ Licensed under the Pixabay Content License
 (https://pixabay.com/service/license-summary/): free for commercial
 use, no attribution required, may be modified/adapted into new works.
 Not distributed standalone here -- mixed into rendered video output.
+
+
+generated-bed-01 .. generated-bed-07.mp3
+---------------------------------------
+Synthesised in-house by backend/scripts/video-factory/makeMusicTrack.mjs
+(seeds "fillbook-bed-01" .. "fillbook-bed-07", 150 s, loudness-normalised
+to -14 LUFS). No third-party audio or samples; no licence restrictions.
+Regenerate or add more with:
+  node backend/scripts/video-factory/makeMusicTrack.mjs --seed fillbook-bed-08 --duration 150 --out bed.wav
+  ffmpeg -i bed.wav -af loudnorm=I=-14:TP=-1:LRA=7 -ar 44100 -ac 1 -c:a libmp3lame -b:a 96k backend/scripts/video-factory/assets/music/generated-bed-08.mp3
+Any .mp3 in this folder is picked up automatically (see music.ts).

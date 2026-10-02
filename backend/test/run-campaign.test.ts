@@ -165,11 +165,13 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     expect(result.statusCode).toBe(200);
     const body = result.body as { motionConcepts: { id: string }[] };
     expect(body.motionConcepts.map((c) => c.id)).toContain(CONCEPT_ID);
-    // 2026-10-01: only chart-card concepts are offered: 3 hand-made (chartPilots.ts) + 12 illustrative outcomes cards (chartConcepts.ts).
+    // 2026-10-01: only chart-card concepts are offered: 3 hand-made (chartPilots.ts) + 9 bar charts (chartBarsConcepts.ts) + 12 illustrative outcomes cards (chartConcepts.ts).
     // Every older concept is retired from the list but stays in the catalog so a script already drafted or approved still renders.
     expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["chart-a-17-green-days", "chart-b-10-green-days", "chart-c-one-signal-two-accounts"]));
     expect(body.motionConcepts.every((c) => c.id.startsWith("chart-"))).toBe(true);
-    expect(body.motionConcepts.length).toBe(15);
+    // 24 chart concepts exist, but the 12 illustrative win-rate cards are near-copies of each other: only one is offered, the other 11 are hidden.
+    expect(body.motionConcepts.length).toBe(13);
+    expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds).toHaveLength(11);
   });
 
   it("POST for a retired (older-style) concept is refused with 409, and a custom-topic or Radar video request is refused too", async () => {

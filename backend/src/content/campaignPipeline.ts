@@ -9,6 +9,7 @@ import { draftResearch, formatResearchAsText, type ResearchReport } from "./rese
 import { extractMotionConceptRefFromRationale } from "../../scripts/video-factory/motionCatalog.js";
 import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX } from "../opportunities/manualMotionConcept.js";
 import { MOTION_SCENE_PLANS } from "../shortform/motionPlans.js";
+import { spokenScriptOf } from "./contentQualityGate.js";
 import { assertMeetsRenderBar } from "../shortform/storyScore.js";
 import { loadManifest, validateScenePlan } from "../shortform/scenePlan.js";
 
@@ -112,6 +113,14 @@ export interface PipelineResult {
  * handOffToOwner/EXTERNAL_DRAFT -- the furthest stage this can reach is
  * 'ready_for_owner', same as every other path into CampaignFactory.
  */
+let catalogSpokenScripts: Set<string> | null = null;
+
+/** True when `text` is a stored draft of one of the verified motion catalog's own scripts (compared on the spoken script, as the originality gate does). */
+export function isCatalogMotionScript(text: string): boolean {
+  catalogSpokenScripts ??= new Set(MOTION_SCENE_PLANS.map((p) => buildVideoScriptFromScenePlan(p).script.trim()));
+  return catalogSpokenScripts.has(spokenScriptOf(text).trim());
+}
+
 export async function runCampaignPipeline(
   llmClient: LlmClient,
   factory: CampaignFactory,
@@ -237,7 +246,11 @@ export async function runCampaignPipeline(
     videoScript ? { videoScript } : researchReport ? { research: researchReport } : undefined,
   );
 
-  const mechanical = await factory.submitDraft("draft", draftText, context.recentTextsForSameTopic, { isVideo: isVideoAsset });
+  // A motion concept's script is fixed, fact-checked catalog copy, and the catalog's chart cards share wording on
+  // purpose ("Check your target against...", "Same signal. Same loss."), so measuring it against OTHER catalog scripts
+  // blocked every motion video after the first as "too similar". It is still checked against everything else.
+  const recentForGate = motionConceptId ? context.recentTextsForSameTopic.filter((text) => !isCatalogMotionScript(text)) : context.recentTextsForSameTopic;
+  const mechanical = await factory.submitDraft("draft", draftText, recentForGate, { isVideo: isVideoAsset });
   await campaignRepo.updateAssetStage(campaignAssetId, mechanical.newStage);
 
   if (!mechanical.advanced) {

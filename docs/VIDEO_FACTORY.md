@@ -290,7 +290,44 @@ hand-timed against the `.srt` by a human.
   stretches for a ~25s video. To add variety, drop more royalty-free `.mp3`
   files into `assets/music/` (no code change) and record each one's source
   and license in `assets/music/LICENSE.txt` -- only tracks whose license
-  allows commercial use without attribution.
+  allows commercial use without attribution. Eight beds ship today: the
+  Pixabay track plus seven synthesised in-house (`generated-bed-01..07.mp3`,
+  made with `makeMusicTrack.mjs`; no third-party audio).
 - **One voice, one visual style.** No per-draft customization beyond
   `--voice` yet -- not needed at current volume, easy to extend if it
   becomes worth it.
+
+## Chart-card concepts: keeping the queue varied
+
+The app offers only chart-card concepts, and the daily refill requests them one
+theme at a time (`src/video/dailyChartCardRequests.ts` round-robins across each
+concept's first `expectedTopic`). Three families exist:
+
+- `chartPilots.ts` -- hand-made cards (payout gap, two accounts).
+- `chartBarsConcepts.ts` -- one labelled bar chart per concept, each drawn from a
+  verified recording of a *different* product feature (day of week, time of day,
+  tagged habits, conviction, plan vs reality, flagged sizing, Edge Score, win-rate
+  drift, consistency cap).
+- `chartConcepts.ts` -- the illustrative "win rate isn't profit" arithmetic
+  cards. One theme, many parameter sets. They say nearly the same thing
+  (64-80% overlap), so only one is ever offered at a time (see below).
+
+**No near-copies to choose between** (owner rule, 2026-10-02).
+`src/shortform/conceptVariety.ts` hides any concept whose narration overlaps 50%
+or more with, or whose hook repeats, a concept that is already made, waiting, or
+earlier in the offered list. It is applied both to the app's picker
+(`GET /api/run-campaign`, which also returns `hiddenNearCopyConceptIds`) and to the
+daily refill. Hidden concepts are not deleted -- an already drafted or approved
+script from one still renders. Today that leaves 13 distinct concepts; the supply
+warning ("LOW SUPPLY") counts distinct concepts, so it fires when new ones are
+needed. To get more than one win-rate card, rewrite their narration so they genuinely differ
+(changing it changes the plan hash of any draft already made from the old wording).
+
+To add a concept on a new feature: take a recording in `verified-manifest.json`,
+write a `buildBarsPlan` config in `chartBarsConcepts.ts` (every number in a row
+label, figure, headline, caption or narration must be in a fact the beat cites),
+add it to `BARS_PILOTS`, and run the tests -- the plan validator, the story bar
+(grade A or better) and the variety checks in `test/chartBars.test.ts` must pass.
+The stored facts were read from the recordings by the system, not confirmed by
+the owner (`asset_not_owner_verified` review notice): spot-check a concept's
+numbers against its recording before approving it.
