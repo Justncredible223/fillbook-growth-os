@@ -423,6 +423,21 @@ describe("deriveTodayXPostView -- Home's exact state mapping (ready / handed_off
     expect(deriveTodayXPostView({ ...readyRun, status: "running", campaignAssetId: null }, null, false, null)).toEqual({ state: "running", canRegenerate: false });
   });
 
+  it("a run still 'running' past the staleness bar -> failed with Regenerate offered, so a killed attempt never leaves the card stuck on Generating", () => {
+    const running = { ...readyRun, status: "running" as const, campaignAssetId: null, updatedAt: "2026-09-05T12:00:00.000Z" };
+    const justOver = new Date(new Date(running.updatedAt).getTime() + STALE_RUNNING_MS + 1000);
+    const view = deriveTodayXPostView(running, null, false, null, justOver);
+    expect(view.state).toBe("failed");
+    expect(view.canRegenerate).toBe(true);
+    expect(view.reason).toMatch(/didn't finish/);
+  });
+
+  it("a run that is still within the staleness bar stays 'running' (a live attempt is never shown as failed)", () => {
+    const running = { ...readyRun, status: "running" as const, campaignAssetId: null, updatedAt: "2026-09-05T12:00:00.000Z" };
+    const justUnder = new Date(new Date(running.updatedAt).getTime() + STALE_RUNNING_MS - 1000);
+    expect(deriveTodayXPostView(running, null, false, null, justUnder)).toEqual({ state: "running", canRegenerate: false });
+  });
+
   it("a failed run -> failed, with the real reason surfaced and Regenerate offered", () => {
     const view = deriveTodayXPostView({ ...readyRun, status: "failed", campaignAssetId: null, error: "review gate: fact_checker: unverified claim" }, null, false, null);
     expect(view).toEqual({ state: "failed", reason: "review gate: fact_checker: unverified claim", canRegenerate: true });

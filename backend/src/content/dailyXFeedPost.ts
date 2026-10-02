@@ -1145,6 +1145,8 @@ export function deriveTodayXPostView(
   assetStage: string | null,
   dismissed: boolean,
   previewText: string | null,
+  /** When given, a 'running' run not updated for STALE_RUNNING_MS is shown as failed with Regenerate offered. Omitted = no staleness check. */
+  now?: Date,
 ): TodayXPostView {
   if (run === null) {
     return { state: "empty", canRegenerate: false };
@@ -1155,6 +1157,17 @@ export function deriveTodayXPostView(
   // it right now" rather than the two looking identical, as they did
   // before this state existed.
   if (run.status === "running") {
+    // A run whose invocation was killed mid-attempt (the function has a hard time limit) stays 'running' in the database
+    // until something reclaims it. Showing "Generating..." with no button for it left the owner stuck for hours, so once it
+    // is past the staleness bar (the same one a reclaim uses) it reads as failed and Regenerate, which does reclaim it, is offered.
+    if (now && isStaleRunning(run, now)) {
+      return {
+        state: "failed",
+        reason: "The last attempt didn't finish (it ran out of time). Tap Regenerate to try again.",
+        selectionReason: run.selectionReason ?? undefined,
+        canRegenerate: true,
+      };
+    }
     return { state: "running", canRegenerate: false };
   }
 
