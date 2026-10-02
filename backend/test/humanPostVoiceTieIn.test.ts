@@ -28,4 +28,17 @@ describe("HUMAN_POST_VOICE_RULES product tie-in", () => {
       expect(HUMAN_POST_VOICE_RULES, phrase).toContain(`"${phrase}"`);
     }
   });
+
+  // 2026-10-02: the writer followed the safe shape and then appended "so you see the number before you decide to press
+  // it", which the hook_specialist rejected as presenting Fillbook as protective. Banning single phrases kept losing to
+  // new ones, so the rule forbids the kind of tail and offers sentences that stop where the screen description stops.
+  it("forbids purpose, benefit and timing tails on the tie-in, and gives sentences that stop at what the screen shows", () => {
+    expect(HUMAN_POST_VOICE_RULES).toMatch(/ONE plain sentence that says what the screen shows and then STOPS/);
+    for (const tail of ["so you ...", "before you ...", "when you ...", "to help you ...", "lets you ...", "tells you ...", "keeps you ..."]) {
+      expect(HUMAN_POST_VOICE_RULES, tail).toContain(`"${tail}"`);
+    }
+    expect(HUMAN_POST_VOICE_RULES).toMatch(/does\s+not protect an account or prevent orders/);
+    expect(HUMAN_POST_VOICE_RULES).toContain(`"Fillbook's Account Health shows your buffer from your synced trades."`);
+    expect(HUMAN_POST_VOICE_RULES).toContain("for you to\n  review afterwards");
+  });
 });

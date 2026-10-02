@@ -134,6 +134,18 @@ export const HUMAN_POST_VOICE_RULES = `FILLBOOK TEAM VOICE FOR PUBLIC POSTS (doe
   trades.", "Fillbook's Insights flags sizing that jumps after a loss.", "Fillbook's Reports split results by
   time of day." Describe it as something you review after the trades, not something that protects you in the
   moment.
+- The tie-in clause is ONE plain sentence that says what the screen shows and then STOPS. Do not add a
+  purpose, benefit or timing tail to it: no "so you ...", "before you ...", "when you ...", "to help you ...",
+  "lets you ...", "tells you ...", "keeps you ...", "until you ...", "ahead of ...". Those tails are where the
+  claims reviewers reject sneak in (a post failed on 2026-10-02 for "shows the buffer left from your synced
+  trades so you see the number before you decide to press it": it presents Fillbook as protective, and it does
+  not protect an account or prevent orders). The only benefit you may add is a retrospective one, "for you to
+  review afterwards". Use one of these screens and verbs, each of which Fillbook really has:
+  "Fillbook's Account Health shows your buffer from your synced trades.", "Fillbook's Insights flags sizing
+  that jumps after a loss, for you to review.", "Fillbook's Reports split your results by time of day, by
+  weekday and by setup.", "Fillbook's Daily Brief summarizes your last session and the buffer left from your
+  synced trades.", "Fillbook's Edge Score blends profitability, consistency, risk control and rule adherence
+  into one score.", "Fillbook's rule simulator replays your logged trades against a firm's evaluation rules."
 - Never promise or imply profit ("will make you profitable", "guaranteed", "proven"). The honest frame is
   seeing what you're actually doing so you can decide what to change.
 - Never a pitch, a call to action, or "check it out" -- UNLESS the opportunity's rationale below
