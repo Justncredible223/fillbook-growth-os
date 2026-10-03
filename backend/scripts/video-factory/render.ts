@@ -71,8 +71,8 @@ const FONT_DIR = "fonts";
  * pick a track and a start offset per video via music.ts, so any .mp3 added
  * to assets/music/ joins the rotation.
  */
-const MUSIC_ASSET_PATH = join(dirname(fileURLToPath(import.meta.url)), "assets", "music", "ambient-technology.mp3");
-const MUSIC_BASENAME = "ambient-technology.mp3";
+const MUSIC_ASSET_PATH = join(dirname(fileURLToPath(import.meta.url)), "assets", "music", "generated-bed-01.mp3");
+const MUSIC_BASENAME = "generated-bed-01.mp3";
 
 /**
  * Music level BEFORE ducking, i.e. how loud it sits in the gaps between

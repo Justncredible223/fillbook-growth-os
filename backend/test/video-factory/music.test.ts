@@ -26,6 +26,14 @@ describe("listMusicTracks", () => {
   });
 });
 
+describe("the bundled music", () => {
+  it("is a pool of in-house synthesised beds only (no third-party audio that platforms can flag), enough to rotate through", () => {
+    const tracks = listMusicTracks().map((p) => basename(p));
+    expect(tracks.length).toBeGreaterThanOrEqual(12);
+    expect(tracks.every((t) => /^generated-bed-\d+\.mp3$/.test(t)), tracks.join(", ")).toBe(true);
+  });
+});
+
 describe("pickMusic rotation", () => {
   it("walks through every track in order before any repeats, then loops back", async () => {
     const runner = runnerWithDuration(140);
