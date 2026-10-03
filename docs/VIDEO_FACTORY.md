@@ -377,3 +377,24 @@ invitation pops. Counting uses only each figure's own finished text, so the last
 frame is exactly the verified number. Motion only slides content from inside the safe
 area; the finished slide is the one measured against the platform overlays. A video
 takes about a minute to render locally because each beat is 30 screenshots.
+
+## Music rotation
+
+Each render takes the next bundled track in order: `runRender` counts the render rows
+created before this one and passes that as the rotation index, so consecutive renders
+never share a track and every track plays before any repeats (eight tracks today; add
+an .mp3 to `assets/music/` and it joins the rotation). The start point inside the
+track still varies by render. If the count cannot be read, the track falls back to
+one chosen from the render's id, so music never blocks a render.
+
+## Redesigned concepts and old drafts
+
+A draft stores the id and content hash of the plan it was written from, and the worker
+refuses a draft whose plan has changed (it never renders different content than was
+approved). After a redesign, run `npx tsx scripts/printStaleMotionDraftsSql.ts` and paste
+its two statements into the Supabase SQL editor: the first previews the stale drafts, the
+second retires them (as Reject does) and cancels their queued or failed renders. The
+concepts can then be requested again and are drafted fresh from the current plan. Videos
+that already rendered are untouched. Only product-mock concepts are offered
+(`isOfferedPlan`); the older illustrative win-rate cards still resolve for drafts already
+made but are no longer offered.

@@ -26,6 +26,28 @@ describe("listMusicTracks", () => {
   });
 });
 
+describe("pickMusic rotation", () => {
+  it("walks through every track in order before any repeats, then loops back", async () => {
+    const runner = runnerWithDuration(140);
+    const tracks = ["/m/a.mp3", "/m/b.mp3", "/m/c.mp3", "/m/d.mp3", "/m/e.mp3"];
+    const used: string[] = [];
+    // The seed (a render id) is deliberately unrelated to the order: only the rotation index decides the track.
+    for (let i = 0; i < 12; i++) used.push((await pickMusic(i * 7919 + 3, 18, runner, tracks, i))!.file);
+    expect(new Set(used.slice(0, 5)).size).toBe(5);
+    expect(used.slice(5, 10)).toEqual(used.slice(0, 5));
+    expect(used[10]).toBe(used[0]);
+    for (let i = 1; i < used.length; i++) expect(used[i]).not.toBe(used[i - 1]);
+  });
+
+  it("uses all bundled tracks across consecutive renders", async () => {
+    const runner = runnerWithDuration(140);
+    const tracks = listMusicTracks();
+    const used = new Set<string>();
+    for (let i = 0; i < tracks.length; i++) used.add((await pickMusic(1, 18, runner, tracks, i))!.file);
+    expect(used.size).toBe(tracks.length);
+  });
+});
+
 describe("pickMusic", () => {
   it("returns null with no tracks", async () => {
     expect(await pickMusic(1, 25, runnerWithDuration(140), [])).toBeNull();

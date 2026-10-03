@@ -10,7 +10,7 @@ import { validateResearchTopicShape, manualResearchTopicTitle, manualResearchTop
 import { MANUAL_MOTION_CONCEPT_TITLE_PREFIX, manualMotionConceptTitle } from "../src/opportunities/manualMotionConcept.js";
 import { enqueueMotionConceptRequest } from "../src/opportunities/requestMotionConcept.js";
 import { listMotionConcepts } from "../scripts/video-factory/motionCatalog.js";
-import { MOTION_SCENE_PLANS, isChartPlan } from "../src/shortform/motionPlans.js";
+import { MOTION_SCENE_PLANS, isOfferedPlan } from "../src/shortform/motionPlans.js";
 import { distinctConcepts } from "../src/shortform/conceptVariety.js";
 import { renderBar, renderBarRefusal } from "../src/shortform/storyScore.js";
 
@@ -139,7 +139,7 @@ export function isAllowedAssetTypeOverride(value: unknown): value is AllowedAsse
  */
 const planFor = (id: string) => MOTION_SCENE_PLANS.find((p) => p.planId === id);
 /** Owner rule, 2026-10-01: a NEW video is only ever requested from a chart-card concept. Older concepts stay in the catalog (so an already drafted or approved script still renders) but are never offered or accepted again. */
-const isOffered = (id: string): boolean => { const p = planFor(id); return p ? isChartPlan(p) : false; };
+const isOffered = (id: string): boolean => { const p = planFor(id); return p ? isOfferedPlan(p) : false; };
 const meetsBar = (id: string): boolean => { const p = planFor(id); return p ? renderBar(p).ok : false; };
 const barSummary = (id: string) => { const p = planFor(id); const r = p ? renderBar(p) : null; return { score: r?.score ?? 0, grade: r?.grade ?? "D", fixes: r?.fixes ?? [] }; };
 const barRefusal = (id: string): string => { const p = planFor(id); return p ? renderBarRefusal(p) : `"${id}" is not a known concept.`; };

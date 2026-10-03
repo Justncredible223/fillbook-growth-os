@@ -33,6 +33,8 @@ interface BeatInput {
   /** Fact keys this beat's narration and caption draw on. */
   facts: string[];
   closing?: boolean;
+  /** The recording this beat shows, when it differs from the concept's (a concept that compares two accounts). Its facts then replace the concept-wide set. */
+  assetId?: string;
   /** The beat says what a Fillbook screen does, rather than quoting a figure from it. */
   capability?: boolean;
 }
@@ -54,6 +56,12 @@ export interface BarsConfig {
   beats: BeatInput[];
 }
 
+/** A fact key, or "<assetId>/<factKey>" for a fact on another recording (a concept that compares two accounts). */
+const evidenceRef = (defaultAssetId: string) => (ref: string) => {
+  const slash = ref.indexOf("/");
+  return slash < 0 ? { assetId: defaultAssetId, factKey: ref } : { assetId: ref.slice(0, slash), factKey: ref.slice(slash + 1) };
+};
+
 export function buildBarsPlan(cfg: BarsConfig): ScenePlan {
   const headline = cfg.lines.join(" ");
   const allFacts = [...new Set(cfg.beats.flatMap((b) => b.facts))];
@@ -63,13 +71,13 @@ export function buildBarsPlan(cfg: BarsConfig): ScenePlan {
       type: b.capability ? ("product_capability" as const) : ("data_point" as const),
       text: b.narration,
       // A mock draws every window on every beat, so each beat must stand behind all the figures on the slide.
-      evidence: (cfg.mock ? allFacts : b.facts).map((factKey) => ({ assetId: cfg.assetId, factKey })),
+      evidence: (cfg.mock && !b.assetId ? allFacts : b.facts).map(evidenceRef(b.assetId ?? cfg.assetId)),
     };
     return {
       sceneId: `${cfg.variationId}-s${i + 1}`,
       narration: b.narration,
       takeaway: b.takeaway,
-      assetId: cfg.assetId,
+      assetId: b.assetId ?? cfg.assetId,
       focalRegion: null,
       crop: null,
       aspectRatio: "source" as const,

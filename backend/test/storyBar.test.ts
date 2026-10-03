@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { MOTION_SCENE_PLANS, isChartPlan } from "../src/shortform/motionPlans";
+import { MOTION_SCENE_PLANS, isChartPlan, isOfferedPlan } from "../src/shortform/motionPlans";
 import { MIN_RENDER_SCORE, assertMeetsRenderBar, renderBar, renderBarRefusal } from "../src/shortform/storyScore";
 
 /**
@@ -86,7 +86,7 @@ describe("the app's request handler", () => {
     await handler(fakeReq(undefined, "GET"), res);
     expect(result.statusCode).toBe(200);
     const body = result.body as { motionConcepts: { id: string }[]; belowBarMotionConcepts: { id: string }[]; hiddenNearCopyConceptIds: string[] };
-    const charts = MOTION_SCENE_PLANS.filter(isChartPlan);
+    const charts = MOTION_SCENE_PLANS.filter(isOfferedPlan);
     expect(charts.length).toBeGreaterThan(0);
     // Every chart concept that clears the bar is either offered or hidden as a near-copy of one that is (never lost, never both).
     expect([...body.motionConcepts.map((c) => c.id), ...body.hiddenNearCopyConceptIds].sort()).toEqual(charts.filter((p) => renderBar(p).ok).map((p) => p.planId).sort());

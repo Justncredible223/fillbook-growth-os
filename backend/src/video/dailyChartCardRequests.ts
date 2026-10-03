@@ -1,7 +1,7 @@
 import { listMotionConcepts } from "../../scripts/video-factory/motionCatalog.js";
 import type { MotionConceptSummary } from "../../scripts/video-factory/motionCatalog.js";
 import { manualMotionConceptTitle } from "../opportunities/manualMotionConcept.js";
-import { MOTION_SCENE_PLANS, isChartPlan } from "../shortform/motionPlans.js";
+import { MOTION_SCENE_PLANS, isOfferedPlan } from "../shortform/motionPlans.js";
 import { renderBar } from "../shortform/storyScore.js";
 import { distinctConcepts } from "../shortform/conceptVariety.js";
 import type { ScenePlan } from "../shortform/types.js";
@@ -40,7 +40,7 @@ export function offeredChartConcepts(): MotionConceptSummary[] {
   const byId = new Map(MOTION_SCENE_PLANS.map((p) => [p.planId, p] as const));
   const offered = listMotionConcepts().filter((c) => {
     const plan = byId.get(c.id);
-    return plan !== undefined && isChartPlan(plan) && renderBar(plan).ok;
+    return plan !== undefined && isOfferedPlan(plan) && renderBar(plan).ok;
   });
   const groups = new Map<string, MotionConceptSummary[]>();
   for (const c of offered) {

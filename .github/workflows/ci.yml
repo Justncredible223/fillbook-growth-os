@@ -48,6 +48,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # The mock-slide tests render real slides in headless Chromium (they skip themselves where none is installed).
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
       - name: Typecheck
         run: npm run typecheck
 

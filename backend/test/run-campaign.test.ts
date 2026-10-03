@@ -165,13 +165,14 @@ describe("api/run-campaign.ts handler -- motion-concept payload construction", (
     expect(result.statusCode).toBe(200);
     const body = result.body as { motionConcepts: { id: string }[] };
     expect(body.motionConcepts.map((c) => c.id)).toContain(CONCEPT_ID);
-    // 2026-10-01: only chart-card concepts are offered: 3 hand-made (chartPilots.ts) + 9 bar charts (chartBarsConcepts.ts) + 12 illustrative outcomes cards (chartConcepts.ts).
+    // 2026-10-01: only chart-card concepts are offered: 3 hand-made (chartMockConcepts.ts) + 9 bar charts (chartBarsConcepts.ts), all drawn as product mocks.
     // Every older concept is retired from the list but stays in the catalog so a script already drafted or approved still renders.
     expect(body.motionConcepts.map((c) => c.id)).toEqual(expect.arrayContaining(["chart-a-17-green-days", "chart-b-10-green-days", "chart-c-one-signal-two-accounts"]));
     expect(body.motionConcepts.every((c) => c.id.startsWith("chart-"))).toBe(true);
-    // 24 chart concepts exist, but the 12 illustrative win-rate cards are near-copies of each other: only one is offered, the other 11 are hidden.
-    expect(body.motionConcepts.length).toBe(13);
-    expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds).toHaveLength(11);
+    // 24 chart concepts exist; the 12 illustrative win-rate cards are not drawn as product mocks, so they are no longer offered.
+    expect(body.motionConcepts.length).toBe(12);
+    expect(body.motionConcepts.some((c) => c.id.startsWith("chart-o-"))).toBe(false);
+    expect((result.body as { hiddenNearCopyConceptIds: string[] }).hiddenNearCopyConceptIds).toHaveLength(0);
   });
 
   it("POST for a retired (older-style) concept is refused with 409, and a custom-topic or Radar video request is refused too", async () => {

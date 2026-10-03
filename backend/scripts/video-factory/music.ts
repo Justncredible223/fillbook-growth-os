@@ -29,8 +29,10 @@ export function listMusicTracks(dir: string = MUSIC_DIR): string[] {
 const END_SLACK_SECONDS = 1;
 
 /**
- * Chooses the track and start offset for one render, deterministically from
- * `seed`: the track is `seed` mod the number of bundled tracks, and the
+ * Chooses the track and start offset for one render, deterministically. With a
+ * `rotationIndex` the track is that index mod the number of bundled tracks, so
+ * consecutive renders walk through every track before any repeats; without one
+ * it is `seed` mod the number of tracks. The
  * start offset is a seeded point in the track that still leaves room for
  * the whole video. With a single 2:20 track and ~25s videos this already
  * gives ~5 distinct, non-overlapping stretches; every extra track multiplies
@@ -42,9 +44,11 @@ export async function pickMusic(
   totalDurationSeconds: number,
   runner: ProcessRunner,
   tracks: string[] = listMusicTracks(),
+  /** This render's place in the order of all renders (0 for the first). When given, tracks play in order and only repeat after every one has been used. */
+  rotationIndex?: number,
 ): Promise<MusicChoice | null> {
   if (tracks.length === 0) return null;
-  const file = tracks[seed % tracks.length]!;
+  const file = tracks[(rotationIndex ?? seed) % tracks.length]!;
   const probe = await runFfprobeJson(file, runner);
   const trackSeconds = Number(probe.format.duration);
   const room = trackSeconds - totalDurationSeconds - END_SLACK_SECONDS;
