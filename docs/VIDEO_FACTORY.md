@@ -413,5 +413,5 @@ UI over the bottom of the frame: a comment-preview bubble, a "Promotional conten
 promote/analytics bar (YouTube: "Promote this Short", "Analytics", "Share your video"). A guest view
 (TikTok web, signed out of the owner account) shows none of them, only the right-hand buttons and the
 account name and caption from about y 1540. The layout is therefore checked against what viewers see
-(bottom limit y 1600 for the platform caption block), not against the owner's view. An earlier change
+(everything on a mock ends above y 1450, about 100px clear of the account-name block that starts near y 1520-1540), not against the owner's view. An earlier change
 (#97) moved everything above y 1250 for the owner-view bubble and was reverted.

@@ -43,29 +43,29 @@ ${Object.entries(MOCK_BOXES).map(([n, b]) => `[data-box=${n}]{left:${b.x}px;top:
 .headline{font:700 ${MOCK_FONT.headline}px/${MOCK_FONT.headlineLine}px SG;letter-spacing:-.02em;overflow:hidden}
 .headline div{white-space:nowrap;overflow:hidden;height:${MOCK_FONT.headlineLine}px}.headline .accent{color:var(--cyan)}
 .win{border:2px solid var(--line);border-radius:26px;background:var(--bg1);overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.55)}
-.bar{display:flex;align-items:center;gap:12px;height:64px;padding:0 28px;border-bottom:2px solid var(--line);font:600 24px MR;color:var(--dim);white-space:nowrap}
+.bar{display:flex;align-items:center;gap:12px;height:60px;padding:0 28px;border-bottom:2px solid var(--line);font:600 24px MR;color:var(--dim);white-space:nowrap}
 .dot{width:16px;height:16px;border-radius:50%;background:#252f3b;flex:none}
 .bar .t{margin-left:14px}.bar .tag{margin-left:auto;font-size:20px;letter-spacing:.12em}
 table{width:100%;border-collapse:collapse}
-th{height:56px;font:700 20px MR;letter-spacing:.14em;color:var(--dim);text-align:left;padding:0 28px;white-space:nowrap}
-td{height:90px;font:500 32px JB;padding:0 28px;border-top:2px solid var(--line);white-space:nowrap}
+th{height:48px;font:700 20px MR;letter-spacing:.14em;color:var(--dim);text-align:left;padding:0 28px;white-space:nowrap}
+td{height:82px;font:500 32px JB;padding:0 28px;border-top:2px solid var(--line);white-space:nowrap}
 .r{text-align:right}.bad{color:var(--bad)}.good{color:var(--good)}
-.step{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
-.step span{border:2px solid #14566a;background:#0b2b34;color:var(--cyan);font:700 24px MR;letter-spacing:.14em;border-radius:999px;padding:12px 30px;white-space:nowrap}
-.step svg{width:44px;height:44px;stroke:var(--cyan);fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
-.stats{display:flex;gap:20px;padding:18px 28px 18px}
-.stat{flex:1;height:214px;border:2px solid var(--line);border-radius:20px;background:var(--bg2);padding:16px 22px;overflow:hidden}
-.stat .k{font:700 18px/24px MR;letter-spacing:.12em;color:var(--dim);height:48px;overflow:hidden}
+.step{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+.step span{border:2px solid #14566a;background:#0b2b34;color:var(--cyan);font:700 24px MR;letter-spacing:.14em;border-radius:999px;padding:10px 30px;white-space:nowrap}
+.step svg{width:34px;height:34px;stroke:var(--cyan);fill:none;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.stats{display:flex;gap:20px;padding:12px 28px 12px}
+.stat{flex:1;height:190px;border:2px solid var(--line);border-radius:20px;background:var(--bg2);padding:14px 22px;overflow:hidden}
+.stat .k{font:700 18px/24px MR;letter-spacing:.12em;color:var(--dim);height:44px;overflow:hidden}
 .stat .v{font:700 64px/72px SG;white-space:nowrap}.stat .v small{font:600 26px MR;color:var(--mute);margin-left:8px}
-.meter{height:14px;border-radius:9px;background:#1b2531;margin-top:14px;position:relative}
+.meter{height:14px;border-radius:9px;background:#1b2531;margin-top:10px;position:relative}
 .meter i{position:absolute;left:0;top:0;bottom:0;width:100%;border-radius:9px;background:linear-gradient(90deg,#0891b2,#22b8dc)}
 .meter b{position:absolute;top:-6px;bottom:-6px;width:3px;background:var(--ink)}
-.note{font:600 20px/26px MR;color:var(--dim);margin-top:8px;white-space:nowrap}
+.note{font:600 20px/26px MR;color:var(--dim);margin-top:4px;white-space:nowrap}
 .caption{font:700 ${MOCK_FONT.caption}px/${MOCK_BOXES.caption.h}px MR;color:var(--ink);white-space:nowrap;overflow:hidden}
 .cta{display:flex;align-items:center;justify-content:center;text-align:center;border:2px solid #14566a;background:#0b2b34;border-radius:28px;padding:0 44px;font:700 46px/60px SG;color:var(--ink)}
-.det td{height:84px;font:600 30px MR;color:var(--ink)}.det td.r{font:700 32px JB}
+.det td{height:86px;font:600 30px MR;color:var(--ink)}.det td.r{font:700 32px JB}
 .win.d{display:flex;flex-direction:column}.win.d .foot{margin-top:auto}
-.foot{height:60px;line-height:60px;padding:0 28px;border-top:2px solid var(--line);font:600 24px MR;color:var(--mute);letter-spacing:.04em;white-space:nowrap}
+.foot{height:56px;line-height:56px;padding:0 28px;border-top:2px solid var(--line);font:600 24px MR;color:var(--mute);letter-spacing:.04em;white-space:nowrap}
 .hl{outline:4px solid var(--cyan);outline-offset:-4px;border-radius:14px}
 .dim{opacity:.3}
 .hidden{visibility:hidden}
