@@ -63,6 +63,9 @@ td{height:90px;font:500 32px JB;padding:0 28px;border-top:2px solid var(--line);
 .note{font:600 20px/26px MR;color:var(--dim);margin-top:8px;white-space:nowrap}
 .caption{font:700 ${MOCK_FONT.caption}px/${MOCK_BOXES.caption.h}px MR;color:var(--ink);white-space:nowrap;overflow:hidden}
 .cta{display:flex;align-items:center;justify-content:center;text-align:center;border:2px solid #14566a;background:#0b2b34;border-radius:28px;padding:0 44px;font:700 46px/60px SG;color:var(--ink)}
+.det td{height:84px;font:600 30px MR;color:var(--ink)}.det td.r{font:700 32px JB}
+.win.d{display:flex;flex-direction:column}.win.d .foot{margin-top:auto}
+.foot{height:60px;line-height:60px;padding:0 28px;border-top:2px solid var(--line);font:600 24px MR;color:var(--mute);letter-spacing:.04em;white-space:nowrap}
 .hl{outline:4px solid var(--cyan);outline-offset:-4px;border-radius:14px}
 .dim{opacity:.3}
 .hidden{visibility:hidden}
@@ -74,8 +77,10 @@ export function buildMockHtml(frame: MockFrame): string {
   const m = chart.mock;
   if (!m) throw new VideoFactoryError("mockCard: a mock chart scene has no mock spec (validateScenePlan should have refused it).");
   const stage = chart.stage;
-  const closing = chart.dim === true || stage >= 4;
-  const showResult = stage >= 2;
+  const closing = chart.dim === true;
+  // Stage 4 of a mock with details swaps the step and result windows for the detail card.
+  const detail = m.details !== undefined && stage === 4 && !closing;
+  const showResult = stage >= 2 && !detail;
   const lastRow = m.source.rows.length - 1;
   const box = (name: MockBoxName): string => `data-box="${name}"`;
   const lines = chart.lines.map((l, i) => `<div class="${i >= m.accentFrom ? "accent" : ""}">${esc(l)}</div>`).join("");
@@ -99,6 +104,8 @@ export function buildMockHtml(frame: MockFrame): string {
 <div ${box("step")} class="step${showResult ? "" : " hidden"}${closing ? " dim" : ""}"><span>${esc(m.step)}</span><svg viewBox="0 0 44 44"><path d="M22 6v30M10 25l12 12 12-12"/></svg></div>
 <div ${box("result")} class="win${showResult ? "" : " hidden"}${closing ? " dim" : ""}"><div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">${esc(m.result.title)}</span><span class="tag">${esc(m.result.tag.toUpperCase())}</span></div>
 <div class="stats">${stats}</div></div>
+${m.details ? `<div ${box("detail")} class="win d${detail ? "" : " hidden"}"><div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="t">${esc(m.details.title)}</span><span class="tag">${esc(m.result.tag.toUpperCase())}</span></div>
+<table class="det">${m.details.rows.map((r) => `<tr><td>${esc(r.label)}</td><td class="r ${toneClass(r.tone)}">${esc(r.value)}</td></tr>`).join("")}</table><div class="foot">${esc(m.details.footer)}</div></div>` : ""}
 <div ${box("caption")} class="caption" data-fit>${esc(frame.captionText)}</div>
 ${frame.cta ? `<div ${box("cta")} class="cta">${esc(frame.cta)}</div>` : ""}
 </body></html>`;

@@ -40,6 +40,7 @@ export const MOCK_BOXES = {
   source: { x: MOCK_SAFE.x, y: 690, w: MOCK_SAFE.w, h: 300 },
   step: { x: MOCK_SAFE.x, y: 1010, w: MOCK_SAFE.w, h: 108 },
   result: { x: MOCK_SAFE.x, y: 1138, w: MOCK_SAFE.w, h: 314 },
+  detail: { x: MOCK_SAFE.x, y: 1010, w: MOCK_SAFE.w, h: 442 },
   caption: { x: MOCK_SAFE.x, y: 1466, w: MOCK_SAFE.w, h: 70 },
   cta: { x: MOCK_SAFE.x, y: 740, w: MOCK_SAFE.w, h: 300 },
 } as const satisfies Record<string, Rect>;
@@ -66,6 +67,10 @@ export const MOCK_LIMITS = {
   statValue: 6,
   statUnit: 10,
   statNote: 26,
+  detailRows: 3,
+  detailLabel: 24,
+  detailValue: 12,
+  footer: 30,
   caption: 30,
   cta: 80,
 } as const;
@@ -92,6 +97,10 @@ export function mockTexts(spec: MockSpec, headlineLines: string[], caption: stri
     if (s.unit) t.push([`stat ${i + 1} unit`, s.unit]);
     if (s.note) t.push([`stat ${i + 1} note`, s.note]);
   });
+  if (spec.details) {
+    t.push(["detail title", spec.details.title], ["detail footer", spec.details.footer]);
+    spec.details.rows.forEach((r, i) => t.push([`detail row ${i + 1} label`, r.label], [`detail row ${i + 1} value`, r.value]));
+  }
   t.push(["caption", caption]);
   if (cta) t.push(["invitation", cta]);
   return t;
@@ -125,6 +134,16 @@ export function mockFitProblems(spec: MockSpec, headlineLines: string[], caption
     if (s.unit) over(`stat ${i + 1} unit`, s.unit, L.statUnit);
     if (s.note) over(`stat ${i + 1} note`, s.note, L.statNote);
   });
+  if (spec.details) {
+    const d = spec.details;
+    over("detail title", d.title, L.windowTitle);
+    over("detail footer", d.footer, L.footer);
+    if (d.rows.length !== L.detailRows) p.push(`The detail card holds exactly ${L.detailRows} rows, not ${d.rows.length}.`);
+    d.rows.forEach((r, i) => {
+      over(`detail row ${i + 1} label`, r.label, L.detailLabel);
+      over(`detail row ${i + 1} value`, r.value, L.detailValue);
+    });
+  }
   over("caption", caption, L.caption);
   if (cta) over("invitation", cta, L.cta);
   return p;
