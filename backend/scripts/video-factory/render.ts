@@ -329,7 +329,10 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
     const scene = plan.scenes[i]!;
     // Each input runs a transition-length past its planned duration -- see computeSyncedSceneTimeline.
     const inputDuration = inputDurations[i]!;
-    if (scene.card && !scene.clipPath && !scene.imagePath) {
+    if (scene.card?.frames && !scene.clipPath && !scene.imagePath) {
+      // Entrance motion: an image sequence at the render frame rate; the filter below holds its last frame for the rest of the scene.
+      inputArgs.push("-framerate", String(FRAME_RATE), "-i", renderBasename(scene.card.frames.pattern));
+    } else if (scene.card && !scene.clipPath && !scene.imagePath) {
       inputArgs.push("-loop", "1", "-framerate", String(FRAME_RATE), "-t", inputDuration.toFixed(3), "-i", renderBasename(scene.card.backgroundPath));
     } else if (scene.imagePath) {
       // UI screenshot: a still looped at the render's frame rate for the
@@ -434,6 +437,12 @@ export function buildFfmpegArgs(plan: RenderPlan): string[] {
         // The shadow sits CARD_SHADOW_DROP below the card's centre, exactly as the static layout placed it.
         `[bg${i}][sh${i}]overlay=x='${cardCenterX}-w/2':y='${cardCenterY + CARD_SHADOW_DROP}-h/2':eval=frame[cb${i}]`,
         `[cb${i}][cd${i}]overlay=x='${cardCenterX}-w/2':y='${cardCenterY}-h/2':eval=frame:shortest=1,fps=${FRAME_RATE},format=yuv420p,setsar=1:1,setpts=PTS-STARTPTS[${label}]`,
+      );
+      continue;
+    }
+    if (scene.card?.frames && !scene.clipPath && !scene.imagePath) {
+      sceneFilterParts.push(
+        `[${i}:v]scale=${WIDTH}:${HEIGHT},fps=${FRAME_RATE},tpad=stop_mode=clone:stop_duration=${inputDurations[i]!.toFixed(3)},trim=duration=${inputDurations[i]!.toFixed(3)},format=yuv420p,setsar=1:1,setpts=PTS-STARTPTS[${label}]`,
       );
       continue;
     }

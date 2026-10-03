@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CHART, validateChartScene } from "../src/shortform/chart";
 import { MOCK_BOXES, MOCK_RIGHT_LIMIT, MOCK_SAFE, boxesOutsideSafeArea } from "../src/shortform/mockLayout";
-import { PLATFORM_OVERLAY_ZONES } from "../scripts/video-factory/render";
+import { PLATFORM_OVERLAY_ZONES, buildFfmpegArgs } from "../scripts/video-factory/render";
 import { BARS_PILOTS, barsSizedUpPlan } from "../src/shortform/chartBarsConcepts";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
 import { renderBar } from "../src/shortform/storyScore";
-import { buildMockHtml, createMockRenderer, measuredProblems } from "../scripts/video-factory/mockCard";
+import { MOCK_ENTRANCE, buildMockHtml, createMockRenderer, measuredProblems } from "../scripts/video-factory/mockCard";
 import type { SceneSpec } from "../src/shortform/types";
 
 const manifest = loadManifest();
@@ -66,6 +66,25 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
     expect(buildMockHtml(frame(b3!))).toMatch(/class="stat hl"/);
   });
 
+  it("the opening beat's headline figures count up, and later beats animate what they reveal", () => {
+    const [b1, b2, b3, b4, b5] = plan.scenes.map((s) => buildMockHtml(frame(s)));
+    expect(b1).toMatch(/data-count="\$127"/);
+    expect(b1).toMatch(/data-a="slideup"/);
+    expect(b2).toMatch(/class="v" data-count="5"/);
+    expect(b3).toMatch(/data-a="pop"/);
+    expect(b4).toMatch(/class="win d"[^>]*data-a="slideup"/);
+    expect(b5).toMatch(/data-a="dimin"/);
+    expect(b1).not.toMatch(/data-count="\$127"[^>]*>\$0/); // markup holds the finished text; the page script draws the count
+  });
+
+  it("a scene with entrance frames is read as an image sequence and held on its last frame", () => {
+    const scene = (i: number) => ({ kind: "explanation" as const, label: "", durationSeconds: 3, backgroundColor: "0x05070a", narration: "", card: { backgroundPath: `/x/mock-${i}.png`, frames: { pattern: `mock-${i}-%03d.png`, count: 30 } } });
+    const args = buildFfmpegArgs({ scenes: [scene(0), scene(1)], totalDurationSeconds: 6, voiceoverPath: "/x/v.mp3", assPath: "/x/c.ass", outputPath: "/x/o.mp4", silencePadSeconds: 0.3 }).join(" ");
+    expect(args).toContain("mock-0-%03d.png");
+    expect(args).not.toContain("-loop 1 -framerate 30 -t 3.000 -i mock-0");
+    expect(args).toMatch(/tpad=stop_mode=clone/);
+  });
+
   const chromium = ["/opt/pw-browsers/chromium", process.env.MOCK_CHROMIUM_PATH ?? ""].some((p) => p && existsSync(p));
   it.skipIf(!chromium)("renders every beat of every concept in the brand fonts with all boxes measured clear of the overlays", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mock-"));
@@ -78,4 +97,18 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
       await r.close();
     }
   }, 120_000);
+
+  it.skipIf(!chromium)("writes an entrance sequence that ends on the finished slide", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "mock-seq-"));
+    const r = await createMockRenderer(dir);
+    try {
+      const beat = await r.renderBeat(frame(plan.scenes[0]!), dir, "b0");
+      expect(beat.count).toBe(Math.round(MOCK_ENTRANCE.seconds * MOCK_ENTRANCE.fps));
+      expect(existsSync(join(dir, "b0-000.png"))).toBe(true);
+      expect(existsSync(join(dir, `b0-${String(beat.count - 1).padStart(3, "0")}.png`))).toBe(true);
+      expect(existsSync(beat.stillPath)).toBe(true);
+    } finally {
+      await r.close();
+    }
+  }, 60_000);
 });
