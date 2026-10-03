@@ -11,6 +11,7 @@ import type { MockSpec, Rect } from "./types.js";
  *     applied (layout.ts);
  *   - the owner's measured overlay zones (2026-09-25): the button column from x=930, and the caption/username block from
  *     y=1600 (render.ts PLATFORM_OVERLAY_ZONES);
+ *   - the pinned-comment bubble TikTok draws over the bottom of the video, from about y=1290 (MOCK_BOTTOM_LIMIT);
  *   - the chart cards' own right edge, x=880 (CHART.safeRight), so a mock sits exactly where a chart card does.
  * The geometry is static data, so the check is pure, runs in CI, and a test proves every box clears it. The renderer
  * also measures the real rendered boxes in the browser as a second guard.
@@ -18,6 +19,13 @@ import type { MockSpec, Rect } from "./types.js";
 const LEFT_MARGIN = 100;
 /** The chart cards' right edge (CHART.safeRight in chart.ts, which a test keeps equal; chart.ts imports this file, so it cannot be imported back). */
 export const MOCK_RIGHT_LIMIT = 880;
+/**
+ * TikTok shows the pinned comment as a bubble over the bottom of the video, above the account name and description. Measured
+ * on a phone (2026-10-03, a post with a pinned comment): in the 1920px frame the bubble covers roughly y 1290-1480 and the
+ * description block starts near y 1520, which is above the 1600 the earlier overlay measurement assumed. Everything on a
+ * mock therefore ends above y 1250, so a pinned comment never covers a figure or the caption.
+ */
+export const MOCK_BOTTOM_LIMIT = 1250;
 const TOP_MARGIN = 170; // 20px past TikTok's 150px top inset, which is the stricter of the two platforms
 
 export const MOCK_SAFE: Rect = (() => {
@@ -26,7 +34,7 @@ export const MOCK_SAFE: Rect = (() => {
   const left = Math.max(tiktok.x, shorts.x, LEFT_MARGIN);
   const top = Math.max(tiktok.y, shorts.y, TOP_MARGIN);
   const right = Math.min(tiktok.x + tiktok.w, shorts.x + shorts.w, MOCK_RIGHT_LIMIT);
-  const bottom = Math.min(tiktok.y + tiktok.h, shorts.y + shorts.h, 1600);
+  const bottom = Math.min(tiktok.y + tiktok.h, shorts.y + shorts.h, MOCK_BOTTOM_LIMIT);
   return { x: left, y: top, w: right - left, h: bottom - top };
 })();
 
@@ -35,20 +43,20 @@ export const MOCK_CANVAS = { width: CANVAS.width, height: CANVAS.height } as con
 /** Where every element of the mock sits. Windows have a fixed height, so text that is too long is a validation error, not a reflow. */
 export const MOCK_BOXES = {
   logo: { x: MOCK_SAFE.x, y: 170, w: 220, h: 58 },
-  eyebrow: { x: MOCK_SAFE.x, y: 262, w: MOCK_SAFE.w, h: 36 },
-  headline: { x: MOCK_SAFE.x, y: 312, w: MOCK_SAFE.w, h: 330 },
-  source: { x: MOCK_SAFE.x, y: 690, w: MOCK_SAFE.w, h: 300 },
-  step: { x: MOCK_SAFE.x, y: 1010, w: MOCK_SAFE.w, h: 108 },
-  result: { x: MOCK_SAFE.x, y: 1138, w: MOCK_SAFE.w, h: 314 },
-  detail: { x: MOCK_SAFE.x, y: 1010, w: MOCK_SAFE.w, h: 442 },
-  caption: { x: MOCK_SAFE.x, y: 1466, w: MOCK_SAFE.w, h: 70 },
-  cta: { x: MOCK_SAFE.x, y: 740, w: MOCK_SAFE.w, h: 300 },
+  eyebrow: { x: MOCK_SAFE.x, y: 240, w: MOCK_SAFE.w, h: 32 },
+  headline: { x: MOCK_SAFE.x, y: 282, w: MOCK_SAFE.w, h: 276 },
+  source: { x: MOCK_SAFE.x, y: 580, w: MOCK_SAFE.w, h: 256 },
+  step: { x: MOCK_SAFE.x, y: 844, w: MOCK_SAFE.w, h: 78 },
+  result: { x: MOCK_SAFE.x, y: 930, w: MOCK_SAFE.w, h: 256 },
+  detail: { x: MOCK_SAFE.x, y: 844, w: MOCK_SAFE.w, h: 342 },
+  caption: { x: MOCK_SAFE.x, y: 1194, w: MOCK_SAFE.w, h: 48 },
+  cta: { x: MOCK_SAFE.x, y: 600, w: MOCK_SAFE.w, h: 250 },
 } as const satisfies Record<string, Rect>;
 
 export type MockBoxName = keyof typeof MOCK_BOXES;
 
 /** Font sizes (px) the template draws with. The character budgets below follow from them. */
-export const MOCK_FONT = { headline: 106, headlineLine: 110, caption: 42 } as const;
+export const MOCK_FONT = { headline: 88, headlineLine: 92, caption: 36 } as const;
 
 /** Most characters each text may have so it fits its fixed box (Space Grotesk / Manrope / JetBrains Mono at the sizes above). */
 export const MOCK_LIMITS = {
