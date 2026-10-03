@@ -407,3 +407,11 @@ saying the data is sample data (`backend/src/video/pinnedComment.ts`; one of fou
 wordings, chosen from the video's hook so neighbouring videos differ). It is built on the
 fly, not stored. Posting and pinning stay manual: neither TikTok's nor YouTube's API can
 pin a comment, and nothing here posts to a platform without the owner.
+
+**Owner-view overlays (2026-10-03).** On the owner's own view of a posted video TikTok draws extra
+UI over the bottom of the frame: a comment-preview bubble, a "Promotional content" label and a
+promote/analytics bar (YouTube: "Promote this Short", "Analytics", "Share your video"). A guest view
+(TikTok web, signed out of the owner account) shows none of them, only the right-hand buttons and the
+account name and caption from about y 1540. The layout is therefore checked against what viewers see
+(bottom limit y 1600 for the platform caption block), not against the owner's view. An earlier change
+(#97) moved everything above y 1250 for the owner-view bubble and was reverted.
