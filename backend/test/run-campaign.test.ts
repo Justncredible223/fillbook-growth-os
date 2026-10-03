@@ -49,7 +49,7 @@ function fakeRes() {
 function createFakeClient(
   opts: {
     existingOpportunity?: { id: string; status: string } | null;
-    campaignRows?: Array<{ thesis: string; status: string }>;
+    campaignRows?: Array<{ thesis: string; status: string; decided_by?: string | null }>;
     /** Campaign-run requests still queued or running, with their opportunity's title. */
     pendingRuns?: Array<{ opportunity_id: string; title: string }>;
   } = {},
