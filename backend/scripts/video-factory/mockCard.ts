@@ -169,6 +169,17 @@ function chromiumPath(): string | undefined {
   return existsSync(preinstalled) ? preinstalled : undefined;
 }
 
+/** True when a browser for the mock slides can be found (an override, the pre-installed one, or Playwright's own install). Lets tests that really render skip where there is none. */
+export async function chromiumAvailable(): Promise<boolean> {
+  if (chromiumPath()) return true;
+  try {
+    const { chromium } = await import("playwright-core");
+    return existsSync(chromium.executablePath());
+  } catch {
+    return false;
+  }
+}
+
 interface Measured {
   box: string;
   x: number;

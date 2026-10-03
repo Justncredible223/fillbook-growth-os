@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ProcessRunner } from "../../scripts/video-factory/processRunner";
 import { runRender } from "../../scripts/video-worker/render-single";
 import { PILOT_1, PILOT_2 } from "../../src/shortform/pilots";
-import { chartAPlan } from "../../src/shortform/chartPilots";
+import { mockPayoutGapPlan as chartAPlan } from "../../src/shortform/chartMockConcepts";
 import { computeScenePlanHash } from "../../src/shortform/scenePlan";
 import { buildVideoScriptFromScenePlan } from "../../src/content/videoScriptWriter";
 
@@ -16,6 +16,29 @@ import { buildVideoScriptFromScenePlan } from "../../src/content/videoScriptWrit
 vi.mock("../../src/shortform/storyScore", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/shortform/storyScore")>();
   return { ...actual, assertMeetsRenderBar: () => {}, renderBar: () => ({ ok: true, score: 100, grade: "A+" as const, fixes: [] }) };
+});
+
+// The chart-card plan below draws mock slides. Its slide rendering (a real headless Chromium) is tested for real in
+// mockLayout.test.ts; here the browser is stubbed so this suite stays fast and needs no browser installed.
+vi.mock("../../scripts/video-factory/mockCard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../scripts/video-factory/mockCard")>();
+  const { writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  return {
+    ...actual,
+    createMockRenderer: async () => ({
+      render: async (_frame: unknown, outPath: string) => {
+        writeFileSync(outPath, "png");
+        return outPath;
+      },
+      renderBeat: async (_frame: unknown, dir: string, prefix: string) => {
+        const stillPath = join(dir, `${prefix}.png`);
+        writeFileSync(stillPath, "png");
+        return { stillPath, pattern: `${prefix}-%03d.png`, count: 30 };
+      },
+      close: async () => {},
+    }),
+  };
 });
 
 /**

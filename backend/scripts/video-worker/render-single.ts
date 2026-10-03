@@ -127,6 +127,7 @@ async function buildVerifiedMotionPlan(
   outDir: string,
   runner: ProcessRunner,
   outputPath: string,
+  musicRotation?: number,
 ): Promise<{ plan: RenderPlan; assetsUsed: CatalogAssetSummary[]; narrationProvenance: "edge_tts" | "offline_sapi" | "none" }> {
   const manifest = loadManifest();
   // Payoff-layout plans (the retention redesign) are timed for a brisker voice and snappier cuts; every other plan is unchanged.
@@ -150,7 +151,7 @@ async function buildVerifiedMotionPlan(
   writeFileSync(assPath, buildAssFile(adapted.captionCues, adapted.sceneLabelCues), "utf-8");
 
   const seed = parseInt(outputPath.replace(/[^0-9a-f]/gi, "").slice(0, 8) || "0", 16) || 0;
-  const music = await pickMusic(seed, adapted.totalDurationSeconds, runner);
+  const music = await pickMusic(seed, adapted.totalDurationSeconds, runner, undefined, musicRotation);
 
   const plan: RenderPlan = {
     scenes: adapted.scenes,
@@ -173,6 +174,7 @@ async function buildStockFootagePlan(
   runner: ProcessRunner,
   workDir: string,
   outputPath: string,
+  musicRotation?: number,
 ): Promise<RenderPlan> {
   const voiceover = await generateVoiceover(pkg.videoScript.script, outDir, runner, DEFAULT_VOICE);
   const totalDurationSeconds = voiceover.durationSeconds + SILENCE_PAD_SECONDS;
@@ -255,7 +257,7 @@ async function buildStockFootagePlan(
   }
   console.log(`[render-single] hook scene visual: ${scenes[0]?.imagePath ? "screenshot" : scenes[0]?.clipPath ? "stock footage" : "FLAT COLOR CARD (retention risk)"}`);
 
-  const music = await pickMusic(seed, totalDurationSeconds, runner);
+  const music = await pickMusic(seed, totalDurationSeconds, runner, undefined, musicRotation);
   if (music) console.log(`[render-single] music: ${music.file.split(/[\/]/).pop()} from ${music.startSeconds}s`);
 
   return {
@@ -268,6 +270,24 @@ async function buildStockFootagePlan(
     musicFile: music?.file,
     musicStartSeconds: music?.startSeconds,
   };
+}
+
+/**
+ * This render's place among all renders, oldest first: how many render rows were created before it. Music walks through the
+ * bundled tracks in that order, so no two consecutive renders share a track and every track plays before any repeats.
+ * Undefined if the lookup fails (the track then comes from the render's own id, as before): music is never worth failing a render.
+ */
+async function musicRotationIndex(client: SupabaseClient, videoRenderId: string): Promise<number | undefined> {
+  try {
+    const { data: row } = await client.from("video_renders").select("created_at").eq("id", videoRenderId).maybeSingle();
+    const createdAt = (row as { created_at?: string } | null)?.created_at;
+    if (!createdAt) return undefined;
+    const { count, error } = await client.from("video_renders").select("id", { count: "exact", head: true }).lt("created_at", createdAt);
+    return error || count === null ? undefined : count;
+  } catch (err) {
+    console.warn("[render-single] music rotation lookup failed, using the render id:", (err as Error).message ?? err);
+    return undefined;
+  }
 }
 
 export async function runRender(videoRenderId: string, campaignAssetId: string, deps: RenderWorkerDeps): Promise<RenderRunResult> {
@@ -288,6 +308,7 @@ export async function runRender(videoRenderId: string, campaignAssetId: string, 
   mkdirSync(outDir, { recursive: true });
   const outputPath = join(outDir, "final.mp4");
 
+  const musicRotation = await musicRotationIndex(client, videoRenderId);
   const motionMatch = resolveMotionScenePlan(pkg.videoScript);
   console.log(`[render-single] motion selection: ${motionMatch.reason}`);
 
@@ -296,11 +317,11 @@ export async function runRender(videoRenderId: string, campaignAssetId: string, 
   if (motionMatch.plan) {
     // Owner rule: only concepts that grade A or A+ are rendered, including ones approved before the rule existed.
     assertMeetsRenderBar(motionMatch.plan);
-    const built = await buildVerifiedMotionPlan(motionMatch.plan, outDir, runner, outputPath);
+    const built = await buildVerifiedMotionPlan(motionMatch.plan, outDir, runner, outputPath, musicRotation);
     plan = built.plan;
     motionSelection = { usedVerifiedScenePlan: true, reason: motionMatch.reason, assetsUsed: built.assetsUsed, narrationProvenance: built.narrationProvenance };
   } else {
-    plan = await buildStockFootagePlan(pkg, outDir, runner, workDir, outputPath);
+    plan = await buildStockFootagePlan(pkg, outDir, runner, workDir, outputPath, musicRotation);
     motionSelection = { usedVerifiedScenePlan: false, reason: motionMatch.reason, assetsUsed: [], narrationProvenance: null };
   }
   console.log(`[render-single] motion selection result: ${JSON.stringify(motionSelection)}`);

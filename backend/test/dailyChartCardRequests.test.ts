@@ -24,20 +24,19 @@ function deps(opts: { paused?: boolean; states?: Array<[number, ConceptState]>; 
 }
 
 describe("the chart concepts the daily refill draws from", () => {
-  it("are only chart cards that clear the bar: 3 hand-made, 9 bar charts and the illustrative ones", () => {
-    expect(concepts).toHaveLength(24);
+  it("are only product-mock cards that clear the bar: 3 hand-made and 9 bar charts, none of the illustrative win-rate ones", () => {
+    expect(concepts).toHaveLength(12);
     expect(concepts.every((c) => c.id.startsWith("chart-"))).toBe(true);
     expect(concepts.filter((c) => c.id.startsWith("chart-bars-"))).toHaveLength(9);
-    expect(concepts.filter((c) => c.id.startsWith("chart-o-"))).toHaveLength(12);
+    expect(concepts.filter((c) => c.id.startsWith("chart-o-"))).toHaveLength(0);
     expect(concepts.map((c) => c.id)).toEqual(expect.arrayContaining(["chart-a-17-green-days", "chart-b-10-green-days", "chart-c-one-signal-two-accounts"]));
   });
 
   it("are served in a fixed order that rotates through themes, so the same template never runs back to back", () => {
     expect(concepts.map((c) => c.id)).toEqual(offeredChartConcepts().map((c) => c.id));
-    // The first requests, one per theme: a payout card, the two-accounts card, then each bar chart, then one illustrative card.
+    // The first requests, one per theme: a payout card, the two-accounts card, then each bar chart; the second payout card is last.
     expect(concepts.slice(0, 3).map((c) => c.id)).toEqual(["chart-a-17-green-days", "chart-c-one-signal-two-accounts", "chart-bars-day-of-week"]);
-    expect(concepts.slice(0, 11).filter((c) => c.id.startsWith("chart-o-"))).toHaveLength(0);
-    expect(concepts.slice(0, 12).filter((c) => c.id.startsWith("chart-o-"))).toHaveLength(1);
+    expect(concepts[concepts.length - 1]!.id).toBe("chart-b-10-green-days");
   });
 });
 
