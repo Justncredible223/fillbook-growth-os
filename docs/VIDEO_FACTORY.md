@@ -340,8 +340,10 @@ the fillbook repo with their OFL licences) and colour tokens, then screenshotted
 headless Chromium at the final 1080x1920 (`mockCard.ts`). It shows a source window
 (what the trader's platform shows), a "Fillbook Insights" step, and the result
 window, so the viewer sees where in the product a number comes from.
-`chart-bars-sized-up` is the first concept on it; use `mock` on a `buildBarsPlan`
-config the same way.
+All nine `chart-bars-*` concepts use it (the older drawn "bars" kind is still
+supported and tested). To add a concept, give a `buildBarsPlan` config a `mock`
+spec: headline of at most 3 lines of 13 characters, 2 source rows, 2 result stats;
+put the "but" item last, since the third beat highlights the last row and 2nd stat.
 
 **Platform overlays.** Every box has a fixed position in `mockLayout.ts`, all inside
 x 100-880, y 170-1600 -- the strictest of TikTok's and YouTube Shorts' insets, the

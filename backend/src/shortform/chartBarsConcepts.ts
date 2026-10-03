@@ -35,7 +35,7 @@ interface BeatInput {
   closing?: boolean;
 }
 
-interface BarsConfig {
+export interface BarsConfig {
   planId: string;
   title: string;
   topic: string;
@@ -45,14 +45,14 @@ interface BarsConfig {
   expectedTopic: string;
   lines: string[];
   accent: "good" | "bad";
-  rows: ChartRow[];
-  highlight: number;
+  rows?: ChartRow[];
+  highlight?: number;
   /** When set, the plan is drawn as an HTML product mock (chart kind "mock") instead of bars; lines may then be 1-3 short lines. */
   mock?: MockSpec;
   beats: BeatInput[];
 }
 
-function buildBarsPlan(cfg: BarsConfig): ScenePlan {
+export function buildBarsPlan(cfg: BarsConfig): ScenePlan {
   const headline = cfg.lines.join(" ");
   const scenes: SceneSpec[] = cfg.beats.map((b, i) => {
     const claim: Claim = {
@@ -84,7 +84,7 @@ function buildBarsPlan(cfg: BarsConfig): ScenePlan {
       masks: [],
       chart: cfg.mock
         ? { kind: "mock" as const, lines: [...cfg.lines], accent: cfg.accent, mock: cfg.mock, stage: b.stage, ...(b.closing ? { dim: true } : {}) }
-        : { kind: "bars" as const, lines: [...cfg.lines], accent: cfg.accent, rows: cfg.rows, highlight: cfg.highlight, stage: b.stage, ...(b.closing ? { dim: true } : {}) },
+        : { kind: "bars" as const, lines: [...cfg.lines], accent: cfg.accent, rows: cfg.rows!, highlight: cfg.highlight, stage: b.stage, ...(b.closing ? { dim: true } : {}) },
     };
   });
   return {
@@ -112,16 +112,29 @@ export function barsDayOfWeekPlan(): ScenePlan {
     variationId: "bars-dow",
     assetId: "rec.p8-day-of-week.v1",
     expectedTopic: "day_of_week",
-    lines: ["Tuesday made $157.", "Monday lost $57."],
+    lines: ["Tuesday $157.", "Monday lost", "$57."],
     accent: "bad",
-    highlight: 0,
-    rows: [
-      { label: "Monday · 5 trades", display: "-$57.32", amount: 57.32, tone: "bad" },
-      { label: "Tuesday · 5 trades", display: "$157.12", amount: 157.12, tone: "good" },
-      { label: "Wednesday · 4 trades", display: "$60.60", amount: 60.6, tone: "good" },
-      { label: "Thursday · 4 trades", display: "$104.60", amount: 104.6, tone: "good" },
-      { label: "Friday · 4 trades", display: "$122.08", amount: 122.08, tone: "good" },
-    ],
+    mock: {
+      eyebrow: "SAMPLE ACCOUNT",
+      accentFrom: 1,
+      source: {
+        title: "Daily P&L",
+        columns: ["DAY", "TRADES", "P&L"],
+        rows: [
+          { when: "Tuesday", symbol: "5", value: "$157", tone: "good" },
+          { when: "Monday", symbol: "5", value: "-$57", tone: "bad" },
+        ],
+      },
+      step: "FILLBOOK REPORTS",
+      result: {
+        title: "Profit by weekday",
+        tag: "Demo data",
+        stats: [
+          { label: "BEST DAY: TUESDAY", value: "$157" },
+          { label: "ONLY RED DAY: MONDAY", value: "-$57" },
+        ],
+      },
+    },
     beats: [
       { stage: 1, seconds: 3.0, facts: ["dow.all"], narration: "Fillbook Reports show profit by day of the week.", takeaway: "Reports split profit by weekday.", caption: "Reports: profit by weekday." },
       { stage: 2, seconds: 3.2, facts: ["dow.all"], narration: "Tuesday made $157.12. Friday made $122.08.", takeaway: "The two best days.", caption: "Tuesday: $157.12." },
@@ -139,13 +152,29 @@ export function barsTimeOfDayPlan(): ScenePlan {
     variationId: "bars-tod",
     assetId: "rec.b3-reports-timing-conviction.v1",
     expectedTopic: "time_of_day",
-    lines: ["71% win at the open.", "Only 24% after 10:30."],
+    lines: ["71% at open.", "Only 24%", "after 10:30."],
     accent: "bad",
-    highlight: 1,
-    rows: [
-      { label: "Open, 9:30-10:30am ET · 106 trades", display: "71% win", amount: 71, tone: "good" },
-      { label: "Late morning, 10:30am-12pm ET · 25 trades", display: "24% win", amount: 24, tone: "bad" },
-    ],
+    mock: {
+      eyebrow: "SAMPLE ACCOUNT",
+      accentFrom: 1,
+      source: {
+        title: "Trade history",
+        columns: ["TIME (ET)", "TRADES", "WIN RATE"],
+        rows: [
+          { when: "9:30-10:30am", symbol: "106", value: "71% win", tone: "good" },
+          { when: "10:30am-12pm", symbol: "25", value: "24% win", tone: "bad" },
+        ],
+      },
+      step: "FILLBOOK REPORTS",
+      result: {
+        title: "Win rate by time",
+        tag: "Demo data",
+        stats: [
+          { label: "THE OPEN", value: "71%", note: "106 trades" },
+          { label: "LATE MORNING", value: "24%", note: "25 trades" },
+        ],
+      },
+    },
     beats: [
       { stage: 1, seconds: 3.0, facts: ["timing.buckets"], narration: "Fillbook Reports break win rate down by time of day.", takeaway: "Reports split win rate by time window.", caption: "Reports: win rate by time." },
       { stage: 2, seconds: 3.2, facts: ["timing.buckets"], narration: "The open: 106 trades, 71% win, $2,967.96.", takeaway: "The opening hour.", caption: "Open: 71% win." },
@@ -163,14 +192,29 @@ export function barsHabitCostPlan(): ScenePlan {
     variationId: "bars-habit",
     assetId: "rec.b3-insights-behavior.v1",
     expectedTopic: "mistake_tags",
-    lines: ["Moved stops cost $656.", "Discipline made $828."],
-    accent: "good",
-    highlight: 0,
-    rows: [
-      { label: "Moved stop · 4 trades", display: "-$655.84", amount: 655.84, tone: "bad" },
-      { label: "Chased price · 10 trades", display: "-$629.60", amount: 629.6, tone: "bad" },
-      { label: "Good discipline · 12 trades", display: "$828.48", amount: 828.48, tone: "good" },
-    ],
+    lines: ["Moved stops", "cost $656."],
+    accent: "bad",
+    mock: {
+      eyebrow: "SAMPLE ACCOUNT",
+      accentFrom: 1,
+      source: {
+        title: "Tagged trades",
+        columns: ["TAG", "TRADES", "RESULT"],
+        rows: [
+          { when: "Moved stop", symbol: "4", value: "-$656", tone: "bad" },
+          { when: "Discipline", symbol: "12", value: "$828", tone: "good" },
+        ],
+      },
+      step: "FILLBOOK INSIGHTS",
+      result: {
+        title: "Net result by tag",
+        tag: "Demo data",
+        stats: [
+          { label: "MOVED STOP", value: "-$656", note: "4 trades" },
+          { label: "GOOD DISCIPLINE", value: "$828", note: "12 trades" },
+        ],
+      },
+    },
     beats: [
       { stage: 1, seconds: 3.0, facts: ["tags.all"], narration: "Tag each trade, and Fillbook Insights adds up every tag.", takeaway: "Insights total each tag.", caption: "Insights: net result by tag." },
       { stage: 2, seconds: 3.2, facts: ["tags.all"], narration: "4 trades tagged Moved stop lost $655.84.", takeaway: "What Moved stop cost.", caption: "Moved stop: -$655.84." },
@@ -188,14 +232,29 @@ export function barsConvictionPlan(): ScenePlan {
     variationId: "bars-conv",
     assetId: "rec.b3-reports-timing-conviction.v1",
     expectedTopic: "conviction",
-    lines: ["Would retake: $3,822.", "Wouldn't: lost $2,576."],
+    lines: ["Retake $3,822", "Wouldn't:", "lost $2,576"],
     accent: "bad",
-    highlight: 1,
-    rows: [
-      { label: "Would take again · 75 trades", display: "$3,822.00", amount: 3822, tone: "good" },
-      { label: "Wouldn't take again · 34 trades", display: "-$2,575.96", amount: 2575.96, tone: "bad" },
-      { label: "Unsure · 22 trades", display: "$315.92", amount: 315.92, tone: "good" },
-    ],
+    mock: {
+      eyebrow: "SAMPLE ACCOUNT",
+      accentFrom: 1,
+      source: {
+        title: "Trade review",
+        columns: ["ANSWER", "TRADES", "RESULT"],
+        rows: [
+          { when: "Would retake", symbol: "75", value: "$3,822", tone: "good" },
+          { when: "Wouldn't", symbol: "34", value: "-$2,576", tone: "bad" },
+        ],
+      },
+      step: "FILLBOOK REPORTS",
+      result: {
+        title: "Results by conviction",
+        tag: "Demo data",
+        stats: [
+          { label: "WOULD TAKE AGAIN", value: "75", note: "made $3,822" },
+          { label: "WOULDN'T TAKE AGAIN", value: "34", note: "lost $2,576" },
+        ],
+      },
+    },
     beats: [
       { stage: 1, seconds: 3.0, facts: ["conviction.all"], narration: "In Fillbook, answer one question per trade: would you take it again?", takeaway: "Answer once per trade; Reports compare.", caption: "Reports: by conviction." },
       { stage: 2, seconds: 3.2, facts: ["conviction.all"], narration: "75 trades you would take again made $3,822.00.", takeaway: "The trades you'd retake.", caption: "Would retake: $3,822." },
@@ -213,13 +272,29 @@ export function barsPlanWindowPlan(): ScenePlan {
     variationId: "bars-plan",
     assetId: "rec.b3-plan-vs-reality.v1",
     expectedTopic: "plan_adherence",
-    lines: ["In the plan: $21.", "Outside it: lost $39."],
+    lines: ["In plan: $21", "Outside it:", "lost $39."],
     accent: "bad",
-    highlight: 1,
-    rows: [
-      { label: "Inside 09:30-11:30 · average per trade", display: "$21.13", amount: 21.13, tone: "good" },
-      { label: "Outside it · 20 trades, average per trade", display: "-$39.16", amount: 39.16, tone: "bad" },
-    ],
+    mock: {
+      eyebrow: "SAMPLE ACCOUNT",
+      accentFrom: 1,
+      source: {
+        title: "Trade history",
+        columns: ["WHERE", "TRADES", "AVG TRADE"],
+        rows: [
+          { when: "Inside plan", symbol: "\u2013", value: "$21", tone: "good" },
+          { when: "Outside plan", symbol: "20", value: "-$39", tone: "bad" },
+        ],
+      },
+      step: "FILLBOOK PLAN VS REALITY",
+      result: {
+        title: "Plan vs reality",
+        tag: "Demo data",
+        stats: [
+          { label: "INSIDE 09:30-11:30", value: "$21", note: "average per trade" },
+          { label: "OUTSIDE IT", value: "-$39", note: "average per trade" },
+        ],
+      },
+    },
     beats: [
       { stage: 1, seconds: 3.0, facts: ["plan.focus"], narration: "Set your trading window in your Fillbook plan, then compare it with what happened.", takeaway: "Fillbook compares the plan with what happened.", caption: "Plan vs what happened." },
       { stage: 2, seconds: 3.2, facts: ["plan.focus"], narration: "Inside 09:30-11:30, trades average $21.13.", takeaway: "Results inside the window.", caption: "Inside the window: $21.13." },
@@ -239,7 +314,6 @@ export function barsSizedUpPlan(): ScenePlan {
     expectedTopic: "revenge_trading",
     lines: ["Lost $127.", "Then sized", "up 2.5x."],
     accent: "bad",
-    highlight: 0,
     mock: {
       eyebrow: "SAMPLE ACCOUNT",
       accentFrom: 1,
@@ -261,13 +335,6 @@ export function barsSizedUpPlan(): ScenePlan {
         ],
       },
     },
-    rows: [
-      { label: "3 min after losing $127", display: "2.5x size", amount: 2.5, tone: "bad" },
-      { label: "4 min after losing $107", display: "2.4x size", amount: 2.4, tone: "bad" },
-      { label: "12 min after losing $63", display: "2.0x size", amount: 2, tone: "bad" },
-      { label: "7 min after losing $75", display: "1.9x size", amount: 1.9, tone: "bad" },
-      { label: "9 min after losing $87", display: "1.5x size", amount: 1.5, tone: "bad" },
-    ],
     beats: [
       { stage: 1, seconds: 3.0, facts: ["behavior.revenge"], narration: "Fillbook Insights flagged 5 possible revenge trades.", takeaway: "Insights flag five trades for review.", caption: "5 possible revenge trades." },
       { stage: 2, seconds: 3.2, facts: ["behavior.revenge"], narration: "Each opened minutes after a loss, bigger than your average size.", takeaway: "Each came soon after a loss, at a larger size.", caption: "Flagged: bigger after a loss." },
@@ -285,15 +352,29 @@ export function barsEdgeMapPlan(): ScenePlan {
     variationId: "bars-edge",
     assetId: "rec.p6-edge-score.v1",
     expectedTopic: "edge_score",
-    lines: ["Edge Score: 67.", "Still developing."],
+    lines: ["Score: 67.", "Still", "developing."],
     accent: "good",
-    highlight: 0,
-    rows: [
-      { label: "Profitability", display: "59", amount: 59, tone: "bad" },
-      { label: "Consistency", display: "63", amount: 63, tone: "good" },
-      { label: "Risk control", display: "69", amount: 69, tone: "good" },
-      { label: "Rule adherence", display: "87", amount: 87, tone: "good" },
-    ],
+    mock: {
+      eyebrow: "SAMPLE ACCOUNT",
+      accentFrom: 1,
+      source: {
+        title: "Score parts",
+        columns: ["PART", "SCORE", "NOTE"],
+        rows: [
+          { when: "Rule adherence", symbol: "87", value: "strongest", tone: "good" },
+          { when: "Profitability", symbol: "59", value: "lowest", tone: "bad" },
+        ],
+      },
+      step: "FILLBOOK EDGE SCORE",
+      result: {
+        title: "Edge Score",
+        tag: "Demo data",
+        stats: [
+          { label: "EDGE SCORE", value: "67", note: "Still developing" },
+          { label: "PROFITABILITY", value: "59", note: "the lowest part" },
+        ],
+      },
+    },
     beats: [
       { stage: 1, seconds: 3.0, facts: ["edge.score", "edge.map"], narration: "Fillbook gives one score for how you trade: Edge Score 67.", takeaway: "One score, built from several parts.", caption: "Edge Score: 67." },
       { stage: 2, seconds: 3.2, facts: ["edge.score", "edge.map"], narration: "Rule adherence is 87. Risk control is 69.", takeaway: "The strongest parts.", caption: "Rule adherence: 87." },
@@ -311,13 +392,29 @@ export function barsWinDriftPlan(): ScenePlan {
     variationId: "bars-drift",
     assetId: "rec.b3-progress.v1",
     expectedTopic: "progress",
-    lines: ["Win rate: 76%.", "Lately: only 55%."],
+    lines: ["Win rate 76%.", "Now only 55%."],
     accent: "bad",
-    highlight: 1,
-    rows: [
-      { label: "Baseline win rate", display: "76%", amount: 76, tone: "good" },
-      { label: "Recent win rate", display: "55%", amount: 55, tone: "bad" },
-    ],
+    mock: {
+      eyebrow: "SAMPLE ACCOUNT",
+      accentFrom: 1,
+      source: {
+        title: "Win rate",
+        columns: ["PERIOD", "TRADES", "WIN RATE"],
+        rows: [
+          { when: "Baseline", symbol: "\u2013", value: "76%", tone: "good" },
+          { when: "Recent", symbol: "\u2013", value: "55%", tone: "bad" },
+        ],
+      },
+      step: "FILLBOOK PROGRESS",
+      result: {
+        title: "Progress",
+        tag: "Demo data",
+        stats: [
+          { label: "BASELINE", value: "76%", note: "your own baseline" },
+          { label: "RECENT", value: "55%", note: "down 21%" },
+        ],
+      },
+    },
     beats: [
       { stage: 1, seconds: 3.0, facts: ["progress.win_rate"], narration: "Fillbook's Progress page compares your win rate now with your own baseline.", takeaway: "Progress compares recent with baseline.", caption: "Progress: recent vs baseline." },
       { stage: 2, seconds: 3.2, facts: ["progress.win_rate"], narration: "The baseline is 76%.", takeaway: "The baseline.", caption: "Baseline: 76%." },
@@ -335,13 +432,29 @@ export function barsConsistencyPlan(): ScenePlan {
     variationId: "bars-cons",
     assetId: "rec.p4-account-health-consistency.v1",
     expectedTopic: "consistency",
-    lines: ["One day made 46%.", "The cap: only 40%."],
+    lines: ["One day made", "46%. The cap:", "only 40%."],
     accent: "bad",
-    highlight: 0,
-    rows: [
-      { label: "One day's share of total profit", display: "46%", amount: 46, tone: "bad" },
-      { label: "The firm's consistency cap", display: "40%", amount: 40, tone: "good" },
-    ],
+    mock: {
+      eyebrow: "SAMPLE ACCOUNT",
+      accentFrom: 1,
+      source: {
+        title: "Daily P&L",
+        columns: ["ITEM", "BASIS", "SHARE"],
+        rows: [
+          { when: "Firm cap", symbol: "profit", value: "40% of total", tone: "good" },
+          { when: "Biggest day", symbol: "profit", value: "46% of total", tone: "bad" },
+        ],
+      },
+      step: "FILLBOOK ACCOUNT HEALTH",
+      result: {
+        title: "Account health",
+        tag: "Demo data",
+        stats: [
+          { label: "FIRM CAP", value: "40%", note: "of total profit" },
+          { label: "BIGGEST DAY", value: "46%", note: "of total profit" },
+        ],
+      },
+    },
     beats: [
       { stage: 1, seconds: 3.0, facts: ["health.consistency_action"], narration: "Fillbook's Account health shows one day made 46% of your total profit.", takeaway: "Account health shows one day's share of profit.", caption: "One day: 46% of profit." },
       { stage: 2, seconds: 3.2, facts: ["health.consistency_action"], narration: "A consistency cap limits any one day to 40% of your total profit.", takeaway: "What the cap limits.", caption: "The cap: 40% of profit." },

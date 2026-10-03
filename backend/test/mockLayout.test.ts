@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { CHART, validateChartScene } from "../src/shortform/chart";
 import { MOCK_BOXES, MOCK_RIGHT_LIMIT, MOCK_SAFE, boxesOutsideSafeArea } from "../src/shortform/mockLayout";
 import { PLATFORM_OVERLAY_ZONES } from "../scripts/video-factory/render";
-import { barsSizedUpPlan } from "../src/shortform/chartBarsConcepts";
+import { BARS_PILOTS, barsSizedUpPlan } from "../src/shortform/chartBarsConcepts";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
 import { renderBar } from "../src/shortform/storyScore";
 import { buildMockHtml, createMockRenderer, measuredProblems } from "../scripts/video-factory/mockCard";
@@ -67,13 +67,15 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
   });
 
   const chromium = ["/opt/pw-browsers/chromium", process.env.MOCK_CHROMIUM_PATH ?? ""].some((p) => p && existsSync(p));
-  it.skipIf(!chromium)("renders every beat in the brand fonts with all boxes measured clear of the overlays", async () => {
+  it.skipIf(!chromium)("renders every beat of every concept in the brand fonts with all boxes measured clear of the overlays", async () => {
     const dir = mkdtempSync(join(tmpdir(), "mock-"));
     const r = await createMockRenderer(dir);
     try {
-      for (const [i, s] of plan.scenes.entries()) expect(existsSync(await r.render(frame(s), join(dir, `m${i}.png`)))).toBe(true);
+      for (const p of BARS_PILOTS) {
+        for (const [i, s] of p.scenes.entries()) expect(existsSync(await r.render(frame(s), join(dir, `${p.planId}-${i}.png`))), `${p.planId} beat ${i + 1}`).toBe(true);
+      }
     } finally {
       await r.close();
     }
-  }, 60_000);
+  }, 120_000);
 });
