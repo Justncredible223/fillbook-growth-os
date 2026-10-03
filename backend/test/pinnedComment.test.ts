@@ -18,6 +18,11 @@ describe("buildPinnedComment", () => {
     expect(PINNED_COMMENT.length).toBeLessThanOrEqual(150); // well inside both platforms' comment limits
   });
 
+  it("starts with the link, so TikTok's cut-off preview bubble still shows it", () => {
+    expect(PINNED_COMMENT.indexOf(PINNED_COMMENT_LINK)).toBe(0);
+    expect(PINNED_COMMENT.slice(0, 70)).toContain(PINNED_COMMENT_LINK);
+  });
+
   it("opens with the invitation to look, not a defensive disclaimer about the whole video", () => {
     expect(PINNED_COMMENT).not.toMatch(/^everything in this video/i);
   });
