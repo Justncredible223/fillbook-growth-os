@@ -346,9 +346,7 @@ spec: headline of at most 3 lines of 13 characters, 2 source rows, 2 result stat
 put the "but" item last, since the third beat highlights the last row and 2nd stat.
 
 **Platform overlays.** Every box has a fixed position in `mockLayout.ts`, all inside
-x 100-880, y 170-1250 (the bottom limit is TikTok's pinned-comment bubble, which covers
-about y 1290-1480 of the frame, measured on a phone 2026-10-03; the description block starts
-near y 1520) -- the strictest of TikTok's and YouTube Shorts' insets, the
+x 100-880, y 170-1600 -- the strictest of TikTok's and YouTube Shorts' insets, the
 owner's measured button column (x 930) and caption block (y 1600). Text limits are
 character budgets, so a too-long line is a validation error, not a reflow. The
 renderer also measures every box in the real browser and throws if one leaves the
@@ -409,3 +407,11 @@ saying the data is sample data (`backend/src/video/pinnedComment.ts`; one of fou
 wordings, chosen from the video's hook so neighbouring videos differ). It is built on the
 fly, not stored. Posting and pinning stay manual: neither TikTok's nor YouTube's API can
 pin a comment, and nothing here posts to a platform without the owner.
+
+**Owner-view overlays (2026-10-03).** On the owner's own view of a posted video TikTok draws extra
+UI over the bottom of the frame: a comment-preview bubble, a "Promotional content" label and a
+promote/analytics bar (YouTube: "Promote this Short", "Analytics", "Share your video"). A guest view
+(TikTok web, signed out of the owner account) shows none of them, only the right-hand buttons and the
+account name and caption from about y 1540. The layout is therefore checked against what viewers see
+(bottom limit y 1600 for the platform caption block), not against the owner's view. An earlier change
+(#97) moved everything above y 1250 for the owner-view bubble and was reverted.
