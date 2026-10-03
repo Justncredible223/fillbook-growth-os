@@ -615,6 +615,16 @@ const THUMBNAIL_ASS_BASENAME = "thumbnail-card.ass";
 const THUMBNAIL_BACKGROUND_COLOR = "0x05070a";
 /** Brand cyan, matches captions.ts's HIGHLIGHT_COLOR_TAG. */
 const THUMBNAIL_TOPIC_COLOR = "&H00EED322&";
+/**
+ * Hook size steps down with length so the line stays as large as a 1080-wide card allows (real hooks run ~17-56
+ * characters) while the whole block stays in the centre band that a 3:4 profile-grid or square feed crop keeps.
+ */
+const THUMBNAIL_HOOK_FS_SHORT = 190;
+const THUMBNAIL_HOOK_FS_MEDIUM = 156;
+const THUMBNAIL_HOOK_FS_LONG = 128;
+/** Topic label and site badge sit at fixed heights above and below the centred hook, inside the 3:4 centre crop. */
+const THUMBNAIL_TOPIC_Y = 400;
+const THUMBNAIL_BRAND_Y = 1520;
 
 /**
  * Thumbnail generation used to grab a real frame from the finished video
@@ -635,8 +645,14 @@ const THUMBNAIL_TOPIC_COLOR = "&H00EED322&";
  * length to go wrong against.
  */
 function buildThumbnailCardAss(hookText: string, topicLabel: string): string {
-  const escapedHook = escapeAssText(hookText);
+  // Dollar amounts, counts and percentages in the hook ("$656", "67", "64%") are the part a viewer's eye lands on, so
+  // they take the brand cyan against the white line.
+  const escapedHook = escapeAssText(hookText).replace(
+    /\$?\d[\d,.]*%?/g,
+    (figure) => `{\\c${THUMBNAIL_TOPIC_COLOR}}${figure}{\\c&H00FFFFFF&}`,
+  );
   const escapedTopic = escapeAssText(topicLabel.toUpperCase());
+  const hookFontSize = hookText.length <= 22 ? THUMBNAIL_HOOK_FS_SHORT : hookText.length <= 36 ? THUMBNAIL_HOOK_FS_MEDIUM : THUMBNAIL_HOOK_FS_LONG;
   return `[Script Info]
 ScriptType: v4.00+
 PlayResX: ${WIDTH}
@@ -646,15 +662,17 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: ThumbnailBrand,Poppins ExtraBold,44,&H00FFFFFF,&H00FFFFFF,&H00000000,&H73000000,1,0,0,0,100,100,0,0,3,8,0,7,32,32,32,1
-Style: ThumbnailTopic,Poppins ExtraBold,40,${THUMBNAIL_TOPIC_COLOR},${THUMBNAIL_TOPIC_COLOR},&H00000000,&H00000000,1,0,0,0,100,100,4,0,1,4,2,5,80,80,520,1
-Style: ThumbnailHook,Poppins ExtraBold,100,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,9,3,5,80,80,0,1
+Style: ThumbnailBrand,Poppins ExtraBold,56,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,1,0,1,0,0,5,0,0,0,1
+Style: ThumbnailTopic,Poppins ExtraBold,52,${THUMBNAIL_TOPIC_COLOR},${THUMBNAIL_TOPIC_COLOR},&H00000000,&H00000000,1,0,0,0,100,100,8,0,1,0,0,5,0,0,0,1
+Style: ThumbnailHook,Poppins ExtraBold,${hookFontSize},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,10,4,5,70,70,0,1
+Style: ThumbnailBar,Poppins ExtraBold,20,${THUMBNAIL_TOPIC_COLOR},${THUMBNAIL_TOPIC_COLOR},&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailBrand,,0,0,0,,${THUMBNAIL_SITE_TEXT}
-Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailTopic,,0,0,0,,${escapedTopic}
-Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailHook,,0,0,0,,${escapedHook}`;
+Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailBar,,0,0,0,,{\\pos(0,0)\\p1\\c${THUMBNAIL_TOPIC_COLOR}}m 0 0 l ${WIDTH} 0 ${WIDTH} 16 0 16{\\p0}
+Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailTopic,,0,0,0,,{\\an5\\pos(${WIDTH / 2},${THUMBNAIL_TOPIC_Y})}${escapedTopic}
+Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailHook,,0,0,0,,{\\an5\\pos(${WIDTH / 2},${HEIGHT / 2})}${escapedHook}
+Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailBrand,,0,0,0,,{\\an5\\pos(${WIDTH / 2},${THUMBNAIL_BRAND_Y})}${THUMBNAIL_SITE_TEXT}`;
 }
 
 /**
