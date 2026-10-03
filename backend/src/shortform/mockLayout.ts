@@ -18,6 +18,11 @@ import type { MockSpec, Rect } from "./types.js";
 const LEFT_MARGIN = 100;
 /** The chart cards' right edge (CHART.safeRight in chart.ts, which a test keeps equal; chart.ts imports this file, so it cannot be imported back). */
 export const MOCK_RIGHT_LIMIT = 880;
+/**
+ * Everything on a mock ends above this. TikTok's account name and caption block starts at about y 1520-1540 of the 1920px frame
+ * (measured on a guest view, 2026-10-03), so the slide keeps roughly 100px clear of it instead of ending a few pixels short.
+ */
+export const MOCK_BOTTOM_LIMIT = 1450;
 const TOP_MARGIN = 170; // 20px past TikTok's 150px top inset, which is the stricter of the two platforms
 
 export const MOCK_SAFE: Rect = (() => {
@@ -26,7 +31,7 @@ export const MOCK_SAFE: Rect = (() => {
   const left = Math.max(tiktok.x, shorts.x, LEFT_MARGIN);
   const top = Math.max(tiktok.y, shorts.y, TOP_MARGIN);
   const right = Math.min(tiktok.x + tiktok.w, shorts.x + shorts.w, MOCK_RIGHT_LIMIT);
-  const bottom = Math.min(tiktok.y + tiktok.h, shorts.y + shorts.h, 1600);
+  const bottom = Math.min(tiktok.y + tiktok.h, shorts.y + shorts.h, MOCK_BOTTOM_LIMIT);
   return { x: left, y: top, w: right - left, h: bottom - top };
 })();
 
@@ -35,14 +40,14 @@ export const MOCK_CANVAS = { width: CANVAS.width, height: CANVAS.height } as con
 /** Where every element of the mock sits. Windows have a fixed height, so text that is too long is a validation error, not a reflow. */
 export const MOCK_BOXES = {
   logo: { x: MOCK_SAFE.x, y: 170, w: 220, h: 58 },
-  eyebrow: { x: MOCK_SAFE.x, y: 262, w: MOCK_SAFE.w, h: 36 },
-  headline: { x: MOCK_SAFE.x, y: 312, w: MOCK_SAFE.w, h: 330 },
-  source: { x: MOCK_SAFE.x, y: 690, w: MOCK_SAFE.w, h: 300 },
-  step: { x: MOCK_SAFE.x, y: 1010, w: MOCK_SAFE.w, h: 108 },
-  result: { x: MOCK_SAFE.x, y: 1138, w: MOCK_SAFE.w, h: 314 },
-  detail: { x: MOCK_SAFE.x, y: 1010, w: MOCK_SAFE.w, h: 442 },
-  caption: { x: MOCK_SAFE.x, y: 1466, w: MOCK_SAFE.w, h: 70 },
-  cta: { x: MOCK_SAFE.x, y: 740, w: MOCK_SAFE.w, h: 300 },
+  eyebrow: { x: MOCK_SAFE.x, y: 250, w: MOCK_SAFE.w, h: 36 },
+  headline: { x: MOCK_SAFE.x, y: 298, w: MOCK_SAFE.w, h: 330 },
+  source: { x: MOCK_SAFE.x, y: 650, w: MOCK_SAFE.w, h: 276 },
+  step: { x: MOCK_SAFE.x, y: 936, w: MOCK_SAFE.w, h: 90 },
+  result: { x: MOCK_SAFE.x, y: 1036, w: MOCK_SAFE.w, h: 284 },
+  detail: { x: MOCK_SAFE.x, y: 936, w: MOCK_SAFE.w, h: 384 },
+  caption: { x: MOCK_SAFE.x, y: 1332, w: MOCK_SAFE.w, h: 64 },
+  cta: { x: MOCK_SAFE.x, y: 680, w: MOCK_SAFE.w, h: 300 },
 } as const satisfies Record<string, Rect>;
 
 export type MockBoxName = keyof typeof MOCK_BOXES;

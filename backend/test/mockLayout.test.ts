@@ -23,7 +23,7 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
     expect(boxesOutsideSafeArea()).toEqual([]);
     for (const [name, b] of Object.entries(MOCK_BOXES)) {
       expect(b.x + b.w, name).toBeLessThanOrEqual(880);
-      expect(b.y + b.h, name).toBeLessThanOrEqual(1600);
+      expect(b.y + b.h, name).toBeLessThanOrEqual(1450);
       expect(b.y, name).toBeGreaterThanOrEqual(150);
     }
   });
@@ -33,6 +33,8 @@ describe("mock slide layout keeps clear of TikTok and YouTube Shorts overlays", 
     for (const [name, b] of Object.entries(MOCK_BOXES)) {
       expect(b.x + b.w, name).toBeLessThanOrEqual(rightColumn.x);
       expect(b.y + b.h, name).toBeLessThanOrEqual(captionTop);
+      // About 100px of clearance above TikTok's account-name block (starts near y 1520), not a few pixels.
+      expect(b.y + b.h, name).toBeLessThanOrEqual(1450);
     }
   });
 
