@@ -34,6 +34,7 @@ import { CARD_SHADOW_SPREAD, PLATFORM_OVERLAY_ZONES, assertCardClearsOverlays, c
 import { computePayoffCard, type PayoffCard } from "../../src/shortform/payoffLayout.js";
 import { PAYOFF_BACKGROUNDS, buildPayoffCues, buildPayoffCursorCues } from "./payoffCues.js";
 import { buildChartCues } from "./chartCues.js";
+import { createMockRenderer, type MockRenderer } from "./mockCard.js";
 
 export interface AdaptedScenes {
   scenes: RenderScene[];
@@ -145,139 +146,152 @@ export async function buildRenderPlanScenes(
     return path;
   };
 
+  // A "mock" chart scene is an HTML slide screenshotted by Chromium; one browser serves every mock scene of the plan.
+  let mockRenderer: MockRenderer | null = null;
   const scenes: RenderScene[] = [];
   const captionCues: CaptionCue[] = [];
   const sceneLabelCues: SceneLabelCue[] = [];
   let elapsed = 0;
 
-  for (const [i, s] of plan.scenes.entries()) {
-    // "hook" (render.ts) applies a push-in zoom plus a 35%-opacity black
-    // scrim, designed for a generic stock-footage opener where legibility
-    // of the background doesn't matter. A scene with real verified
-    // evidence must never get that treatment just for being first --
-    // "product" (real screenshots' own existing kind) renders it at full
-    // clarity instead, regardless of scene index.
-    // A chart scene names the recording its numbers come from but shows none of it, so it is never a "product" scene.
-    const chart = s.layout === "chart" ? s.chart : undefined;
-    const kind = s.cta ? "cta" : s.assetId && !chart ? "product" : i === 0 ? "hook" : "explanation";
-    const label = s.disclosure ? s.disclosure.toUpperCase() : "";
-    const backgroundColor = "0x05070a"; // brand-dark fallback for a text-only scene, matches scenes.ts's own hook/explanation color
+  try {
+    for (const [i, s] of plan.scenes.entries()) {
+      // "hook" (render.ts) applies a push-in zoom plus a 35%-opacity black
+      // scrim, designed for a generic stock-footage opener where legibility
+      // of the background doesn't matter. A scene with real verified
+      // evidence must never get that treatment just for being first --
+      // "product" (real screenshots' own existing kind) renders it at full
+      // clarity instead, regardless of scene index.
+      // A chart scene names the recording its numbers come from but shows none of it, so it is never a "product" scene.
+      const chart = s.layout === "chart" ? s.chart : undefined;
+      const kind = s.cta ? "cta" : s.assetId && !chart ? "product" : i === 0 ? "hook" : "explanation";
+      const label = s.disclosure ? s.disclosure.toUpperCase() : "";
+      const backgroundColor = "0x05070a"; // brand-dark fallback for a text-only scene, matches scenes.ts's own hook/explanation color
 
-    const renderScene: RenderScene = { kind, label, durationSeconds: s.durationSeconds, backgroundColor, narration: s.narration };
-    let cardLayout: CardLayout | null = null;
-    let payoffCard: PayoffCard | null = null;
-    const payoff = s.layout === "payoff" ? s.payoff : undefined;
-    const sceneBackground = chart ? await backgroundFor("dark") : payoff ? await backgroundFor(payoff.theme) : backgroundPath;
-    if (!s.assetId || chart) renderScene.card = { backgroundPath: sceneBackground };
+      const renderScene: RenderScene = { kind, label, durationSeconds: s.durationSeconds, backgroundColor, narration: s.narration };
+      let cardLayout: CardLayout | null = null;
+      let payoffCard: PayoffCard | null = null;
+      const payoff = s.layout === "payoff" ? s.payoff : undefined;
+      let sceneBackground = chart ? await backgroundFor("dark") : payoff ? await backgroundFor(payoff.theme) : backgroundPath;
+      if (chart?.kind === "mock") {
+        mockRenderer ??= await createMockRenderer(outDir);
+        sceneBackground = await mockRenderer.render({ chart, headline: s.headline, captionText: s.captionText, cta: s.cta }, join(outDir, `mock-${i}.png`));
+      }
+      if (!s.assetId || chart) renderScene.card = { backgroundPath: sceneBackground };
 
-    if (s.assetId && !chart) {
-      const asset = findAsset(manifest, s.assetId);
-      if (asset.kind === "screen_recording") {
-        if (!s.clipTimeRangeSeconds) throw new VideoFactoryError(`Adapter: scene "${s.sceneId}" uses a screen_recording asset with no clipTimeRangeSeconds (should have been caught by validateScenePlan).`);
-        // renderVideo() runs ffmpeg with cwd=outDir and references every
-        // input by plain basename (see render.ts's renderBasename doc
-        // comment) -- same convention render-single.ts's copyClipToDir
-        // follows for stock footage, so a clip living outside outDir (the
-        // manifest's own assets/ dir) must be copied in first.
-        const destPath = join(outDir, `clip-${i}-${asset.id.replace(/[^a-z0-9.-]/gi, "_")}${asset.file.slice(asset.file.lastIndexOf("."))}`);
-        copyFileSync(join(ASSETS_DIR, asset.file), destPath);
-        renderScene.clipPath = destPath;
-        renderScene.clipTimeRangeSeconds = s.clipTimeRangeSeconds;
-        if (s.crop) renderScene.sourceCrop = s.crop;
-        if (asset.privateRegions?.length) renderScene.privacyMasks = asset.privateRegions.map((pr) => pr.region);
-        if (s.crop && payoff) {
-          payoffCard = computePayoffCard(s.crop);
-          const right = payoffCard.x + payoffCard.width;
-          const bottom = payoffCard.y + payoffCard.height;
-          if (right > PLATFORM_OVERLAY_ZONES.rightColumn.x || bottom > PLATFORM_OVERLAY_ZONES.captionTop) {
-            throw new VideoFactoryError(`Adapter: payoff card for "${s.sceneId}" (x to ${right}, y to ${bottom}) would run under a platform overlay.`);
+      if (s.assetId && !chart) {
+        const asset = findAsset(manifest, s.assetId);
+        if (asset.kind === "screen_recording") {
+          if (!s.clipTimeRangeSeconds) throw new VideoFactoryError(`Adapter: scene "${s.sceneId}" uses a screen_recording asset with no clipTimeRangeSeconds (should have been caught by validateScenePlan).`);
+          // renderVideo() runs ffmpeg with cwd=outDir and references every
+          // input by plain basename (see render.ts's renderBasename doc
+          // comment) -- same convention render-single.ts's copyClipToDir
+          // follows for stock footage, so a clip living outside outDir (the
+          // manifest's own assets/ dir) must be copied in first.
+          const destPath = join(outDir, `clip-${i}-${asset.id.replace(/[^a-z0-9.-]/gi, "_")}${asset.file.slice(asset.file.lastIndexOf("."))}`);
+          copyFileSync(join(ASSETS_DIR, asset.file), destPath);
+          renderScene.clipPath = destPath;
+          renderScene.clipTimeRangeSeconds = s.clipTimeRangeSeconds;
+          if (s.crop) renderScene.sourceCrop = s.crop;
+          if (asset.privateRegions?.length) renderScene.privacyMasks = asset.privateRegions.map((pr) => pr.region);
+          if (s.crop && payoff) {
+            payoffCard = computePayoffCard(s.crop);
+            const right = payoffCard.x + payoffCard.width;
+            const bottom = payoffCard.y + payoffCard.height;
+            if (right > PLATFORM_OVERLAY_ZONES.rightColumn.x || bottom > PLATFORM_OVERLAY_ZONES.captionTop) {
+              throw new VideoFactoryError(`Adapter: payoff card for "${s.sceneId}" (x to ${right}, y to ${bottom}) would run under a platform overlay.`);
+            }
+            // A dark card on a dark theme needs an edge: a soft cool glow instead of the usual black shadow.
+            const glow = payoff.theme === "dark" ? { r: 70, g: 150, b: 200, alpha: 210 } : undefined;
+            const { maskPath, shadowPath } = await buildCardMaskAndShadow(payoffCard, outDir, runner, i, glow);
+            renderScene.card = {
+              backgroundPath: sceneBackground,
+              evidence: { x: payoffCard.x, y: payoffCard.y, width: payoffCard.width, height: payoffCard.height, maskPath, shadowPath },
+            };
+          } else if (s.crop) {
+            cardLayout = computeCardLayout(s.crop.w, s.crop.h);
+            assertCardClearsOverlays(cardLayout);
+            const { maskPath, shadowPath } = await buildCardMaskAndShadow(cardLayout, outDir, runner, i);
+            renderScene.card = {
+              backgroundPath,
+              evidence: { x: cardLayout.x, y: cardLayout.y, width: cardLayout.width, height: cardLayout.height, maskPath, shadowPath },
+            };
           }
-          // A dark card on a dark theme needs an edge: a soft cool glow instead of the usual black shadow.
-          const glow = payoff.theme === "dark" ? { r: 70, g: 150, b: 200, alpha: 210 } : undefined;
-          const { maskPath, shadowPath } = await buildCardMaskAndShadow(payoffCard, outDir, runner, i, glow);
-          renderScene.card = {
-            backgroundPath: sceneBackground,
-            evidence: { x: payoffCard.x, y: payoffCard.y, width: payoffCard.width, height: payoffCard.height, maskPath, shadowPath },
-          };
         } else if (s.crop) {
-          cardLayout = computeCardLayout(s.crop.w, s.crop.h);
-          assertCardClearsOverlays(cardLayout);
-          const { maskPath, shadowPath } = await buildCardMaskAndShadow(cardLayout, outDir, runner, i);
-          renderScene.card = {
-            backgroundPath,
-            evidence: { x: cardLayout.x, y: cardLayout.y, width: cardLayout.width, height: cardLayout.height, maskPath, shadowPath },
-          };
+          renderScene.imagePath = await buildCroppedStill(asset, s.crop, outDir, runner, i);
+        } else {
+          // No crop: same copy-into-outDir/basename-reference requirement as the clip case above.
+          const destPath = join(outDir, `still-${i}-${asset.id.replace(/[^a-z0-9.-]/gi, "_")}${asset.file.slice(asset.file.lastIndexOf("."))}`);
+          copyFileSync(join(ASSETS_DIR, asset.file), destPath);
+          renderScene.imagePath = destPath;
         }
-      } else if (s.crop) {
-        renderScene.imagePath = await buildCroppedStill(asset, s.crop, outDir, runner, i);
-      } else {
-        // No crop: same copy-into-outDir/basename-reference requirement as the clip case above.
-        const destPath = join(outDir, `still-${i}-${asset.id.replace(/[^a-z0-9.-]/gi, "_")}${asset.file.slice(asset.file.lastIndexOf("."))}`);
-        copyFileSync(join(ASSETS_DIR, asset.file), destPath);
-        renderScene.imagePath = destPath;
       }
-    }
 
-    scenes.push(renderScene);
+      scenes.push(renderScene);
 
-    const start = elapsed;
-    const end = elapsed + s.durationSeconds;
-    if (chart) {
-      // Chart layout: the headline, the chart up to this scene's beat, and the beat's caption, all drawn as vector cues.
-      captionCues.push(...buildChartCues({ chart, headline: s.headline, captionText: s.captionText, cta: s.cta, start, end }));
-    } else if (renderScene.card && payoff) {
-      // Payoff layout: the big figure + line + caption block (animated), drawn above the zoomed card, in the top band.
-      captionCues.push(...buildPayoffCues({ headline: s.headline, captionText: s.captionText, cta: s.cta, start, end, spec: payoff, hasCard: Boolean(payoffCard) }));
-      if (payoff.cursor && payoffCard && s.crop && s.focalRegion) {
-        captionCues.push(...buildPayoffCursorCues({ card: payoffCard, crop: s.crop, focal: s.focalRegion, start, end: end + (plan.scenes[i + 1]?.transition.durationSeconds ?? 0) }));
-      }
-    } else if (renderScene.card) {
-      // Card layout: the headline and a smaller, softer caption as one block, directly under the evidence card, or
-      // in the upper-middle of the frame on a text-only scene. The closing scene's caption uses the accent color.
-      const captionColor = s.cta ? "&HCFB822&" : "&HC4B39F&";
-      const marginV = cardLayout ? cardLayout.textTop : TEXT_ONLY_CARD_TOP;
-      // The whole caption block for a given rendering of the headline. Text-only scenes get a short accent bar (an
-      // ASS vector drawing) above the headline.
-      const buildBlock = (headlineMarkup: string): string => {
-        const parts = [cardLayout ? "" : `{\\p1\\c&HCFB822&}m 0 0 l 140 0 140 10 0 10{\\p0\\c&HFFFFFF&}`, headlineMarkup];
-        if (s.captionText) parts.push(`{\\fs22} `, `{\\fs46\\c${captionColor}}${escapeAssText(s.captionText)}`);
-        // The CTA text itself (e.g. "Follow @fillbookhq") was previously only used to pick this
-        // scene's accent caption color and to feed pilotMetadata()'s cta/handlePlacement fields --
-        // it was never actually painted onto the video, so a finished render never showed the
-        // invitation it claimed to make (confirmed by grepping a real render's captions.ass for
-        // "fillbook"/"follow": no match). Render it as its own line so the on-screen closing card
-        // matches what the metadata reports.
-        if (s.cta) parts.push(`{\\fs22} `, `{\\fs38\\c&HCFB822&}${escapeAssText(s.cta)}`);
-        return parts.filter(Boolean).join("\\N");
-      };
-      // The hook (first scene): highlight its headline word by word as it is spoken, each word popping in. Only when
-      // real word timings exist AND the headline is literally the first words of the narration -- otherwise the
-      // highlight would land on the wrong words, so the plain static headline stays.
-      const spokenHeadline = i === 0 && s.headline ? alignHeadlineToSpeech(s.headline, mergeBrandNameWordCues(wordCuesBySceneId?.[s.sceneId] ?? [])) : null;
-      if (spokenHeadline) {
-        for (const v of buildHeadlineWordVariants(spokenHeadline, start, end)) {
-          captionCues.push({ text: buildBlock(v.markup), startSeconds: v.startSeconds, endSeconds: v.endSeconds, style: "Card", marginV });
+      const start = elapsed;
+      const end = elapsed + s.durationSeconds;
+      if (chart?.kind === "mock") {
+        // Everything is already in the HTML still (headline, mock, caption, invitation); no vector text is drawn over it.
+      } else if (chart) {
+        // Chart layout: the headline, the chart up to this scene's beat, and the beat's caption, all drawn as vector cues.
+        captionCues.push(...buildChartCues({ chart, headline: s.headline, captionText: s.captionText, cta: s.cta, start, end }));
+      } else if (renderScene.card && payoff) {
+        // Payoff layout: the big figure + line + caption block (animated), drawn above the zoomed card, in the top band.
+        captionCues.push(...buildPayoffCues({ headline: s.headline, captionText: s.captionText, cta: s.cta, start, end, spec: payoff, hasCard: Boolean(payoffCard) }));
+        if (payoff.cursor && payoffCard && s.crop && s.focalRegion) {
+          captionCues.push(...buildPayoffCursorCues({ card: payoffCard, crop: s.crop, focal: s.focalRegion, start, end: end + (plan.scenes[i + 1]?.transition.durationSeconds ?? 0) }));
+        }
+      } else if (renderScene.card) {
+        // Card layout: the headline and a smaller, softer caption as one block, directly under the evidence card, or
+        // in the upper-middle of the frame on a text-only scene. The closing scene's caption uses the accent color.
+        const captionColor = s.cta ? "&HCFB822&" : "&HC4B39F&";
+        const marginV = cardLayout ? cardLayout.textTop : TEXT_ONLY_CARD_TOP;
+        // The whole caption block for a given rendering of the headline. Text-only scenes get a short accent bar (an
+        // ASS vector drawing) above the headline.
+        const buildBlock = (headlineMarkup: string): string => {
+          const parts = [cardLayout ? "" : `{\\p1\\c&HCFB822&}m 0 0 l 140 0 140 10 0 10{\\p0\\c&HFFFFFF&}`, headlineMarkup];
+          if (s.captionText) parts.push(`{\\fs22} `, `{\\fs46\\c${captionColor}}${escapeAssText(s.captionText)}`);
+          // The CTA text itself (e.g. "Follow @fillbookhq") was previously only used to pick this
+          // scene's accent caption color and to feed pilotMetadata()'s cta/handlePlacement fields --
+          // it was never actually painted onto the video, so a finished render never showed the
+          // invitation it claimed to make (confirmed by grepping a real render's captions.ass for
+          // "fillbook"/"follow": no match). Render it as its own line so the on-screen closing card
+          // matches what the metadata reports.
+          if (s.cta) parts.push(`{\\fs22} `, `{\\fs38\\c&HCFB822&}${escapeAssText(s.cta)}`);
+          return parts.filter(Boolean).join("\\N");
+        };
+        // The hook (first scene): highlight its headline word by word as it is spoken, each word popping in. Only when
+        // real word timings exist AND the headline is literally the first words of the narration -- otherwise the
+        // highlight would land on the wrong words, so the plain static headline stays.
+        const spokenHeadline = i === 0 && s.headline ? alignHeadlineToSpeech(s.headline, mergeBrandNameWordCues(wordCuesBySceneId?.[s.sceneId] ?? [])) : null;
+        if (spokenHeadline) {
+          for (const v of buildHeadlineWordVariants(spokenHeadline, start, end)) {
+            captionCues.push({ text: buildBlock(v.markup), startSeconds: v.startSeconds, endSeconds: v.endSeconds, style: "Card", marginV });
+          }
+        } else {
+          const text = buildBlock(s.headline ? escapeAssText(s.headline) : "");
+          if (text) captionCues.push({ text, startSeconds: start, endSeconds: end, style: "Card", marginV });
         }
       } else {
-        const text = buildBlock(s.headline ? escapeAssText(s.headline) : "");
-        if (text) captionCues.push({ text, startSeconds: start, endSeconds: end, style: "Card", marginV });
+        const captionParts = [s.headline, s.captionText, s.cta].filter((v): v is string => Boolean(v)).map(escapeAssText);
+        const captionText = captionParts.join("\\N");
+        // Hook style is middle-centered and reserves no space for anything
+        // else -- correct for a pure opening beat, wrong for a scene that also
+        // shows real evidence (kind "product" here). Caption is bottom-anchored,
+        // clear of the evidence band render.ts's sourceCrop treatment reserves.
+        if (captionText) captionCues.push({ text: captionText, startSeconds: start, endSeconds: end, style: kind === "hook" ? "Hook" : "Caption" });
       }
-    } else {
-      const captionParts = [s.headline, s.captionText, s.cta].filter((v): v is string => Boolean(v)).map(escapeAssText);
-      const captionText = captionParts.join("\\N");
-      // Hook style is middle-centered and reserves no space for anything
-      // else -- correct for a pure opening beat, wrong for a scene that also
-      // shows real evidence (kind "product" here). Caption is bottom-anchored,
-      // clear of the evidence band render.ts's sourceCrop treatment reserves.
-      if (captionText) captionCues.push({ text: captionText, startSeconds: start, endSeconds: end, style: kind === "hook" ? "Hook" : "Caption" });
+      // The fade into scene i+1 runs from this scene's nominal end for that transition's duration, with this
+      // scene's footage still visible -- so an evidence scene keeps its label through that fade, and the next
+      // scene's label waits for it to finish, never leaving fading evidence unlabeled or under another label.
+      const outgoingFade = s.assetId && !chart ? (plan.scenes[i + 1]?.transition.durationSeconds ?? 0) : 0;
+      const incomingDelay = i > 0 && plan.scenes[i - 1]!.assetId && plan.scenes[i - 1]!.layout !== "chart" ? s.transition.durationSeconds : 0;
+      if (label) sceneLabelCues.push({ label, startSeconds: start + incomingDelay, endSeconds: end + outgoingFade, ...(renderScene.card ? { style: "CardLabel" as const } : {}) });
+      elapsed = end;
     }
-    // The fade into scene i+1 runs from this scene's nominal end for that transition's duration, with this
-    // scene's footage still visible -- so an evidence scene keeps its label through that fade, and the next
-    // scene's label waits for it to finish, never leaving fading evidence unlabeled or under another label.
-    const outgoingFade = s.assetId && !chart ? (plan.scenes[i + 1]?.transition.durationSeconds ?? 0) : 0;
-    const incomingDelay = i > 0 && plan.scenes[i - 1]!.assetId && plan.scenes[i - 1]!.layout !== "chart" ? s.transition.durationSeconds : 0;
-    if (label) sceneLabelCues.push({ label, startSeconds: start + incomingDelay, endSeconds: end + outgoingFade, ...(renderScene.card ? { style: "CardLabel" as const } : {}) });
-    elapsed = end;
+
+  } finally {
+    await mockRenderer?.close();
   }
 
   return { scenes, captionCues, sceneLabelCues, totalDurationSeconds: elapsed };

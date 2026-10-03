@@ -1,4 +1,5 @@
 import { extractNumbers, numberIsSupported, claimEvidenceNumbers } from "./claims.js";
+import { MOCK_BOXES, boxesOutsideSafeArea, mockFitProblems, mockTexts } from "./mockLayout.js";
 import type { ChartGrid, ChartSpec, PlanIssue, SceneSpec, VerifiedAsset } from "./types.js";
 
 /**
@@ -195,6 +196,14 @@ export function chartGeometry(chart: ChartSpec): ChartGeometry {
     });
     captionTop = CHART.barsTop + chart.rows.length * pitch + 50;
   }
+  if (chart.kind === "mock") {
+    // A mock is drawn by the HTML renderer inside fixed boxes (mockLayout.ts): report their extent so the generic safe-area check covers it.
+    for (const b of Object.values(MOCK_BOXES)) {
+      maxX = Math.max(maxX, b.x + b.w);
+      maxY = Math.max(maxY, b.y + b.h);
+    }
+    captionTop = MOCK_BOXES.caption.y;
+  }
   return { cells, bar, pairBars, outcomeBars, rowBars, netY, captionTop, maxX, maxY };
 }
 
@@ -275,14 +284,38 @@ export function validateChartScene(scene: SceneSpec, asset: VerifiedAsset): Plan
         add("chart_bad_highlight", "The highlighted row must be one of the rows.");
       }
     }
+  } else if (chart.kind === "mock") {
+    const m = chart.mock;
+    if (!m) {
+      add("chart_missing_mock", "A mock chart needs its mock spec.");
+    } else {
+      for (const problem of mockFitProblems(m, chart.lines, scene.captionText, scene.cta)) add("chart_mock_text_too_long", problem);
+      // Every number on the slide, in any text, must be a number in a fact this scene cites.
+      // The closing invitation is the fixed approved line ("14 days"), not a figure the recording shows, so it is not checked here.
+      for (const [field, text] of mockTexts(m, chart.lines, scene.captionText, null)) {
+        for (const token of extractNumbers(text)) needsFact(`a figure in the ${field}`, token);
+      }
+      // "Your average" on the meter is 1 / the multiple the stat shows, so a bar cannot imply a different ratio than its number.
+      for (const [i, stat] of m.result.stats.entries()) {
+        if (!stat.meter) continue;
+        const multiple = Number(`${stat.value}`.replace(/x$/i, ""));
+        if (!/x$/i.test(stat.value) || !(multiple > 1)) add("chart_mock_meter_unit", `Stat ${i + 1} has a meter, so its value must be a multiple above 1 such as "2.5x".`);
+        else if (Math.abs(stat.meter.markAt - 1 / multiple) > 0.01) add("chart_mock_meter_mismatch", `Stat ${i + 1}'s average mark is at ${stat.meter.markAt}, but 1 / ${multiple} is ${(1 / multiple).toFixed(3)}.`);
+      }
+      if (!/demo data/i.test(m.result.tag) && /demo data/i.test(scene.disclosure ?? "")) add("chart_mock_missing_demo_tag", 'The result window must say "Demo data" on the slide itself.');
+      for (const box of boxesOutsideSafeArea()) add("chart_mock_outside_safe_area", `The mock's ${box} box sits outside the area TikTok and YouTube Shorts leave clear.`);
+    }
   }
 
   const geo = chartGeometry(chart);
   if (geo.maxX > CHART.safeRight || geo.maxY > CHART.safeBottom) {
     add("chart_under_overlay", `The chart reaches x=${geo.maxX}, y=${geo.maxY}; it must stay within x<=${CHART.safeRight} and y<=${CHART.safeBottom}.`);
   }
-  const textBottom = textBlockBottom(scene, geo.captionTop);
-  if (textBottom > CHART.safeBottom) add("chart_text_under_overlay", `The caption and invitation block reaches y=${textBottom}; it must stay above y=${CHART.safeBottom}.`);
+  // A mock draws its caption and invitation inside its own fixed boxes (checked above), not in the flowing text block below the chart.
+  if (chart.kind !== "mock") {
+    const textBottom = textBlockBottom(scene, geo.captionTop);
+    if (textBottom > CHART.safeBottom) add("chart_text_under_overlay", `The caption and invitation block reaches y=${textBottom}; it must stay above y=${CHART.safeBottom}.`);
+  }
   return issues;
 }
 

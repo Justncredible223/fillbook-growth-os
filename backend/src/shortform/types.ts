@@ -233,8 +233,37 @@ export interface ChartIllustration {
   avgWin: number;
   avgLoss: number;
 }
+/** One row of the source window of a "mock" chart, e.g. a trade. Every number in it must appear in a fact the scene cites. */
+export interface MockRow {
+  when: string;
+  symbol: string;
+  value: string;
+  tone: ChartTone;
+}
+/** One stat tile of the result window. `meter.markAt` (0-1) is where "your average" falls on the bar, which is 1 / the stat's multiple. */
+export interface MockStat {
+  label: string;
+  value: string;
+  unit?: string;
+  note?: string;
+  meter?: { markAt: number };
+}
+/**
+ * The "mock" chart kind (2026-10): a product mock in the look of the site's own link-preview cards. A source window (what
+ * the trader's platform shows), a step pill ("Fillbook Insights"), and a result window (what Fillbook shows). It shows
+ * WHERE in the product a number comes from, which a bare bar chart does not. Laid out in HTML with the site's fonts and
+ * colour tokens and rendered at the final 1080x1920; geometry and limits are in mockLayout.ts.
+ */
+export interface MockSpec {
+  eyebrow: string;
+  /** Index of the first headline line drawn in the accent colour. */
+  accentFrom: number;
+  source: { title: string; columns: [string, string, string]; rows: MockRow[] };
+  step: string;
+  result: { title: string; /** Must say "Demo data" for a recording that is demo data. */ tag: string; stats: [MockStat, MockStat] };
+}
 export interface ChartSpec {
-  kind: "grid_progress" | "pair" | "outcomes" | "bars";
+  kind: "grid_progress" | "pair" | "outcomes" | "bars" | "mock";
   /** The beat this scene reveals, 1-based. Earlier beats are drawn already complete; later beats are not drawn yet. */
   stage: number;
   /** The headline split into display lines. Joined with spaces they must equal the scene headline. */
@@ -246,6 +275,8 @@ export interface ChartSpec {
   pair?: ChartPair;
   /** "outcomes" only: the total won and the total lost, drawn as two bars sized against each other. */
   bars?: [ChartBar, ChartBar];
+  /** "mock" only: a product mock (source window, Fillbook step, result window) laid out in HTML and rendered to a still. */
+  mock?: MockSpec;
   /** "bars" only: 2 to 5 labelled bars drawn from one recording's facts, sized against the largest. */
   rows?: ChartRow[];
   /** "bars" only: index of the row the third beat rings, so the eye lands on the one that matters. */

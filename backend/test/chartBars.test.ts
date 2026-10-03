@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CHART, barsPitch, chartGeometry, validateChartScene } from "../src/shortform/chart";
-import { BARS_PILOTS } from "../src/shortform/chartBarsConcepts";
+import { BARS_PILOTS, buildBarsPlan } from "../src/shortform/chartBarsConcepts";
 import { MOTION_SCENE_PLANS, isChartPlan } from "../src/shortform/motionPlans";
 import { loadManifest, validateScenePlan } from "../src/shortform/scenePlan";
 import { renderBar } from "../src/shortform/storyScore";
@@ -14,6 +14,32 @@ const manifest = loadManifest();
 const asset = (id: string) => manifest.assets.find((a) => a.id === id)!;
 const withChart = (s: SceneSpec, patch: Partial<ChartSpec>): SceneSpec => ({ ...s, chart: { ...s.chart!, ...patch } });
 const spoken = (p: { scenes: SceneSpec[] }) => p.scenes.map((s) => s.narration).join(" ");
+
+// The nine shipped concepts are all HTML mocks now; the "bars" drawing is still supported, so it is tested on this plan.
+const BARS_FIXTURE = buildBarsPlan({
+  planId: "fixture-bars-day-of-week",
+  title: "Tuesday made $157, Monday lost $57",
+  topic: "A sample account's profit by day of the week, and the one weekday that lost money",
+  variationId: "fixture-dow",
+  assetId: "rec.p8-day-of-week.v1",
+  expectedTopic: "day_of_week",
+  lines: ["Tuesday made $157.", "Monday lost $57."],
+  accent: "bad",
+  highlight: 0,
+  rows: [
+    { label: "Monday · 5 trades", display: "-$57.32", amount: 57.32, tone: "bad" },
+    { label: "Tuesday · 5 trades", display: "$157.12", amount: 157.12, tone: "good" },
+    { label: "Wednesday · 4 trades", display: "$60.60", amount: 60.6, tone: "good" },
+    { label: "Thursday · 4 trades", display: "$104.60", amount: 104.6, tone: "good" },
+    { label: "Friday · 4 trades", display: "$122.08", amount: 122.08, tone: "good" },
+  ],
+  beats: [
+    { stage: 1, seconds: 3.0, facts: ["dow.all"], narration: "Fillbook Reports show profit by day of the week.", takeaway: "Reports split profit by weekday.", caption: "Reports: profit by weekday." },
+    { stage: 2, seconds: 3.2, facts: ["dow.all"], narration: "Tuesday made $157.12. Friday made $122.08.", takeaway: "The two best days.", caption: "Tuesday: $157.12." },
+    { stage: 3, seconds: 3.4, facts: ["dow.all", "dow.monday"], narration: "But Monday is the only red day: -$57.32.", takeaway: "Monday is the only losing day.", caption: "Only Monday is red." },
+    { stage: 4, seconds: 3.2, facts: ["dow.all"], closing: true, narration: "Tuesday made $157. Monday lost $57. Fillbook shows yours by weekday.", takeaway: "Look at your own weekdays.", caption: "Check your own weekdays." },
+  ],
+});
 
 describe("bar-chart concepts", () => {
   it("are all valid plans that clear the render bar, with no errors", () => {
@@ -56,17 +82,18 @@ describe("bar-chart concepts", () => {
 
   it("keep every chart inside the platforms' safe area, including the closing beat", () => {
     for (const p of BARS_PILOTS) {
-      for (const s of p.scenes) {
-        const g = chartGeometry(s.chart!);
-        expect(g.maxX, s.sceneId).toBeLessThanOrEqual(CHART.safeRight);
-        expect(g.maxY, s.sceneId).toBeLessThanOrEqual(CHART.safeBottom);
-        expect(g.rowBars).toHaveLength(s.chart!.rows!.length);
-      }
+      for (const s of p.scenes) expect(s.chart!.kind, s.sceneId).toBe("mock"); // HTML mocks: their boxes are checked in mockLayout.test.ts
+    }
+    for (const s of BARS_FIXTURE.scenes) {
+      const g = chartGeometry(s.chart!);
+      expect(g.maxX, s.sceneId).toBeLessThanOrEqual(CHART.safeRight);
+      expect(g.maxY, s.sceneId).toBeLessThanOrEqual(CHART.safeBottom);
+      expect(g.rowBars).toHaveLength(s.chart!.rows!.length);
     }
   });
 
   it("size each bar against the largest row", () => {
-    const g = chartGeometry(BARS_PILOTS[0]!.scenes[0]!.chart!);
+    const g = chartGeometry(BARS_FIXTURE.scenes[0]!.chart!);
     const lengths = g.rowBars.map((b) => b.x1 - b.x0);
     expect(Math.max(...lengths)).toBe(CHART.barsBarLength);
     expect(lengths[0]!).toBeLessThan(lengths[1]!); // Monday's $57.32 is shorter than Tuesday's $157.12
@@ -79,7 +106,7 @@ describe("bar-chart concepts", () => {
 });
 
 describe("validateChartScene for bars", () => {
-  const plan = BARS_PILOTS.find((p) => p.planId === "chart-bars-day-of-week")!;
+  const plan = BARS_FIXTURE;
   const scene = plan.scenes[2]!;
   const rows = scene.chart!.rows!;
   const codes = (s: SceneSpec) => validateChartScene(s, asset(s.assetId!)).map((i) => i.code);
@@ -109,7 +136,7 @@ describe("validateChartScene for bars", () => {
 });
 
 describe("bars drawing", () => {
-  const s = BARS_PILOTS.find((p) => p.planId === "chart-bars-sized-up")!.scenes;
+  const s = BARS_FIXTURE.scenes;
   const cues = (i: number) => buildChartCues({ chart: s[i]!.chart!, headline: s[i]!.headline, captionText: s[i]!.captionText, cta: s[i]!.cta, start: 0, end: s[i]!.durationSeconds });
 
   it("draws every row's label and figure, and animates them in on the first beat only", () => {
