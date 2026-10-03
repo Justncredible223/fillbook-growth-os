@@ -23,6 +23,8 @@ import { renderBar, renderBarRefusal } from "../src/shortform/storyScore.js";
  *   identical script.
  * Only a run that failed or a draft the quality gate blocked leaves the concept available, so it can be retried.
  */
+/** `campaigns.decided_by` on a draft retired by the plan-update cleanup SQL (scripts/printStaleMotionDraftsSql.ts). */
+export const PLAN_UPDATE_CLEANUP = "plan update cleanup";
 export type MotionConceptState = "made" | "waiting" | "rejected";
 const STATE_PRIORITY: Record<MotionConceptState, number> = { made: 3, waiting: 2, rejected: 1 };
 
@@ -35,11 +37,14 @@ export async function motionConceptStates(client: ReturnType<typeof getServiceCl
 
   const { data, error } = await client
     .from("campaigns")
-    .select("thesis, status")
+    .select("thesis, status, decided_by")
     .like("thesis", `${MANUAL_MOTION_CONCEPT_TITLE_PREFIX}%`)
     .in("status", ["approved", "in_review", "retired"]);
   if (error) throw new Error(`Motion concept state lookup failed: ${error.message}`);
-  for (const row of (data ?? []) as Array<{ thesis: string; status: string }>) {
+  for (const row of (data ?? []) as Array<{ thesis: string; status: string; decided_by?: string | null }>) {
+    // A draft retired because its concept was redesigned (scripts/printStaleMotionDraftsSql.ts) was never rejected on its merits:
+    // the concept is on offer again, and a new request drafts it fresh from the current plan.
+    if (row.status === "retired" && row.decided_by === PLAN_UPDATE_CLEANUP) continue;
     if (row.status === "approved") mark(row.thesis, "made");
     else if (row.status === "in_review") mark(row.thesis, "waiting");
     else if (row.status === "retired") mark(row.thesis, "rejected");
