@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { listMusicTracks, pickMusic } from "../../scripts/video-factory/music";
@@ -29,8 +30,41 @@ describe("listMusicTracks", () => {
 describe("the bundled music", () => {
   it("is a pool of in-house synthesised beds only (no third-party audio that platforms can flag), enough to rotate through", () => {
     const tracks = listMusicTracks().map((p) => basename(p));
-    expect(tracks.length).toBeGreaterThanOrEqual(12);
+    expect(tracks.length).toBeGreaterThanOrEqual(24);
     expect(tracks.every((t) => /^generated-bed-\d+\.mp3$/.test(t)), tracks.join(", ")).toBe(true);
+  });
+});
+
+describe("makeMusicTrack styles", () => {
+  const script = join(__dirname, "..", "..", "scripts", "video-factory", "makeMusicTrack.mjs");
+  const styles = ["ambient", "lofi", "drive", "piano", "corporate", "synthwave", "deephouse", "cinematic"];
+
+  it("every style renders audible, unclipped, finite audio, and the styles differ from one another", () => {
+    const dir = mkdtempSync(join(tmpdir(), "music-styles-"));
+    try {
+      const rms: number[] = [];
+      for (const style of styles) {
+        const out = join(dir, `${style}.wav`);
+        const info = JSON.parse(execFileSync("node", [script, "--seed", "test-seed", "--style", style, "--duration", "6", "--out", out], { encoding: "utf-8" }));
+        expect(info.style).toBe(style);
+        const wav = readFileSync(out);
+        const samples = new Int16Array(wav.buffer, wav.byteOffset + 44, (wav.length - 44) / 2);
+        let sum = 0;
+        let peak = 0;
+        for (const v of samples) { sum += v * v; peak = Math.max(peak, Math.abs(v)); }
+        const r = Math.sqrt(sum / samples.length) / 32768;
+        expect(r, `${style} is audible`).toBeGreaterThan(0.02);
+        expect(peak, `${style} does not clip`).toBeLessThan(32767);
+        rms.push(r);
+      }
+      expect(new Set(rms.map((v) => v.toFixed(3))).size, "styles do not all sound alike").toBeGreaterThanOrEqual(6);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("refuses an unknown style", () => {
+    expect(() => execFileSync("node", [script, "--style", "polka", "--duration", "1", "--out", join(tmpdir(), "x.wav")], { stdio: "pipe" })).toThrow();
   });
 });
 
