@@ -346,7 +346,9 @@ spec: headline of at most 3 lines of 13 characters, 2 source rows, 2 result stat
 put the "but" item last, since the third beat highlights the last row and 2nd stat.
 
 **Platform overlays.** Every box has a fixed position in `mockLayout.ts`, all inside
-x 100-880, y 170-1600 -- the strictest of TikTok's and YouTube Shorts' insets, the
+x 100-880, y 170-1250 (the bottom limit is TikTok's pinned-comment bubble, which covers
+about y 1290-1480 of the frame, measured on a phone 2026-10-03; the description block starts
+near y 1520) -- the strictest of TikTok's and YouTube Shorts' insets, the
 owner's measured button column (x 930) and caption block (y 1600). Text limits are
 character budgets, so a too-long line is a validation error, not a reflow. The
 renderer also measures every box in the real browser and throws if one leaves the
