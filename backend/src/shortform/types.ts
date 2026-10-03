@@ -248,6 +248,12 @@ export interface MockStat {
   note?: string;
   meter?: { markAt: number };
 }
+/** One line of a mock's detail card ("what else Fillbook shows"): a label and the figure beside it. Every number must be in a fact the scene cites. */
+export interface MockDetailRow {
+  label: string;
+  value: string;
+  tone: ChartTone;
+}
 /**
  * The "mock" chart kind (2026-10): a product mock in the look of the site's own link-preview cards. A source window (what
  * the trader's platform shows), a step pill ("Fillbook Insights"), and a result window (what Fillbook shows). It shows
@@ -260,6 +266,8 @@ export interface MockSpec {
   accentFrom: number;
   source: { title: string; columns: [string, string, string]; rows: MockRow[] };
   step: string;
+  /** Shown on the beat with stage 4 in place of the step and result windows: the same screen's other lines, and what it does for a trader who journals. */
+  details?: { title: string; rows: MockDetailRow[]; footer: string };
   result: { title: string; /** Must say "Demo data" for a recording that is demo data. */ tag: string; stats: [MockStat, MockStat] };
 }
 export interface ChartSpec {

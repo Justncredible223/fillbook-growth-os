@@ -356,3 +356,11 @@ reaches a video. `test/mockLayout.test.ts` proves both.
 **Chromium.** `video-render.yml` runs `npx playwright install --with-deps chromium`.
 Locally, set `MOCK_CHROMIUM_PATH` or run the same command. Preview a concept with
 `npx tsx scripts/video-factory/renderScenePlanLocally.ts chart-bars-sized-up`.
+
+**Length and detail.** Each concept runs five beats, about 17 seconds: the source
+window, the Fillbook result, the highlighted figure, a "what else this screen shows"
+detail card (`mock.details`: 3 rows from the cited facts plus "From your synced
+trades."), and the dimmed closing with the invitation. Because a mock draws every
+window on every beat, each beat cites all of the concept's facts. The detail beat's
+claim is a `product_capability` claim, so wording must stay within the guardrails
+(synced, closed trades; no "live"; behaviour labels framed as flags).
