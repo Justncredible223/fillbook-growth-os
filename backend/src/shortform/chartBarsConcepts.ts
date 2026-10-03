@@ -266,17 +266,17 @@ export function barsConvictionPlan(): ScenePlan {
     variationId: "bars-conv",
     assetId: "rec.b3-reports-timing-conviction.v1",
     expectedTopic: "conviction",
-    lines: ["Retake $3,822", "Wouldn't:", "lost $2,576"],
+    lines: ["Yes: made", "$3,822. No:", "lost $2,576."],
     accent: "bad",
     mock: {
-      eyebrow: "SAMPLE ACCOUNT",
+      eyebrow: "WOULD YOU TAKE IT AGAIN?",
       accentFrom: 1,
       source: {
         title: "Trade review",
         columns: ["ANSWER", "TRADES", "RESULT"],
         rows: [
-          { when: "Would retake", symbol: "75", value: "$3,822", tone: "good" },
-          { when: "Wouldn't", symbol: "34", value: "-$2,576", tone: "bad" },
+          { when: "Yes, again", symbol: "75", value: "$3,822", tone: "good" },
+          { when: "No, not again", symbol: "34", value: "-$2,576", tone: "bad" },
         ],
       },
       details: {
@@ -301,9 +301,9 @@ export function barsConvictionPlan(): ScenePlan {
     beats: [
       { stage: 1, seconds: 3.0, facts: ["conviction.all"], narration: "In Fillbook, answer one question per trade: would you take it again?", takeaway: "Answer once per trade; Reports compare.", caption: "Reports: by conviction." },
       { stage: 2, seconds: 3.2, facts: ["conviction.all"], narration: "75 trades you would take again made $3,822.00.", takeaway: "The trades you'd retake.", caption: "Would retake: $3,822." },
-      { stage: 3, seconds: 3.4, facts: ["conviction.all"], narration: "But 34 you wouldn't take again lost $2,575.96.", takeaway: "The trades you wouldn't.", caption: "Wouldn't: -$2,575.96." },
+      { stage: 3, seconds: 3.4, facts: ["conviction.all"], narration: "But 34 you wouldn't take again lost $2,575.96.", takeaway: "The trades you wouldn't.", caption: "Not again: -$2,575.96." },
       { stage: 4, seconds: 4.6, facts: ["conviction.all"], capability: true, narration: "Fillbook Reports show win rate and profit for each answer you give while journaling.", takeaway: "Reports compare your answers.", caption: "Win rate for each answer." },
-      { stage: 5, seconds: 3.2, facts: ["conviction.all"], closing: true, narration: "Would retake: $3,822. Wouldn't: lost $2,576. Fillbook splits your own trades the same way.", takeaway: "Rate your own trades.", caption: "Rate your own trades." },
+      { stage: 5, seconds: 3.2, facts: ["conviction.all"], closing: true, narration: "Would take again: made $3,822. Would not: lost $2,576. Fillbook splits your own trades the same way.", takeaway: "Rate your own trades.", caption: "Rate your own trades." },
     ],
   });
 }

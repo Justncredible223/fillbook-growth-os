@@ -171,12 +171,15 @@ export async function buildRenderPlanScenes(
       let cardLayout: CardLayout | null = null;
       let payoffCard: PayoffCard | null = null;
       const payoff = s.layout === "payoff" ? s.payoff : undefined;
+      let mockFrames: { pattern: string; count: number } | undefined;
       let sceneBackground = chart ? await backgroundFor("dark") : payoff ? await backgroundFor(payoff.theme) : backgroundPath;
       if (chart?.kind === "mock") {
         mockRenderer ??= await createMockRenderer(outDir);
-        sceneBackground = await mockRenderer.render({ chart, headline: s.headline, captionText: s.captionText, cta: s.cta }, join(outDir, `mock-${i}.png`));
+        const beat = await mockRenderer.renderBeat({ chart, headline: s.headline, captionText: s.captionText, cta: s.cta }, outDir, `mock-${i}`);
+        sceneBackground = beat.stillPath;
+        mockFrames = { pattern: beat.pattern, count: beat.count };
       }
-      if (!s.assetId || chart) renderScene.card = { backgroundPath: sceneBackground };
+      if (!s.assetId || chart) renderScene.card = { backgroundPath: sceneBackground, ...(mockFrames ? { frames: mockFrames } : {}) };
 
       if (s.assetId && !chart) {
         const asset = findAsset(manifest, s.assetId);

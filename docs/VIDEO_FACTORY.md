@@ -364,3 +364,16 @@ trades."), and the dimmed closing with the invitation. Because a mock draws ever
 window on every beat, each beat cites all of the concept's facts. The detail beat's
 claim is a `product_capability` claim, so wording must stay within the guardrails
 (synced, closed trades; no "live"; behaviour labels framed as flags).
+
+**Motion.** Every mock beat opens with a one-second entrance, drawn as 30 PNG frames
+(`MOCK_ENTRANCE` in `mockCard.ts`) and played by `render.ts` as an image sequence
+that then holds on the finished slide. The page script `seek(ms)` draws each frame as
+a pure function of time, so a render is deterministic. Beat 1: the headline lines
+slide in with their figures counting up from zero (the first frame already moves),
+then the source window rises and its rows slide in. Beat 2: the step pill pops, the
+result window rises, stat figures count up and the meter fills. Beat 3: the highlight
+pops. Beat 4: the detail card rises with its rows. Beat 5: the windows dim and the
+invitation pops. Counting uses only each figure's own finished text, so the last
+frame is exactly the verified number. Motion only slides content from inside the safe
+area; the finished slide is the one measured against the platform overlays. A video
+takes about a minute to render locally because each beat is 30 screenshots.

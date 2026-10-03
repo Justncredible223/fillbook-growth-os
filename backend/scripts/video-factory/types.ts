@@ -122,6 +122,8 @@ export interface Scene {
 export interface CardPresentation {
   /** 1080x1920 still used as the scene's full-canvas background. */
   backgroundPath: string;
+  /** Optional entrance motion: numbered PNG frames (printf pattern, basename) played at the render frame rate before the background holds on its last frame. */
+  frames?: { pattern: string; count: number };
   /** Evidence scenes only: where the scaled `sourceCrop` card sits, plus its rounded alpha mask and pre-blurred shadow. */
   evidence?: { x: number; y: number; width: number; height: number; maskPath: string; shadowPath: string };
 }
