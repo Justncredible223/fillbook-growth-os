@@ -74,7 +74,7 @@ describe("buildFfmpegArgs", () => {
   it("loops and trims the bundled music track to the plan's total duration, referenced by basename", () => {
     const args = buildFfmpegArgs(plan);
     const joined = args.join(" ");
-    expect(joined).toContain("-stream_loop -1 -t 10.000 -i ambient-technology.mp3");
+    expect(joined).toContain("-stream_loop -1 -t 10.000 -i generated-bed-01.mp3");
   });
 
   it("uses the known-good codec settings (h264/yuv420p/aac)", () => {
@@ -211,12 +211,12 @@ describe("buildFfmpegArgs music selection", () => {
     const joined = args.join(" ");
     expect(joined).toContain("-stream_loop -1 -ss 42.5 -t 10.000 -i other-track.mp3");
     expect(joined).not.toContain("assets");
-    expect(joined).not.toContain("ambient-technology.mp3");
+    expect(joined).not.toContain("generated-bed-01.mp3");
   });
 
   it("omits -ss when the segment starts at 0 and keeps the default bed when no track is named", () => {
     expect(buildFfmpegArgs({ ...plan, musicFile: "/m/a.mp3", musicStartSeconds: 0 }).join(" ")).toContain("-stream_loop -1 -t 10.000 -i a.mp3");
-    expect(buildFfmpegArgs(plan).join(" ")).toContain("-i ambient-technology.mp3");
+    expect(buildFfmpegArgs(plan).join(" ")).toContain("-i generated-bed-01.mp3");
   });
 });
 

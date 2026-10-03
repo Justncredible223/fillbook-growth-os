@@ -152,6 +152,7 @@ async function buildVerifiedMotionPlan(
 
   const seed = parseInt(outputPath.replace(/[^0-9a-f]/gi, "").slice(0, 8) || "0", 16) || 0;
   const music = await pickMusic(seed, adapted.totalDurationSeconds, runner, undefined, musicRotation);
+  console.log(`[render-single] music: ${music ? `${music.file.split(/[\\/]/).pop()} from ${music.startSeconds}s` : "none"} (rotation index ${musicRotation ?? "unavailable, chosen from the render id"})`);
 
   const plan: RenderPlan = {
     scenes: adapted.scenes,

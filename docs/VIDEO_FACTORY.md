@@ -382,8 +382,10 @@ takes about a minute to render locally because each beat is 30 screenshots.
 
 Each render takes the next bundled track in order: `runRender` counts the render rows
 created before this one and passes that as the rotation index, so consecutive renders
-never share a track and every track plays before any repeats (eight tracks today; add
-an .mp3 to `assets/music/` and it joins the rotation). The start point inside the
+never share a track and every track plays before any repeats (twenty-four tracks today across eight styles -- lo-fi, driving, piano, corporate, synthwave, deep house, cinematic,
+ambient -- all synthesised in-house and numbered so consecutive renders always change style; add an .mp3 to
+`assets/music/` and it joins the rotation; keep it to synthesised beds, since TikTok flags third-party audio;
+`makeMusicTrack.mjs --style` makes more). The start point inside the
 track still varies by render. If the count cannot be read, the track falls back to
 one chosen from the render's id, so music never blocks a render.
 

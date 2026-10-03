@@ -1,21 +1,26 @@
-ambient-technology.mp3
------------------------
-Source: https://pixabay.com/music/corporate-ambient-technology-151187/
-Track: "Ambient Technology" by The_Mountain
-Downloaded: 2026-09-17
-
-Licensed under the Pixabay Content License
-(https://pixabay.com/service/license-summary/): free for commercial
-use, no attribution required, may be modified/adapted into new works.
-Not distributed standalone here -- mixed into rendered video output.
-
-
-generated-bed-01 .. generated-bed-07.mp3
----------------------------------------
+generated-bed-01 .. generated-bed-24.mp3
+----------------------------------------
 Synthesised in-house by backend/scripts/video-factory/makeMusicTrack.mjs
-(seeds "fillbook-bed-01" .. "fillbook-bed-07", 150 s, loudness-normalised
-to -14 LUFS). No third-party audio or samples; no licence restrictions.
-Regenerate or add more with:
-  node backend/scripts/video-factory/makeMusicTrack.mjs --seed fillbook-bed-08 --duration 150 --out bed.wav
-  ffmpeg -i bed.wav -af loudnorm=I=-14:TP=-1:LRA=7 -ar 44100 -ac 1 -c:a libmp3lame -b:a 96k backend/scripts/video-factory/assets/music/generated-bed-08.mp3
-Any .mp3 in this folder is picked up automatically (see music.ts).
+(seeds "fillbook-bed-01" .. "fillbook-bed-24", 150 s, loudness-normalised to -14 LUFS).
+No third-party audio or samples; no licence restrictions.
+
+Eight styles, cycling by number so consecutive renders always change style:
+  01 lofi        mellow, swung beat, electric-piano chords      (72-84 bpm)
+  02 drive       driving four-on-the-floor, rolling bass, arp    (120-128 bpm)
+  03 piano       sparse piano, no drums, space                   (62-74 bpm)
+  04 corporate   bright, bouncy, upbeat                          (104-114 bpm)
+  05 synthwave   retro drive, gated chords, bass 8ths            (96-106 bpm)
+  06 deephouse   offbeat hats, stabs, side-chained pump          (118-124 bpm)
+  07 cinematic   low drone, bells, risers, deep hits             (84-92 bpm)
+  08 ambient     soft pad and plucks (the original style)       (82-121 bpm)
+(then 09..16 and 17..24 repeat the cycle with different seeds.)
+
+The one third-party track this folder used to hold ("Ambient Technology" by
+The_Mountain, Pixabay) was removed 2026-10-03: TikTok's audio matching labelled
+videos that used it "Contains: ... The_Mount", which is a flag a business account
+does not want. Keep this folder to synthesised beds only.
+
+Add more with (style is one of lofi, drive, piano, corporate, synthwave, deephouse, cinematic, ambient):
+  node backend/scripts/video-factory/makeMusicTrack.mjs --seed fillbook-bed-25 --style lofi --duration 150 --out bed.wav
+  ffmpeg -i bed.wav -af loudnorm=I=-14:TP=-1:LRA=7 -ar 44100 -ac 1 -c:a libmp3lame -b:a 96k backend/scripts/video-factory/assets/music/generated-bed-25.mp3
+Any .mp3 in this folder is picked up automatically (see music.ts) and joins the rotation.
