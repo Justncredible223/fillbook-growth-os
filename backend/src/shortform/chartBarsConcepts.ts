@@ -1,5 +1,5 @@
 import { PILOT_EXPERIMENT_ID } from "./pilots.js";
-import { OFFICIAL_HANDLE, type ChartRow, type Claim, type SceneSpec, type ScenePlan } from "./types.js";
+import { OFFICIAL_HANDLE, type ChartRow, type Claim, type MockSpec, type SceneSpec, type ScenePlan } from "./types.js";
 
 /**
  * Bar-chart concepts (see chart.ts, the "bars" kind): one labelled bar chart per concept, each drawn from a single
@@ -43,10 +43,12 @@ interface BarsConfig {
   assetId: string;
   /** The topic of the facts the beats cite (must also be one of the recording's topics). */
   expectedTopic: string;
-  lines: [string, string];
+  lines: string[];
   accent: "good" | "bad";
   rows: ChartRow[];
   highlight: number;
+  /** When set, the plan is drawn as an HTML product mock (chart kind "mock") instead of bars; lines may then be 1-3 short lines. */
+  mock?: MockSpec;
   beats: BeatInput[];
 }
 
@@ -80,7 +82,9 @@ function buildBarsPlan(cfg: BarsConfig): ScenePlan {
       expectedTopics: [cfg.expectedTopic],
       claims: b.closing ? [claim, { id: `${cfg.variationId}-invite`, type: "invitation" as const, text: "Invites the viewer to try it on their own account.", evidence: [] }] : [claim],
       masks: [],
-      chart: { kind: "bars" as const, lines: [...cfg.lines], accent: cfg.accent, rows: cfg.rows, highlight: cfg.highlight, stage: b.stage, ...(b.closing ? { dim: true } : {}) },
+      chart: cfg.mock
+        ? { kind: "mock" as const, lines: [...cfg.lines], accent: cfg.accent, mock: cfg.mock, stage: b.stage, ...(b.closing ? { dim: true } : {}) }
+        : { kind: "bars" as const, lines: [...cfg.lines], accent: cfg.accent, rows: cfg.rows, highlight: cfg.highlight, stage: b.stage, ...(b.closing ? { dim: true } : {}) },
     };
   });
   return {
@@ -233,9 +237,30 @@ export function barsSizedUpPlan(): ScenePlan {
     variationId: "bars-sized",
     assetId: "rec.b3-insights-behavior.v1",
     expectedTopic: "revenge_trading",
-    lines: ["Lost $127.", "Then sized up 2.5x."],
+    lines: ["Lost $127.", "Then sized", "up 2.5x."],
     accent: "bad",
     highlight: 0,
+    mock: {
+      eyebrow: "SAMPLE ACCOUNT",
+      accentFrom: 1,
+      source: {
+        title: "Trade history",
+        columns: ["WHEN", "SYMBOL", "RESULT"],
+        rows: [
+          { when: "Loss", symbol: "MNQ", value: "-$127", tone: "bad" },
+          { when: "3 min later", symbol: "MNQ", value: "2.5x size", tone: "bad" },
+        ],
+      },
+      step: "FILLBOOK INSIGHTS",
+      result: {
+        title: "Behavior patterns",
+        tag: "Demo data",
+        stats: [
+          { label: "POSSIBLE REVENGE TRADES", value: "5" },
+          { label: "SIZE VS YOUR AVERAGE", value: "2.5x", meter: { markAt: 0.4 } },
+        ],
+      },
+    },
     rows: [
       { label: "3 min after losing $127", display: "2.5x size", amount: 2.5, tone: "bad" },
       { label: "4 min after losing $107", display: "2.4x size", amount: 2.4, tone: "bad" },

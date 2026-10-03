@@ -13,11 +13,13 @@
  * UNVERIFIED, never imply a finished, ready-to-publish render.
  *
  *   npx tsx scripts/video-factory/renderScenePlanLocally.ts pilot-3
+ *   npx tsx scripts/video-factory/renderScenePlanLocally.ts chart-bars-sized-up   (motion-render concepts work too)
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PILOTS } from "../../src/shortform/pilots.js";
+import { MOTION_SCENE_PLANS } from "../../src/shortform/motionPlans.js";
 import { loadManifest } from "../../src/shortform/scenePlan.js";
 import { buildRenderPlanScenes, buildSilentPlaceholderAudio } from "./scenePlanAdapter.js";
 import { buildAssFile } from "./captions.js";
@@ -31,7 +33,7 @@ const SILENCE_PAD_SECONDS = 0.3;
 
 async function main() {
   const filter = process.argv[2];
-  const plans = PILOTS.filter((p) => !filter || p.planId.includes(filter));
+  const plans = [...PILOTS, ...MOTION_SCENE_PLANS].filter((p) => !filter || p.planId.includes(filter));
   if (plans.length === 0) throw new Error(`No pilot matches "${filter}".`);
 
   const manifest = loadManifest();

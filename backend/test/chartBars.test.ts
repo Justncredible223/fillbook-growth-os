@@ -57,6 +57,7 @@ describe("bar-chart concepts", () => {
   it("keep every chart inside the platforms' safe area, including the closing beat", () => {
     for (const p of BARS_PILOTS) {
       for (const s of p.scenes) {
+        if (s.chart!.kind === "mock") continue; // an HTML mock: its boxes are checked in mockLayout.test.ts
         const g = chartGeometry(s.chart!);
         expect(g.maxX, s.sceneId).toBeLessThanOrEqual(CHART.safeRight);
         expect(g.maxY, s.sceneId).toBeLessThanOrEqual(CHART.safeBottom);
@@ -109,7 +110,7 @@ describe("validateChartScene for bars", () => {
 });
 
 describe("bars drawing", () => {
-  const s = BARS_PILOTS.find((p) => p.planId === "chart-bars-sized-up")!.scenes;
+  const s = BARS_PILOTS.find((p) => p.planId === "chart-bars-day-of-week")!.scenes;
   const cues = (i: number) => buildChartCues({ chart: s[i]!.chart!, headline: s[i]!.headline, captionText: s[i]!.captionText, cta: s[i]!.cta, start: 0, end: s[i]!.durationSeconds });
 
   it("draws every row's label and figure, and animates them in on the first beat only", () => {

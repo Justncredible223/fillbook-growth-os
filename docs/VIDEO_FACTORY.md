@@ -331,3 +331,26 @@ add it to `BARS_PILOTS`, and run the tests -- the plan validator, the story bar
 The stored facts were read from the recordings by the system, not confirmed by
 the owner (`asset_not_owner_verified` review notice): spot-check a concept's
 numbers against its recording before approving it.
+
+## Product-mock slides (chart kind `mock`)
+
+A `mock` slide is laid out in HTML/CSS with the site's own typefaces (Space Grotesk,
+Manrope, JetBrains Mono -- `backend/scripts/video-factory/assets/brand`, copied from
+the fillbook repo with their OFL licences) and colour tokens, then screenshotted by
+headless Chromium at the final 1080x1920 (`mockCard.ts`). It shows a source window
+(what the trader's platform shows), a "Fillbook Insights" step, and the result
+window, so the viewer sees where in the product a number comes from.
+`chart-bars-sized-up` is the first concept on it; use `mock` on a `buildBarsPlan`
+config the same way.
+
+**Platform overlays.** Every box has a fixed position in `mockLayout.ts`, all inside
+x 100-880, y 170-1600 -- the strictest of TikTok's and YouTube Shorts' insets, the
+owner's measured button column (x 930) and caption block (y 1600). Text limits are
+character budgets, so a too-long line is a validation error, not a reflow. The
+renderer also measures every box in the real browser and throws if one leaves the
+clear area or its text overflows, so a slide a platform button could cover never
+reaches a video. `test/mockLayout.test.ts` proves both.
+
+**Chromium.** `video-render.yml` runs `npx playwright install --with-deps chromium`.
+Locally, set `MOCK_CHROMIUM_PATH` or run the same command. Preview a concept with
+`npx tsx scripts/video-factory/renderScenePlanLocally.ts chart-bars-sized-up`.
