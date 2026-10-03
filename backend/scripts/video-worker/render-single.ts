@@ -371,7 +371,7 @@ export async function runRender(videoRenderId: string, campaignAssetId: string, 
   let thumbnailPath: string | null = null;
   try {
     const thumbnailLocalPath = join(outDir, "thumbnail.jpg");
-    await renderThumbnailCard(pkg.videoScript.hook, pkg.campaignTitle, thumbnailLocalPath, runner);
+    await renderThumbnailCard(pkg.videoScript.hook, thumbnailLocalPath, runner);
     const candidatePath = `${videoRenderId}-thumbnail.jpg`;
     const { error: thumbUploadError } = await client.storage
       .from(STORAGE_BUCKET)

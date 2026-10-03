@@ -614,7 +614,7 @@ const THUMBNAIL_ASS_BASENAME = "thumbnail-card.ass";
 /** Same brand-dark base the hook scene itself renders on (see scenes.ts's SCENE_COLORS). */
 const THUMBNAIL_BACKGROUND_COLOR = "0x05070a";
 /** Brand cyan, matches captions.ts's HIGHLIGHT_COLOR_TAG. */
-const THUMBNAIL_TOPIC_COLOR = "&H00EED322&";
+const THUMBNAIL_ACCENT_COLOR = "&H00EED322&";
 /**
  * Hook size steps down with length so the line stays as large as a 1080-wide card allows (real hooks run ~17-56
  * characters) while the whole block stays in the centre band that a 3:4 profile-grid or square feed crop keeps.
@@ -622,8 +622,7 @@ const THUMBNAIL_TOPIC_COLOR = "&H00EED322&";
 const THUMBNAIL_HOOK_FS_SHORT = 190;
 const THUMBNAIL_HOOK_FS_MEDIUM = 156;
 const THUMBNAIL_HOOK_FS_LONG = 128;
-/** Topic label and site badge sit at fixed heights above and below the centred hook, inside the 3:4 centre crop. */
-const THUMBNAIL_TOPIC_Y = 400;
+/** The site badge sits at a fixed height below the centred hook, inside the 3:4 centre crop. */
 const THUMBNAIL_BRAND_Y = 1520;
 
 /**
@@ -636,22 +635,20 @@ const THUMBNAIL_BRAND_Y = 1520;
  * thumbnail does. This instead composites a text card, the same way a
  * human would design one: the video's own hook line (already the single
  * most attention-grabbing sentence in the script, see videoScriptWriter.ts's
- * quality bar) large and centered, the campaign topic as a small label
- * above it, and the site badge -- burned onto a flat brand-dark
+ * quality bar) large and centered with the site badge below it -- burned onto a flat brand-dark
  * background via the same `subtitles`-over-`color` technique the flat
  * scene cards already use (never `drawtext`, which segfaults on this
  * ffmpeg build -- see captions.ts's own doc comment). No video frame is
  * read at all, so there is nothing for the video's actual content or
  * length to go wrong against.
  */
-function buildThumbnailCardAss(hookText: string, topicLabel: string): string {
+function buildThumbnailCardAss(hookText: string): string {
   // Dollar amounts, counts and percentages in the hook ("$656", "67", "64%") are the part a viewer's eye lands on, so
   // they take the brand cyan against the white line.
   const escapedHook = escapeAssText(hookText).replace(
     /\$?\d[\d,.]*%?/g,
-    (figure) => `{\\c${THUMBNAIL_TOPIC_COLOR}}${figure}{\\c&H00FFFFFF&}`,
+    (figure) => `{\\c${THUMBNAIL_ACCENT_COLOR}}${figure}{\\c&H00FFFFFF&}`,
   );
-  const escapedTopic = escapeAssText(topicLabel.toUpperCase());
   const hookFontSize = hookText.length <= 22 ? THUMBNAIL_HOOK_FS_SHORT : hookText.length <= 36 ? THUMBNAIL_HOOK_FS_MEDIUM : THUMBNAIL_HOOK_FS_LONG;
   return `[Script Info]
 ScriptType: v4.00+
@@ -663,21 +660,21 @@ ScaledBorderAndShadow: yes
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: ThumbnailBrand,Poppins ExtraBold,56,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,1,0,1,0,0,5,0,0,0,1
-Style: ThumbnailTopic,Poppins ExtraBold,52,${THUMBNAIL_TOPIC_COLOR},${THUMBNAIL_TOPIC_COLOR},&H00000000,&H00000000,1,0,0,0,100,100,8,0,1,0,0,5,0,0,0,1
 Style: ThumbnailHook,Poppins ExtraBold,${hookFontSize},&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,10,4,5,70,70,0,1
-Style: ThumbnailBar,Poppins ExtraBold,20,${THUMBNAIL_TOPIC_COLOR},${THUMBNAIL_TOPIC_COLOR},&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
+Style: ThumbnailBar,Poppins ExtraBold,20,${THUMBNAIL_ACCENT_COLOR},${THUMBNAIL_ACCENT_COLOR},&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailBar,,0,0,0,,{\\pos(0,0)\\p1\\c${THUMBNAIL_TOPIC_COLOR}}m 0 0 l ${WIDTH} 0 ${WIDTH} 16 0 16{\\p0}
-Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailTopic,,0,0,0,,{\\an5\\pos(${WIDTH / 2},${THUMBNAIL_TOPIC_Y})}${escapedTopic}
+Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailBar,,0,0,0,,{\\pos(0,0)\\p1\\c${THUMBNAIL_ACCENT_COLOR}}m 0 0 l ${WIDTH} 0 ${WIDTH} 16 0 16{\\p0}
 Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailHook,,0,0,0,,{\\an5\\pos(${WIDTH / 2},${HEIGHT / 2})}${escapedHook}
 Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailBrand,,0,0,0,,{\\an5\\pos(${WIDTH / 2},${THUMBNAIL_BRAND_Y})}${THUMBNAIL_SITE_TEXT}`;
 }
 
 /**
- * Renders a designed thumbnail card -- the video's hook line and campaign
- * topic burned over a flat brand-dark background -- as a JPG. See
+ * Renders a designed thumbnail card -- the video's hook line burned over a
+ * flat brand-dark background -- as a JPG. Deliberately takes no campaign
+ * title or topic: that text is the internal campaign thesis (it can read
+ * "Motion concept request: ...") and must never reach a viewer. See
  * buildThumbnailCardAss's doc comment for why this replaced a real-frame
  * grab. Single ffmpeg pass: `color` lavfi source stands in for a "raw"
  * input, same `subtitles` overlay technique renderVideo and the old
@@ -686,7 +683,6 @@ Dialogue: 0,0:00:00.00,0:00:10.00,ThumbnailBrand,,0,0,0,,{\\an5\\pos(${WIDTH / 2
  */
 export async function renderThumbnailCard(
   hookText: string,
-  topicLabel: string,
   thumbnailPath: string,
   runner: ProcessRunner,
 ): Promise<void> {
@@ -705,7 +701,7 @@ export async function renderThumbnailCard(
   }
 
   const assPath = join(cwd, THUMBNAIL_ASS_BASENAME);
-  writeFileSync(assPath, buildThumbnailCardAss(hookText, topicLabel), "utf-8");
+  writeFileSync(assPath, buildThumbnailCardAss(hookText), "utf-8");
 
   // Runs with cwd set to the thumbnail's own directory and references the
   // .ass file by plain basename inside the filter string -- same basename-

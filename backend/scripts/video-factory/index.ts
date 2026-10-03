@@ -183,7 +183,7 @@ async function main(): Promise<void> {
   console.log("Rendering thumbnail card (ffmpeg)...");
   const thumbnailPath = join(outDir, "thumbnail.jpg");
   try {
-    await renderThumbnailCard(pkg.videoScript.hook, pkg.campaignTitle, thumbnailPath, runner);
+    await renderThumbnailCard(pkg.videoScript.hook, thumbnailPath, runner);
   } catch (err) {
     console.error(`Thumbnail card render failed (non-fatal): ${(err as Error).message}`);
   }

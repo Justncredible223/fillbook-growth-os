@@ -377,7 +377,7 @@ describe("renderThumbnailCard", () => {
       const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
       const runner: ProcessRunner = { run };
 
-      await renderThumbnailCard("You already know which trade you're about to repeat", "Trading discipline", thumbnailPath, runner);
+      await renderThumbnailCard("You already know which trade you're about to repeat", thumbnailPath, runner);
 
       expect(run).toHaveBeenCalledTimes(1);
 
@@ -396,12 +396,26 @@ describe("renderThumbnailCard", () => {
       expect(args[vfIndex + 1]).not.toContain("drawtext");
       expect(args[vfIndex + 1]).toContain("subtitles=thumbnail-card.ass");
 
-      // The real .ass file was written to cwd, carrying the site badge, the
-      // topic label, and the video's own hook line.
+      // The real .ass file was written to cwd, carrying the site badge and the
+      // video's own hook line -- and nothing else a viewer would read.
       const assContent = readFileSync(join(dir, "thumbnail-card.ass"), "utf-8");
       expect(assContent).toContain("fillbookhq.com");
-      expect(assContent).toContain("TRADING DISCIPLINE");
       expect(assContent).toContain("You already know which trade you're about to repeat");
+      const spokenLines = assContent
+        .split("\n")
+        .filter((l) => l.startsWith("Dialogue:") && !l.includes("ThumbnailBar"))
+        .map((l) => l.replace(/\{[^}]*\}/g, "").split(",,").pop());
+      expect(spokenLines).toEqual(["You already know which trade you're about to repeat", "fillbookhq.com"]);
+    }));
+
+  it("colours figures in the hook with the accent, and never renders an internal campaign title", async () =>
+    withTempDir(async (dir) => {
+      const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "", exitCode: 0 });
+      await renderThumbnailCard("17 green days and still $1,484 short.", join(dir, "thumbnail.jpg"), { run });
+      const assContent = readFileSync(join(dir, "thumbnail-card.ass"), "utf-8");
+      expect(assContent).toContain("{\\c&H00EED322&}17{\\c&H00FFFFFF&}");
+      expect(assContent).toContain("{\\c&H00EED322&}$1,484{\\c&H00FFFFFF&}");
+      expect(assContent).not.toMatch(/motion concept request/i);
     }));
 
   it("throws VideoFactoryError with ffmpeg's stderr on a non-zero exit", async () =>
@@ -410,8 +424,8 @@ describe("renderThumbnailCard", () => {
       const run = vi.fn().mockResolvedValue({ stdout: "", stderr: "unknown filter subtitles", exitCode: 1 });
       const runner: ProcessRunner = { run };
 
-      await expect(renderThumbnailCard("Hook", "Topic", thumbnailPath, runner)).rejects.toThrow(VideoFactoryError);
-      await expect(renderThumbnailCard("Hook", "Topic", thumbnailPath, runner)).rejects.toThrow(/unknown filter subtitles/);
+      await expect(renderThumbnailCard("Hook", thumbnailPath, runner)).rejects.toThrow(VideoFactoryError);
+      await expect(renderThumbnailCard("Hook", thumbnailPath, runner)).rejects.toThrow(/unknown filter subtitles/);
     }));
 });
 
