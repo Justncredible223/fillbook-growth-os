@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 /**
  * The comment the owner posts and pins under each video, pointing viewers to the free sample (the redesign brief's
  * "reason to click": pinned comment with fillbookhq.com/sample, plus the bio link). It is shown on Video Status with a
@@ -11,17 +9,14 @@ import { createHash } from "node:crypto";
  */
 export const PINNED_COMMENT_LINK = "fillbookhq.com/sample";
 
-const TEMPLATES: readonly string[] = [
-  `Want to see this screen on your own trades? Open the free sample: ${PINNED_COMMENT_LINK} (sample data, not real results)`,
-  `Everything in this video is sample data. See the same Fillbook screen yourself: ${PINNED_COMMENT_LINK}`,
-  `This is a demo account. Open the Fillbook sample and look around: ${PINNED_COMMENT_LINK}`,
-  `Curious what your own journal would show? Try the free sample: ${PINNED_COMMENT_LINK} (demo data)`,
-];
+/**
+ * One wording for every video. It opens with the invitation, not a disclaimer (a pinned comment is the first thing a
+ * viewer reads), then says plainly that this is a sample account rather than a real trader's data, which the
+ * caption's own "Demo data" line already backs up.
+ */
+export const PINNED_COMMENT = `Sample account, not a real trader's data. Open this same screen with the demo data yourself: ${PINNED_COMMENT_LINK}`;
 
-/** One of a few wordings, chosen from the video's hook so a video always gets the same one and neighbouring videos differ. */
-export function buildPinnedComment(hook: string): string {
-  const n = createHash("sha256").update(hook).digest().readUInt32BE(0);
-  return TEMPLATES[n % TEMPLATES.length]!;
+/** The comment to pin under a video. Kept as a function of the hook so callers need not change if wordings ever vary again. */
+export function buildPinnedComment(_hook: string): string {
+  return PINNED_COMMENT;
 }
-
-export const PINNED_COMMENT_TEMPLATES = TEMPLATES;
