@@ -316,6 +316,16 @@ describe("api/run-campaign.ts handler -- a concept is used up once requested (ow
     );
   });
 
+  it("a draft retired by the plan-update cleanup does not use its concept up: it is offered again and can be requested", async () => {
+    await load({ campaignRows: [{ thesis: A, status: "retired", decided_by: "plan update cleanup" }, { thesis: C, status: "retired", decided_by: "owner" }] });
+    const { res, result } = fakeRes();
+    await handler(fakeReq(undefined, "GET"), res);
+    const body = result.body as { motionConcepts: { id: string }[]; unavailableMotionConcepts: { id: string; state: string }[] };
+    expect(body.motionConcepts.map((c) => c.id)).toContain("chart-a-17-green-days");
+    expect(body.unavailableMotionConcepts).toEqual(expect.arrayContaining([expect.objectContaining({ id: "chart-c-one-signal-two-accounts", state: "rejected" })]));
+    expect(body.unavailableMotionConcepts.map((c) => c.id)).not.toContain("chart-a-17-green-days");
+  });
+
   it("POST for a concept that already has a video is refused with 409 before anything is created or enqueued", async () => {
     await load({ campaignRows: [{ thesis: A, status: "approved" }] });
     const { res, result } = fakeRes();
