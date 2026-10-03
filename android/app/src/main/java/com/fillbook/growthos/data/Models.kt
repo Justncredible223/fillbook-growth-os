@@ -588,6 +588,8 @@ data class VideoRenderMetadata(
     val disclosureCta: String?,
     /** YouTube thumbnail concept: bold text overlay + one-sentence visual description. Null for renders predating this field. */
     val youtubeThumbnailConcept: String?,
+    /** The comment to post and pin under the video on TikTok and YouTube (links viewers to the free sample). Null from a server that predates this field. */
+    val pinnedComment: String? = null,
 )
 
 /**

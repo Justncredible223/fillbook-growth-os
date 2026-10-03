@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { buildPinnedComment } from "../src/video/pinnedComment";
 import { parseVideoRenderMetadata, setPublishedUrl, VideoStatusActionError } from "../src/video/videoStatusHandlers";
 import { FakeSupabaseClient, asSupabase } from "./helpers/fakeSupabase";
 
@@ -37,6 +38,7 @@ describe("parseVideoRenderMetadata", () => {
       hashtags: ["futurestrading", "propfirm"],
       disclosureCta: "Example data shown for illustration only.",
       youtubeThumbnailConcept: "Bold text overlay over a split-screen visual.",
+      pinnedComment: buildPinnedComment("hook text"),
     });
   });
 
