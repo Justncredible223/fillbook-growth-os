@@ -890,6 +890,19 @@ private fun VideoRenderCard(
                 copyLabel = "TikTok metadata",
                 body = buildTiktokShareText(meta),
             )
+            meta.pinnedComment?.let { comment ->
+                Spacer(Modifier.height(8.dp))
+                VideoMetadataSection(
+                    label = "PINNED COMMENT (TIKTOK + YOUTUBE)",
+                    copyLabel = "Pinned comment",
+                    body = comment,
+                )
+                Text(
+                    "After you post, paste this as a comment on the video, then pin it.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextTertiary,
+                )
+            }
             meta.instagramCaption?.let { caption ->
                 Spacer(Modifier.height(8.dp))
                 VideoMetadataSection(

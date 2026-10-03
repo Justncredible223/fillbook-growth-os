@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordOwnerPublication } from "../attribution/contentPublications.js";
 import { extractYoutubeVideoId } from "./youtubeUrl.js";
+import { buildPinnedComment } from "./pinnedComment.js";
 
 /**
  * The platform-specific publishing metadata generated alongside the video
@@ -20,6 +21,8 @@ export interface VideoRenderMetadataJson {
   hashtags: string[];
   disclosureCta: string | null;
   youtubeThumbnailConcept: string | null;
+  /** The comment to post and pin under the video on TikTok and YouTube (pinnedComment.ts). Built from the video's hook, never stored. */
+  pinnedComment: string;
 }
 
 export interface VideoRenderStatusJson {
@@ -69,6 +72,7 @@ export function parseVideoRenderMetadata(rawMetadata: unknown): VideoRenderMetad
     hashtags: v.hashtags as string[],
     disclosureCta: typeof v.disclosureCta === "string" ? v.disclosureCta : null,
     youtubeThumbnailConcept: typeof v.youtubeThumbnailConcept === "string" ? v.youtubeThumbnailConcept : null,
+    pinnedComment: buildPinnedComment(typeof v.hook === "string" ? v.hook : v.youtubeTitle),
   };
 }
 

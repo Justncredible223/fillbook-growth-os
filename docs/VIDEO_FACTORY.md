@@ -398,3 +398,12 @@ concepts can then be requested again and are drafted fresh from the current plan
 that already rendered are untouched. Only product-mock concepts are offered
 (`isOfferedPlan`); the older illustrative win-rate cards still resolve for drafts already
 made but are no longer offered.
+
+## Pinned comment
+
+Video Status shows a "Pinned comment" block with a Copy button on every video that has
+publishing metadata: a short plain-text line pointing to `fillbookhq.com/sample` and
+saying the data is sample data (`backend/src/video/pinnedComment.ts`; one of four
+wordings, chosen from the video's hook so neighbouring videos differ). It is built on the
+fly, not stored. Posting and pinning stay manual: neither TikTok's nor YouTube's API can
+pin a comment, and nothing here posts to a platform without the owner.
